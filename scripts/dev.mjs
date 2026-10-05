@@ -48,7 +48,7 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
 
 function send(res, status, body, type = "application/json") {
   res.writeHead(status, { "content-type": type, "cache-control": "no-store" });
-  res.end(typeof body === "string" ? body : JSON.stringify(body));
+  res.end(typeof body === "string" || body instanceof Uint8Array ? body : JSON.stringify(body));
 }
 
 async function body(req) {
