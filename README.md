@@ -70,7 +70,7 @@ await grain.storage.set("rating", "1640");     // synced across the user's devic
 const { id } = await grain.pay({ invoice });   // from a tap; the wallet's own sheet and PIN
 grain.on("theme", ({ theme }) => repaint(theme));
 
-const me = await grain.relay.open();           // the user's address in this grain, at the wallet's relay
+const me = await grain.relay.open({ grant });  // the user's address in this grain; grant: your sponsor pays relays
 await grain.relay.send(peer, bytes, { keep: true });   // sealed to peer's key; at most 48 000 bytes
 const stop = grain.relay.onFrame((from, payload) => apply(from, payload));
 await grain.notifications.allow();             // asked once: your server may notify with the grain closed
@@ -86,7 +86,7 @@ wallet).
 ## The server
 
 ```ts
-import { newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification } from "@salarium/grain-server";
+import { newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification, grantFor } from "@salarium/grain-server";
 
 // Sign-in: give the page a challenge, check what grain.login returned.
 const ok = verifyLogin(answer, { slug: "chess", origin: "https://chess.example", challenge });
@@ -106,6 +106,21 @@ await relay.notify(userGrainAddress, signNotification(
 await relay.send(userGrainAddress, bytes);                       // live; { keep: true } for the mailbox
 relay.on("frame", ({ from, payload, kept }) => handle(from, payload));
 ```
+
+A **sponsor** pays the relays for your users' grain frames when the free share is busy (Salarium 11-access, 12-grains §5.4):
+
+```sh
+grain sponsor init                                   # sponsor.key; put its account in grain.json "sponsor"
+grain sponsor --node URL                             # its account, WORK, channels, the exchanges to open one with
+grain sponsor open --exchange <city> --amount 10 --node URL
+```
+
+```ts
+// At login: a grant for the user's grain key (what grain.login returned), for the page's grain.relay.open({ grant }).
+const grant = await grantFor(nodeUrl, sponsorSecret, answer.key, { perDay: 500_000n, days: 7 });
+```
+
+The wallet checks the grant against the manifest's sponsor and network; the exchange holds each user to `perDay` µWORK.
 
 `RelayClient` (Salarium 09-relay §3, 12-grains §5.4–5.5) registers under the server key with a record it signs
 itself, its messaging key derived from that key (`serverMessagingSecret`); it trusts a relay's self-signed

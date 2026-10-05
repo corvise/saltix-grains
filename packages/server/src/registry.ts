@@ -1,16 +1,15 @@
 // The grains' registry on the beacon chain (Salarium 12-grains §3): the owner's transactions that register,
 // update and retire a grain, encoded and signed as the node checks them, and what a node says of a slug.
 import { ed25519 } from "@noble/curves/ed25519";
-import { Writer, derive, fromHex, toHex } from "./bytes.js";
+import { Writer, fromHex, toHex } from "./bytes.js";
 import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
 import { rpc } from "./node.js";
+import { type TxFields, encodeTx, minimumTxFee, signTx, txId } from "./tx.js";
+
+export type { TxFields } from "./tx.js";
 
 /** What `RegisterGrain` keeps until the grain retires: 100 SALT, in base units. */
 export const GRAIN_DEPOSIT = 100_000_000_000n;
-/** Base units of SALT a transaction pays per byte at least (Salarium 03-ledger §7). */
-export const MIN_FEE_PER_BYTE = 10n;
-/** The largest signed transaction a node takes. */
-export const MAX_TX_SIZE = 16_384;
 
 /** A registry call of the owner (Salarium 06-licenses §4). */
 export type GrainCall =
@@ -18,22 +17,13 @@ export type GrainCall =
   | { update: SignedManifest }
   | { retire: string };
 
-/** A transaction's fields besides the call: the sender's key (hex) and nonce, the fee (base units of SALT) and the
- *  last slot it is valid in. */
-export interface TxFields {
-  sender: string;
-  nonce: bigint | number;
-  fee: bigint | number;
-  validUntilSlot: bigint | number;
-}
-
 // Action::Registry is tag 1; RegisterGrain, UpdateGrain and RetireGrain are calls 7, 8 and 9.
 const ACTION_REGISTRY = 1;
 const CALL = { register: 7, update: 8, retire: 9 } as const;
 
-/** The transaction's Borsh form: what its id and signature cover. */
-export function encodeGrainTx(tx: TxFields, call: GrainCall): Uint8Array {
-  const w = new Writer().fixed(fromHex(tx.sender, 32), 32).u64(tx.nonce).u64(tx.fee).u64(tx.validUntilSlot).u8(ACTION_REGISTRY);
+/** The registry call's action: `Action::Registry { call, amount }`. */
+function grainAction(call: GrainCall): Uint8Array {
+  const w = new Writer().u8(ACTION_REGISTRY);
   let amount = 0n;
   if ("register" in call || "update" in call) {
     const signed = "register" in call ? call.register : call.update;
@@ -46,10 +36,13 @@ export function encodeGrainTx(tx: TxFields, call: GrainCall): Uint8Array {
   return w.u64(amount).done();
 }
 
-/** The transaction's id and what the sender signs: bound to the network's genesis. */
-export function grainTxId(body: Uint8Array, genesisHash: string): string {
-  return toHex(derive("Salarium transaction v2", fromHex(genesisHash, 32), body));
+/** The transaction's Borsh form: what its id and signature cover. */
+export function encodeGrainTx(tx: TxFields, call: GrainCall): Uint8Array {
+  return encodeTx(tx, grainAction(call));
 }
+
+/** The transaction's id and what the sender signs: bound to the network's genesis. */
+export const grainTxId = txId;
 
 /** Sign `call` with the owner's 32-byte secret: the signed transaction in hex, as `transaction_submit` takes it, and
  *  its id. A registered manifest must be the sender's own. */
@@ -59,18 +52,12 @@ export function signGrainTx(secret: Uint8Array, fields: Omit<TxFields, "sender">
     const signed = "register" in call ? call.register : call.update;
     if (signed.manifest.owner_key !== sender) throw new TypeError("the manifest's owner_key is not this key's");
   }
-  const body = encodeGrainTx({ ...fields, sender }, call);
-  const id = grainTxId(body, genesisHash);
-  const signature = ed25519.sign(fromHex(id, 32), secret);
-  const hex = toHex(body) + toHex(signature);
-  if (hex.length / 2 > MAX_TX_SIZE) throw new TypeError(`the transaction is ${hex.length / 2} bytes, a node takes at most ${MAX_TX_SIZE}`);
-  return { hex, id };
+  return signTx(secret, fields, grainAction(call), genesisHash);
 }
 
 /** The least fee a node's pool takes for `call`: its size times `MIN_FEE_PER_BYTE` (the fee does not change it). */
 export function minimumFee(call: GrainCall): bigint {
-  const size = encodeGrainTx({ sender: "00".repeat(32), nonce: 0, fee: 0, validUntilSlot: 0 }, call).length + 64;
-  return BigInt(size) * MIN_FEE_PER_BYTE;
+  return minimumTxFee(grainAction(call));
 }
 
 /** A slug in the registry as a node serves it (`grain_get`, Salarium 08-node §6). */

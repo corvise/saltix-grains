@@ -4,6 +4,13 @@
 
 ### Added
 
+- A grain's sponsor (Salarium 11-access §4, 12-grains §5.4):
+  - `@salarium/grain`: `relay.open({ grant })`;
+  - `@salarium/grain-server`: `issueSponsorCert`, `decodeSponsorCert`, `sponsorCertProblem`, `grantFor` (a grant at login
+    from the node's slot), `signChannelTx` (open, top up, close the sponsor's channel), byte for byte
+    `vectors/access-v1.json`; the transaction envelope shared by registry and channel calls (`signTx`);
+  - `grain sponsor init | show | open | top-up | close`: the sponsor key and its channel, refused before a node would.
+
 - Relays for grains and notifications (Salarium 12-grains §5.4–5.5, stage 3 on the free lane):
   - `@salarium/grain`: `relay.open/send/close/onFrame` (frames of at most `MAX_RELAY_PAYLOAD` = 48 000 bytes),
     the `relay` event, `notifications.allow`;

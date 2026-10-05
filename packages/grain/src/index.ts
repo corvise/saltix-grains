@@ -225,8 +225,13 @@ export const grain = {
    * under the user's key in this grain. Frames are sealed by the wallet to the recipient's key.
    */
   relay: {
-    /** Register the grain's alias at the wallet's relay; resolves with the address others send to. */
-    open: async () => (await call<{ address: string }>("grain_relay_open")).address,
+    /**
+     * Register the grain's alias at the wallet's relay; resolves with the address others send to. With `grant` (the
+     * hex your server's `issueSponsorCert`/`grantFor` gave for this user's grain key) the frames are paid from your
+     * sponsor channel when the relay's free share is busy; without it they use the free share only.
+     */
+    open: async (options: { grant?: string } = {}) =>
+      (await call<{ address: string }>("grain_relay_open", options.grant ? { grant: options.grant.toLowerCase() } : {})).address,
     /**
      * Send `payload` (at most `MAX_RELAY_PAYLOAD` bytes) to `to`: live only, or with `keep` kept in the
      * recipient's mailbox until its wallet takes it. Rejects when it did not go out.
