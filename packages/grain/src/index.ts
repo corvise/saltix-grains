@@ -35,7 +35,8 @@ export interface GrainInfo {
   slug: string;
   version: number;
   form: "hosted" | "sealed";
-  listing: "verified" | "unlisted";
+  /** How the wallet sees the grain: on its verified list, in the network's registry, or neither (12-grains §9). */
+  listing: "verified" | "listed" | "unlisted";
   host: string;
   host_version: string;
   bridge: number;
@@ -139,8 +140,19 @@ export function inWallet(): boolean {
 
 /** The link that opens the grain whose manifest is at `manifestUrl` in a wallet (12-grains §4). */
 export function walletLink(manifestUrl: string, start?: string): string {
-  if (start !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(start)) throw new GrainError(ErrorCode.InvalidParams, "start: 1 to 64 of [A-Za-z0-9_-]");
+  checkStart(start);
   return "salt:grain?manifest=" + encodeURIComponent(manifestUrl) + (start ? "&start=" + start : "");
+}
+
+/** The link that opens a registered grain by its slug (12-grains §4): `salt:grain/<slug>[?start=…]`. */
+export function slugLink(slug: string, start?: string): string {
+  if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(slug)) throw new GrainError(ErrorCode.InvalidParams, "slug: 3 to 32 of [a-z0-9-], not starting with -");
+  checkStart(start);
+  return "salt:grain/" + slug + (start ? "?start=" + start : "");
+}
+
+function checkStart(start?: string): void {
+  if (start !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(start)) throw new GrainError(ErrorCode.InvalidParams, "start: 1 to 64 of [A-Za-z0-9_-]");
 }
 
 async function call<T>(method: string, params: object = {}): Promise<T> {

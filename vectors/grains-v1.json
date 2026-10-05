@@ -136,8 +136,110 @@
     "icon = derive_key(\"Salarium grain icon v1\", png); bundle = derive_key(\"Salarium grain bundle v1\", zip)",
     "login: the grain key signs derive_key(\"Salarium grain login v1\", Borsh(GrainLogin))",
     "invoice: the signer signs derive_key(\"Salarium grain invoice v1\", genesis_hash || Borsh(Invoice)); a certified key's InvoiceKeyCert is signed by the owner over derive_key(\"Salarium grain invoice key v1\", Borsh((slug, key, expires_at)))",
-    "the payment's public memo: the reference in lowercase hex, a space, the invoice's text"
+    "the payment's public memo: the reference in lowercase hex, a space, the invoice's text",
+    "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least GRAIN_DEPOSIT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner_key; ids as in transaction-v2.json"
   ],
   "owner_secret": "6161616161616161616161616161616161616161616161616161616161616161",
+  "registry": {
+    "deposit": "100000000000",
+    "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "network": "testnet",
+    "transactions": [
+      {
+        "amount": "100000000000",
+        "call": {
+          "call": "register_grain",
+          "manifest": {
+            "manifest": {
+              "description": {
+                "en": "Play with friends"
+              },
+              "entry": {
+                "hosted": {
+                  "origins": [
+                    "https://chess.example"
+                  ],
+                  "url": "https://chess.example/play"
+                }
+              },
+              "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
+              "min_host": 1,
+              "name": {
+                "en": "Chess",
+                "ru": "Шахматы"
+              },
+              "owner_key": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+              "permissions": 67,
+              "slug": "chess",
+              "sponsor": "4444444444444444444444444444444444444444444444444444444444444444",
+              "version": 3
+            },
+            "signature": "e5cde00310c3547268349c240f7b58a3f4d67f5985d19438ed6029d65c3f7c965304b8632997e37ce41acaf4bde5aa405765e6616505f3357a2fa941e356a502"
+          }
+        },
+        "fee": "150000",
+        "id_hex": "90edad64bb068c87120d53d3aca9099dad7e207fbe55f26539bec14334afa8e8",
+        "name": "register",
+        "nonce": "0",
+        "signed_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0000000000000000f049020000000000a086010000000000010705000000636865737303000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444444444444444444444444444440100e5cde00310c3547268349c240f7b58a3f4d67f5985d19438ed6029d65c3f7c965304b8632997e37ce41acaf4bde5aa405765e6616505f3357a2fa941e356a50200e8764817000000b2d073b123454baad6cbdd606d8e1abc86a810459daf41c2aa6a48d2226ce6e4b6d62bfe66fbcc51ebeaeb3b699ca72f7b6e5851864c3c9648c14072e4c0d903",
+        "transaction_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0000000000000000f049020000000000a086010000000000010705000000636865737303000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444444444444444444444444444440100e5cde00310c3547268349c240f7b58a3f4d67f5985d19438ed6029d65c3f7c965304b8632997e37ce41acaf4bde5aa405765e6616505f3357a2fa941e356a50200e8764817000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "update_grain",
+          "manifest": {
+            "manifest": {
+              "description": {
+                "en": "Play with friends"
+              },
+              "entry": {
+                "hosted": {
+                  "origins": [
+                    "https://chess.example"
+                  ],
+                  "url": "https://chess.example/play"
+                }
+              },
+              "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
+              "min_host": 1,
+              "name": {
+                "en": "Chess",
+                "ru": "Шахматы"
+              },
+              "owner_key": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+              "permissions": 67,
+              "slug": "chess",
+              "sponsor": "4444444444444444444444444444444444444444444444444444444444444444",
+              "version": 4
+            },
+            "signature": "3349e71a86adb00fef1dfaa14cef9c22d0401881d46898e55ed633841f27cdc3db3857a532e96ba1cf9572385f511734c7df1518033f37f28028e05791cfc30f"
+          }
+        },
+        "fee": "150000",
+        "id_hex": "1fccc8f30646e3b47781ce213811244c610b7dca0dcd23ecf81a361531c34cc2",
+        "name": "update",
+        "nonce": "1",
+        "signed_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000000000000f049020000000000a086010000000000010805000000636865737304000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444444444444444444444444444401003349e71a86adb00fef1dfaa14cef9c22d0401881d46898e55ed633841f27cdc3db3857a532e96ba1cf9572385f511734c7df1518033f37f28028e05791cfc30f000000000000000043b9ebc171a18fee48442b34331632a0ccf37e2740be53c1d204e971c45dac3ca90f3698e60f721013641e71a3d1427b7762d765b53b079bdba3a10d3a382101",
+        "transaction_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000000000000f049020000000000a086010000000000010805000000636865737304000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444444444444444444444444444401003349e71a86adb00fef1dfaa14cef9c22d0401881d46898e55ed633841f27cdc3db3857a532e96ba1cf9572385f511734c7df1518033f37f28028e05791cfc30f0000000000000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "retire_grain",
+          "slug": "chess"
+        },
+        "fee": "150000",
+        "id_hex": "27ef405417f4cae40027cf9332422fd2fdd739caaa98c69341b9cc5a21a9ebf4",
+        "name": "retire",
+        "nonce": "2",
+        "signed_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a08601000000000001090500000063686573730000000000000000a47954214dd2643dbdbaeced942aa98d024b6cc243f9366812205291c796bafe596a5bd97cb45ab25a06d2459de5cb9266d6da0b8241ab062736e2007b9f1d0e",
+        "transaction_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a08601000000000001090500000063686573730000000000000000",
+        "valid_until_slot": "100000"
+      }
+    ]
+  },
   "version": 1
 }

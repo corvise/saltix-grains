@@ -4,6 +4,9 @@
 
 ### Added
 
+- `slugLink(slug, start?)`: the link that opens a registered grain, `salt:grain/<slug>`; `GrainInfo.listing`
+  may be `listed` (in the network's registry, not on the wallet's verified list; Salarium 12-grains §9).
+  Vectors synced with Salarium's registry transactions.
 - `@salarium/grain` 0.1.0: the page's side of the bridge, version 1 (12-grains §5): info, ready,
   close, expand, setHeader, haptic, copy, share, openLink, scanQr, login, requestAddress,
   pickContact, pay, storage, events; `inWallet()`, `walletLink()`; the simulator transport.
