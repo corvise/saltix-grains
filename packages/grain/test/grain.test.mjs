@@ -1,7 +1,7 @@
 // The bridge as a wallet answers it: a fake `window.salarium` records what the SDK sends.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { grain, inWallet, walletLink, GrainError, ErrorCode, _reset } from "../dist/index.js";
+import { grain, inWallet, walletLink, slugLink, GrainError, ErrorCode, _reset } from "../dist/index.js";
 
 function wallet(answer) {
   const sent = [];
@@ -22,6 +22,10 @@ test("outside a wallet nothing is asked, and the link opens the grain in one", a
   assert.equal(walletLink("https://chess.example/.well-known/salarium-grain", "room-7"),
     "salt:grain?manifest=https%3A%2F%2Fchess.example%2F.well-known%2Fsalarium-grain&start=room-7");
   assert.throws(() => walletLink("https://a.example/m", "a b"), GrainError);
+  assert.equal(slugLink("chess"), "salt:grain/chess");
+  assert.equal(slugLink("chess", "room-7"), "salt:grain/chess?start=room-7");
+  for (const bad of ["Chess", "go", "-chess", "a".repeat(33)]) assert.throws(() => slugLink(bad), GrainError, bad);
+  assert.throws(() => slugLink("chess", "a b"), GrainError);
 });
 
 test("methods and parameters are the wallet's", async () => {
