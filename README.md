@@ -7,11 +7,12 @@ A grain uses the wallet's identity, payments, storage and relays, and never hold
 | Package | What it is |
 |---|---|
 | [`@salarium/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()` |
-| [`@salarium/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, Address v1 |
+| [`@salarium/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the owner's registry transactions, Address v1 |
+| [`@salarium/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show` |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain |
 
-Both packages reproduce `vectors/grains-v1.json` (manifests, logins, invoices) and the addresses of
+The packages reproduce `vectors/grains-v1.json` (manifests, logins, invoices, registry transactions) and the addresses of
 `vectors/crypto-v1.json` byte for byte; `scripts/sync-vectors.sh ../Salarium` refreshes them.
 
 ## Quick start
@@ -28,6 +29,27 @@ npm run dev            # builds, then serves the simulator and hello-grain on :8
   developer origins (`localhost`, `127.0.0.1`, `10.0.2.2`); release builds never do.
 - `NODE_RPC` (default `http://127.0.0.1:30734`) is a node of the wallet's network: the server reads
   its genesis for invoices and finds payments there.
+
+## The command line
+
+```sh
+npx grain init dice --name "Dice roll"   # grain.json, owner.key (owner-only), public/ with the bridge
+cd dice && npx grain dev                  # serves public/ and the manifest signed for this computer
+npx grain lint                            # what stops grain.json from being registered
+npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
+npx grain sign                            # signed.json: serve it at /.well-known/salarium-grain
+npx grain publish --node http://127.0.0.1:30334 --wait   # register the slug (100 SALT) or a newer version
+npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
+```
+
+- `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
+  the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix.
+- `publish` asks the node for the slug: unregistered → `RegisterGrain` with the deposit; the owner's
+  with a lower version → `UpdateGrain`; anything else is refused before a transaction is made. It
+  checks the owner's balance, signs with `owner.key`, submits through the node's wallet interface
+  (plain HTTP: a local node or an SSH tunnel), and writes `signed.json`.
+- `owner.key` is a key file, for devnets and the test network. On mainnet the owner's key should be
+  the wallet's: signing and registering from Saltix by a QR code comes next (12-grains §10).
 
 ## The page
 
@@ -67,13 +89,13 @@ const payment = await findPayment(nodeUrl, myAddress, reference);
 ```
 
 The manifest your site serves at `/.well-known/salarium-grain` is `signManifest(manifest,
-ownerSecret)`'s output; keep the owner's key off servers (12-grains §10: `grain sign` will sign it
-in the wallet by a QR code).
+ownerSecret)`'s output (`grain sign`); keep the owner's key off servers. `signGrainTx` makes the
+owner's registry transactions (`RegisterGrain`, `UpdateGrain`, `RetireGrain`) as `grain publish` does.
 
 ## Checks
 
 ```sh
-npm test               # builds, then runs both packages' tests (node --test)
+npm test               # builds, then runs every package's tests (node --test)
 ```
 
 MIT licensed.
