@@ -36,10 +36,12 @@
     "account": 0,
     "grains": [
       {
+        "messaging_public": "920d2438479921cc8b31d53dccd687c7b8652c0931e792506584e2950228116b",
         "public_key": "a4514f8e374aec9952a5adb31c747cb9987a51414df90e17d536d5a2a146c6ae",
         "slug": "chess"
       },
       {
+        "messaging_public": "f7507367da92a51e989fe7f5096fbc533a0f96165f977604b8312f2bd660d11c",
         "public_key": "d83bd3d25ba4abe78aa256856a78ac5c078b93c133a392ef9ecbfabe10fa19ca",
         "slug": "salt-notes"
       }
@@ -137,8 +139,29 @@
     "login: the grain key signs derive_key(\"Salarium grain login v1\", Borsh(GrainLogin))",
     "invoice: the signer signs derive_key(\"Salarium grain invoice v1\", genesis_hash || Borsh(Invoice)); a certified key's InvoiceKeyCert is signed by the owner over derive_key(\"Salarium grain invoice key v1\", Borsh((slug, key, expires_at)))",
     "the payment's public memo: the reference in lowercase hex, a space, the invoice's text",
+    "grain messaging key: X25519 secret derive_key(\"Salarium grain messaging key v1\", secret || slug); frames to a grain alias are base64url(nonce 24 || NaCl crypto_box) between messaging keys",
+    "notification: the owner or the certified server key signs derive_key(\"Salarium grain notification v1\", genesis_hash || Borsh(GrainNotification)); SignedGrainNotification is Borsh {notification, cert: Option<InvoiceKeyCert>, signature}",
     "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least GRAIN_DEPOSIT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner_key; ids as in transaction-v2.json"
   ],
+  "notifications": {
+    "cases": [
+      {
+        "borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000",
+        "message": "1a171bf9df8e7cff48e91fdb27238c5663284886c56764fc89f509445495331c",
+        "name": "by-owner",
+        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000000b05e0fd9aff2a758d040374a4a410f390e94c09d560d05130e61c881c4640527de88f3397b05a934a61b9fc935f325294b1dcd5b7a6f869d05e979b3ab79ed04"
+      },
+      {
+        "borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000",
+        "message": "1a171bf9df8e7cff48e91fdb27238c5663284886c56764fc89f509445495331c",
+        "name": "by-server-key",
+        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000da869ba74f1495fad753cded2ad7920d5dbeaf993bf7e5468a326746ef0ea7a4030fcc5e445bafa6ba177ddb60b898e35859a15a76cca6a4ddd7f485cb22fe05946cfdc4031b6a85bff72a71cb56a92bee6140326f4b1c29af20b2ff00dcbff2e6c370ac80c93832ce0dfe25542c933f19d77bd55496acae1dd07cf696ad4d00"
+      }
+    ],
+    "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "network": "testnet",
+    "now": 1790000000000
+  },
   "owner_secret": "6161616161616161616161616161616161616161616161616161616161616161",
   "registry": {
     "deposit": "100000000000",

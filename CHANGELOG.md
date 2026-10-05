@@ -4,6 +4,18 @@
 
 ### Added
 
+- Relays for grains and notifications (Salarium 12-grains §5.4–5.5, stage 3 on the free lane):
+  - `@salarium/grain`: `relay.open/send/close/onFrame` (frames of at most `MAX_RELAY_PAYLOAD` = 48 000 bytes),
+    the `relay` event, `notifications.allow`;
+  - `@salarium/grain-server`: relay records (`signKeyBinding`, `signAddressRecord`, `recordProblem`,
+    `messagingKeyOf`, `signMailboxAck`) byte for byte `vectors/relay-v1.json`; `sealFrame`/`openFrame`
+    (`crypto_box`, tweetnacl); `signNotification`, `decodeNotification`, `notificationProblem` byte for byte
+    `vectors/grains-v1.json`; `RelayClient`, a server's connection to the relays (`ws`): registers under its key,
+    pins self-signed relays by the hash in their record, seals to checked keys, acks its mailbox, reconnects;
+  - the simulator answers the relay and notification methods, plays a frame arriving, and checks a server's
+    notification as a wallet does.
+- Vectors synced with Salarium b1d399c (`relay-v1.json` added; grain messaging keys and notifications).
+
 - `grain publish` in the owner's wallet (Salarium 12-grains §10): without a key file it shows a QR code of
   `salt:grain-publish?m=…` (the manifest's Borsh, `owner_key` zeroed, raw DEFLATE, base64url), waits for the
   registry to hold the grain as the wallet published it, and writes `signed.json`; `grain show --out`. Checked

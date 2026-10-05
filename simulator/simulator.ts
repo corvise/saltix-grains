@@ -3,10 +3,17 @@
  * iframe named `salarium-simulator`, and `@salarium/grain` in the page sends its requests here.
  * Sign-in uses a test grain secret kept in this browser (real signatures, checkable by
  * `@salarium/grain-server`); invoices are checked like a wallet checks them; payments are not made
- * (it answers a made-up id); storage lives in this browser.
+ * (it answers a made-up id); storage lives in this browser. Relay frames the grain sends are logged,
+ * and "Frame to the grain" plays one arriving; "Check a notification" checks your server's like a
+ * wallet does.
  */
 import { ed25519 } from "@noble/curves/ed25519";
-import { derive, fromHex, toHex, loginMessage, invoiceProblem, decodeInvoice } from "../packages/server/src/index";
+// Module by module: the package's index also exports the relay client, which needs Node.
+import { derive, fromHex, toHex } from "../packages/server/src/bytes";
+import { accountId, encodeAddress } from "../packages/server/src/address";
+import { loginMessage } from "../packages/server/src/login";
+import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
+import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const frame = $<HTMLIFrameElement>("grain");
@@ -43,6 +50,11 @@ class Refusal extends Error {
 
 const consents = new Set<string>();
 
+/** The user's key in the grain, as the wallet derives it (12-grains §5.1). */
+const grainSeed = (slug: string) => derive("Salarium grain key v1", secret(), new TextEncoder().encode(slug));
+/** The grain alias's address once `relay.open` registered it. */
+let alias: string | null = null;
+
 async function handle(origin: string, method: string, params: Record<string, unknown>): Promise<unknown> {
   const s = settings();
   const storageKey = (k: unknown) => `sim.storage.${s.slug}.${String(k)}`;
@@ -57,7 +69,7 @@ async function handle(origin: string, method: string, params: Record<string, unk
       consents.add("login");
       const challenge = fromHex(String(params.challenge ?? ""));
       if (challenge.length > 64) throw new Refusal(-32602, "challenge: at most 64 bytes");
-      const seed = derive("Salarium grain key v1", secret(), new TextEncoder().encode(s.slug));
+      const seed = grainSeed(s.slug);
       const at = Date.now();
       return { key: toHex(ed25519.getPublicKey(seed)), signature: toHex(ed25519.sign(loginMessage(s.slug, origin, challenge, at), seed)), at, origin };
     }
@@ -97,6 +109,25 @@ async function handle(origin: string, method: string, params: Record<string, unk
       const prefix = storageKey("");
       return { keys: Object.keys(localStorage).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)).sort() };
     }
+    case "grain_relay_open":
+      alias = encodeAddress("devnet", accountId(ed25519.getPublicKey(grainSeed(s.slug))));
+      return { address: alias };
+    case "grain_relay_send": {
+      if (!alias) throw new Refusal(5000, "the frame did not go out: open the relay first");
+      const payload = String(params.payload ?? "");
+      if (!/^([0-9a-f]{2}){1,48000}$/.test(payload)) throw new Refusal(-32602, "payload: lowercase hex of 1 to 48000 bytes");
+      write(`relay → ${params.to}${params.keep ? " (kept)" : ""}: ${payload.length / 2} bytes`);
+      return null;
+    }
+    case "grain_relay_close":
+      alias = null;
+      return null;
+    case "grain_notifications_allow":
+      if (!consents.has("notifications")) {
+        if (!confirm(`${s.slug} asks to send you notifications.`)) return { allowed: false };
+        consents.add("notifications");
+      }
+      return { allowed: true };
     case "grain_scanQr": {
       const t = prompt(String(params.hint ?? "The text of a QR code"));
       if (!t) throw new Refusal(4001, "the user cancelled");
@@ -142,6 +173,30 @@ $<HTMLButtonElement>("open").onclick = () => {
 $<HTMLSelectElement>("theme").onchange = () => emit("theme", { theme: settings().theme });
 $<HTMLButtonElement>("hide").onclick = () => emit("visibility", { visible: false });
 $<HTMLButtonElement>("show").onclick = () => emit("visibility", { visible: true });
+$<HTMLButtonElement>("frame").onclick = () => {
+  if (!alias) return write("relay: the grain has not opened its relay");
+  const from = prompt("From (an address)", "dsalt1q…");
+  const text = from && prompt("The frame, as text");
+  if (!from || text == null) return;
+  emit("relay", { from, payload: toHex(new TextEncoder().encode(text)) });
+  write(`relay ← ${from}: ${text.length} characters`);
+};
+$<HTMLButtonElement>("notification").onclick = () => {
+  const s = settings();
+  const hex = prompt("A signed notification from your server (hex)");
+  if (!hex) return;
+  if (!s.owner || !s.genesis) return write("notification: set the owner key and the genesis hash first");
+  let bytes: Uint8Array;
+  try {
+    bytes = fromHex(hex.trim().toLowerCase());
+  } catch {
+    return write("notification ✖ malformed");
+  }
+  const problem = notificationProblem(bytes, s.slug, s.owner, s.genesis);
+  if (problem) return write(`notification ✖ ${problem}`);
+  const { notification: n } = decodeNotification(bytes);
+  write(`notification ✔ "${n.title}" ${n.body}${n.start ? ` (opens with ${n.start})` : ""}`);
+};
 $<HTMLButtonElement>("manifest").onclick = async () => {
   const url = prompt("The grain's manifest URL", new URL("/.well-known/salarium-grain", location.href).href);
   if (!url) return;
