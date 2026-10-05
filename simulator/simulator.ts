@@ -111,6 +111,8 @@ async function handle(origin: string, method: string, params: Record<string, unk
     }
     case "grain_relay_open":
       alias = encodeAddress("devnet", accountId(ed25519.getPublicKey(grainSeed(s.slug))));
+      // A wallet checks a grant against the manifest's sponsor; the simulator pays no relay, so it only says so.
+      if (typeof params.grant === "string") write(`relay: opened with a sponsor's grant (${params.grant.length / 2} bytes)`);
       return { address: alias };
     case "grain_relay_send": {
       if (!alias) throw new Refusal(5000, "the frame did not go out: open the relay first");

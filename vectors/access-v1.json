@@ -1,0 +1,169 @@
+{
+  "allowance": {
+    "allowance_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e16fc2fda6ee9cb44a81e6657a27e8d7ccaf4d7327e1282ee0e7819ad2d334e26717cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d404b4c000000000040420f0000000000c093100000000000000102030405060708090a0b0c0d0e0f",
+    "amount": "5000000",
+    "expires": "1086400",
+    "id_hex": "b9ccbfc53a57653f53a4818686308b06a3a02dfdc00d76ee345501cbc7ed31f4",
+    "issued": "1000000",
+    "nonce_hex": "000102030405060708090a0b0c0d0e0f",
+    "signature_hex": "a181e330640866adbaeeaacf596617ccb1052e1ba96a0ebd1be3263a31d28dbfe09cc05bafe71d50e59555cf69b085435f3b8e7223dcb636611dfcd05b6d8201"
+  },
+  "chain": {
+    "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "network": "tsalt"
+  },
+  "claim": {
+    "claim_hex": "02000000e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e16fc2fda6ee9cb44a81e6657a27e8d7ccaf4d7327e1282ee0e7819ad2d334e26717cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d404b4c000000000040420f0000000000c093100000000000000102030405060708090a0b0c0d0e0fa181e330640866adbaeeaacf596617ccb1052e1ba96a0ebd1be3263a31d28dbfe09cc05bafe71d50e59555cf69b085435f3b8e7223dcb636611dfcd05b6d8201d0121300000000004db6cdbc7f52cf173b4082d0dfcfb3ee3072dce3684f542e9edbd5e3752a8a567d44d107ff75ebb58df68f19d91689df462f90d5dd4a0cb5eaca91cb219f480500e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e16fc2fda6ee9cb44a81e6657a27e8d7ccaf4d7327e1282ee0e7819ad2d334e26717cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ced759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48404b4c000000000040420f0000000000c093100000000000000102030405060708090a0b0c0d0e0f243e560aab7614170d0c559f66d6b545a9bde00ce07139402dfd5335ac421f3cb1ad4d0010fecf7cc1991b97d97ac2522c9aa36e655da42d12393839956db20c20a10700000000000c671fe8da80058e9380f016dcec51c625e7830acc323c33b00db1ae2e360f019fff8c9e4dea298174f3a7360ec72a518fd7f1aa2398d9c97204aa699f67310d0192147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275dd759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4880841e000000000003a0bb0d0000000000a048350000000000b1bcd8688b8220433096d0e3be2dc96d7603d85bd6b6fa0fe331f97d3bf6efd5128287464925c0ac81dbe09fadb35320be36526d6e50eb08f62d378485b0cc08",
+    "fee_at_min_rate": "77",
+    "id_hex": "7a3d0ff49016986f3dbbc7859b0a8b56235135297d827e1774f421a69605307f",
+    "size": 767
+  },
+  "grant": {
+    "certificate_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275dd759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4880841e000000000003a0bb0d0000000000a048350000000000",
+    "expires": "3492000",
+    "issued": "900000",
+    "message_hex": "24826c9d4221eab67376abda7b09429d1372e1e71a1fc2361177918ef4644907",
+    "per_day": "2000000",
+    "services": 3,
+    "signature_hex": "b1bcd8688b8220433096d0e3be2dc96d7603d85bd6b6fa0fe331f97d3bf6efd5128287464925c0ac81dbe09fadb35320be36526d6e50eb08f62d378485b0cc08"
+  },
+  "keys": {
+    "device_private_hex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "device_public_hex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+    "exchange_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+    "operator_private_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "operator_public_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "payer_account_hex": "6fc2fda6ee9cb44a81e6657a27e8d7ccaf4d7327e1282ee0e7819ad2d334e267",
+    "payer_private_hex": "8dde3bb31f98a8b2eba1a4042a50ea1864437784eef15bf877db086b165edf1b",
+    "payer_public_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d",
+    "relay_public_hex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+  },
+  "request": {
+    "amount": "2000000",
+    "at": "1000000",
+    "id_hex": "4b3d0d486d464ab457438df43c9f9714c704da2359e989217669ad094cbd5d53",
+    "request_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e16fc2fda6ee9cb44a81e6657a27e8d7ccaf4d7327e1282ee0e7819ad2d334e26717cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ced759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4880841e00000000000192147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275dd759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4880841e000000000003a0bb0d0000000000a048350000000000b1bcd8688b8220433096d0e3be2dc96d7603d85bd6b6fa0fe331f97d3bf6efd5128287464925c0ac81dbe09fadb35320be36526d6e50eb08f62d378485b0cc080d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d40420f0000000000",
+    "signed_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e16fc2fda6ee9cb44a81e6657a27e8d7ccaf4d7327e1282ee0e7819ad2d334e26717cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ced759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4880841e00000000000192147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275dd759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4880841e000000000003a0bb0d0000000000a048350000000000b1bcd8688b8220433096d0e3be2dc96d7603d85bd6b6fa0fe331f97d3bf6efd5128287464925c0ac81dbe09fadb35320be36526d6e50eb08f62d378485b0cc080d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d40420f0000000000d4051d6323a7390ff3303069fcce89021621b6344366feb4e918f3ac5c615808f569a416f6681cc70bcc4358a8d1290f900987e19520f8ce4b723ad42dfcf90c"
+  },
+  "rules": [
+    "all Borsh, integers little-endian; µWORK for WORK amounts, slots for times",
+    "actions after Registry (tag 1): OpenChannel tag 2 {exchange: [u8; 32], amount: u64}; TopUpChannel tag 3 {exchange, amount}; CloseChannel tag 4 {exchange}; StakeAccess tag 5 {amount: u64 SALT}; UnstakeAccess tag 6",
+    "registry calls after UpdateCity (tag 3): OpenExchange tag 4 {city: [u8; 32], fee_bp: u16} paid in WORK; CloseExchange tag 5 {city}; ExchangeDebt tag 6 is the ledger's own",
+    "allowance: {exchange [32], payer [32], relay [32], client_key [32], amount u64, issued u64, expires u64, nonce [16]}; id = BLAKE3 derive_key(\"Salarium access allowance v1\", genesis hash ‖ allowance); the operator signs the id",
+    "allowance request: {exchange [32], payer [32], relay [32], client_key [32], amount u64, grant Option<{certificate, signature [64]}>, nonce [16], at u64}; client_key signs BLAKE3 derive_key(\"Salarium allowance request v1\", genesis hash ‖ request); the allowance takes the nonce, issued = the exchange's slot, expires = issued + 86 400",
+    "voucher: client_key signs BLAKE3 derive_key(\"Salarium access voucher v1\", allowance id ‖ total as u64 big-endian)",
+    "sponsor certificate: {sponsor [32], user_key [32], per_day u64, services u8, issued u64, expires u64}; the sponsor signs BLAKE3 derive_key(\"Salarium sponsor certificate v1\", genesis hash ‖ certificate)",
+    "claim: Vec of {allowance, allowance signature [64], total u64, voucher [64], grant Option<{certificate, signature [64]}>}; id = BLAKE3 derive_key(\"Salarium access claim id v1\", genesis hash ‖ claim); fee = ⌈size × fee_per_byte / 100⌉ µWORK",
+    "numbers are decimal strings: JSON loses precision above 2^53"
+  ],
+  "spec": "specs/11-access.md §4–6, specs/03-ledger.md §3",
+  "transactions": [
+    {
+      "action": {
+        "amount": "10000000",
+        "exchange_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "open_channel"
+      },
+      "fee": "2000",
+      "id_hex": "1e17e57e5468cd9903e8e59532090deb56dacbd9eb7d61678b139f3ab5423298",
+      "name": "open-channel",
+      "nonce": "3",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0300000000000000d007000000000000a08601000000000002e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1809698000000000071a1b4a6162f6ba83d4dba61e1964e8b64e28e2982fd1ac4194e6843c0bfa0cc33749de7b6529b72ab40b1234c84ab9261641436669fbe2aa92d2b6abc4aa00f",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0300000000000000d007000000000000a08601000000000002e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e18096980000000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "2500000",
+        "exchange_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "top_up_channel"
+      },
+      "fee": "2000",
+      "id_hex": "50ed9fe6a1c7074fea83a1c30f290e15f127a7fa7e5494e45378f9a70d69025e",
+      "name": "top-up-channel",
+      "nonce": "4",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0400000000000000d007000000000000a08601000000000003e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1a025260000000000145c8bb724d89a5133bc7d48c6cc2b129a3853812007f89ad49b373a19073ca75385b18ebd8429539155d7b9c14fb6d594480e8ab12e0ade6808f39de8518900",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0400000000000000d007000000000000a08601000000000003e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1a025260000000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "exchange_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+        "kind": "close_channel"
+      },
+      "fee": "2000",
+      "id_hex": "a9841a086f13fd674c406b9f49219b2728491b8d32c3b35cee25cf51032df5d3",
+      "name": "close-channel",
+      "nonce": "5",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0500000000000000d007000000000000a08601000000000004e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e14654b794d9fdc071262b89c90e6bbff8720ab83d0640ed6cc8f3df2cac8064dafa100cb529e4fde76747cb35b3527f38f909a995e69625c8973f939b5180d109",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0500000000000000d007000000000000a08601000000000004e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "1000000000",
+        "kind": "stake_access"
+      },
+      "fee": "2000",
+      "id_hex": "0a03109fcbab21ac73fc84e5377c213d9006b07fc6a1a207632790fc0c605e42",
+      "name": "stake-access",
+      "nonce": "6",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0600000000000000d007000000000000a0860100000000000500ca9a3b00000000a1147665e5f3d9ff405639ed972b021242a601dfd325d03eb8a199e8f762a055870a0d215b5a5d1c8d47ef09b9be48fb6fbfeebcbf239404c0650f91f9a7890e",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0600000000000000d007000000000000a0860100000000000500ca9a3b00000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "kind": "unstake_access"
+      },
+      "fee": "2000",
+      "id_hex": "9154a9409961583fd832e93f23e0bc9e5869a0faeedcf8cc756f984c06e13401",
+      "name": "unstake-access",
+      "nonce": "7",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0700000000000000d007000000000000a08601000000000006bb8ac2ae65e0af2f791c38902eeac304e6af8568d63860477e3084087830b9e316225d7368859bb3cf4b121647ac435fa0002c06e6ec1620987ebe6fca8c1b0c",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0700000000000000d007000000000000a08601000000000006",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "10000000000",
+        "call": {
+          "call": "open_exchange",
+          "city_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+          "fee_bp": 50
+        },
+        "kind": "registry"
+      },
+      "fee": "2000",
+      "id_hex": "61136f917fec9ce67e74569c0c0827fc3a4bf982175f54fe555cf36b2c6c4745",
+      "name": "open-exchange",
+      "nonce": "8",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0800000000000000d007000000000000a0860100000000000104e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1320000e40b540200000007cf50ebbccd80e92fd8a2bebac5b453f4fe825c129f0984bd1f6f3bbe05553c1fc1fa66cc1af17e9198cd58ecfcb66ae7f1cef8cb2ef7fc3d64fb18bf668a02",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0800000000000000d007000000000000a0860100000000000104e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1320000e40b5402000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "0",
+        "call": {
+          "call": "close_exchange",
+          "city_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
+        },
+        "kind": "registry"
+      },
+      "fee": "2000",
+      "id_hex": "474d9ee4971eadc838a674367c2e902f3ff1c278bc2869744990f003adcc5266",
+      "name": "close-exchange",
+      "nonce": "9",
+      "signed_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0900000000000000d007000000000000a0860100000000000105e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e10000000000000000402a0307433f40bb77520eab55e121b6052b99666f4fd992f89d7bc5c142c1a81882b424b49ed238bfe741a3ad66cdf5cc5d1d3844e932d2617ce26f5db04b0a",
+      "transaction_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0900000000000000d007000000000000a0860100000000000105e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e10000000000000000",
+      "valid_until_slot": "100000"
+    }
+  ],
+  "version": 1,
+  "voucher": {
+    "message_hex": "b01d6e5071d5ff4681b862f11a48e2c3b76dcea09cd8725c8a567acc32009637",
+    "signature_hex": "4db6cdbc7f52cf173b4082d0dfcfb3ee3072dce3684f542e9edbd5e3752a8a567d44d107ff75ebb58df68f19d91689df462f90d5dd4a0cb5eaca91cb219f4805",
+    "total": "1250000"
+  }
+}

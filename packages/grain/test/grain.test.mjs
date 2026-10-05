@@ -76,14 +76,16 @@ test("relay frames go out as hex and come back as bytes; notifications are asked
   };
   _reset();
   assert.equal(await grain.relay.open(), "dsalt1qalias");
+  await grain.relay.open({ grant: "ABCD" });
+  assert.deepEqual(sent.splice(0, 2).map((r) => r.params), [{}, { grant: "abcd" }]);
   await grain.relay.send("dsalt1qpeer", new Uint8Array([1, 2, 255]), { keep: true });
   await grain.relay.send("dsalt1qpeer", new Uint8Array(MAX_RELAY_PAYLOAD));
-  assert.deepEqual(sent[1], { method: "grain_relay_send", params: { to: "dsalt1qpeer", payload: "0102ff", keep: true } });
-  assert.equal(sent[2].params.keep, false, "live unless kept");
+  assert.deepEqual(sent[0], { method: "grain_relay_send", params: { to: "dsalt1qpeer", payload: "0102ff", keep: true } });
+  assert.equal(sent[1].params.keep, false, "live unless kept");
   for (const bad of [new Uint8Array(0), new Uint8Array(MAX_RELAY_PAYLOAD + 1)]) {
     await assert.rejects(grain.relay.send("dsalt1qpeer", bad), (e) => e.code === ErrorCode.InvalidParams);
   }
-  assert.equal(sent.length, 3, "a refused frame is not sent");
+  assert.equal(sent.length, 2, "a refused frame is not sent");
 
   const frames = [];
   const stop = grain.relay.onFrame((from, payload) => frames.push([from, [...payload]]));
@@ -96,5 +98,5 @@ test("relay frames go out as hex and come back as bytes; notifications are asked
 
   assert.equal(await grain.notifications.allow(), true);
   await grain.relay.close();
-  assert.deepEqual(sent.slice(3).map((r) => r.method), ["grain_notifications_allow", "grain_relay_close"]);
+  assert.deepEqual(sent.slice(2).map((r) => r.method), ["grain_notifications_allow", "grain_relay_close"]);
 });

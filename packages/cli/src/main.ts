@@ -8,6 +8,7 @@ import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor
 import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, type Signing } from "./registry.js";
 import { serve, linkFor } from "./dev.js";
+import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import * as template from "./template.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Salarium 12-grains)
@@ -22,6 +23,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            (a key file, for test networks) when owner.key is there
   grain retire --slug S --node URL         close the slug for good; the deposit returns 30 days later
   grain show --slug S --node URL [--out F] what the registry holds for a slug; F gets its signed manifest
+  grain sponsor init                       a sponsor key (sponsor.key): its account pays relays for your users
+  grain sponsor --node URL                 the sponsor's account, WORK, channels and the exchanges to open one with
+  grain sponsor open --exchange C --amount W --node URL   a channel with city C's exchange, W WORK deposited
+  grain sponsor top-up --exchange C --amount W --node URL
+  grain sponsor close --exchange C --node URL             the deposit returns after the claim window
 
   --manifest F   the manifest (grain.json); --key F   the owner's key file (owner.key)
   --node URL     a node's wallet interface (plain HTTP: a local node or a tunnel)
@@ -170,6 +176,29 @@ async function main(argv: string[]): Promise<number> {
         console.log(`${out}: the signed manifest the registry holds`);
       }
       return g === null ? 1 : 0;
+    }
+    case "sponsor": {
+      const sponsorKey = text(flags, "key", SPONSOR_KEY_FILE);
+      const sub = positional[0] ?? "show";
+      if (sub === "init") {
+        const key = newKey(sponsorKey);
+        console.log(`a sponsor key in ${sponsorKey} (keep it secret, on your server); its public key ${key}`);
+        console.log(`set "sponsor" in grain.json to its account: grain sponsor --node URL shows it`);
+        return 0;
+      }
+      const secret = readKey(sponsorKey);
+      if (sub === "show") {
+        console.log(JSON.stringify(await sponsorStatus(text(flags, "node"), secret), null, 2));
+        return 0;
+      }
+      const exchange = text(flags, "exchange").toLowerCase();
+      const call = sub === "open" ? { open: { exchange, amount: parseWork(text(flags, "amount")) } }
+        : sub === "top-up" ? { topUp: { exchange, amount: parseWork(text(flags, "amount")) } }
+        : sub === "close" ? { close: { exchange } } : null;
+      if (call === null) throw new Error(`grain sponsor ${sub}: init, show, open, top-up or close`);
+      const sent = await channel(call, secret, signing(flags));
+      console.log(`${sub} the channel with ${exchange}: transaction ${sent.id} (fee ${sent.fee})`);
+      return 0;
     }
     case "help":
     case "--help":
