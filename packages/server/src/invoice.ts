@@ -47,6 +47,30 @@ function certMessage(slug: string, key: Uint8Array, expiresAt: number): Uint8Arr
   return derive("Salarium grain invoice key v1", new Writer().string(slug).fixed(key, 32).u64(expiresAt).done());
 }
 
+/** `Option<InvoiceKeyCert>` in Borsh, as invoices and notifications carry it. */
+export function writeCert(w: Writer, cert: InvoiceKeyCert | null | undefined): Writer {
+  if (!cert) return w.u8(0);
+  return w.u8(1).string(cert.slug).fixed(fromHex(cert.key, 32), 32).u64(cert.expires_at).fixed(fromHex(cert.signature, 64), 64);
+}
+
+export function readCert(r: Reader): InvoiceKeyCert | null {
+  const tag = r.u8();
+  if (tag === 0) return null;
+  if (tag !== 1) throw new TypeError("borsh: bad option");
+  return { slug: r.string(64), key: toHex(r.fixed(32)), expires_at: Number(r.u64()), signature: toHex(r.fixed(64)) };
+}
+
+/**
+ * Who may sign for `slug` (hex key): its owner, or — with `cert` — the key the owner certified for
+ * this grain, until it expires; null when the certificate does not hold.
+ */
+export function signerOf(cert: InvoiceKeyCert | null, slug: string, ownerKey: string, now: number): string | null {
+  if (!cert) return ownerKey;
+  const ok = cert.slug === slug && cert.expires_at > now &&
+    ed25519.verify(fromHex(cert.signature, 64), certMessage(cert.slug, fromHex(cert.key, 32), cert.expires_at), fromHex(ownerKey, 32));
+  return ok ? cert.key : null;
+}
+
 /** Certify `key` (hex) to sign invoices of `slug` until `expiresAt`, with the owner's secret. Do it once, offline. */
 export function issueInvoiceKeyCert(ownerSecret: Uint8Array, slug: string, key: string, expiresAt: number): InvoiceKeyCert {
   const signature = toHex(ed25519.sign(certMessage(slug, fromHex(key, 32), expiresAt), ownerSecret));
@@ -59,13 +83,7 @@ export function issueInvoiceKeyCert(ownerSecret: Uint8Array, slug: string, key: 
  */
 export function signInvoice(inv: Invoice, secret: Uint8Array, genesisHash: string, cert?: InvoiceKeyCert): string {
   const signature = ed25519.sign(invoiceMessage(inv, genesisHash), secret);
-  const w = new Writer().raw(encodeInvoice(inv));
-  if (cert) {
-    w.u8(1).string(cert.slug).fixed(fromHex(cert.key, 32), 32).u64(cert.expires_at).fixed(fromHex(cert.signature, 64), 64);
-  } else {
-    w.u8(0);
-  }
-  return toHex(w.raw(signature).done());
+  return toHex(writeCert(new Writer().raw(encodeInvoice(inv)), cert).raw(signature).done());
 }
 
 /** The signed invoice in `hex` read back. */
@@ -80,10 +98,7 @@ export function decodeInvoice(hex: string): { invoice: Invoice; cert: InvoiceKey
     reference: toHex(r.fixed(16)),
     expires_at: Number(r.u64()),
   };
-  const cert =
-    r.u8() === 1
-      ? { slug: r.string(64), key: toHex(r.fixed(32)), expires_at: Number(r.u64()), signature: toHex(r.fixed(64)) }
-      : null;
+  const cert = readCert(r);
   const signature = toHex(r.fixed(64));
   r.end();
   return { invoice, cert, signature };
@@ -96,13 +111,8 @@ export function invoiceProblem(hex: string, slug: string, ownerKey: string, gene
     if (invoice.slug !== slug) return "grain";
     if (invoice.expires_at <= now) return "expired";
     if (invoice.amount === 0n) return "amount";
-    let signer = ownerKey;
-    if (cert) {
-      const ok = cert.slug === slug && cert.expires_at > now &&
-        ed25519.verify(fromHex(cert.signature, 64), certMessage(cert.slug, fromHex(cert.key, 32), cert.expires_at), fromHex(ownerKey, 32));
-      if (!ok) return "cert";
-      signer = cert.key;
-    }
+    const signer = signerOf(cert, slug, ownerKey, now);
+    if (!signer) return "cert";
     return ed25519.verify(fromHex(signature, 64), invoiceMessage(invoice, genesisHash), fromHex(signer, 32)) ? null : "signature";
   } catch (e) {
     return "malformed";

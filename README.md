@@ -69,7 +69,14 @@ const answer = await grain.login(challenge);   // { key, signature, at, origin }
 await grain.storage.set("rating", "1640");     // synced across the user's devices, 1 MiB per grain
 const { id } = await grain.pay({ invoice });   // from a tap; the wallet's own sheet and PIN
 grain.on("theme", ({ theme }) => repaint(theme));
+
+const me = await grain.relay.open();           // the user's address in this grain, at the wallet's relay
+await grain.relay.send(peer, bytes, { keep: true });   // sealed to peer's key; at most 48 000 bytes
+const stop = grain.relay.onFrame((from, payload) => apply(from, payload));
+await grain.notifications.allow();             // asked once: your server may notify with the grain closed
 ```
+
+Frames without a sponsor use the relay's free share, never the user's own channel.
 
 Every method rejects with a `GrainError` whose `code` is `4001` (the user refused), `4100` (not
 permitted: the manifest does not ask for it, or no tap before a payment), `4200` (unsupported),
@@ -79,7 +86,7 @@ wallet).
 ## The server
 
 ```ts
-import { newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment } from "@salarium/grain-server";
+import { newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification } from "@salarium/grain-server";
 
 // Sign-in: give the page a challenge, check what grain.login returned.
 const ok = verifyLogin(answer, { slug: "chess", origin: "https://chess.example", challenge });
@@ -91,7 +98,20 @@ const invoice = signInvoice({ slug: "chess", to, asset: "SALT", amount: 2_500_00
 
 // The payment, by the reference its public memo carries.
 const payment = await findPayment(nodeUrl, myAddress, reference);
+
+// Users through the relays, under the server key: frames both ways and notifications.
+const relay = await RelayClient.connect({ node: nodeUrl, secret: serverSecret, network: "testnet" });
+await relay.notify(userGrainAddress, signNotification(
+  { slug: "chess", title: "Your move", body: "Bob played e4", start: "game-7", at: Date.now() }, serverSecret, genesisHash, cert));
+await relay.send(userGrainAddress, bytes);                       // live; { keep: true } for the mailbox
+relay.on("frame", ({ from, payload, kept }) => handle(from, payload));
 ```
+
+`RelayClient` (Salarium 09-relay §3, 12-grains §5.4–5.5) registers under the server key with a record it signs
+itself, its messaging key derived from that key (`serverMessagingSecret`); it trusts a relay's self-signed
+certificate only by the hash in the relay's record, takes users' messaging keys only from records it checked,
+acknowledges kept frames with a signed proof, and reconnects on its own, to another relay when one fails. Its
+frames use the free share for now. `notificationProblem` checks a notification as a wallet does.
 
 The manifest your site serves at `/.well-known/salarium-grain` is `signManifest(manifest,
 ownerSecret)`'s output (`grain sign`); keep the owner's key off servers. `signGrainTx` makes the

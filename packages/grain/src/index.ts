@@ -71,7 +71,12 @@ export type Haptic = "light" | "medium" | "heavy" | "success" | "warning" | "err
 export interface Events {
   theme: { theme: Theme };
   visibility: { visible: boolean };
+  /** A frame to the grain's alias at the relay (`relay.open`), opened by the wallet: `payload` is hex. */
+  relay: { from: string; payload: string };
 }
+
+/** The most a frame through the relays carries, in bytes (12-grains §11). */
+export const MAX_RELAY_PAYLOAD = 48_000;
 
 interface Provider {
   request(args: { method: string; params?: object }): Promise<unknown>;
@@ -171,6 +176,12 @@ function hex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function unhex(text: string): Uint8Array {
+  const out = new Uint8Array(text.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(text.slice(2 * i, 2 * i + 2), 16);
+  return out;
+}
+
 export const grain = {
   info: () => call<GrainInfo>("grain_info"),
   /** The grain is drawn: the wallet hides its splash. */
@@ -208,6 +219,42 @@ export const grain = {
     set: (key: string, value: string) => call<null>("grain_storage_set", { key, value }),
     remove: (key: string) => call<null>("grain_storage_remove", { key }),
     keys: async () => (await call<{ keys: string[] }>("grain_storage_keys")).keys,
+  },
+  /**
+   * Real time between the grain's users, and with its server, through the relays (12-grains §5.4),
+   * under the user's key in this grain. Frames are sealed by the wallet to the recipient's key.
+   */
+  relay: {
+    /** Register the grain's alias at the wallet's relay; resolves with the address others send to. */
+    open: async () => (await call<{ address: string }>("grain_relay_open")).address,
+    /**
+     * Send `payload` (at most `MAX_RELAY_PAYLOAD` bytes) to `to`: live only, or with `keep` kept in the
+     * recipient's mailbox until its wallet takes it. Rejects when it did not go out.
+     */
+    send: (to: string, payload: Uint8Array, options: { keep?: boolean } = {}) => {
+      if (payload.length === 0 || payload.length > MAX_RELAY_PAYLOAD) {
+        return Promise.reject(new GrainError(ErrorCode.InvalidParams, `payload: 1 to ${MAX_RELAY_PAYLOAD} bytes`));
+      }
+      return call<null>("grain_relay_send", { to, payload: hex(payload), keep: options.keep ?? false });
+    },
+    /** Unregister the alias (it stays while the grain's notifications are allowed). */
+    close: () => call<null>("grain_relay_close"),
+    /** Frames to the alias, as bytes; returns what stops listening. */
+    onFrame(handler: (from: string, payload: Uint8Array) => void): () => void {
+      const wrapped = (data: unknown) => {
+        const { from, payload } = data as Events["relay"];
+        handler(from, unhex(payload));
+      };
+      provider()?.on?.("relay", wrapped);
+      return () => {
+        provider()?.off?.("relay", wrapped);
+      };
+    },
+  },
+  /** Notifications from your server while the grain is closed (12-grains §5.5). */
+  notifications: {
+    /** Ask the user once whether the grain may notify them; resolves with the answer. */
+    allow: async () => (await call<{ allowed: boolean }>("grain_notifications_allow")).allowed,
   },
   on<E extends keyof Events>(event: E, handler: (data: Events[E]) => void): void {
     provider()?.on?.(event, handler as (data: unknown) => void);
