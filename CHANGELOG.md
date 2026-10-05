@@ -4,6 +4,13 @@
 
 ### Added
 
+- `@salarium/grain-cli` 0.1.0, the `grain` command line (Salarium 12-grains §10): `init` (a project with an
+  owner-only key and the bridge), `dev` (public/ and the manifest signed for the asking developer origin),
+  `lint` (bounds, developer origins, the size a transaction allows), `icon`, `sign`, `publish` (register or
+  update through a node, deposit and balance checked first), `retire`, `show`. Checked against a local devnet:
+  registered, updated and retired a grain end to end.
+- `@salarium/grain-server`: `encodeGrainTx`, `signGrainTx`, `minimumFee`, `grainGet` — the owner's registry
+  transactions, byte for byte `vectors/grains-v1.json`.
 - `slugLink(slug, start?)`: the link that opens a registered grain, `salt:grain/<slug>`; `GrainInfo.listing`
   may be `listed` (in the network's registry, not on the wallet's verified list; Salarium 12-grains §9).
   Vectors synced with Salarium's registry transactions.

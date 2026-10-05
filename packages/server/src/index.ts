@@ -9,3 +9,4 @@ export * from "./manifest.js";
 export * from "./login.js";
 export * from "./invoice.js";
 export * from "./node.js";
+export * from "./registry.js";
