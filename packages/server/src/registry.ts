@@ -2,7 +2,7 @@
 // update and retire a grain, encoded and signed as the node checks them, and what a node says of a slug.
 import { ed25519 } from "@noble/curves/ed25519";
 import { Writer, derive, fromHex, toHex } from "./bytes.js";
-import { encodeManifest, type SignedManifest } from "./manifest.js";
+import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
 import { rpc } from "./node.js";
 
 /** What `RegisterGrain` keeps until the grain retires: 100 SALT, in base units. */
@@ -89,4 +89,11 @@ export interface RegisteredGrain {
 /** What the registry holds under `slug`; null when nobody registered it. */
 export async function grainGet(nodeUrl: string, slug: string): Promise<RegisteredGrain | null> {
   return (await rpc<{ grain: RegisteredGrain | null }>(nodeUrl, "grain_get", { slug })).grain;
+}
+
+const ZERO_KEY = "00".repeat(32);
+
+/** Whether `a` and `b` are the same manifest but for its owner: what a wallet published from a link. */
+export function sameManifest(a: Manifest, b: Manifest): boolean {
+  return toHex(encodeManifest({ ...a, owner_key: ZERO_KEY })) === toHex(encodeManifest({ ...b, owner_key: ZERO_KEY }));
 }

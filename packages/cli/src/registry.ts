@@ -1,9 +1,10 @@
 // `grain publish`, `grain retire` and `grain show`: the owner's registry calls through a node's wallet interface
 // (Salarium 12-grains §3, 08-node §6), signed with the owner's key file.
 import {
-  type SignedManifest, type GrainCall, rpc, grainGet, signGrainTx, minimumFee, accountId, toHex, fromHex, GRAIN_DEPOSIT,
-  type RegisteredGrain,
+  type Manifest, type SignedManifest, type GrainCall, rpc, grainGet, signGrainTx, minimumFee, accountId, toHex, fromHex,
+  GRAIN_DEPOSIT, type RegisteredGrain, sameManifest,
 } from "@salarium/grain-server";
+import { publishLink } from "./publish.js";
 import { publicKeyOf } from "./project.js";
 
 export interface Signing {
@@ -84,4 +85,23 @@ export async function waitFor(node: string, slug: string, done: (g: RegisteredGr
     await new Promise((r) => setTimeout(r, 3000));
   }
   return false;
+}
+
+/** The link that asks the owner's wallet to publish `m` (12-grains §10), after what the registry says rules it out:
+ *  a retired slug, or a version not above the registered one. Whose the slug is, the wallet checks. */
+export async function walletLink(m: Manifest, node: string): Promise<string> {
+  const now = await grainGet(node, m.slug);
+  if (now?.retired != null) throw new Error(`${m.slug}: retired at slot ${now.retired}; a retired slug is never used again`);
+  if (now && m.version <= now.version) throw new Error(`${m.slug}: version ${now.version} is registered; raise "version" above it`);
+  return publishLink(m);
+}
+
+/** The signed manifest once the registry holds `m` as a wallet published it (any owner key); null after `ms`. */
+export async function waitForPublished(node: string, m: Manifest, ms: number): Promise<SignedManifest | null> {
+  let found: SignedManifest | null = null;
+  await waitFor(node, m.slug, (g) => {
+    if (g?.manifest && g.retired === null && sameManifest(g.manifest.manifest, m)) found = g.manifest;
+    return found !== null;
+  }, ms);
+  return found;
 }

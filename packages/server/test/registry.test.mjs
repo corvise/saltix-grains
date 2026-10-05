@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { encodeGrainTx, grainTxId, signGrainTx, minimumFee, fromHex, toHex } from "../dist/index.js";
+import { encodeGrainTx, grainTxId, signGrainTx, minimumFee, fromHex, toHex, sameManifest } from "../dist/index.js";
 import { ed25519 } from "@noble/curves/ed25519";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
@@ -31,4 +31,10 @@ test("only the owner's manifest and a valid slug are signed", () => {
   const other = fromHex("62".repeat(32), 32);
   assert.throws(() => signGrainTx(other, { nonce: 0, fee: 0, validUntilSlot: 1 }, { register: register.call.manifest }, v.registry.genesis_hash), /owner_key/);
   assert.throws(() => signGrainTx(secret, { nonce: 0, fee: 0, validUntilSlot: 1 }, { retire: "Go" }, v.registry.genesis_hash), /slug/);
+});
+
+test("a wallet's manifest is the same but for its owner", () => {
+  const m = v.manifests.find((c) => c.name === "hosted").json.manifest;
+  assert.ok(sameManifest(m, { ...m, owner_key: "22".repeat(32) }));
+  assert.ok(!sameManifest(m, { ...m, version: m.version + 1 }));
 });

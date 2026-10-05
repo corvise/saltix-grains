@@ -4,6 +4,10 @@
 
 ### Added
 
+- `grain publish` in the owner's wallet (Salarium 12-grains §10): without a key file it shows a QR code of
+  `salt:grain-publish?m=…` (the manifest's Borsh, `owner_key` zeroed, raw DEFLATE, base64url), waits for the
+  registry to hold the grain as the wallet published it, and writes `signed.json`; `grain show --out`. Checked
+  end to end with a debug Saltix on a local devnet. `sameManifest` in the server SDK.
 - `@salarium/grain-cli` 0.1.0, the `grain` command line (Salarium 12-grains §10): `init` (a project with an
   owner-only key and the bridge), `dev` (public/ and the manifest signed for the asking developer origin),
   `lint` (bounds, developer origins, the size a transaction allows), `icon`, `sign`, `publish` (register or

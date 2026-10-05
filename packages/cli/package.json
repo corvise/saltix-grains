@@ -17,10 +17,12 @@
   "dependencies": {
     "@salarium/grain": "*",
     "@salarium/grain-server": "*",
-    "@noble/curves": "^1.6.0"
+    "@noble/curves": "^1.6.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5"
   }
 }
