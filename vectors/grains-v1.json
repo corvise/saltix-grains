@@ -1,0 +1,143 @@
+{
+  "hashes": {
+    "bundle": "d4952a8893f3276bec43da678f0cbbacacc8d2e9bf060c569158bc169211ee9e",
+    "bundle_of": "notes bundle",
+    "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
+    "icon_of": "chess icon"
+  },
+  "invoices": {
+    "cases": [
+      {
+        "memo_text": "abababababababababababababababab Premium, 1 month",
+        "message": "dfbfa1597312e314d4f3353aaa7460afc8812c537e5b4845de64a43350e74ac6",
+        "name": "by-owner",
+        "signed_borsh": "05000000636865737377777777777777777777777777777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a0010000007dc06dca55a9103653f08d667893b271d81f39a443b154a45c3d7e20477c1ed880165d49c50fcd643ef6c94a702590deb5fac7234ac67f0645eb613d02f3b406"
+      },
+      {
+        "memo_text": "abababababababababababababababab Premium, 1 month",
+        "message": "dfbfa1597312e314d4f3353aaa7460afc8812c537e5b4845de64a43350e74ac6",
+        "name": "by-certified-key",
+        "signed_borsh": "05000000636865737377777777777777777777777777777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000da869ba74f1495fad753cded2ad7920d5dbeaf993bf7e5468a326746ef0ea7a4030fcc5e445bafa6ba177ddb60b898e35859a15a76cca6a4ddd7f485cb22fe05e781b67c60a0409d30995f74dc7e9196ed2a729b6cd456ce30c8b4d41e7b21c6cfa3aedc2ff48ba4ca354db2ba945520a1b40a2095246c2e33e8ee60b4ef4a07"
+      }
+    ],
+    "cert": {
+      "expires_at": 1790086400000,
+      "key": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
+      "signature": "da869ba74f1495fad753cded2ad7920d5dbeaf993bf7e5468a326746ef0ea7a4030fcc5e445bafa6ba177ddb60b898e35859a15a76cca6a4ddd7f485cb22fe05",
+      "slug": "chess"
+    },
+    "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "network": "testnet",
+    "now": 1790000000000,
+    "owner_key": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+    "server_secret": "6363636363636363636363636363636363636363636363636363636363636363"
+  },
+  "keys": {
+    "account": 0,
+    "grains": [
+      {
+        "public_key": "a4514f8e374aec9952a5adb31c747cb9987a51414df90e17d536d5a2a146c6ae",
+        "slug": "chess"
+      },
+      {
+        "public_key": "d83bd3d25ba4abe78aa256856a78ac5c078b93c133a392ef9ecbfabe10fa19ca",
+        "slug": "salt-notes"
+      }
+    ],
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    "passphrase": "",
+    "secret": "4ca03ccf9bc5f9c9f0879b8983e7039f36d374363fa80122d729a0deb210b933",
+    "secret_path": "m/44'/1010'/0'/3'/0'"
+  },
+  "login": {
+    "at": 1790000000000,
+    "borsh": "0500000063686573731500000068747470733a2f2f63686573732e6578616d706c650e0000006368616c6c656e67652d30303031006c50c4a0010000",
+    "challenge": "6368616c6c656e67652d30303031",
+    "key": "a4514f8e374aec9952a5adb31c747cb9987a51414df90e17d536d5a2a146c6ae",
+    "message": "f37c565b1d9b9f3a71a3cefa3394cb9c5a8b091b11fb3ec5525dc5fb03713874",
+    "origin": "https://chess.example",
+    "signature": "ac9b1fd4ea7af45a3baec31317df11124308132eb381777a0bf4419889e128f790139107b4e5220dc4e973c99d056748d8080ded694a7273c75f517a51d22a07",
+    "slug": "chess"
+  },
+  "manifests": [
+    {
+      "borsh": "05000000636865737303000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444444444444444444444444444440100",
+      "id": "8580f642695a07a657c016f88cb9436c1370087b1151e46be3194e4335883b58",
+      "json": {
+        "manifest": {
+          "description": {
+            "en": "Play with friends"
+          },
+          "entry": {
+            "hosted": {
+              "origins": [
+                "https://chess.example"
+              ],
+              "url": "https://chess.example/play"
+            }
+          },
+          "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
+          "min_host": 1,
+          "name": {
+            "en": "Chess",
+            "ru": "Шахматы"
+          },
+          "owner_key": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+          "permissions": 67,
+          "slug": "chess",
+          "sponsor": "4444444444444444444444444444444444444444444444444444444444444444",
+          "version": 3
+        },
+        "signature": "e5cde00310c3547268349c240f7b58a3f4d67f5985d19438ed6029d65c3f7c965304b8632997e37ce41acaf4bde5aa405765e6616505f3357a2fa941e356a502"
+      },
+      "message": "e279913699a51763945709afa3c59a9b650d69d474196d6cf9bbee28253a862e",
+      "name": "hosted",
+      "signature": "e5cde00310c3547268349c240f7b58a3f4d67f5985d19438ed6029d65c3f7c965304b8632997e37ce41acaf4bde5aa405765e6616505f3357a2fa941e356a502"
+    },
+    {
+      "borsh": "0a00000073616c742d6e6f74657301000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e050000004e6f7465730000000093f07baca059d307e8add61881eb5683b11527b829262dd9bd7745d444f614c401d4952a8893f3276bec43da678f0cbbacacc8d2e9bf060c569158bc169211ee9e3930000000000000010000002400000068747470733a2f2f63646e2e6578616d706c652f73616c742d6e6f7465732d312e7a69700a000000696e6465782e68746d6c0000000001000000000100",
+      "id": "8e0fefcc88da736fd0f006809367138c703d99ef137f0ad2df8acb1576c0fff5",
+      "json": {
+        "manifest": {
+          "description": {},
+          "entry": {
+            "sealed": {
+              "bundle": "d4952a8893f3276bec43da678f0cbbacacc8d2e9bf060c569158bc169211ee9e",
+              "connect": [],
+              "size": 12345,
+              "sources": [
+                "https://cdn.example/salt-notes-1.zip"
+              ],
+              "start": "index.html"
+            }
+          },
+          "icon": "93f07baca059d307e8add61881eb5683b11527b829262dd9bd7745d444f614c4",
+          "min_host": 1,
+          "name": {
+            "en": "Notes"
+          },
+          "owner_key": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+          "permissions": 1,
+          "slug": "salt-notes",
+          "sponsor": null,
+          "version": 1
+        },
+        "signature": "fb0273056dd0fac01ea1b5eacf028813780d1e65a7b9b18ae2dcbcb01077340e317b21ed5332453bf1fcea075963e078968175934b1ca18bd3dbe6ce328ba702"
+      },
+      "message": "8345dcdab42f7c1775251b69e0825af8d2201fe47aeb3898ac111c9f7dfd036e",
+      "name": "sealed",
+      "signature": "fb0273056dd0fac01ea1b5eacf028813780d1e65a7b9b18ae2dcbcb01077340e317b21ed5332453bf1fcea075963e078968175934b1ca18bd3dbe6ce328ba702"
+    }
+  ],
+  "notes": [
+    "grain secret: the SLIP-0010 node m/44'/1010'/account'/3'/0'; a grain's key: Ed25519 from the seed BLAKE3-derive_key(\"Salarium grain key v1\", secret || slug)",
+    "manifest: Borsh of GrainManifest; id = derive_key(\"Salarium grain manifest id v1\", borsh); the owner signs derive_key(\"Salarium grain manifest v1\", borsh)",
+    "json: the form a hosted grain serves at /.well-known/salarium-grain; bytes in lowercase hex",
+    "icon = derive_key(\"Salarium grain icon v1\", png); bundle = derive_key(\"Salarium grain bundle v1\", zip)",
+    "login: the grain key signs derive_key(\"Salarium grain login v1\", Borsh(GrainLogin))",
+    "invoice: the signer signs derive_key(\"Salarium grain invoice v1\", genesis_hash || Borsh(Invoice)); a certified key's InvoiceKeyCert is signed by the owner over derive_key(\"Salarium grain invoice key v1\", Borsh((slug, key, expires_at)))",
+    "the payment's public memo: the reference in lowercase hex, a space, the invoice's text"
+  ],
+  "owner_secret": "6161616161616161616161616161616161616161616161616161616161616161",
+  "version": 1
+}

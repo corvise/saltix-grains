@@ -1,0 +1,16 @@
+{
+  "name": "@salarium/grain",
+  "version": "0.1.0",
+  "description": "The bridge between a grain and the Salarium wallet it runs in (specs/12-grains.md §5)",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "devDependencies": { "typescript": "^5.6.0" }
+}

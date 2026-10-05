@@ -1,0 +1,23 @@
+{
+  "name": "salarium-grains",
+  "private": true,
+  "description": "SDKs and tools for grains, apps that open inside Salarium wallets (Salarium specs/12-grains.md)",
+  "license": "MIT",
+  "workspaces": [
+    "packages/grain",
+    "packages/server"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces && npm run build:simulator",
+    "build:simulator": "esbuild simulator/simulator.ts --bundle --format=esm --outfile=simulator/dist/simulator.js",
+    "test": "npm run build && npm test --workspaces",
+    "dev": "npm run build && node scripts/dev.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}
