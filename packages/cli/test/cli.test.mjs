@@ -10,8 +10,10 @@ import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, toHex, fromHex, verifyManifest } from "@salarium/grain-server";
 import { lint, sign, forOrigin, readKey, signedFor } from "../dist/project.js";
-import { publish, retire } from "../dist/registry.js";
+import { publish, retire, walletLink, waitForPublished } from "../dist/registry.js";
 import { serve } from "../dist/dev.js";
+import { publishLink, publishLinkManifest } from "../dist/publish.js";
+import { encodeManifest } from "@salarium/grain-server";
 
 const secret = fromHex("61".repeat(32), 32);
 const owner = toHex(ed25519.getPublicKey(secret));
@@ -152,4 +154,37 @@ test("init makes a project the owner alone can sign for", () => {
   assert.equal(m.owner_key, toHex(ed25519.getPublicKey(key)));
   assert.ok(verifyManifest(signedFor(join(dir, "dice", "grain.json"), key)));
   assert.throws(() => execFileSync("node", [main, "init", join(dir, "dice")], { stdio: "pipe" }), "not over an existing grain");
+});
+
+test("the wallet's way: a link first, the signed manifest from the registry after", async () => {
+  const before = await fakeNode({});
+  const link = await walletLink(manifest(), before.url);
+  assert.ok(link.startsWith("salt:grain-publish?m="));
+  before.close();
+  const registered = { slug: "chess", owner: "77".repeat(32), version: 1, retired: null };
+  const stale = await fakeNode({ grain: registered });
+  await assert.rejects(walletLink(manifest(), stale.url), /raise "version"/);
+  stale.close();
+  const gone = await fakeNode({ grain: { ...registered, retired: 9 } });
+  await assert.rejects(walletLink(manifest({ version: 2 }), gone.url), /never used again/);
+  gone.close();
+  // The wallet's key in the registry's manifest: the same grain but for its owner.
+  const walletKey = "33".repeat(32);
+  const published = { manifest: { ...manifest(), owner_key: walletKey }, signature: "44".repeat(64) };
+  const after = await fakeNode({ grain: { ...registered, owner: "88".repeat(32), manifest: published } });
+  assert.deepEqual(await waitForPublished(after.url, manifest(), 1000), published);
+  assert.equal(await waitForPublished(after.url, manifest({ version: 2 }), 100), null, "another version is not it");
+  after.close();
+});
+
+test("a publish link carries the manifest without its owner", () => {
+  const m = manifest();
+  const link = publishLink(m);
+  assert.ok(link.startsWith("salt:grain-publish?m=") && link.length < 500, link);
+  assert.equal(toHex(publishLinkManifest(link)), toHex(encodeManifest({ ...m, owner_key: "00".repeat(32) })));
+  // Text that does not compress: eight descriptions of 200 scattered CJK characters.
+  const scattered = (seed) => Array.from({ length: 200 }, (_, i) => String.fromCodePoint(0x4e00 + ((i * 7919 + seed * 104729) % 20000))).join("");
+  const huge = manifest({ description: Object.fromEntries(["en", "ru", "de", "fr", "es", "it", "pt", "pl"].map((l, k) => [l, scattered(k)])) });
+  assert.throws(() => publishLink(huge), /key file/);
+  assert.equal(publishLinkManifest("salt:grain/chess"), null);
 });

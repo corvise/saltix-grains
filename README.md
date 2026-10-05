@@ -38,18 +38,23 @@ cd dice && npx grain dev                  # serves public/ and the manifest sign
 npx grain lint                            # what stops grain.json from being registered
 npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
 npx grain sign                            # signed.json: serve it at /.well-known/salarium-grain
-npx grain publish --node http://127.0.0.1:30334 --wait   # register the slug (100 SALT) or a newer version
+npx grain publish --node http://127.0.0.1:30334   # a QR code: the owner's Saltix registers it (100 SALT)
+npx grain publish --node … --key owner.key --wait # or sign with a key file (test networks)
 npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
 ```
 
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix.
-- `publish` asks the node for the slug: unregistered → `RegisterGrain` with the deposit; the owner's
-  with a lower version → `UpdateGrain`; anything else is refused before a transaction is made. It
-  checks the owner's balance, signs with `owner.key`, submits through the node's wallet interface
-  (plain HTTP: a local node or an SSH tunnel), and writes `signed.json`.
-- `owner.key` is a key file, for devnets and the test network. On mainnet the owner's key should be
-  the wallet's: signing and registering from Saltix by a QR code comes next (12-grains §10).
+- `publish` without a key file shows `salt:grain-publish?m=…` as a QR code (Salarium 12-grains §10):
+  scan it with the owner's Saltix, which fills in its account's key, checks the manifest and the
+  registry, shows the grain and the deposit and, after the PIN, signs and registers it (or records
+  a newer version). The tool waits for the registry and writes `signed.json`, the form your origin
+  serves. The owner's key never leaves the phone.
+- With `owner.key` (or `--key`), for devnets and the test network: it asks the node for the slug —
+  unregistered → `RegisterGrain` with the deposit; the owner's with a lower version → `UpdateGrain`;
+  anything else is refused before a transaction is made — checks the balance, signs and submits
+  through the node's wallet interface (plain HTTP: a local node or an SSH tunnel).
+- `grain show --slug S --node … --out signed.json` writes the signed manifest the registry holds.
 
 ## The page
 

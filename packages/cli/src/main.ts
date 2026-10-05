@@ -5,7 +5,8 @@ import { join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { iconHash, verifyManifest, type Manifest } from "@salarium/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf } from "./project.js";
-import { publish, retire, show, waitFor, type Signing } from "./registry.js";
+import QRCode from "qrcode";
+import { publish, retire, show, waitFor, walletLink, waitForPublished, type Signing } from "./registry.js";
 import { serve, linkFor } from "./dev.js";
 import * as template from "./template.js";
 
@@ -16,9 +17,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain lint [--manifest grain.json]       what stops the manifest from being registered
   grain icon <png>                         the hash a manifest names its 256x256 icon by
   grain sign [--out signed.json]           the signed manifest, for /.well-known/salarium-grain
-  grain publish --node URL [--wait]        register the slug (100 SALT deposit) or record a newer version
+  grain publish --node URL [--wallet]      register the slug (100 SALT deposit) or record a newer version:
+                                           signed in the owner's wallet by a QR code, or with --key
+                                           (a key file, for test networks) when owner.key is there
   grain retire --slug S --node URL         close the slug for good; the deposit returns 30 days later
-  grain show --slug S --node URL           what the registry holds for a slug
+  grain show --slug S --node URL [--out F] what the registry holds for a slug; F gets its signed manifest
 
   --manifest F   the manifest (grain.json); --key F   the owner's key file (owner.key)
   --node URL     a node's wallet interface (plain HTTP: a local node or a tunnel)
@@ -117,6 +120,27 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case "publish": {
+      if (flags.get("wallet") === true || !existsSync(keyPath)) {
+        // The owner's key stays in the wallet: it fills in owner_key, signs and pays (12-grains §10).
+        const node = text(flags, "node");
+        const { manifest } = readManifest(manifestPath);
+        const unowned = { ...manifest, owner_key: "00".repeat(32) };
+        const { errors } = lint(unowned);
+        if (errors.length > 0) throw new Error(errors.join("\n"));
+        const link = await walletLink(manifest, node);
+        console.log(await QRCode.toString(link, { type: "terminal", small: true, errorCorrectionLevel: "L" }));
+        console.log(`Scan it with the owner's Saltix (the phone's camera opens it), check the grain and confirm with the PIN.`);
+        console.log(`The link: ${link}`);
+        console.log("Waiting for the registry…");
+        const signed = await waitForPublished(node, manifest, Number(text(flags, "timeout", "600")) * 1000);
+        if (signed === null) {
+          console.error(`not in the registry yet: once the wallet's transaction lands, grain show --slug ${manifest.slug} --node ${node} --out signed.json writes it`);
+          return 1;
+        }
+        writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
+        console.log(`${manifest.slug} v${manifest.version} is in the registry, owned by key ${signed.manifest.owner_key}; ${text(flags, "out", "signed.json")} written`);
+        return 0;
+      }
       const secret = readKey(keyPath);
       const signed = signedFor(manifestPath, secret);
       const s = signing(flags);
@@ -140,6 +164,11 @@ async function main(argv: string[]): Promise<number> {
     case "show": {
       const g = await show(text(flags, "node"), text(flags, "slug"));
       console.log(JSON.stringify(g, null, 2));
+      const out = flags.get("out");
+      if (typeof out === "string" && g?.manifest) {
+        writeFileSync(out, JSON.stringify(g.manifest, null, 2) + "\n");
+        console.log(`${out}: the signed manifest the registry holds`);
+      }
       return g === null ? 1 : 0;
     }
     case "help":
