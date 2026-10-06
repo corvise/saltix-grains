@@ -42,6 +42,10 @@ test("the same files make the same bundle, whatever their times", () => {
   assert.match(listing, /index\.html/);
   assert.match(listing, /js\/app\.js/);
   assert.equal(execFileSync("unzip", ["-p", join(dir, "b.zip"), "index.html"]).toString(), "<h1>notes</h1>".repeat(50));
+  // Compressible past what wallets unpack: refused though the ZIP would be small.
+  writeFileSync(join(dir, "public", "zeros.bin"), Buffer.alloc(64 * 1024 * 1024 + 1));
+  assert.throws(() => makeBundle(join(dir, "public")), /unpacks to at most/);
+  writeFileSync(join(dir, "public", "zeros.bin"), Buffer.alloc(1));
   mkdirSync(join(dir, "public", "bad"), { recursive: true });
   writeFileSync(join(dir, "public", "bad", "a\tb.js"), "");
   assert.throws(() => makeBundle(join(dir, "public")), /names use/);

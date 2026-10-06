@@ -5,8 +5,9 @@ import { join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { bundleHash, type Manifest } from "@salarium/grain-server";
 
-/** A bundle is at most this large (12-grains §11). */
+/** A bundle is at most this large (12-grains §11), and unpacks to at most MAX_UNPACKED (§8: what every wallet takes). */
 export const MAX_BUNDLE = 20 * 1024 * 1024;
+export const MAX_UNPACKED = 64 * 1024 * 1024;
 /** Names a bundle may hold: what a wallet unpacks (Saltix `GrainBundles`). */
 const NAME = /^[A-Za-z0-9._ ~@+-]+(\/[A-Za-z0-9._ ~@+-]+)*$/;
 
@@ -58,11 +59,14 @@ export function makeBundle(dir: string): Bundle {
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
   let offset = 0;
+  let unpacked = 0;
   for (const name of files) {
     if (!NAME.test(name) || name.split("/").some((p) => p === "." || p === "..")) {
       throw new Error(`${name}: a bundle's names use [A-Za-z0-9._ ~@+-] and /`);
     }
     const data = new Uint8Array(readFileSync(join(dir, ...name.split("/"))));
+    unpacked += data.length;
+    if (unpacked > MAX_UNPACKED) throw new Error(`the files come to more than ${MAX_UNPACKED} bytes; a bundle unpacks to at most that`);
     const deflated = new Uint8Array(deflateRawSync(data, { level: 9 }));
     const [method, body] = deflated.length < data.length ? [8, deflated] : [0, data];
     const nameBytes = new TextEncoder().encode(name);
