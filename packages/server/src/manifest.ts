@@ -113,7 +113,7 @@ export function manifestProblem(m: Manifest, dev = false): string | null {
   } else {
     const e = m.entry.sealed;
     if (!(e.size >= 1 && e.size <= 20 * 1024 * 1024)) return "size";
-    if (e.sources.length < 1 || e.sources.length > 8 || !e.sources.every((s) => s.length <= 2048 && originOf(s) !== null)) return "sources";
+    if (e.sources.length < 1 || e.sources.length > 8 || !e.sources.every((s) => s.length <= 2048 && originOf(s, dev) !== null)) return "sources";
     const parts = e.start.split("/");
     if (!/^[A-Za-z0-9._/-]{1,256}$/.test(e.start) || e.start.startsWith("/") || parts.some((p) => p === "" || p === "." || p === ".."))
       return "start";

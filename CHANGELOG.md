@@ -4,6 +4,10 @@
 
 ### Added
 
+- Sealed grains (Salarium 12-grains §8): `grain bundle` makes a deterministic ZIP of `public/` (at most 20 MiB) and
+  names its hash, size, sources, start and connect origins in `grain.json`; `grain dev` makes and serves the bundle of a
+  sealed grain for a debug wallet. `manifestProblem(m, dev)` takes developer origins as a sealed grain's sources.
+
 - A grain's sponsor (Salarium 11-access §4, 12-grains §5.4):
   - `@salarium/grain`: `relay.open({ grant })`;
   - `@salarium/grain-server`: `issueSponsorCert`, `decodeSponsorCert`, `sponsorCertProblem`, `grantFor` (a grant at login
