@@ -33,7 +33,8 @@ async function node(state) {
 }
 const s = (url) => ({ node: url, validFor: 600 });
 // After sender (32), nonce, fee and valid_until_slot (8 each): the action's tag, then the exchange.
-const action = (hex) => [fromHex(hex)[56], toHex(fromHex(hex).slice(57, 89))];
+// Transaction v3: the sender's tag and key (33), nonce, fee, last slot (24), then the action's tag and exchange.
+const action = (hex) => [fromHex(hex)[57], toHex(fromHex(hex).slice(58, 90))];
 
 test("amounts of WORK are exact", () => {
   assert.equal(parseWork("2.5"), 2_500_000n);
