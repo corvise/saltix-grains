@@ -38,6 +38,8 @@ cd dice && npx grain dev                  # serves public/ and the manifest sign
 npx grain lint                            # what stops grain.json from being registered
 npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
 npx grain sign                            # signed.json: serve it at /.well-known/salarium-grain
+npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
+                                          # a sealed grain: public/ as one ZIP named by its hash
 npx grain publish --node http://127.0.0.1:30334   # a QR code: the owner's Saltix registers it (100 SALT)
 npx grain publish --node … --key owner.key --wait # or sign with a key file (test networks)
 npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
@@ -55,6 +57,12 @@ npx grain retire --slug dice --node …     # close the slug for good; the depos
   anything else is refused before a transaction is made — checks the balance, signs and submits
   through the node's wallet interface (plain HTTP: a local node or an SSH tunnel).
 - `grain show --slug S --node … --out signed.json` writes the signed manifest the registry holds.
+- `grain bundle` seals `public/` (Salarium 12-grains §8): one ZIP of its files — sorted, no times, so
+  the same files make the same bytes — at most 20 MiB, and `grain.json` names its hash, size,
+  `sources` (where you upload `bundle.zip`), `start` and the `connect` origins the grain may reach.
+  Wallets download it, check the hash and serve it from the phone at `https://<slug>.grain.invalid`,
+  with the network limited to `connect`. A sealed grain's `grain dev` makes the bundle for every
+  manifest it serves and serves it at `/_bundle.zip`, so a debug Saltix runs it as it will run.
 
 ## The page
 

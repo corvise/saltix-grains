@@ -9,6 +9,7 @@ import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, type Signing } from "./registry.js";
 import { serve, linkFor } from "./dev.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
+import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Salarium 12-grains)
@@ -18,6 +19,9 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain lint [--manifest grain.json]       what stops the manifest from being registered
   grain icon <png>                         the hash a manifest names its 256x256 icon by
   grain sign [--out signed.json]           the signed manifest, for /.well-known/salarium-grain
+  grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip]
+                                           seal public/ into one ZIP; grain.json names its hash and size
+                                           (upload bundle.zip to the sources; grain dev serves it itself)
   grain publish --node URL [--wallet]      register the slug (100 SALT deposit) or record a newer version:
                                            signed in the owner's wallet by a QR code, or with --key
                                            (a key file, for test networks) when owner.key is there
@@ -176,6 +180,20 @@ async function main(argv: string[]): Promise<number> {
         console.log(`${out}: the signed manifest the registry holds`);
       }
       return g === null ? 1 : 0;
+    }
+    case "bundle": {
+      const { manifest } = readManifest(manifestPath);
+      const made = makeBundle(join(text(flags, "dir", "."), "public"));
+      const list = (name: string) => (typeof flags.get(name) === "string" ? (flags.get(name) as string).split(",").filter(Boolean) : undefined);
+      const next = sealed(manifest, made, {
+        sources: list("sources"), start: typeof flags.get("start") === "string" ? (flags.get("start") as string) : undefined, connect: list("connect"),
+      });
+      const out = text(flags, "out", "bundle.zip");
+      writeFileSync(out, made.zip);
+      writeFileSync(manifestPath, JSON.stringify(next, null, 2) + "\n");
+      console.log(`${out}: ${made.files.length} files, ${made.size} bytes, bundle ${made.hash}`);
+      console.log(`${manifestPath} names it; upload ${out} to ${("sealed" in next.entry ? next.entry.sealed.sources : []).join(", ")}, raise "version" if it was published, then grain publish`);
+      return 0;
     }
     case "sponsor": {
       const sponsorKey = text(flags, "key", SPONSOR_KEY_FILE);
