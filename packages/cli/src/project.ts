@@ -68,7 +68,8 @@ export function lint(m: Manifest, ownerKey?: string): Lint {
   if (!problem) {
     // The manifest rides in the transaction that registers it.
     const signed: SignedManifest = { manifest: m, signature: "00".repeat(64) };
-    const size = encodeGrainTx({ sender: m.owner_key, nonce: 0, fee: 0, validUntilSlot: 0 }, { register: signed }).length + 64;
+    // The proof adds its tag and the signature.
+    const size = encodeGrainTx({ sender: m.owner_key, nonce: 0, fee: 0, validUntilSlot: 0 }, { register: signed }).length + 1 + 64;
     if (size > MAX_TX_SIZE) errors.push(`size: registering it takes a ${size}-byte transaction, a node takes at most ${MAX_TX_SIZE}; shorten the descriptions`);
   }
   if (/^0+$/.test(m.icon ?? "")) warnings.push("icon: still zero; `grain icon <256x256.png>` gives its hash");

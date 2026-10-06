@@ -72,7 +72,8 @@ async function fakeNode(state) {
 
 const signing = (node) => ({ node, validFor: 600 });
 // After sender (32), nonce, fee and valid_until_slot (8 each): Action::Registry (1), then the call's tag.
-const callTag = (hex) => fromHex(hex)[57];
+// Transaction v3: the sender's tag and key (33), nonce, fee, last slot (24), the action's tag, then the call's.
+const callTag = (hex) => fromHex(hex)[58];
 
 test("publish registers a new slug and updates the owner's", async () => {
   const fresh = await fakeNode({});

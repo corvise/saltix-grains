@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Transaction v3 (Salarium 03-ledger §3, 13-accounts §6.1): `encodeTx`, `signTx` and every transaction built on them
+  (grains' registry calls, a sponsor's channel) carry the sender's tag and the proof's, and their id is
+  `"Salarium transaction v3"`; fees count the extra byte. Vectors synced from Salarium 602995e. Every package's tests
+  exit when one fails instead of waiting on an open server.
+
 ### Added
 
 - Sealed grains (Salarium 12-grains §8): `grain bundle` makes a deterministic ZIP of `public/` (at most 20 MiB) and
