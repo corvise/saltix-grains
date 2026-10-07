@@ -9,7 +9,12 @@
     "vault item: domain \"Salarium vault item v1\", payload = Borsh(account_key, collection u8, key, version u64, epoch u32, sealed Vec<u8>, device Option<cert>); key = BLAKE3 keyed(vault key, logical key); sealed = nonce ‖ XChaCha20-Poly1305(vault key, nonce, plaintext, aad = Borsh(account_key, collection, key, version, epoch)), empty for a tombstone",
     "link code: BLAKE3 derive_key(\"Salarium link code v1\", ephemeral ‖ device key), first 8 bytes big-endian, mod 100 000 000",
     "link payload: E ‖ XChaCha20-Poly1305(key, nonce = 24 zero bytes, aad = sid ‖ device key), with E = X25519(e, 9), S = X25519(e, Q) for the QR's key Q, key = BLAKE3 derive_key(\"Salarium link payload v1\", S ‖ E ‖ Q); sent as base64url",
-    "frames carry records as base64url; relays take it with or without padding"
+    "frames carry records as base64url; relays take it with or without padding",
+    "managed signer (09-relay §1.4): tag 0 Root [u8; 32] Ed25519 key, tag 1 Device (tag 0 Ed25519 [u8; 32] | tag 1 P256 [u8; 33] compressed); signs BLAKE3 derive_key(domain, payload) with Ed25519, or ECDSA P-256 over SHA-256 of it as r ‖ s with a low s",
+    "managed binding: domain \"Salarium managed messaging key v1\", payload = Borsh(account [32], messaging_key [32], key_epoch u32, issued_at u64, seq u32, signer); checked against the account's key event log (vectors/accounts-v1.json `log`) at seq",
+    "managed record: domain \"Salarium managed address record v1\", payload = Borsh(body) with body = (binding, relay, issued_at u64, nonce [u8; 16], signer)",
+    "managed ack: domain \"Salarium managed mailbox ack v1\", payload = Borsh(account [32], msg_id String, at u64, signer)",
+    "vault item signer (10-storage §5.1, §5.5): the item's last field before the signature is u8 0 (the account key) | 1 ‖ certificate (a certified device) — what Option<cert> encodes — | 2 ‖ managed signer; a managed account's item carries its account id where a kind 0 item carries its key, also in the aad"
   ],
   "vectors": [
     {
@@ -189,6 +194,66 @@
       "qr_key_hex": "4049502db92ca2342c3f92dac5d6de7c85db5df5407a5b4996ce39f2efb7e827",
       "qr_secret_hex": "6161616161616161616161616161616161616161616161616161616161616161",
       "sid": "cXFxcXFxcXFxcXFxcXFxcXFxcXFxcXFxcXFxcXFxcXE"
+    },
+    {
+      "account_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111",
+      "encoded_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111232323232323232323232323232323232323232323232323232323232323232300000000006c50c4a0010000050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed552b76fbbe7d56446dfe9666e6fb433966bd71663739dda0f0bac27ea9ebfa2767506ea0d98e92438e6b387eb4111ddcb3889a27ff11b041b088e5d31c3fff72",
+      "issued_at": 1790000000000,
+      "key_epoch": 0,
+      "kind": "managed_binding",
+      "messaging_key_hex": "2323232323232323232323232323232323232323232323232323232323232323",
+      "name": "managed binding by the phone",
+      "seq": 5,
+      "signature_hex": "552b76fbbe7d56446dfe9666e6fb433966bd71663739dda0f0bac27ea9ebfa2767506ea0d98e92438e6b387eb4111ddcb3889a27ff11b041b088e5d31c3fff72",
+      "signer_hex": "0101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed"
+    },
+    {
+      "binding_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111232323232323232323232323232323232323232323232323232323232323232300000000006c50c4a0010000050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed552b76fbbe7d56446dfe9666e6fb433966bd71663739dda0f0bac27ea9ebfa2767506ea0d98e92438e6b387eb4111ddcb3889a27ff11b041b088e5d31c3fff72",
+      "encoded_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111232323232323232323232323232323232323232323232323232323232323232300000000006c50c4a0010000050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed552b76fbbe7d56446dfe9666e6fb433966bd71663739dda0f0bac27ea9ebfa2767506ea0d98e92438e6b387eb4111ddcb3889a27ff11b041b088e5d31c3fff7220828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7e86f50c4a0010000313131313131313131313131313131310101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4edb64005bd2a8544c73ae6f0bb1e43dc0a4445d1bdfc611819f95daa1bf093e5a971cbcf731b9a32152e8ca9f5658c1be323ab05e9837cabf107e4caffd44b911d",
+      "issued_at": 1790000001000,
+      "kind": "managed_record",
+      "name": "managed record of the phone",
+      "nonce_hex": "31313131313131313131313131313131",
+      "record_b64": "s2Sd08Vskljg3hGHHpW0P_lxQyebuhpPbCeUCLxfYREjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIwAAAAAAbFDEoAEAAAUAAAABAQICF-YX8LZEOSgnj5aZnmmiOk8sFSvfbWzfZuW4AoLU7VUrdvu-fVZEbf6WZub7QzlmvXFmNzndoPC6wn6p6_onZ1BuoNmOkkOOazh-tBEd3LOImif_EbBBsIjl0xw__3Iggov1xb3Ky2hIYzNsIC-1WZ2ki-VZZhV0IXBwW-yp9-hvUMSgAQAAMTExMTExMTExMTExMTExMQEBAgIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTttkAFvSqFRMc65vC7HkPcCkRF0b38YRgZ-V2qG_CT5alxy89zG5oyFS6MqfVljBvjI6sF6YN8q_EH5Mr_1EuRHQ",
+      "relay_hex": "20828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7",
+      "signature_hex": "b64005bd2a8544c73ae6f0bb1e43dc0a4445d1bdfc611819f95daa1bf093e5a971cbcf731b9a32152e8ca9f5658c1be323ab05e9837cabf107e4caffd44b911d",
+      "signer_hex": "0101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed"
+    },
+    {
+      "binding_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111232323232323232323232323232323232323232323232323232323232323232300000000006c50c4a0010000050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed552b76fbbe7d56446dfe9666e6fb433966bd71663739dda0f0bac27ea9ebfa2767506ea0d98e92438e6b387eb4111ddcb3889a27ff11b041b088e5d31c3fff72",
+      "encoded_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111232323232323232323232323232323232323232323232323232323232323232300000000006c50c4a0010000050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed552b76fbbe7d56446dfe9666e6fb433966bd71663739dda0f0bac27ea9ebfa2767506ea0d98e92438e6b387eb4111ddcb3889a27ff11b041b088e5d31c3fff7220828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7e86f50c4a0010000323232323232323232323232323232320100a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0345c8ece4858671f9a35c9661f5a8322e0e4ef62afdfa3736c46dde004c0358fffeb0d02a6f880ce4c0de064cc95857f90db3cf42e3fab983672391019745c0d",
+      "issued_at": 1790000001000,
+      "kind": "managed_record",
+      "name": "managed record of the browser",
+      "nonce_hex": "32323232323232323232323232323232",
+      "record_b64": "s2Sd08Vskljg3hGHHpW0P_lxQyebuhpPbCeUCLxfYREjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIwAAAAAAbFDEoAEAAAUAAAABAQICF-YX8LZEOSgnj5aZnmmiOk8sFSvfbWzfZuW4AoLU7VUrdvu-fVZEbf6WZub7QzlmvXFmNzndoPC6wn6p6_onZ1BuoNmOkkOOazh-tBEd3LOImif_EbBBsIjl0xw__3Iggov1xb3Ky2hIYzNsIC-1WZ2ki-VZZhV0IXBwW-yp9-hvUMSgAQAAMjIyMjIyMjIyMjIyMjIyMgEAoJql9HpnWYAv-VX43C0qFKXJnSO-l_hkEn_5ODRVpPA0XI7OSFhnH5o1yWYfWoMi4OTvYq_fo3NsRt3gBMA1j__rDQKm-IDOTA3gZMyVhX-Q2zz0Lj-rmDZyORAZdFwN",
+      "relay_hex": "20828bf5c5bdcacb684863336c202fb5599da48be5596615742170705beca9f7",
+      "signature_hex": "345c8ece4858671f9a35c9661f5a8322e0e4ef62afdfa3736c46dde004c0358fffeb0d02a6f880ce4c0de064cc95857f90db3cf42e3fab983672391019745c0d",
+      "signer_hex": "0100a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+    },
+    {
+      "account_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111",
+      "collection": 1,
+      "encoded_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111014141414141414141414141414141414141414141414141414141414141414141b87750c4a00100000000000030000000424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242020101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed6e7716bc3eba748c0c292a994949372a8f51192291dfc75f2d1e2e5110c5f15732574ea9e3d2281c8670b8b202392b650de0d3ac1c87ed0e0e0465e647e7209b",
+      "epoch": 0,
+      "item_b64": "s2Sd08Vskljg3hGHHpW0P_lxQyebuhpPbCeUCLxfYREBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUG4d1DEoAEAAAAAAAAwAAAAQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCAgEBAgIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtbncWvD66dIwMKSqZSUk3Ko9RGSKR38dfLR4uURDF8VcyV06p49IoHIZwuLICOStlDeDTrByH7Q4OBGXmR-cgmw",
+      "key_hex": "4141414141414141414141414141414141414141414141414141414141414141",
+      "kind": "managed_vault_item",
+      "name": "managed vault item by the phone",
+      "sealed_hex": "424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242",
+      "signature_hex": "6e7716bc3eba748c0c292a994949372a8f51192291dfc75f2d1e2e5110c5f15732574ea9e3d2281c8670b8b202392b650de0d3ac1c87ed0e0e0465e647e7209b",
+      "version": 1790000003000
+    },
+    {
+      "account_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111",
+      "at": 1790000002000,
+      "encoded_hex": "b3649dd3c56c9258e0de11871e95b43ff97143279bba1a4f6c279408bc5f6111030000006d2d31d07350c4a00100000100a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0127d71e9e938a67111ae14466ca31e66275e2c2c08ef4a9de1f7b7bb56436f18d924896ceffe41ae7382217d200409aad21d2df20ff42f52b904f351a6bfd101",
+      "kind": "managed_ack",
+      "msg_id": "m-1",
+      "name": "managed ack by the browser",
+      "proof_b64": "s2Sd08Vskljg3hGHHpW0P_lxQyebuhpPbCeUCLxfYREDAAAAbS0x0HNQxKABAAABAKCapfR6Z1mAL_lV-NwtKhSlyZ0jvpf4ZBJ_-Tg0VaTwEn1x6ek4pnERrhRGbKMeZideLCwI70qd4fe3u1ZDbxjZJIls7_5BrnOCIX0gBAmq0h0t8g_0L1K5BPNRpr_RAQ",
+      "signature_hex": "127d71e9e938a67111ae14466ca31e66275e2c2c08ef4a9de1f7b7bb56436f18d924896ceffe41ae7382217d200409aad21d2df20ff42f52b904f351a6bfd101",
+      "signer_hex": "0100a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
     }
   ],
   "version": 1

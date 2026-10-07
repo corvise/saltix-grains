@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
-import { bundleHash, fromHex, toHex, verifyManifest } from "@salarium/grain-server";
+import { accountId, bundleHash, fromHex, toHex, verifyManifest } from "@salarium/grain-server";
 import { makeBundle, sealed } from "../dist/bundle.js";
 import { serve, DEV_BUNDLE } from "../dist/dev.js";
 
@@ -22,7 +22,8 @@ function grainDir() {
 
 const secret = fromHex("61".repeat(32), 32);
 const manifest = (entry) => ({
-  slug: "notes", version: 1, owner_key: toHex(ed25519.getPublicKey(secret)), name: { en: "Notes" }, description: {},
+  slug: "notes", version: 1, owner: toHex(accountId(ed25519.getPublicKey(secret))),
+  owner_key: { ed25519: toHex(ed25519.getPublicKey(secret)) }, name: { en: "Notes" }, description: {},
   icon: "11".repeat(32), entry, permissions: 1, sponsor: null, min_host: 1,
 });
 

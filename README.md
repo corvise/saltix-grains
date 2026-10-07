@@ -137,8 +137,12 @@ acknowledges kept frames with a signed proof, and reconnects on its own, to anot
 frames use the free share for now. `notificationProblem` checks a notification as a wallet does.
 
 The manifest your site serves at `/.well-known/salarium-grain` is `signManifest(manifest,
-ownerSecret)`'s output (`grain sign`); keep the owner's key off servers. `signGrainTx` makes the
-owner's registry transactions (`RegisterGrain`, `UpdateGrain`, `RetireGrain`) as `grain publish` does.
+ownerSecret)`'s output (`grain sign`); keep the owner's key off servers. A manifest names its `owner`
+account and an `owner_key` that speaks for it (Salarium 12-grains §2): a key file's own account and
+key (`{ "ed25519": "<hex>" }`), or — published from Saltix by a managed account — its phone's P-256 key
+(`{ "p256": "<hex>" }`). `invoiceProblem` and `notificationProblem` take that `owner_key`;
+`verifyByDeviceKey` checks either kind. `signGrainTx` makes a plain owner's registry transactions
+(`RegisterGrain`, `UpdateGrain`, `RetireGrain`) as `grain publish` does.
 
 ## Checks
 

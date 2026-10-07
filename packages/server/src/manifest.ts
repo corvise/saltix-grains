@@ -1,5 +1,6 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Writer, derive, fromHex, toHex } from "./bytes.js";
+import { type DeviceKey, deviceKeyOf, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
 
 export const PERMISSIONS = {
   storage: 1,
@@ -19,7 +20,11 @@ export type Entry =
 export interface Manifest {
   slug: string;
   version: number;
-  owner_key: string;
+  /** The developer's account id: it registers, updates and retires the grain. */
+  owner: string;
+  /** The key that signs the manifest and certifies server keys: it speaks for `owner` — a plain account's own Ed25519
+   *  key, or a managed account's device (13-accounts §5). */
+  owner_key: DeviceKey;
   name: Record<string, string>;
   description: Record<string, string>;
   icon: string;
@@ -69,7 +74,7 @@ function texts(w: Writer, map: Record<string, string>): void {
 
 /** The manifest's Borsh form: what is hashed and signed. */
 export function encodeManifest(m: Manifest): Uint8Array {
-  const w = new Writer().string(m.slug).u32(m.version).fixed(fromHex(m.owner_key, 32), 32);
+  const w = writeDeviceKey(new Writer().string(m.slug).u32(m.version).fixed(fromHex(m.owner, 32), 32), m.owner_key);
   texts(w, m.name);
   texts(w, m.description);
   w.fixed(fromHex(m.icon, 32), 32);
@@ -100,6 +105,8 @@ export const bundleHash = (zip: Uint8Array) => toHex(derive("Salarium grain bund
 export function manifestProblem(m: Manifest, dev = false): string | null {
   if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(m.slug)) return "slug";
   if (!Number.isInteger(m.version) || m.version < 1 || m.version > 0xffffffff) return "version";
+  if (typeof m.owner !== "string" || !/^[0-9a-f]{64}$/.test(m.owner)) return "owner";
+  if (deviceKeyOf(m.owner_key) === null) return "owner_key";
   const textsOk = (map: Record<string, string>, max: number) =>
     Object.keys(map).length <= 16 &&
     Object.entries(map).every(([lang, t]) => /^[a-z-]{2,8}$/.test(lang) && t.length > 0 && [...t].length <= max && !/\p{Cc}/u.test(t));
@@ -124,19 +131,22 @@ export function manifestProblem(m: Manifest, dev = false): string | null {
   return null;
 }
 
-/** Sign `m` with the owner's 32-byte secret: the JSON form to publish. `dev` takes developer origins. */
+/** Sign `m` with the owner key's 32-byte Ed25519 secret: the JSON form to publish. `dev` takes developer origins. (A
+ *  managed account's phone signs with P-256 in its wallet.) */
 export function signManifest(m: Manifest, ownerSecret: Uint8Array, dev = false): SignedManifest {
-  if (toHex(ed25519.getPublicKey(ownerSecret)) !== m.owner_key) throw new TypeError("owner_key is not the secret's");
+  const own = toHex(ed25519.getPublicKey(ownerSecret));
+  if (!("ed25519" in m.owner_key) || m.owner_key.ed25519 !== own) throw new TypeError("owner_key is not the secret's");
   const problem = manifestProblem(m, dev);
   if (problem) throw new TypeError(`manifest: ${problem}`);
   return { manifest: m, signature: toHex(ed25519.sign(manifestMessage(m), ownerSecret)) };
 }
 
-/** Whether `signed` is in bounds and signed by its owner. */
+/** Whether `signed` is in bounds and signed by its owner key. That the key speaks for `owner` is the chain's to check
+ *  (the owner's account at a node). */
 export function verifyManifest(signed: SignedManifest, dev = false): boolean {
   try {
     return manifestProblem(signed.manifest, dev) === null &&
-      ed25519.verify(fromHex(signed.signature, 64), manifestMessage(signed.manifest), fromHex(signed.manifest.owner_key, 32));
+      verifyByDeviceKey(signed.manifest.owner_key, manifestMessage(signed.manifest), signed.signature);
   } catch {
     return false;
   }
