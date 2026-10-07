@@ -4,6 +4,10 @@
 
 ### Changed
 
+- A sponsor certificate's key carries its tag (Salarium 11-access §4.3: `sponsor` is a device key, so a managed
+  account's phone can grant with P-256): `encodeSponsorCert` writes Ed25519's tag 0 before the key, `decodeSponsorCert`
+  and `sponsorCertProblem` take only an Ed25519 sponsor, as a grain's server signs. Vectors synced from Salarium (with a
+  phone's grant).
 - Transaction v3 (Salarium 03-ledger §3, 13-accounts §6.1): `encodeTx`, `signTx` and every transaction built on them
   (grains' registry calls, a sponsor's channel) carry the sender's tag and the proof's, and their id is
   `"Salarium transaction v3"`; fees count the extra byte. Vectors synced from Salarium 602995e. Every package's tests
