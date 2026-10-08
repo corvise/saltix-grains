@@ -6,6 +6,7 @@
  */
 export * from "./bytes.js";
 export * from "./address.js";
+export * from "./keys.js";
 export * from "./manifest.js";
 export * from "./login.js";
 export * from "./invoice.js";

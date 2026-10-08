@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   type Manifest, type SignedManifest, manifestProblem, verifyManifest, signManifest, originOf, encodeGrainTx,
-  MAX_TX_SIZE, fromHex, toHex,
+  MAX_TX_SIZE, accountId, fromHex, toHex,
 } from "@salarium/grain-server";
 
 export const MANIFEST_FILE = "grain.json";
@@ -48,6 +48,20 @@ export function newKey(path: string): string {
 
 export const publicKeyOf = (secret: Uint8Array) => toHex(ed25519.getPublicKey(secret));
 
+/** The plain owner a key file makes (12-grains §2): the key's own account, the key itself. */
+export function ownerOf(publicKey: string): Pick<Manifest, "owner" | "owner_key"> {
+  return { owner: toHex(accountId(fromHex(publicKey, 32))), owner_key: { ed25519: publicKey } };
+}
+
+/** Why `m` is not the key file's to sign and register, or null. */
+function notTheKeys(m: Manifest, publicKey: string): string | null {
+  const own = ownerOf(publicKey);
+  if (!m.owner_key || !("ed25519" in m.owner_key) || m.owner_key.ed25519 !== publicKey) {
+    return "owner_key: not the key file's public key";
+  }
+  return m.owner === own.owner ? null : "owner: not the key file's account (a managed account publishes from its wallet)";
+}
+
 export interface Lint {
   errors: string[];
   warnings: string[];
@@ -64,12 +78,14 @@ export function lint(m: Manifest, ownerKey?: string): Lint {
       ? "origins: developer origins (http://localhost, 127.0.0.1, 10.0.2.2) work with grain dev only; register an https origin"
       : `${problem}: out of bounds (Salarium 12-grains §2)`);
   }
-  if (ownerKey !== undefined && m.owner_key !== ownerKey) errors.push("owner_key: not the key file's public key");
+  const notOurs = ownerKey === undefined ? null : notTheKeys(m, ownerKey);
+  if (notOurs) errors.push(notOurs);
   if (!problem) {
-    // The manifest rides in the transaction that registers it.
+    // The manifest rides in the transaction that registers it; a sender is its tag and 32 bytes either way.
     const signed: SignedManifest = { manifest: m, signature: "00".repeat(64) };
+    const sender = "ed25519" in m.owner_key ? m.owner_key.ed25519 : "00".repeat(32);
     // The proof adds its tag and the signature.
-    const size = encodeGrainTx({ sender: m.owner_key, nonce: 0, fee: 0, validUntilSlot: 0 }, { register: signed }).length + 1 + 64;
+    const size = encodeGrainTx({ sender, nonce: 0, fee: 0, validUntilSlot: 0 }, { register: signed }).length + 1 + 64;
     if (size > MAX_TX_SIZE) errors.push(`size: registering it takes a ${size}-byte transaction, a node takes at most ${MAX_TX_SIZE}; shorten the descriptions`);
   }
   if (/^0+$/.test(m.icon ?? "")) warnings.push("icon: still zero; `grain icon <256x256.png>` gives its hash");
@@ -86,7 +102,8 @@ export function sign(m: Manifest, secret: Uint8Array, dev = false): SignedManife
 export function signedFor(path: string, secret: Uint8Array): SignedManifest {
   const { manifest, signed } = readManifest(path);
   const owner = publicKeyOf(secret);
-  if (manifest.owner_key !== owner) throw new Error("owner_key: not the key file's public key");
+  const notOurs = notTheKeys(manifest, owner);
+  if (notOurs) throw new Error(notOurs);
   if (signed) {
     if (!verifyManifest(signed)) throw new Error(`${path}: the signature or the bounds do not check`);
     return signed;

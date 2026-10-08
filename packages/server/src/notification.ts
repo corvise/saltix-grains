@@ -1,6 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { type InvoiceKeyCert, readCert, signerOf, writeCert } from "./invoice.js";
+import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
 
 /**
  * A grain's notification to a user (12-grains §5.5): sealed to the user's key in the grain and sent as
@@ -77,9 +78,9 @@ export function decodeNotification(bytes: Uint8Array): { notification: GrainNoti
 
 /**
  * What a wallet checks (12-grains §5.5): why it would not show `bytes` as `slug`'s notification, or
- * null. `ownerKey` is the manifest's owner key (hex).
+ * null. `ownerKey` is the manifest's owner key.
  */
-export function notificationProblem(bytes: Uint8Array, slug: string, ownerKey: string, genesisHash: string, now = Date.now()): string | null {
+export function notificationProblem(bytes: Uint8Array, slug: string, ownerKey: DeviceKey, genesisHash: string, now = Date.now()): string | null {
   let decoded;
   try {
     decoded = decodeNotification(bytes);
@@ -93,5 +94,5 @@ export function notificationProblem(bytes: Uint8Array, slug: string, ownerKey: s
   if (n.at + NOTIFICATION_LIMITS.maxAgeMs < now || n.at > now + NOTIFICATION_LIMITS.aheadMs) return "time";
   const signer = signerOf(cert, slug, ownerKey, now);
   if (!signer) return "cert";
-  return ed25519.verify(fromHex(signature, 64), notificationMessage(n, genesisHash), fromHex(signer, 32)) ? null : "signature";
+  return verifyByDeviceKey(signer, notificationMessage(n, genesisHash), signature) ? null : "signature";
 }

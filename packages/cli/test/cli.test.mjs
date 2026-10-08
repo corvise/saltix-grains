@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
-import { accountId, toHex, fromHex, verifyManifest } from "@salarium/grain-server";
+import { UNOWNED, accountId, toHex, fromHex, verifyManifest } from "@salarium/grain-server";
 import { lint, sign, forOrigin, readKey, signedFor } from "../dist/project.js";
 import { publish, retire, walletLink, waitForPublished } from "../dist/registry.js";
 import { serve } from "../dist/dev.js";
@@ -19,7 +19,7 @@ const secret = fromHex("61".repeat(32), 32);
 const owner = toHex(ed25519.getPublicKey(secret));
 const ownerId = toHex(accountId(fromHex(owner, 32)));
 const manifest = (over = {}) => ({
-  slug: "chess", version: 1, owner_key: owner, name: { en: "Chess", ru: "Шахматы" }, description: {},
+  slug: "chess", version: 1, owner: ownerId, owner_key: { ed25519: owner }, name: { en: "Chess", ru: "Шахматы" }, description: {},
   icon: "11".repeat(32), entry: { hosted: { url: "https://chess.example/", origins: ["https://chess.example"] } },
   permissions: 1, sponsor: null, min_host: 1, ...over,
 });
@@ -30,6 +30,9 @@ test("lint says what stops a registration", () => {
   assert.match(dev.errors[0], /developer origins/);
   assert.match(lint(manifest({ slug: "Chess" })).errors[0], /^slug/);
   assert.match(lint(manifest(), "22".repeat(32)).errors[0], /owner_key/);
+  // The key file's own account owns it: a managed account publishes from its wallet.
+  assert.match(lint(manifest({ owner: "77".repeat(32) }), owner).errors[0], /^owner:/);
+  assert.match(lint(manifest({ owner_key: { p256: "02" + "33".repeat(32) } }), owner).errors[0], /owner_key/);
   const languages = ["en", "ru", "de", "fr", "es", "it", "pt", "pl", "uk", "kk", "tr", "ja", "zh", "ko", "ar", "hi"];
   // Every text at its longest, in four-byte characters, and a long URL: in bounds, but too large to register.
   const texts = (n) => Object.fromEntries(languages.map((l) => [l, "\u{1F600}".repeat(n)]));
@@ -45,7 +48,7 @@ test("a manifest is signed for its owner, and for a developer's origin", () => {
   const local = forOrigin(manifest(), "http://10.0.2.2:8090");
   assert.deepEqual(local.entry, { hosted: { url: "http://10.0.2.2:8090/", origins: ["http://10.0.2.2:8090"] } });
   assert.ok(verifyManifest(sign(local, secret, true), true));
-  assert.throws(() => sign(manifest({ owner_key: "22".repeat(32) }), secret), /owner_key/);
+  assert.throws(() => sign(manifest({ owner_key: { ed25519: "22".repeat(32) } }), secret), /owner_key/);
 });
 
 /** A node that answers the wallet interface from `state` and records what was submitted. */
@@ -152,7 +155,8 @@ test("init makes a project the owner alone can sign for", () => {
   const m = JSON.parse(readFileSync(join(dir, "dice", "grain.json"), "utf8"));
   assert.equal(m.slug, "dice");
   const key = readKey(join(dir, "dice", "owner.key"));
-  assert.equal(m.owner_key, toHex(ed25519.getPublicKey(key)));
+  assert.deepEqual(m.owner_key, { ed25519: toHex(ed25519.getPublicKey(key)) });
+  assert.equal(m.owner, toHex(accountId(ed25519.getPublicKey(key))));
   assert.ok(verifyManifest(signedFor(join(dir, "dice", "grain.json"), key)));
   assert.throws(() => execFileSync("node", [main, "init", join(dir, "dice")], { stdio: "pipe" }), "not over an existing grain");
 });
@@ -170,8 +174,10 @@ test("the wallet's way: a link first, the signed manifest from the registry afte
   await assert.rejects(walletLink(manifest({ version: 2 }), gone.url), /never used again/);
   gone.close();
   // The wallet's key in the registry's manifest: the same grain but for its owner.
-  const walletKey = "33".repeat(32);
-  const published = { manifest: { ...manifest(), owner_key: walletKey }, signature: "44".repeat(64) };
+  const published = {
+    manifest: { ...manifest(), owner: "88".repeat(32), owner_key: { p256: "02" + "33".repeat(32) } },
+    signature: "44".repeat(64),
+  };
   const after = await fakeNode({ grain: { ...registered, owner: "88".repeat(32), manifest: published } });
   assert.deepEqual(await waitForPublished(after.url, manifest(), 1000), published);
   assert.equal(await waitForPublished(after.url, manifest({ version: 2 }), 100), null, "another version is not it");
@@ -182,7 +188,7 @@ test("a publish link carries the manifest without its owner", () => {
   const m = manifest();
   const link = publishLink(m);
   assert.ok(link.startsWith("salt:grain-publish?m=") && link.length < 500, link);
-  assert.equal(toHex(publishLinkManifest(link)), toHex(encodeManifest({ ...m, owner_key: "00".repeat(32) })));
+  assert.equal(toHex(publishLinkManifest(link)), toHex(encodeManifest({ ...m, ...UNOWNED })));
   // Text that does not compress: eight descriptions of 200 scattered CJK characters.
   const scattered = (seed) => Array.from({ length: 200 }, (_, i) => String.fromCodePoint(0x4e00 + ((i * 7919 + seed * 104729) % 20000))).join("");
   const huge = manifest({ description: Object.fromEntries(["en", "ru", "de", "fr", "es", "it", "pt", "pl"].map((l, k) => [l, scattered(k)])) });

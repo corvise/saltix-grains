@@ -14,6 +14,7 @@ import { accountId, encodeAddress } from "../packages/server/src/address";
 import { loginMessage } from "../packages/server/src/login";
 import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
 import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
+import { type DeviceKey, deviceKeyOf } from "../packages/server/src/keys";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const frame = $<HTMLIFrameElement>("grain");
@@ -34,9 +35,21 @@ const settings = () => ({
   language: $<HTMLSelectElement>("language").value,
   theme: $<HTMLSelectElement>("theme").value as "dark" | "light",
   address: $<HTMLInputElement>("address").value.trim(),
-  owner: $<HTMLInputElement>("owner").value.trim(),
+  owner: ownerKey($<HTMLInputElement>("owner").value.trim()),
   genesis: $<HTMLInputElement>("genesis").value.trim(),
 });
+
+/** The owner key typed in: an Ed25519 key's hex, or the manifest's JSON form (`{"p256": "<hex>"}`). */
+function ownerKey(text: string): DeviceKey | null {
+  if (text.startsWith("{")) {
+    try {
+      return deviceKeyOf(JSON.parse(text));
+    } catch {
+      return null;
+    }
+  }
+  return /^[0-9a-f]{64}$/.test(text) ? { ed25519: text } : null;
+}
 
 function write(line: string) {
   log.textContent = `${new Date().toLocaleTimeString()} ${line}\n` + log.textContent;
@@ -204,7 +217,8 @@ $<HTMLButtonElement>("manifest").onclick = async () => {
   if (!url) return;
   const signed = await (await fetch(url)).json();
   $<HTMLInputElement>("slug").value = signed.manifest.slug;
-  $<HTMLInputElement>("owner").value = signed.manifest.owner_key;
+  const key = signed.manifest.owner_key;
+  $<HTMLInputElement>("owner").value = "ed25519" in key ? key.ed25519 : JSON.stringify(key);
   $<HTMLInputElement>("url").value = signed.manifest.entry.hosted?.url ?? "";
   write(`manifest of ${signed.manifest.slug} v${signed.manifest.version} loaded`);
 };

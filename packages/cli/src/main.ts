@@ -3,8 +3,8 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { iconHash, verifyManifest, type Manifest } from "@salarium/grain-server";
-import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf } from "./project.js";
+import { UNOWNED, iconHash, verifyManifest, type Manifest } from "@salarium/grain-server";
+import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, type Signing } from "./registry.js";
 import { serve, linkFor } from "./dev.js";
@@ -81,7 +81,7 @@ async function main(argv: string[]): Promise<number> {
       mkdirSync(join(dir, "public"), { recursive: true });
       const ownerKey = newKey(join(dir, KEY_FILE));
       const manifest: Manifest = {
-        slug, version: 1, owner_key: ownerKey, name: { en: name }, description: { en: "" }, icon: "00".repeat(32),
+        slug, version: 1, ...ownerOf(ownerKey), name: { en: name }, description: { en: "" }, icon: "00".repeat(32),
         entry: { hosted: { url: `https://${slug}.example/`, origins: [`https://${slug}.example`] } },
         permissions: 1, sponsor: null, min_host: 1,
       };
@@ -131,10 +131,10 @@ async function main(argv: string[]): Promise<number> {
     }
     case "publish": {
       if (flags.get("wallet") === true || !existsSync(keyPath)) {
-        // The owner's key stays in the wallet: it fills in owner_key, signs and pays (12-grains §10).
+        // The owner's key stays in the wallet: it fills in the owner and its key, signs and pays (12-grains §10).
         const node = text(flags, "node");
         const { manifest } = readManifest(manifestPath);
-        const unowned = { ...manifest, owner_key: "00".repeat(32) };
+        const unowned = { ...manifest, ...UNOWNED };
         const { errors } = lint(unowned);
         if (errors.length > 0) throw new Error(errors.join("\n"));
         const link = await walletLink(manifest, node);
@@ -148,7 +148,7 @@ async function main(argv: string[]): Promise<number> {
           return 1;
         }
         writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
-        console.log(`${manifest.slug} v${manifest.version} is in the registry, owned by key ${signed.manifest.owner_key}; ${text(flags, "out", "signed.json")} written`);
+        console.log(`${manifest.slug} v${manifest.version} is in the registry, owned by account ${signed.manifest.owner}; ${text(flags, "out", "signed.json")} written`);
         return 0;
       }
       const secret = readKey(keyPath);

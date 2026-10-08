@@ -4,6 +4,12 @@
 
 ### Changed
 
+- A grain's manifest names its owner (Salarium 12-grains §2–3): `owner` (the account id) and `owner_key` (`{ ed25519 }`
+  or `{ p256 }`, `DeviceKey`), which must speak for it; a managed account's phone signs with P-256 (`verifyByDeviceKey`:
+  SHA-256, low s). `grain init` writes the key file's account and key; `lint`, `sign` and `publish --key` refuse a
+  manifest that is not the key file's own; publish links zero both (`UNOWNED`). `invoiceProblem`,
+  `notificationProblem` and `signerOf` take the owner key as a `DeviceKey`; the simulator takes either form. Vectors
+  synced (a managed owner's manifest and a phone's server key certificate).
 - A sponsor certificate's key carries its tag (Salarium 11-access §4.3: `sponsor` is a device key, so a managed
   account's phone can grant with P-256): `encodeSponsorCert` writes Ed25519's tag 0 before the key, `decodeSponsorCert`
   and `sponsorCertProblem` take only an Ed25519 sponsor, as a grain's server signs. Vectors synced from Salarium (with a

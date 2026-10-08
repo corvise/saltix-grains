@@ -84,15 +84,15 @@ test("notifications are the node's, by the owner and by a certified server key",
     const secret = cert ? fromHex(inv.server_secret, 32) : fromHex(grains.owner_secret, 32);
     assert.equal(toHex(signNotification(notification, secret, n.genesis_hash, cert ?? undefined)), c.signed_borsh, c.name);
     const bytes = fromHex(c.signed_borsh);
-    assert.equal(notificationProblem(bytes, "chess", inv.owner_key, n.genesis_hash, n.now), null, c.name);
-    assert.equal(notificationProblem(bytes, "go-game", inv.owner_key, n.genesis_hash, n.now), "grain");
-    assert.equal(notificationProblem(bytes, "chess", inv.owner_key, "00".repeat(32), n.now), "signature");
-    assert.equal(notificationProblem(bytes, "chess", inv.owner_key, n.genesis_hash, notification.at + 7 * 86_400_000 + 1), "time");
-    assert.equal(notificationProblem(bytes, "chess", inv.owner_key, n.genesis_hash, notification.at - 5 * 60_000 - 1), "time");
-    if (cert) assert.equal(notificationProblem(bytes, "chess", inv.owner_key, n.genesis_hash, cert.expires_at), "cert");
+    assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, n.now), null, c.name);
+    assert.equal(notificationProblem(bytes, "go-game", { ed25519: inv.owner_key }, n.genesis_hash, n.now), "grain");
+    assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, "00".repeat(32), n.now), "signature");
+    assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, notification.at + 7 * 86_400_000 + 1), "time");
+    assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, notification.at - 5 * 60_000 - 1), "time");
+    if (cert) assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, cert.expires_at), "cert");
     assert.equal(signature.length, 128);
   }
-  assert.equal(notificationProblem(Uint8Array.of(1, 2), "chess", inv.owner_key, n.genesis_hash, n.now), "malformed");
+  assert.equal(notificationProblem(Uint8Array.of(1, 2), "chess", { ed25519: inv.owner_key }, n.genesis_hash, n.now), "malformed");
   const base = { slug: "chess", title: "Hi", body: "", at: 1 };
   assert.throws(() => encodeNotification({ ...base, title: "" }), /title/);
   assert.throws(() => encodeNotification({ ...base, title: "x".repeat(65) }), /title/);

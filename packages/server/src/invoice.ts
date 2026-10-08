@@ -1,5 +1,6 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
+import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
 
 export type Asset = "SALT" | "WORK";
 
@@ -61,17 +62,19 @@ export function readCert(r: Reader): InvoiceKeyCert | null {
 }
 
 /**
- * Who may sign for `slug` (hex key): its owner, or — with `cert` — the key the owner certified for
- * this grain, until it expires; null when the certificate does not hold.
+ * Who may sign for `slug`: the manifest's owner key, or — with `cert` — the server key the owner key certified for
+ * this grain (Ed25519, or P-256 for a managed owner's phone), until it expires; null when the certificate does not
+ * hold. That the owner key still speaks for the owner is the wallet's to check (12-grains §5.2).
  */
-export function signerOf(cert: InvoiceKeyCert | null, slug: string, ownerKey: string, now: number): string | null {
+export function signerOf(cert: InvoiceKeyCert | null, slug: string, ownerKey: DeviceKey, now: number): DeviceKey | null {
   if (!cert) return ownerKey;
   const ok = cert.slug === slug && cert.expires_at > now &&
-    ed25519.verify(fromHex(cert.signature, 64), certMessage(cert.slug, fromHex(cert.key, 32), cert.expires_at), fromHex(ownerKey, 32));
-  return ok ? cert.key : null;
+    verifyByDeviceKey(ownerKey, certMessage(cert.slug, fromHex(cert.key, 32), cert.expires_at), cert.signature);
+  return ok ? { ed25519: cert.key } : null;
 }
 
-/** Certify `key` (hex) to sign invoices of `slug` until `expiresAt`, with the owner's secret. Do it once, offline. */
+/** Certify `key` (hex) to sign invoices of `slug` until `expiresAt`, with the owner key's Ed25519 secret. Do it once,
+ *  offline. */
 export function issueInvoiceKeyCert(ownerSecret: Uint8Array, slug: string, key: string, expiresAt: number): InvoiceKeyCert {
   const signature = toHex(ed25519.sign(certMessage(slug, fromHex(key, 32), expiresAt), ownerSecret));
   return { slug, key, expires_at: expiresAt, signature };
@@ -105,7 +108,7 @@ export function decodeInvoice(hex: string): { invoice: Invoice; cert: InvoiceKey
 }
 
 /** What a wallet checks (12-grains §5.2): why it would refuse `hex`, or null. */
-export function invoiceProblem(hex: string, slug: string, ownerKey: string, genesisHash: string, now = Date.now()): string | null {
+export function invoiceProblem(hex: string, slug: string, ownerKey: DeviceKey, genesisHash: string, now = Date.now()): string | null {
   try {
     const { invoice, cert, signature } = decodeInvoice(hex);
     if (invoice.slug !== slug) return "grain";
@@ -113,7 +116,7 @@ export function invoiceProblem(hex: string, slug: string, ownerKey: string, gene
     if (invoice.amount === 0n) return "amount";
     const signer = signerOf(cert, slug, ownerKey, now);
     if (!signer) return "cert";
-    return ed25519.verify(fromHex(signature, 64), invoiceMessage(invoice, genesisHash), fromHex(signer, 32)) ? null : "signature";
+    return verifyByDeviceKey(signer, invoiceMessage(invoice, genesisHash), signature) ? null : "signature";
   } catch (e) {
     return "malformed";
   }

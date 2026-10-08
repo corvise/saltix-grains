@@ -32,7 +32,8 @@ function manifestFor(origin) {
   return signManifest({
     slug: SLUG,
     version: 1,
-    owner_key: ownerKey,
+    owner: toHex(ownerId),
+    owner_key: { ed25519: ownerKey },
     name: { en: "Hello, grain", ru: "Привет, крупинка" },
     description: { en: "The SDK's example: sign-in, storage, an invoice", ru: "Пример SDK: вход, хранилище, счёт" },
     icon: iconHash(new TextEncoder().encode("hello-grain icon")),

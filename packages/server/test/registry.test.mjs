@@ -35,6 +35,6 @@ test("only the owner's manifest and a valid slug are signed", () => {
 
 test("a wallet's manifest is the same but for its owner", () => {
   const m = v.manifests.find((c) => c.name === "hosted").json.manifest;
-  assert.ok(sameManifest(m, { ...m, owner_key: "22".repeat(32) }));
+  assert.ok(sameManifest(m, { ...m, owner: "22".repeat(32), owner_key: { p256: "02" + "33".repeat(32) } }));
   assert.ok(!sameManifest(m, { ...m, version: m.version + 1 }));
 });
