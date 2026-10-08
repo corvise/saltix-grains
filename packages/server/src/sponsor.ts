@@ -10,10 +10,13 @@ import { minimumTxFee, signTx, type TxFields } from "./tx.js";
 export const SERVICE = { messages: 1, turn: 2, files: 4, mailbox: 8 } as const;
 /** A certificate lives at most this many slots (30 days). */
 export const MAX_GRANT_LIFE = 2_592_000;
+/** The sponsor key's tag on the wire: Ed25519. (A managed account's phone signs with P-256, tag 1; a grain's server
+ *  never does.) */
+const ED25519 = 0;
 
 /** The sponsor's word that `user_key` may spend up to `per_day` µWORK a day from its channels, for `services`. */
 export interface SponsorCert {
-  /** The sponsor's key (hex): its personal account pays, and is the manifest's `sponsor`. */
+  /** The sponsor's Ed25519 key (hex): its personal account pays, and is the manifest's `sponsor`. */
   sponsor: string;
   /** The user's key in the grain (hex): what `grain.login` returned. */
   user_key: string;
@@ -27,8 +30,8 @@ export interface SponsorCert {
 export function encodeSponsorCert(c: SponsorCert): Uint8Array {
   if (!(c.issued < c.expires && c.expires - c.issued <= MAX_GRANT_LIFE)) throw new TypeError("a certificate lives at most 30 days");
   if (!Number.isInteger(c.services) || c.services < 0 || c.services > 0xff) throw new TypeError("services: a byte");
-  return new Writer().fixed(fromHex(c.sponsor, 32), 32).fixed(fromHex(c.user_key, 32), 32).u64(c.per_day).u8(c.services)
-    .u64(c.issued).u64(c.expires).done();
+  return new Writer().u8(ED25519).fixed(fromHex(c.sponsor, 32), 32).fixed(fromHex(c.user_key, 32), 32).u64(c.per_day)
+    .u8(c.services).u64(c.issued).u64(c.expires).done();
 }
 
 /** What the sponsor signs: the certificate on the network of `genesisHash` (hex). */
@@ -47,6 +50,7 @@ export function issueSponsorCert(sponsorSecret: Uint8Array, cert: Omit<SponsorCe
 
 export function decodeSponsorCert(hex: string): { cert: SponsorCert; signature: string } {
   const r = new Reader(fromHex(hex));
+  if (r.u8() !== ED25519) throw new TypeError("sponsor: not an Ed25519 key");
   const cert: SponsorCert = {
     sponsor: toHex(r.fixed(32)), user_key: toHex(r.fixed(32)), per_day: r.u64(), services: r.u8(), issued: Number(r.u64()),
     expires: Number(r.u64()),

@@ -26,6 +26,9 @@ test("a sponsor's certificate is the node's", () => {
   assert.equal(sponsorCertProblem(hex, v.keys.payer_account_hex, "00".repeat(32)), "signature", "another network");
   assert.equal(sponsorCertProblem(issueSponsorCert(payer, { ...cert, services: SERVICE.turn }, genesis), v.keys.payer_account_hex, genesis), "services");
   assert.equal(sponsorCertProblem(hex.slice(0, -2), v.keys.payer_account_hex, genesis), "malformed");
+  // A managed account's phone grants with its P-256 key (tag 1); a grain's sponsor grants with its own Ed25519 key.
+  const phone = v.phone_grant.certificate_hex + v.phone_grant.signature_hex;
+  assert.equal(sponsorCertProblem(phone, v.keys.payer_account_hex, genesis), "malformed");
   assert.throws(() => issueSponsorCert(payer, { ...cert, expires: cert.issued + 2_592_001 }, genesis), /30 days/);
 });
 
