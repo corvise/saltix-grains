@@ -1,5 +1,5 @@
 /**
- * `@salarium/grain-server`: the server side of a grain (Salarium specs/12-grains.md) — check
+ * `@saltix/grain-server`: the server side of a grain (Saltix specs/12-grains.md) — check
  * sign-ins, make and sign invoices, find their payments on chain, sign the manifest, and write to
  * users through the relays (frames and notifications).
  * Byte for byte the node's formats (vectors/grains-v1.json).

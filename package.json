@@ -1,7 +1,7 @@
 {
-  "name": "salarium-grains",
+  "name": "saltix-grains",
   "private": true,
-  "description": "SDKs and tools for grains, apps that open inside Salarium wallets (Salarium specs/12-grains.md)",
+  "description": "SDKs and tools for grains, apps that open inside Saltix wallets (Saltix specs/12-grains.md)",
   "license": "MIT",
   "workspaces": [
     "packages/grain",

@@ -1,10 +1,10 @@
-// A Salarium transaction v3 (03-ledger §3, 13-accounts §6.1): the sender — tag 0 and a kind 0 key — its nonce, fee and
+// A Saltix transaction v3 (03-ledger §3, 13-accounts §6.1): the sender — tag 0 and a kind 0 key — its nonce, fee and
 // last valid slot, then the action; its id binds it to one network, and the proof — tag 0 and the key's signature of
 // the id — follows it.
 import { ed25519 } from "@noble/curves/ed25519";
 import { Writer, derive, fromHex, toHex } from "./bytes.js";
 
-/** Base units of SALT a transaction pays per byte at least (Salarium 03-ledger §7). */
+/** Base units of SALT a transaction pays per byte at least (Saltix 03-ledger §7). */
 export const MIN_FEE_PER_BYTE = 10n;
 /** The largest signed transaction a node takes. */
 export const MAX_TX_SIZE = 16_384;
@@ -36,7 +36,7 @@ const PROOF_KEY = 0;
 
 /** The transaction's id and what the sender signs: bound to the network's genesis. */
 export function txId(body: Uint8Array, genesisHash: string): string {
-  return toHex(derive("Salarium transaction v3", fromHex(genesisHash, 32), body));
+  return toHex(derive("Saltix transaction v3", fromHex(genesisHash, 32), body));
 }
 
 /** Sign the transaction of `action` with the sender's 32-byte secret: hex as `transaction_submit` takes it, and its id. */

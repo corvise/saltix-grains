@@ -1,8 +1,8 @@
-// `grain sponsor`: the account that pays the relays for a grain's users (Salarium 11-access §4, 12-grains §5.4) —
+// `grain sponsor`: the account that pays the relays for a grain's users (Saltix 11-access §4, 12-grains §5.4) —
 // its key file, its channels with cities' exchanges, and the transactions that open, top up and close them.
 import {
   type ChannelCall, type NetworkName, rpc, signChannelTx, channelTxFee, accountId, encodeAddress, toHex, fromHex,
-} from "@salarium/grain-server";
+} from "@saltix/grain-server";
 import { publicKeyOf } from "./project.js";
 import type { Signing } from "./registry.js";
 

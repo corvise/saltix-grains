@@ -1,7 +1,7 @@
 {
-  "name": "@salarium/grain-server",
+  "name": "@saltix/grain-server",
   "version": "0.1.0",
-  "description": "A grain's server side: sign-in checks, invoices, payments on chain and manifests (Salarium specs/12-grains.md)",
+  "description": "A grain's server side: sign-in checks, invoices, payments on chain and manifests (Saltix specs/12-grains.md)",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

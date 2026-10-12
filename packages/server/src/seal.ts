@@ -17,7 +17,7 @@ export function messagingPublic(secret: Uint8Array): Uint8Array {
  * key across restarts and SDKs, so users' wallets keep sealing to it.
  */
 export function serverMessagingSecret(secret: Uint8Array): Uint8Array {
-  return derive("Salarium grain server messaging key v1", secret);
+  return derive("Saltix grain server messaging key v1", secret);
 }
 
 export function sealFrame(plaintext: Uint8Array, recipientKey: Uint8Array, senderSecret: Uint8Array): Uint8Array {

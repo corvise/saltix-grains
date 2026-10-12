@@ -13,7 +13,7 @@ export function newChallenge(): string {
 /** What `grain_login` signs: Borsh of `GrainLogin {slug, origin, challenge, at}` under its domain. */
 export function loginMessage(slug: string, origin: string, challenge: Uint8Array, at: number | bigint): Uint8Array {
   const body = new Writer().string(slug).string(origin).bytes(challenge).u64(at).done();
-  return derive("Salarium grain login v1", body);
+  return derive("Saltix grain login v1", body);
 }
 
 export interface LoginAnswer {

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
-import { accountId, bundleHash, fromHex, toHex, verifyManifest } from "@salarium/grain-server";
+import { accountId, bundleHash, fromHex, toHex, verifyManifest } from "@saltix/grain-server";
 import { makeBundle, sealed } from "../dist/bundle.js";
 import { serve, DEV_BUNDLE } from "../dist/dev.js";
 
@@ -77,7 +77,7 @@ test("grain dev serves a sealed grain's bundle where its manifest says", async (
   });
   try {
     assert.equal((await get(DEV_BUNDLE, `10.0.2.2:${port}`)).status, 404, "no bundle before a manifest names one");
-    const signed = JSON.parse((await get("/.well-known/salarium-grain", `10.0.2.2:${port}`)).body.toString());
+    const signed = JSON.parse((await get("/.well-known/saltix-grain", `10.0.2.2:${port}`)).body.toString());
     const e = signed.manifest.entry.sealed;
     assert.deepEqual(e.sources, [`http://10.0.2.2:${port}${DEV_BUNDLE}`]);
     assert.ok(verifyManifest(signed, true));

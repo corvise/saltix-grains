@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// The grain command line (Salarium 12-grains §10).
+// The grain command line (Saltix 12-grains §10).
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UNOWNED, iconHash, verifyManifest, type Manifest } from "@salarium/grain-server";
+import { UNOWNED, iconHash, verifyManifest, type Manifest } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, type Signing } from "./registry.js";
@@ -12,13 +12,13 @@ import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.j
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
 
-const HELP = `grain — make, serve, check, sign, register and retire grains (Salarium 12-grains)
+const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
   grain init [dir] [--slug S] [--name N]   a new grain: grain.json, owner.key, public/
   grain dev [--port 8090]                  serve public/ with the manifest signed for this computer
   grain lint [--manifest grain.json]       what stops the manifest from being registered
   grain icon <png>                         the hash a manifest names its 256x256 icon by
-  grain sign [--out signed.json]           the signed manifest, for /.well-known/salarium-grain
+  grain sign [--out signed.json]           the signed manifest, for /.well-known/saltix-grain
   grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip]
                                            seal public/ into one ZIP; grain.json names its hash and size
                                            (upload bundle.zip to the sources; grain dev serves it itself)
@@ -89,7 +89,7 @@ async function main(argv: string[]): Promise<number> {
       writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
       writeFileSync(join(dir, "public", "index.html"), template.indexHtml(name));
       writeFileSync(join(dir, "public", "app.js"), template.appJs);
-      const bridge = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@salarium/grain"));
+      const bridge = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain"));
       copyFileSync(bridge, join(dir, "public", "grain.js"));
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
       writeFileSync(join(dir, "README.md"), template.readme(slug));
@@ -126,7 +126,7 @@ async function main(argv: string[]): Promise<number> {
       const signed = signedFor(manifestPath, readKey(keyPath));
       const out = text(flags, "out", "signed.json");
       writeFileSync(out, JSON.stringify(signed, null, 2) + "\n");
-      console.log(`${out}: serve it at /.well-known/salarium-grain`);
+      console.log(`${out}: serve it at /.well-known/saltix-grain`);
       return 0;
     }
     case "publish": {

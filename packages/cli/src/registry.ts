@@ -1,9 +1,9 @@
 // `grain publish`, `grain retire` and `grain show`: the owner's registry calls through a node's wallet interface
-// (Salarium 12-grains §3, 08-node §6), signed with the owner's key file.
+// (Saltix 12-grains §3, 08-node §6), signed with the owner's key file.
 import {
   type Manifest, type SignedManifest, type GrainCall, rpc, grainGet, signGrainTx, minimumFee, accountId, toHex, fromHex,
   GRAIN_DEPOSIT, type RegisteredGrain, sameManifest,
-} from "@salarium/grain-server";
+} from "@saltix/grain-server";
 import { publishLink } from "./publish.js";
 import { publicKeyOf } from "./project.js";
 

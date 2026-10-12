@@ -7,7 +7,7 @@ const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringi
 const run = (id, fn) => document.getElementById(id).addEventListener("click", () => fn().catch((e) => show(`${e.code ?? ""} ${e.message}`)));
 
 if (!inWallet()) {
-  show("Open this grain in a Salarium wallet:\n" + walletLink(`${location.origin}/.well-known/salarium-grain`));
+  show("Open this grain in a Saltix wallet:\n" + walletLink(`${location.origin}/.well-known/saltix-grain`));
 } else {
   grain.info().then((info) => { document.body.dataset.theme = info.theme; show(info); });
   grain.on("theme", ({ theme }) => { document.body.dataset.theme = theme; });

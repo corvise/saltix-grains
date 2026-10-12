@@ -8,12 +8,12 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
-import { UNOWNED, accountId, toHex, fromHex, verifyManifest } from "@salarium/grain-server";
+import { UNOWNED, accountId, toHex, fromHex, verifyManifest } from "@saltix/grain-server";
 import { lint, sign, forOrigin, readKey, signedFor } from "../dist/project.js";
 import { publish, retire, walletLink, waitForPublished } from "../dist/registry.js";
 import { serve } from "../dist/dev.js";
 import { publishLink, publishLinkManifest } from "../dist/publish.js";
-import { encodeManifest } from "@salarium/grain-server";
+import { encodeManifest } from "@saltix/grain-server";
 
 const secret = fromHex("61".repeat(32), 32);
 const owner = toHex(ed25519.getPublicKey(secret));
@@ -133,10 +133,10 @@ test("grain dev serves public/ and the manifest for the asking origin only", asy
   });
   try {
     assert.equal((await get("/")).body, "<h1>hi</h1>");
-    const signed = JSON.parse((await get("/.well-known/salarium-grain", `10.0.2.2:${port}`)).body);
+    const signed = JSON.parse((await get("/.well-known/saltix-grain", `10.0.2.2:${port}`)).body);
     assert.equal(signed.manifest.entry.hosted.origins[0], `http://10.0.2.2:${port}`);
     assert.ok(verifyManifest(signed, true));
-    assert.equal((await get("/.well-known/salarium-grain", "evil.example")).status, 400);
+    assert.equal((await get("/.well-known/saltix-grain", "evil.example")).status, 400);
     assert.equal((await get("/%2e%2e/secret.txt")).status, 404);
     assert.equal((await get("/../secret.txt")).status, 404);
   } finally {

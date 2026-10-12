@@ -1,8 +1,8 @@
-// The link that asks the owner's wallet to publish a grain (Salarium 12-grains §10): the manifest's Borsh form with
+// The link that asks the owner's wallet to publish a grain (Saltix 12-grains §10): the manifest's Borsh form with
 // `owner` and `owner_key` zeroed — the wallet fills in its account and the key that speaks for it — raw DEFLATE,
 // base64url.
 import { deflateRawSync, inflateRawSync } from "node:zlib";
-import { encodeManifest, MAX_TX_SIZE, UNOWNED, type Manifest } from "@salarium/grain-server";
+import { encodeManifest, MAX_TX_SIZE, UNOWNED, type Manifest } from "@saltix/grain-server";
 
 /** A publish link is at most this long, and its manifest inflates to at most `MAX_TX_SIZE` bytes. */
 export const MAX_PUBLISH_LINK = 2048;

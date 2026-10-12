@@ -21,14 +21,14 @@ export const indexHtml = (name: string) => `<!doctype html>
 </html>
 `;
 
-export const appJs = `// A grain: the wallet's bridge (./grain.js is @salarium/grain), storage synced through the user's vault.
+export const appJs = `// A grain: the wallet's bridge (./grain.js is @saltix/grain), storage synced through the user's vault.
 import { grain, inWallet, walletLink } from "./grain.js";
 
 const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 
 if (!inWallet()) {
-  show("Open this grain in a Salarium wallet:\\n" + walletLink(location.origin + "/.well-known/salarium-grain"));
+  show("Open this grain in a Saltix wallet:\\n" + walletLink(location.origin + "/.well-known/saltix-grain"));
 } else {
   grain.info().then((info) => { document.body.dataset.theme = info.theme; show(info); });
   grain.on("theme", ({ theme }) => { document.body.dataset.theme = theme; });
@@ -52,12 +52,12 @@ signed.json
 
 export const readme = (slug: string) => `# ${slug}
 
-A grain: an app that opens inside a Salarium wallet (Salarium specs/12-grains.md).
+A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
 
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
   debug Saltix (the emulator reaches this computer at 10.0.2.2).
 - \`grain lint\` checks \`grain.json\`; set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
-- Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/salarium-grain\`.
+- Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
 - \`grain publish --node <url>\` registers the slug (a 100 SALT deposit, back 30 days after \`grain retire\`).
 
 \`owner.key\` is the grain's owner key: keep it secret and out of git.

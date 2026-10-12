@@ -34,7 +34,7 @@ export interface Manifest {
   min_host: number;
 }
 
-/** The JSON form a hosted grain serves at `/.well-known/salarium-grain`. */
+/** The JSON form a hosted grain serves at `/.well-known/saltix-grain`. */
 export interface SignedManifest {
   manifest: Manifest;
   signature: string;
@@ -95,11 +95,11 @@ export function encodeManifest(m: Manifest): Uint8Array {
   return w.u16(m.min_host).done();
 }
 
-export const manifestId = (m: Manifest) => toHex(derive("Salarium grain manifest id v1", encodeManifest(m)));
-export const manifestMessage = (m: Manifest) => derive("Salarium grain manifest v1", encodeManifest(m));
+export const manifestId = (m: Manifest) => toHex(derive("Saltix grain manifest id v1", encodeManifest(m)));
+export const manifestMessage = (m: Manifest) => derive("Saltix grain manifest v1", encodeManifest(m));
 /** What a manifest names its icon or a sealed bundle by. */
-export const iconHash = (png: Uint8Array) => toHex(derive("Salarium grain icon v1", png));
-export const bundleHash = (zip: Uint8Array) => toHex(derive("Salarium grain bundle v1", zip));
+export const iconHash = (png: Uint8Array) => toHex(derive("Saltix grain icon v1", png));
+export const bundleHash = (zip: Uint8Array) => toHex(derive("Saltix grain bundle v1", zip));
 
 /** What is out of bounds in `m` (12-grains §2), or null. `dev` takes developer origins (`grain dev`). */
 export function manifestProblem(m: Manifest, dev = false): string | null {

@@ -1,4 +1,4 @@
-// A grain's sponsor (Salarium 11-access §4, 12-grains §5.4): the channel its users' relay traffic is paid from, and the
+// A grain's sponsor (Saltix 11-access §4, 12-grains §5.4): the channel its users' relay traffic is paid from, and the
 // certificates that let each user's grain key spend from it.
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
@@ -36,7 +36,7 @@ export function encodeSponsorCert(c: SponsorCert): Uint8Array {
 
 /** What the sponsor signs: the certificate on the network of `genesisHash` (hex). */
 export function sponsorCertMessage(c: SponsorCert, genesisHash: string): Uint8Array {
-  return derive("Salarium sponsor certificate v1", fromHex(genesisHash, 32), encodeSponsorCert(c));
+  return derive("Saltix sponsor certificate v1", fromHex(genesisHash, 32), encodeSponsorCert(c));
 }
 
 /**

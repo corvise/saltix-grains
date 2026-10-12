@@ -1,8 +1,8 @@
 /**
- * The wallet's side of the bridge on a computer (Salarium 12-grains §10): it opens a grain in an
- * iframe named `salarium-simulator`, and `@salarium/grain` in the page sends its requests here.
+ * The wallet's side of the bridge on a computer (Saltix 12-grains §10): it opens a grain in an
+ * iframe named `saltix-simulator`, and `@saltix/grain` in the page sends its requests here.
  * Sign-in uses a test grain secret kept in this browser (real signatures, checkable by
- * `@salarium/grain-server`); invoices are checked like a wallet checks them; payments are not made
+ * `@saltix/grain-server`); invoices are checked like a wallet checks them; payments are not made
  * (it answers a made-up id); storage lives in this browser. Relay frames the grain sends are logged,
  * and "Frame to the grain" plays one arriving; "Check a notification" checks your server's like a
  * wallet does.
@@ -64,7 +64,7 @@ class Refusal extends Error {
 const consents = new Set<string>();
 
 /** The user's key in the grain, as the wallet derives it (12-grains §5.1). */
-const grainSeed = (slug: string) => derive("Salarium grain key v1", secret(), new TextEncoder().encode(slug));
+const grainSeed = (slug: string) => derive("Saltix grain key v1", secret(), new TextEncoder().encode(slug));
 /** The grain alias's address once `relay.open` registered it. */
 let alias: string | null = null;
 
@@ -163,9 +163,9 @@ async function handle(origin: string, method: string, params: Record<string, unk
 
 window.addEventListener("message", async (event) => {
   if (event.source !== frame.contentWindow) return;
-  const m = event.data as { salariumSim?: number; id?: number; method?: string; params?: Record<string, unknown> };
-  if (!m || m.salariumSim !== 1 || !m.method) return;
-  const reply = (body: object) => frame.contentWindow?.postMessage({ salariumSim: 1, id: m.id, ...body }, event.origin);
+  const m = event.data as { saltixSim?: number; id?: number; method?: string; params?: Record<string, unknown> };
+  if (!m || m.saltixSim !== 1 || !m.method) return;
+  const reply = (body: object) => frame.contentWindow?.postMessage({ saltixSim: 1, id: m.id, ...body }, event.origin);
   try {
     const result = await handle(event.origin, m.method, m.params ?? {});
     write(`${m.method} ${JSON.stringify(m.params)} → ${JSON.stringify(result)}`);
@@ -178,7 +178,7 @@ window.addEventListener("message", async (event) => {
 });
 
 function emit(event: string, data: object) {
-  frame.contentWindow?.postMessage({ salariumSim: 1, event, data }, "*");
+  frame.contentWindow?.postMessage({ saltixSim: 1, event, data }, "*");
 }
 
 $<HTMLButtonElement>("open").onclick = () => {
@@ -213,7 +213,7 @@ $<HTMLButtonElement>("notification").onclick = () => {
   write(`notification ✔ "${n.title}" ${n.body}${n.start ? ` (opens with ${n.start})` : ""}`);
 };
 $<HTMLButtonElement>("manifest").onclick = async () => {
-  const url = prompt("The grain's manifest URL", new URL("/.well-known/salarium-grain", location.href).href);
+  const url = prompt("The grain's manifest URL", new URL("/.well-known/saltix-grain", location.href).href);
   if (!url) return;
   const signed = await (await fetch(url)).json();
   $<HTMLInputElement>("slug").value = signed.manifest.slug;

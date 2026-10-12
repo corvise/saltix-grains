@@ -1,4 +1,4 @@
-// The grains' registry on the beacon chain (Salarium 12-grains §3): the owner's transactions that register,
+// The grains' registry on the beacon chain (Saltix 12-grains §3): the owner's transactions that register,
 // update and retire a grain, encoded and signed as the node checks them, and what a node says of a slug.
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId } from "./address.js";
@@ -12,7 +12,7 @@ export type { TxFields } from "./tx.js";
 /** What `RegisterGrain` keeps until the grain retires: 100 SALT, in base units. */
 export const GRAIN_DEPOSIT = 100_000_000_000n;
 
-/** A registry call of the owner (Salarium 06-licenses §4). */
+/** A registry call of the owner (Saltix 06-licenses §4). */
 export type GrainCall =
   | { register: SignedManifest }
   | { update: SignedManifest }
@@ -65,7 +65,7 @@ export function minimumFee(call: GrainCall): bigint {
   return minimumTxFee(grainAction(call));
 }
 
-/** A slug in the registry as a node serves it (`grain_get`, Salarium 08-node §6). */
+/** A slug in the registry as a node serves it (`grain_get`, Saltix 08-node §6). */
 export interface RegisteredGrain {
   slug: string;
   owner: string;
