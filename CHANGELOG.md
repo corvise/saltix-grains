@@ -9,7 +9,7 @@
   string the packages hash or sign under starts with `"Saltix "` (`"Saltix grain login v1"`,
   `"Saltix grain manifest v1"`, `"Saltix transaction v3"`, `"Saltix address v1"`, …); a hosted grain serves its
   manifest at `/.well-known/saltix-grain`; the page finds the wallet's provider at `window.saltix`, and the simulator's
-  frame is `saltix-simulator`. Vectors synced from Saltix b350515.
+  frame is `saltix-simulator`. Vectors synced from Saltix a4d1d83.
 - A grain's manifest names its owner (Saltix 12-grains §2–3): `owner` (the account id) and `owner_key` (`{ ed25519 }`
   or `{ p256 }`, `DeviceKey`), which must speak for it; a managed account's phone signs with P-256 (`verifyByDeviceKey`:
   SHA-256, low s). `grain init` writes the key file's account and key; `lint`, `sign` and `publish --key` refuse a
