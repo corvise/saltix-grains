@@ -49,7 +49,7 @@ export function encodeNotification(n: GrainNotification): Uint8Array {
 
 /** What the signer signs: the notification on the network of `genesisHash` (hex). */
 export function notificationMessage(n: GrainNotification, genesisHash: string): Uint8Array {
-  return derive("Salarium grain notification v1", fromHex(genesisHash, 32), encodeNotification(n));
+  return derive("Saltix grain notification v1", fromHex(genesisHash, 32), encodeNotification(n));
 }
 
 /**

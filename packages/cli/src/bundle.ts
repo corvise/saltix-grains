@@ -1,9 +1,9 @@
-// `grain bundle`: a sealed grain's files as one ZIP (Salarium 12-grains §8), the same bytes for the same files — sorted
+// `grain bundle`: a sealed grain's files as one ZIP (Saltix 12-grains §8), the same bytes for the same files — sorted
 // names, no times, no extra fields — so its hash names exactly what the owner signed.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { bundleHash, type Manifest } from "@salarium/grain-server";
+import { bundleHash, type Manifest } from "@saltix/grain-server";
 
 /** A bundle is at most this large (12-grains §11), and unpacks to at most MAX_UNPACKED (§8: what every wallet takes). */
 export const MAX_BUNDLE = 20 * 1024 * 1024;

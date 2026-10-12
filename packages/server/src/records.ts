@@ -3,15 +3,15 @@ import { Reader, Writer, derive } from "./bytes.js";
 import { type NetworkName, accountId, decodeAddress } from "./address.js";
 
 /**
- * The relays' records (Salarium 09-relay §1), byte for byte the node's (vectors/relay-v1.json): what a
+ * The relays' records (Saltix 09-relay §1), byte for byte the node's (vectors/relay-v1.json): what a
  * server needs to register its own address at a relay and to check other addresses' messaging keys.
  * Every signature is Ed25519 over `derive(domain, Borsh(payload))`.
  */
 
-const BINDING = "Salarium messaging key v1";
-const DEVICE = "Salarium device certificate v1";
-const RECORD = "Salarium address record v1";
-const ACK = "Salarium mailbox ack v1";
+const BINDING = "Saltix messaging key v1";
+const DEVICE = "Saltix device certificate v1";
+const RECORD = "Saltix address record v1";
+const ACK = "Saltix mailbox ack v1";
 /** How far ahead of a checker's clock a record may be issued. */
 const FUTURE_SKEW_MS = 10 * 60_000;
 const MAX_CERT_LIFETIME_MS = 400 * 86_400_000;

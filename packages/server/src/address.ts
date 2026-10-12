@@ -1,6 +1,6 @@
 import { derive } from "./bytes.js";
 
-/** Salarium Address v1 (01-foundation §4): `Bech32m(prefix, [kind as one 5-bit symbol] ‖ id)`. */
+/** Saltix Address v1 (01-foundation §4): `Bech32m(prefix, [kind as one 5-bit symbol] ‖ id)`. */
 export type NetworkName = "mainnet" | "testnet" | "devnet";
 
 const PREFIX: Record<NetworkName, string> = { mainnet: "salt", testnet: "tsalt", devnet: "dsalt" };
@@ -45,7 +45,7 @@ function convert(data: Uint8Array | number[], from: number, to: number, pad: boo
 
 /** The id of the account a key of `kind` (0: personal) controls. */
 export function accountId(publicKey: Uint8Array, kind = 0): Uint8Array {
-  return derive("Salarium address v1", Uint8Array.of(kind), publicKey);
+  return derive("Saltix address v1", Uint8Array.of(kind), publicKey);
 }
 
 /** The address of the account `id` on `network`. */

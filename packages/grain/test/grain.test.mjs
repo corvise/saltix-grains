@@ -1,11 +1,11 @@
-// The bridge as a wallet answers it: a fake `window.salarium` records what the SDK sends.
+// The bridge as a wallet answers it: a fake `window.saltix` records what the SDK sends.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { grain, inWallet, walletLink, slugLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset } from "../dist/index.js";
 
 function wallet(answer) {
   const sent = [];
-  globalThis.salarium = {
+  globalThis.saltix = {
     isGrain: true,
     request: async (args) => { sent.push(args); return answer(args); },
     on: (e, h) => sent.push({ on: e }),
@@ -15,12 +15,12 @@ function wallet(answer) {
 }
 
 test("outside a wallet nothing is asked, and the link opens the grain in one", async () => {
-  delete globalThis.salarium;
+  delete globalThis.saltix;
   _reset();
   assert.equal(inWallet(), false);
   await assert.rejects(grain.info(), (e) => e instanceof GrainError && e.code === ErrorCode.NoWallet);
-  assert.equal(walletLink("https://chess.example/.well-known/salarium-grain", "room-7"),
-    "salt:grain?manifest=https%3A%2F%2Fchess.example%2F.well-known%2Fsalarium-grain&start=room-7");
+  assert.equal(walletLink("https://chess.example/.well-known/saltix-grain", "room-7"),
+    "salt:grain?manifest=https%3A%2F%2Fchess.example%2F.well-known%2Fsaltix-grain&start=room-7");
   assert.throws(() => walletLink("https://a.example/m", "a b"), GrainError);
   assert.equal(slugLink("chess"), "salt:grain/chess");
   assert.equal(slugLink("chess", "room-7"), "salt:grain/chess?start=room-7");
@@ -65,7 +65,7 @@ test("the wallet's refusals arrive with their code", async () => {
 test("relay frames go out as hex and come back as bytes; notifications are asked", async () => {
   const handlers = new Map();
   const sent = [];
-  globalThis.salarium = {
+  globalThis.saltix = {
     isGrain: true,
     request: async (args) => {
       sent.push(args);

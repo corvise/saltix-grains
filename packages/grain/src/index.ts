@@ -1,9 +1,9 @@
 /**
- * `@salarium/grain`: the bridge between a grain and the Salarium wallet it runs in
- * (Salarium specs/12-grains.md §5, bridge version 1).
+ * `@saltix/grain`: the bridge between a grain and the Saltix wallet it runs in
+ * (Saltix specs/12-grains.md §5, bridge version 1).
  *
- * In a wallet the page has `window.salarium`, defined before its scripts run; in the simulator
- * (an iframe named `salarium-simulator`) requests go to the simulator page instead. Outside both,
+ * In a wallet the page has `window.saltix`, defined before its scripts run; in the simulator
+ * (an iframe named `saltix-simulator`) requests go to the simulator page instead. Outside both,
  * `inWallet()` is false and `walletLink()` gives the link that opens the grain in a wallet.
  *
  * Every method returns a promise that rejects with a `GrainError` carrying the wallet's code.
@@ -47,7 +47,7 @@ export interface GrainInfo {
   start: string | null;
 }
 
-/** What `login` returns: check it on your server (`@salarium/grain-server`). */
+/** What `login` returns: check it on your server (`@saltix/grain-server`). */
 export interface Login {
   /** The user's key in this grain, hex. */
   key: string;
@@ -86,7 +86,7 @@ interface Provider {
 }
 
 /** The simulator's frame name: requests then go to the parent page. */
-export const SIMULATOR_FRAME = "salarium-simulator";
+export const SIMULATOR_FRAME = "saltix-simulator";
 
 function simulatorProvider(): Provider | null {
   const w = globalThis as unknown as Window;
@@ -96,8 +96,8 @@ function simulatorProvider(): Provider | null {
   const listeners = new Map<string, Set<(data: unknown) => void>>();
   w.addEventListener("message", (event: MessageEvent) => {
     if (event.source !== w.parent) return;
-    const m = event.data as { salariumSim?: number; id?: number; result?: unknown; error?: { code: number; message: string }; event?: string; data?: unknown };
-    if (!m || m.salariumSim !== 1) return;
+    const m = event.data as { saltixSim?: number; id?: number; result?: unknown; error?: { code: number; message: string }; event?: string; data?: unknown };
+    if (!m || m.saltixSim !== 1) return;
     if (m.event) {
       listeners.get(m.event)?.forEach((h) => h(m.data));
       return;
@@ -114,7 +114,7 @@ function simulatorProvider(): Provider | null {
       new Promise((resolve, reject) => {
         const id = ++next;
         pending.set(id, { resolve, reject });
-        w.parent.postMessage({ salariumSim: 1, id, method, params: params ?? {} }, "*");
+        w.parent.postMessage({ saltixSim: 1, id, method, params: params ?? {} }, "*");
       }),
     on: (event, handler) => {
       if (!listeners.has(event)) listeners.set(event, new Set());
@@ -128,8 +128,8 @@ let cached: Provider | null | undefined;
 
 function provider(): Provider | null {
   if (cached !== undefined) return cached;
-  const w = globalThis as unknown as { salarium?: Provider };
-  cached = w.salarium?.isGrain ? w.salarium : simulatorProvider();
+  const w = globalThis as unknown as { saltix?: Provider };
+  cached = w.saltix?.isGrain ? w.saltix : simulatorProvider();
   return cached;
 }
 
@@ -162,7 +162,7 @@ function checkStart(start?: string): void {
 
 async function call<T>(method: string, params: object = {}): Promise<T> {
   const p = provider();
-  if (!p) throw new GrainError(ErrorCode.NoWallet, "not in a Salarium wallet");
+  if (!p) throw new GrainError(ErrorCode.NoWallet, "not in a Saltix wallet");
   try {
     return (await p.request({ method, params })) as T;
   } catch (e) {
@@ -199,7 +199,7 @@ export const grain = {
   scanQr: async (hint?: string) => (await call<{ text: string }>("grain_scanQr", hint ? { hint } : {})).text,
   /**
    * Sign in under the user's key in this grain. `challenge` (at most 64 bytes, hex or bytes) comes
-   * from your server, which checks the answer with `@salarium/grain-server`.
+   * from your server, which checks the answer with `@saltix/grain-server`.
    */
   login: (challenge: Uint8Array | string) =>
     call<Login>("grain_login", { challenge: typeof challenge === "string" ? challenge.toLowerCase() : hex(challenge) }),

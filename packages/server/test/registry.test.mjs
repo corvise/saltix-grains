@@ -1,4 +1,4 @@
-// The owner's registry transactions of vectors/grains-v1.json, byte for byte (Salarium 12-grains §3).
+// The owner's registry transactions of vectors/grains-v1.json, byte for byte (Saltix 12-grains §3).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

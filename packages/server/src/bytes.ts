@@ -25,12 +25,12 @@ export function concat(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** Salarium's domain-separated hash: BLAKE3 derive_key with `context` over the parts (01-foundation). */
+/** Saltix's domain-separated hash: BLAKE3 derive_key with `context` over the parts (01-foundation). */
 export function derive(context: string, ...parts: Uint8Array[]): Uint8Array {
   return blake3(concat(...parts), { context: new TextEncoder().encode(context) });
 }
 
-/** Borsh as the Salarium node writes it. */
+/** Borsh as the Saltix node writes it. */
 export class Writer {
   private chunks: Uint8Array[] = [];
   u8(n: number): this {

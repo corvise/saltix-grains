@@ -1,4 +1,4 @@
-// A key that speaks for an account (Salarium 13-accounts §5): a plain account's own Ed25519 key, or one of a managed
+// A key that speaks for an account (Saltix 13-accounts §5): a plain account's own Ed25519 key, or one of a managed
 // account's devices — a phone's P-256 key among them. Manifests (12-grains §2) and the wallet interface write it
 // as `{"ed25519": "<hex>"}` or `{"p256": "<hex>"}`; Borsh writes its tag (0, 1) and the key.
 import { ed25519 } from "@noble/curves/ed25519";

@@ -49,7 +49,7 @@ test("key bindings, address records and mailbox acks are the node's", () => {
       // A device cannot bind another messaging key: only the account key signs bindings.
       const forged = { ...record, key: { ...record.key, messagingKey: new Uint8Array(32).fill(0x66) } };
       const body = encodeAddressRecord(forged).subarray(0, -64);
-      const bySigner = ed25519.sign(derive("Salarium address record v1", body), fromHex(v.signer_private_key_hex, 32));
+      const bySigner = ed25519.sign(derive("Saltix address record v1", body), fromHex(v.signer_private_key_hex, 32));
       assert.equal(recordProblem({ ...forged, signature: bySigner }, v.issued_at), "binding");
     }
   }
@@ -112,7 +112,7 @@ test("frames open only for their recipient, from their sender", () => {
   assert.equal(openFrame(sealed, messagingPublic(a), a), null, "another recipient");
   assert.equal(openFrame(sealed.subarray(0, 39), messagingPublic(a), b), null);
   assert.notEqual(toHex(sealFrame(Uint8Array.of(1), messagingPublic(b), a)), toHex(sealFrame(Uint8Array.of(1), messagingPublic(b), a)), "fresh nonces");
-  assert.equal(toHex(serverMessagingSecret(new Uint8Array(32).fill(1))), toHex(derive("Salarium grain server messaging key v1", new Uint8Array(32).fill(1))));
+  assert.equal(toHex(serverMessagingSecret(new Uint8Array(32).fill(1))), toHex(derive("Saltix grain server messaging key v1", new Uint8Array(32).fill(1))));
 });
 
 /** A relay that checks registrations like the node does and records what clients send. */
@@ -229,7 +229,7 @@ test("a server registers, seals frames to users and hears theirs", async () => {
     assert.equal(ack.msgId, "m-9");
     const proof = fromBase64Url(ack.proof);
     const body = proof.subarray(0, proof.length - 64);
-    assert.ok(ed25519.verify(proof.subarray(proof.length - 64), derive("Salarium mailbox ack v1", body), ed25519.getPublicKey(secret)));
+    assert.ok(ed25519.verify(proof.subarray(proof.length - 64), derive("Saltix mailbox ack v1", body), ed25519.getPublicKey(secret)));
   } finally {
     client.close();
     await relay.close();

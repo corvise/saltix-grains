@@ -1,5 +1,5 @@
 // `npm run dev`: serve the simulator and the hello-grain example on this computer, with the grain's
-// server side (12-grains §5): its manifest at /.well-known/salarium-grain (signed for the origin a
+// server side (12-grains §5): its manifest at /.well-known/saltix-grain (signed for the origin a
 // request came to: localhost for the simulator, 10.0.2.2 for a debug Saltix in the emulator),
 // sign-in checks, an invoice, and the payment found through a node.
 //
@@ -66,7 +66,7 @@ createServer(async (req, res) => {
     const host = (req.headers.host ?? "").split(":")[0];
     const origin = `http://${req.headers.host}`;
     const url = new URL(req.url, origin);
-    if (url.pathname === "/.well-known/salarium-grain") {
+    if (url.pathname === "/.well-known/saltix-grain") {
       if (!DEV_HOSTS.has(host)) return send(res, 404, { error: "a developer's grain runs on localhost, 127.0.0.1 or 10.0.2.2" });
       return send(res, 200, manifestFor(origin));
     }
@@ -107,6 +107,6 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, "0.0.0.0", () => {
   console.log(`grain dev: http://localhost:${PORT}/ (simulator), the emulator's Saltix opens`);
-  console.log(`  salt:grain?manifest=${encodeURIComponent(`http://10.0.2.2:${PORT}/.well-known/salarium-grain`)}`);
+  console.log(`  salt:grain?manifest=${encodeURIComponent(`http://10.0.2.2:${PORT}/.well-known/saltix-grain`)}`);
   console.log(`  owner key ${ownerKey}; node ${NODE_RPC}`);
 });

@@ -1,12 +1,12 @@
 // A grain's project on the developer's computer: its manifest (`grain.json`), the owner's key file and the checks
-// a manifest must pass before it is registered (Salarium 12-grains §2–3).
+// a manifest must pass before it is registered (Saltix 12-grains §2–3).
 import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   type Manifest, type SignedManifest, manifestProblem, verifyManifest, signManifest, originOf, encodeGrainTx,
   MAX_TX_SIZE, accountId, fromHex, toHex,
-} from "@salarium/grain-server";
+} from "@saltix/grain-server";
 
 export const MANIFEST_FILE = "grain.json";
 export const KEY_FILE = "owner.key";
@@ -76,7 +76,7 @@ export function lint(m: Manifest, ownerKey?: string): Lint {
     const developer = manifestProblem(m, true) === null;
     errors.push(developer
       ? "origins: developer origins (http://localhost, 127.0.0.1, 10.0.2.2) work with grain dev only; register an https origin"
-      : `${problem}: out of bounds (Salarium 12-grains §2)`);
+      : `${problem}: out of bounds (Saltix 12-grains §2)`);
   }
   const notOurs = ownerKey === undefined ? null : notTheKeys(m, ownerKey);
   if (notOurs) errors.push(notOurs);

@@ -41,11 +41,11 @@ export function encodeInvoice(inv: Invoice): Uint8Array {
 
 /** What the signer signs: the invoice on the network of `genesisHash` (hex). */
 export function invoiceMessage(inv: Invoice, genesisHash: string): Uint8Array {
-  return derive("Salarium grain invoice v1", fromHex(genesisHash, 32), encodeInvoice(inv));
+  return derive("Saltix grain invoice v1", fromHex(genesisHash, 32), encodeInvoice(inv));
 }
 
 function certMessage(slug: string, key: Uint8Array, expiresAt: number): Uint8Array {
-  return derive("Salarium grain invoice key v1", new Writer().string(slug).fixed(key, 32).u64(expiresAt).done());
+  return derive("Saltix grain invoice key v1", new Writer().string(slug).fixed(key, 32).u64(expiresAt).done());
 }
 
 /** `Option<InvoiceKeyCert>` in Borsh, as invoices and notifications carry it. */

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { fromHex, toHex, accountId } from "@salarium/grain-server";
+import { fromHex, toHex, accountId } from "@saltix/grain-server";
 import { ed25519 } from "@noble/curves/ed25519";
 import { channel, parseWork, sponsorStatus } from "../dist/sponsor.js";
 

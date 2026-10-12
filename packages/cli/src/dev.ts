@@ -4,7 +4,7 @@
 import { createServer, type Server } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, normalize, extname, sep } from "node:path";
-import type { Manifest } from "@salarium/grain-server";
+import type { Manifest } from "@saltix/grain-server";
 import { forOrigin, sign, originOf } from "./project.js";
 import { makeBundle, sealed } from "./bundle.js";
 
@@ -14,7 +14,7 @@ const TYPES: Record<string, string> = {
   ".jpg": "image/jpeg", ".webp": "image/webp", ".ico": "image/x-icon", ".wasm": "application/wasm",
 };
 
-export const WELL_KNOWN = "/.well-known/salarium-grain";
+export const WELL_KNOWN = "/.well-known/saltix-grain";
 export const DEV_BUNDLE = "/_bundle.zip";
 
 /** The server; `manifest` is read again for every request, so edits show without a restart. */

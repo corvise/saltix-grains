@@ -12,7 +12,7 @@ export interface Payment {
   confirmations: number;
 }
 
-/** A JSON-RPC call to a node's wallet interface (Salarium 08-node §6), plain HTTP: your own node or a tunnel. */
+/** A JSON-RPC call to a node's wallet interface (Saltix 08-node §6), plain HTTP: your own node or a tunnel. */
 export async function rpc<T>(url: string, method: string, params: object = {}): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
