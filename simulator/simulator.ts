@@ -5,7 +5,8 @@
  * `@saltix/grain-server`); invoices are checked like a wallet checks them; payments are not made
  * (it answers a made-up id); storage lives in this browser. Relay frames the grain sends are logged,
  * and "Frame to the grain" plays one arriving; "Check a notification" checks your server's like a
- * wallet does.
+ * wallet does. The chat pane talks to the grain's chat server through the development relay as a wallet would
+ * (22-grain-chats; `npm run dev`).
  */
 import { ed25519 } from "@noble/curves/ed25519";
 // Module by module: the package's index also exports the relay client, which needs Node.
@@ -15,6 +16,7 @@ import { loginMessage } from "../packages/server/src/login";
 import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
 import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
 import { type DeviceKey, deviceKeyOf } from "../packages/server/src/keys";
+import { setupChat } from "./chat";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const frame = $<HTMLIFrameElement>("grain");
@@ -75,7 +77,7 @@ async function handle(origin: string, method: string, params: Record<string, unk
     case "grain_info":
       return {
         slug: s.slug, version: 1, form: "hosted", listing: "unlisted", host: "simulator", host_version: "0.1.0",
-        bridge: 1, language: s.language, theme: s.theme, safe_area: { top: 0, bottom: 0 }, network: "devnet", start: s.start,
+        bridge: 2, language: s.language, theme: s.theme, safe_area: { top: 0, bottom: 0 }, network: "devnet", start: s.start,
       };
     case "grain_login": {
       if (!consents.has("login") && !confirm(`${s.slug} asks to sign you in under a key of its own.`)) throw new Refusal(4001, "the user declined");
@@ -154,6 +156,9 @@ async function handle(origin: string, method: string, params: Record<string, unk
     case "grain_openLink":
       window.open(String(params.url), "_blank", "noopener");
       return null;
+    case "grain_chat_open":
+      await chat.open(typeof params.cert === "string" ? params.cert : undefined, typeof params.spec === "string" ? params.spec : undefined);
+      return null;
     case "grain_ready": case "grain_close": case "grain_expand": case "grain_setHeader": case "grain_haptic": case "grain_share":
       return null;
     default:
@@ -180,6 +185,19 @@ window.addEventListener("message", async (event) => {
 function emit(event: string, data: object) {
   frame.contentWindow?.postMessage({ saltixSim: 1, event, data }, "*");
 }
+
+const chat = setupChat({
+  slug: () => settings().slug,
+  owner: () => settings().owner,
+  language: () => settings().language,
+  secret,
+  log: write,
+  open: (start) => {
+    $<HTMLInputElement>("start").value = start;
+    frame.src = $<HTMLInputElement>("url").value.trim();
+    write(`opened ${frame.src} with start ${start}`);
+  },
+});
 
 $<HTMLButtonElement>("open").onclick = () => {
   frame.src = $<HTMLInputElement>("url").value.trim();

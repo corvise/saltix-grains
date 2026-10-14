@@ -1,5 +1,5 @@
-// The SDK's example grain: sign-in checked by its server, storage synced by the wallet, and a payment
-// by an invoice its server signs and then finds on chain.
+// The SDK's example grain: sign-in checked by its server, storage synced by the wallet, a payment by an invoice its
+// server signs and then finds on chain, and its chat (chat.mjs), opened with the spec and certificate its server serves.
 import { grain, inWallet, walletLink } from "/packages/grain/dist/index.js";
 
 const out = document.getElementById("out");
@@ -33,4 +33,9 @@ run("pay", async () => {
     if (payment) return show({ paid, payment });
   }
   show({ paid, payment: "not in a block yet" });
+});
+run("chat", async () => {
+  const { spec, cert } = await (await fetch("/.well-known/saltix-grain-chat")).json();
+  await grain.chat.open({ spec, cert });
+  show("the chat is open");
 });

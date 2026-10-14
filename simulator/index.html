@@ -6,7 +6,7 @@
   <title>Grain simulator</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0b1020; color: #e6ecff; }
-    body { margin: 0; display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; padding: 16px; min-height: 100vh; box-sizing: border-box; }
+    body { margin: 0; display: grid; grid-template-columns: minmax(280px, 340px) auto minmax(320px, 1fr); gap: 16px; padding: 16px; min-height: 100vh; box-sizing: border-box; }
     section { display: flex; flex-direction: column; gap: 8px; }
     label { font-size: 12px; color: #9fb0d8; display: flex; flex-direction: column; gap: 4px; }
     input, select, button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid #2a3560; background: #121a33; color: inherit; }
@@ -15,7 +15,27 @@
     iframe { width: 100%; height: 100%; border: 0; }
     pre { font-size: 11px; white-space: pre-wrap; background: #070b17; padding: 10px; border-radius: 10px; max-height: 40vh; overflow: auto; }
     .row { display: flex; gap: 8px; }
-    @media (max-width: 800px) { body { grid-template-columns: 1fr; } .phone { width: 100%; } }
+    .chat { min-width: 0; }
+    .chat h2 { font-size: 16px; margin: 0; }
+    #chat-card { font-size: 13px; background: #121a33; border-radius: 12px; padding: 10px; }
+    #chat-card ul { margin: 6px 0; padding-left: 18px; }
+    #chat-log { display: flex; flex-direction: column; gap: 8px; min-height: 200px; max-height: 50vh; overflow: auto; background: #070b17; border-radius: 12px; padding: 10px; }
+    .msg { border-radius: 12px; padding: 8px 10px; max-width: 92%; font-size: 13px; }
+    .msg.in { background: #16224a; align-self: flex-start; }
+    .msg.out { background: #2f6bff; align-self: flex-end; white-space: pre-wrap; }
+    .mark { font-size: 11px; color: #9fb0d8; margin-bottom: 4px; }
+    .block { margin: 4px 0; }
+    .block.text { white-space: pre-wrap; }
+    table.block th { text-align: left; color: #9fb0d8; font-weight: normal; padding-right: 10px; }
+    .secret { font-family: monospace; cursor: pointer; background: #0b1020; padding: 2px 6px; border-radius: 6px; }
+    .status { font-size: 12px; } .s0 { color: #e6c35c; } .s1 { color: #6fe08a; } .s2, .s3, .bad { color: #ff8a8a; }
+    .note { font-size: 12px; color: #9fb0d8; } .bad { font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    button.small { padding: 4px 8px; font-size: 12px; }
+    .preview { max-width: 100%; max-height: 240px; overflow: auto; }
+    .form { display: flex; flex-direction: column; gap: 6px; }
+    label.check { flex-direction: row; align-items: center; }
+    @media (max-width: 1100px) { body { grid-template-columns: 1fr; } .phone { width: 100%; } }
   </style>
 </head>
 <body>
@@ -38,6 +58,16 @@
     <pre id="log"></pre>
   </section>
   <div class="phone"><iframe id="grain" name="saltix-simulator" title="grain"></iframe></div>
+  <section class="chat">
+    <div class="row" style="align-items:center;justify-content:space-between"><h2>Chat</h2><button id="chat-load">Load the chat</button></div>
+    <p style="font-size:12px;color:#9fb0d8;margin:0">The grain's chat as a wallet sees it (22-grain-chats): every card checked against the owner key, forms from the spec, secrets masked. Load the manifest first.</p>
+    <div id="chat-card"></div>
+    <div id="chat-log"></div>
+    <select id="chat-command"></select>
+    <div id="chat-form"></div>
+    <div class="row"><input id="chat-text" placeholder="Free text" style="flex:1"><button id="chat-send-text">Send</button></div>
+    <label class="check"><input type="checkbox" id="chat-unasked" checked> Unasked messages allowed (at most 10 a day)</label>
+  </section>
   <script type="module" src="./dist/simulator.js"></script>
 </body>
 </html>
