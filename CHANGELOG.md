@@ -4,6 +4,9 @@
 
 ### Changed
 
+- `decodeInvoice` and the certificates in notifications refuse an asset tag other than 0 or 1 and a time beyond 2^53
+  ms instead of reading them loosely; relay records' base64url no longer needs Node's `Buffer`, so the formats run in a
+  browser.
 - The protocol is Saltix (Saltix #165), and so are the SDKs: `@saltix/grain`, `@saltix/grain-server` and
   `@saltix/grain-cli` (called `@salarium/*` until 2026-10-12), in the repository corvise/saltix-grains. Every domain
   string the packages hash or sign under starts with `"Saltix "` (`"Saltix grain login v1"`,
@@ -25,7 +28,27 @@
   `"Saltix transaction v3"`; fees count the extra byte. Vectors synced from Saltix 602995e. Every package's tests
   exit when one fails instead of waiting on an open server.
 
+### Fixed
+
+- `npm run dev`: `/` redirects to the simulator's own path, so its page finds its script (it was not found at `/`).
+
 ### Added
+
+- Grain chats (Saltix 22-grain-chats, step 2: the server SDK; [docs/chats.md](docs/chats.md)):
+  - `@saltix/grain-server`: the formats and every check of the reference, byte for byte `vectors/grain-chats-v1.json`
+    (synced from Saltix 28ad465): `GrainChatSpec` with its JSON form, `ChatRequest`, `ChatMessage` with blocks and
+    actions, `ChatFrame` (`"SGC1"`), and the file reference of 09-relay §10.5.2 (`FileRef`, Borsh and JSON); `ChatServer`
+    on `RelayClient`: requests checked (sender, signature, life, fit) and routed by command with typed arguments,
+    answered once per `(key, id)` until they expire, refused with a reason or dropped, kept frames acknowledged once
+    answered; cards signed with the server key (`card()`), a working status replaced in place; files sealed with
+    AES-256-GCM and uploaded next to the relay over its pinned certificate (`409`, `404`, `507` handled); unasked messages
+    and notifications within 10 a day per user; a newer spec pushed; `/.well-known/saltix-grain-chat` for any framework;
+    `ChatStore` (in memory, or a file). `RelayClient`: `ackKept: "by_handler"`, `reserveFile`, `endpoint`;
+  - `@saltix/grain`: `grain.chat.open({cert?, spec?})` (bridge version 2) and `chatLink(slug, cert?)`;
+  - `grain chat-spec` (lint with the fault located, check against `grain.json`, a higher version for a change, sign) and
+    `grain cert init | grain cert` (a server key, and the owner key's certificate for it);
+  - the simulator's chat pane, which plays the wallet's side through a development relay (`scripts/dev-relay.mjs`,
+    started by `npm run dev`), and the example grain's chat with every block and action and a CSV report as a file.
 
 - Sealed grains (Saltix 12-grains §8): `grain bundle` makes a deterministic ZIP of `public/` (at most 20 MiB) and
   names its hash, size, sources, start and connect origins in `grain.json`; `grain dev` makes and serves the bundle of a

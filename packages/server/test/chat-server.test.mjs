@@ -382,3 +382,37 @@ test("a run action's arguments are typed by the spec and checked; a card names a
   assert.equal(argOf({ number: 5n }), 5n);
   assert.throws(() => card().run("Delete", "delete").actions(() => undefined), /no command delete/);
 });
+
+test("a slow store that reads and writes apart still answers concurrent copies of a request once", async () => {
+  const taken = new Map();
+  const base = memoryChatStore();
+  const slow = {
+    async take(user, id, expiresAt, now) {
+      const before = taken.get(`${user}:${id}`);
+      await sleep(150); // a database round trip between the read and the write
+      if (before !== undefined && before > now) return false;
+      taken.set(`${user}:${id}`, expiresAt);
+      return true;
+    },
+    forget: (user, id) => { taken.delete(`${user}:${id}`); },
+    spend: (...a) => base.spend(...a),
+    specSent: (u) => base.specSent(u),
+    setSpecSent: (u, v) => base.setSpecSent(u, v),
+  };
+  const { relay, server, close } = await serverOn({ store: slow });
+  const user = await wallet(relay, 0x4a, server.address);
+  let runs = 0;
+  server.command("idle", () => { runs++; return card().text("once"); });
+  try {
+    const r = user.request("idle");
+    await Promise.all([user.send(r), user.send(r), user.send(r)]);
+    await user.until(() => user.answers(r.request.id).length >= 1);
+    await sleep(600);
+    assert.equal(user.answers(r.request.id).length, 1);
+    assert.equal(runs, 1);
+    assert.equal(relay.mailboxes.get(server.address)?.size ?? 0, 0, "every copy acknowledged with the answer");
+  } finally {
+    user.client.close();
+    await close();
+  }
+});
