@@ -3,3 +3,5 @@ dist/
 *.log
 .DS_Store
 examples/**/owner.key
+examples/**/server.key
+examples/**/*.store.json

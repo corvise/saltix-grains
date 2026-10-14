@@ -6,15 +6,17 @@ A grain uses the wallet's identity, payments, storage and relays, and never hold
 
 | Package | What it is |
 |---|---|
-| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()` |
-| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the owner's registry transactions, Address v1 |
-| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show` |
-| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development |
-| [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain |
+| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()` |
+| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the owner's registry transactions, Address v1, and the grain's chat (`ChatServer`) |
+| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert` |
+| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development, with a chat pane |
+| [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat |
+| [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, files, and what a wallet shows and refuses |
 
 The packages reproduce `vectors/grains-v1.json` (manifests, logins, invoices, registry transactions), the addresses of
-`vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json` and the sponsors of `vectors/access-v1.json` byte
-for byte; `scripts/sync-vectors.sh ../saltix` (a checkout of corvise/saltix) refreshes them.
+`vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json` and the
+chats and file references of `vectors/grain-chats-v1.json` byte for byte; `scripts/sync-vectors.sh ../saltix` (a
+checkout of corvise/saltix) refreshes them.
 
 ## Quick start
 
@@ -24,7 +26,8 @@ npm run dev            # builds, then serves the simulator and hello-grain on :8
 ```
 
 - **In a desktop browser:** open `http://localhost:8090/` (the simulator), press *Load a manifest*,
-  then *Open*. Sign-in signatures are real; payments are not made.
+  then *Open*. Sign-in signatures are real; payments are not made. *Load the chat* talks to the example's chat through
+  a development relay, as a wallet would ([docs/chats.md](docs/chats.md)).
 - **In a debug Saltix in the Android emulator:** open the link the server prints,
   `salt:grain?manifest=http%3A%2F%2F10.0.2.2%3A8090%2F.well-known%2Fsaltix-grain`. Debug builds take
   developer origins (`localhost`, `127.0.0.1`, `10.0.2.2`); release builds never do.
@@ -44,6 +47,8 @@ npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.
 npx grain publish --node http://127.0.0.1:30334   # a QR code: the owner's Saltix registers it (100 SALT)
 npx grain publish --node … --key owner.key --wait # or sign with a key file (test networks)
 npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
+npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
+npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
 ```
 
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
@@ -114,6 +119,20 @@ await relay.notify(userGrainAddress, signNotification(
   { slug: "chess", title: "Your move", body: "Bob played e4", start: "game-7", at: Date.now() }, serverSecret, genesisHash, cert));
 await relay.send(userGrainAddress, bytes);                       // live; { keep: true } for the mailbox
 relay.on("frame", ({ from, payload, kept }) => handle(from, payload));
+```
+
+**A chat** (Saltix 22-grain-chats, [docs/chats.md](docs/chats.md)): users send typed actions your chat spec declares,
+your server answers with cards it signs with the server key. Requests are checked and answered once; files go next to
+the relay; unasked messages are at most 10 a day per user.
+
+```ts
+const chat = await ChatServer.start({ slug: "chess", spec, secret: serverSecret, cert, chain: { genesis, network: "testnet" }, node: nodeUrl });
+chat.command("rating", (ask) => card().fields({ Rating: rating(ask.key) }).status("done").open("Play", "lobby"));
+chat.command("report", async (ask) => {
+  await ask.working();                                            // replaced in place by the answer
+  const file = await chat.upload(csv, { name: "games.csv", mime: "text/csv" });
+  return card().text("Your games this week.").file(file, { format: "csv" });
+});
 ```
 
 A **sponsor** pays the relays for your users' grain frames when the free share is busy (Saltix 11-access, 12-grains §5.4):

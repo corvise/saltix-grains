@@ -283,3 +283,36 @@ function hasOpenssl() {
     return false;
   }
 }
+
+test("a kept frame leaves the mailbox when the handler says, and a refused file says why", async () => {
+  const { createDevRelay } = await import("../../../scripts/dev-relay.mjs");
+  const { FileRefused } = await import("../dist/index.js");
+  const relay = await createDevRelay();
+  const endpoints = [relay.endpoint()];
+  const server = await RelayClient.connect({ endpoints, secret: new Uint8Array(32).fill(0x71), network: "devnet", ackKept: "by_handler", ...quiet });
+  const user = await RelayClient.connect({ endpoints, secret: new Uint8Array(32).fill(0x72), network: "devnet", ...quiet });
+  try {
+    const heard = new Promise((r) => server.once("frame", r));
+    await user.send(server.address, new TextEncoder().encode("kept"), { keep: true });
+    const frame = await heard;
+    assert.equal(frame.kept, true);
+    assert.equal(typeof frame.msgId, "string");
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(relay.mailboxes.get(server.address).size, 1, "not before the handler acknowledges it");
+    frame.ack();
+    frame.ack();
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(relay.mailboxes.get(server.address).size, 0);
+    assert.equal(relay.sent.filter((f) => f.type === "message_ack").length, 1, "once");
+
+    const slot = await server.reserveFile(1_000);
+    assert.match(slot.id, /^[A-Za-z0-9_-]{22}$/);
+    assert.deepEqual(slot.endpoint, relay.endpoint(), "the relay it is registered at");
+    assert.deepEqual(server.endpoint, relay.endpoint());
+    await assert.rejects(server.reserveFile(60 * 1024 * 1024), (e) => e instanceof FileRefused && e.detail === "too_large");
+  } finally {
+    server.close();
+    user.close();
+    await relay.close();
+  }
+});

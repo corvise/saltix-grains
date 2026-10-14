@@ -1,7 +1,7 @@
 // The bridge as a wallet answers it: a fake `window.saltix` records what the SDK sends.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { grain, inWallet, walletLink, slugLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset } from "../dist/index.js";
+import { grain, inWallet, walletLink, slugLink, chatLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset } from "../dist/index.js";
 
 function wallet(answer) {
   const sent = [];
@@ -99,4 +99,21 @@ test("relay frames go out as hex and come back as bytes; notifications are asked
   assert.equal(await grain.notifications.allow(), true);
   await grain.relay.close();
   assert.deepEqual(sent.slice(2).map((r) => r.method), ["grain_notifications_allow", "grain_relay_close"]);
+});
+
+test("the chat opens from the page and from a link", async () => {
+  const sent = wallet(() => null);
+  await grain.chat.open();
+  await grain.chat.open({ cert: "0A0B", spec: "ff" });
+  assert.deepEqual(sent, [
+    { method: "grain_chat_open", params: {} },
+    { method: "grain_chat_open", params: { cert: "0a0b", spec: "ff" } },
+  ]);
+  await assert.rejects(grain.chat.open({ cert: "xyz" }), (e) => e.code === ErrorCode.InvalidParams);
+  assert.equal(sent.length, 2, "a refused call is not sent");
+  assert.equal(chatLink("access"), "salt:grain/access?chat");
+  // Base64url of the certificate's Borsh, without padding.
+  assert.equal(chatLink("access", "fbff00"), "salt:grain/access?chat&cert=-_8A");
+  assert.throws(() => chatLink("Access"), GrainError);
+  assert.throws(() => chatLink("access", "abc"), GrainError);
 });

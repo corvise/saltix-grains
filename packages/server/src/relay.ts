@@ -32,13 +32,41 @@ export interface RelayOptions {
   log?: (level: "info" | "warn", event: string, meta?: Record<string, unknown>) => void;
   /** How long `send` waits for a connection, ms. */
   timeoutMs?: number;
+  /**
+   * When a kept frame leaves the mailbox: `"on_receipt"` (the default) acknowledges it as it arrives; `"by_handler"`
+   * leaves it there until the `frame` event's `ack()`, so a frame your server took but had not finished with comes
+   * again after a restart (`ChatServer` does this, and answers each request once).
+   */
+  ackKept?: "on_receipt" | "by_handler";
 }
 
-/** A frame to your address, opened. `kept`: it came from a mailbox and was acknowledged. */
+/** A frame to your address, opened. `kept`: it was kept in your mailbox. */
 export interface RelayFrame {
   from: string;
   payload: Uint8Array;
   kept: boolean;
+  /** The sender's id of the frame; null for a live one. */
+  msgId: string | null;
+  /** Take a kept frame off the mailbox with a signed proof (once; nothing for a live frame, or with `ackKept`
+   *  `"on_receipt"`, which did it already). Without a connection it stays, and comes again on the next one. */
+  ack(): void;
+}
+
+/** A file reserved next to the relay a client is registered at (09-relay §10.5): where its pieces go. */
+export interface FileSlot {
+  /** 16 bytes, base64url without padding. */
+  id: string;
+  /** The relay's endpoint: uploads go to its host and port, over its pinned certificate. */
+  endpoint: RelayEndpoint;
+}
+
+/** A relay refused `file_new`: `detail` is `too_large`, `too_many`, `quota`, `full`, `unavailable`, or
+ *  `payment_required` (the paid lane, which servers do not use yet). */
+export class FileRefused extends Error {
+  constructor(public readonly detail: string) {
+    super(`the relay refused the file: ${detail}`);
+    this.name = "FileRefused";
+  }
 }
 
 /** What the relays take in a `message` payload: base64url of the sealed frame, at most 64 KiB (09-relay §3). */
@@ -95,6 +123,9 @@ export class RelayClient extends EventEmitter {
   private readonly keys = new Map<string, { key: Uint8Array | null; until: number }>();
   private readonly asked = new Map<string, { resolvers: Array<(key: Uint8Array | null) => void>; timer: NodeJS.Timeout }>();
   private waiters: Array<(error?: Error) => void> = [];
+  /** The endpoint of the registered connection. */
+  private current: RelayEndpoint | null = null;
+  private readonly slots = new Map<string, { resolve: (slot: FileSlot) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
 
   private constructor(private readonly options: RelayOptions) {
     super();
@@ -168,6 +199,30 @@ export class RelayClient extends EventEmitter {
     this.write({ type: "message", to, payload: sealed, msgId, ...(options.keep ? {} : { ephemeral: true }) });
   }
 
+  /** The endpoint of the relay this client is registered at, or null between connections. */
+  get endpoint(): RelayEndpoint | null {
+    return this.current;
+  }
+
+  /**
+   * Reserve an upload of `size` bytes of ciphertext next to the relay (`file_new`, 09-relay §10.5): resolves with the
+   * file's id and the endpoint to send its pieces to; rejects with `FileRefused` when the relay says no.
+   */
+  async reserveFile(size: number): Promise<FileSlot> {
+    await this.ready();
+    const ref = toHex(randomBytes(8));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => this.answerSlot(ref, new Error("the relay did not answer file_new in time")), this.options.timeoutMs ?? 15_000);
+      this.slots.set(ref, { resolve: (slot) => resolve(slot), reject, timer });
+      try {
+        this.write({ type: "file_new", size, ref });
+      } catch (e) {
+        this.answerSlot(ref, e as Error);
+        return;
+      }
+    });
+  }
+
   /** Send a notification (`signNotification`'s bytes) to `to`: kept, so it reaches the wallet with the grain closed. */
   notify(to: string, signedNotification: Uint8Array): Promise<void> {
     return this.send(to, signedNotification, { keep: true });
@@ -180,9 +235,19 @@ export class RelayClient extends EventEmitter {
     this.dialing?.terminate();
     this.wake?.();
     for (const address of [...this.asked.keys()]) this.answerKey(address, null, false);
+    for (const ref of [...this.slots.keys()]) this.answerSlot(ref, new Error("relay client closed"));
     const waiters = this.waiters;
     this.waiters = [];
     waiters.forEach((w) => w(new Error("relay client closed")));
+  }
+
+  private answerSlot(ref: string, outcome: FileSlot | Error): void {
+    const pending = this.slots.get(ref);
+    if (!pending) return;
+    this.slots.delete(ref);
+    clearTimeout(pending.timer);
+    if (outcome instanceof Error) pending.reject(outcome);
+    else pending.resolve(outcome);
   }
 
   private write(frame: object): void {
@@ -267,6 +332,7 @@ export class RelayClient extends EventEmitter {
           registered = true;
           this.dialing = null;
           this.ws = ws;
+          this.current = endpoint;
           ping = setInterval(() => ws.ping(), PING_MS);
           this.log("info", "relay_registered", { url: endpoint.url, address: this.address });
           const waiters = this.waiters;
@@ -285,8 +351,11 @@ export class RelayClient extends EventEmitter {
         if (this.dialing === ws) this.dialing = null;
         if (this.ws === ws) {
           this.ws = null;
+          this.current = null;
           this.log("warn", "relay_lost", { url: endpoint.url });
           for (const address of [...this.asked.keys()]) this.answerKey(address, null, false);
+          // A reservation is the connection's: one whose answer did not come is not coming.
+          for (const ref of [...this.slots.keys()]) this.answerSlot(ref, new Error("the relay connection was lost"));
         }
         resolve(registered);
       });
@@ -315,6 +384,10 @@ export class RelayClient extends EventEmitter {
           this.log("info", "relay_stale", { url: endpoint.url });
           return new Error("stale registration: signing a later binding");
         }
+        if ((f.message === "file_refused" || f.message === "payment_required") && typeof f.ref === "string" && this.slots.has(f.ref)) {
+          this.answerSlot(f.ref, new FileRefused(f.message === "file_refused" ? String(f.detail) : "payment_required"));
+          return;
+        }
         this.log("warn", "relay_error", { url: endpoint.url, message: f.message, detail: f.detail });
         if (f.message === "auth_failed") return new Error(`registration refused: ${String(f.detail)}`);
         this.emit("relayError", { message: f.message, detail: f.detail });
@@ -324,6 +397,13 @@ export class RelayClient extends EventEmitter {
         const address = String(f.pubkey);
         if (!this.asked.has(address)) return;
         this.answerKey(address, messagingKeyOf(address, f.record as string | null, Date.now(), this.options.network), true);
+        return;
+      }
+      case "file_slot": {
+        if (typeof f.ref !== "string" || !this.slots.has(f.ref)) return;
+        const id = String(f.id);
+        if (!/^[A-Za-z0-9_-]{22}$/.test(id)) return this.answerSlot(f.ref, new Error("the relay answered file_new with a malformed id"));
+        this.answerSlot(f.ref, { id, endpoint });
         return;
       }
       case "message":
@@ -343,6 +423,7 @@ export class RelayClient extends EventEmitter {
     if (f.to !== this.address || typeof f.from !== "string" || typeof f.payload !== "string") return;
     const from = f.from;
     const kept = f.ephemeral !== true && typeof f.msgId === "string";
+    const msgId = typeof f.msgId === "string" ? f.msgId : null;
     let payload: Uint8Array | null = null;
     try {
       const key = await this.keyOf(from);
@@ -350,14 +431,19 @@ export class RelayClient extends EventEmitter {
     } catch {
       payload = null;
     }
-    if (kept && this.ws) {
-      const proof = toBase64Url(signMailboxAck(this.secret, f.msgId as string, Date.now()));
-      this.write({ type: "message_ack", to: from, msgId: f.msgId, proof });
-    }
+    let acked = false;
+    const ack = () => {
+      if (!kept || acked || !this.ws) return;
+      acked = true;
+      const proof = toBase64Url(signMailboxAck(this.secret, msgId!, Date.now()));
+      this.write({ type: "message_ack", to: from, msgId, proof });
+    };
+    // What does not open is nobody's to handle: it leaves the mailbox now.
+    if (!payload || this.options.ackKept !== "by_handler") ack();
     if (!payload) {
       this.log("warn", "relay_unopened", { from });
       return;
     }
-    this.emit("frame", { from, payload, kept } satisfies RelayFrame);
+    this.emit("frame", { from, payload, kept, msgId, ack } satisfies RelayFrame);
   }
 }

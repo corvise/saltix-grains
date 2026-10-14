@@ -1,0 +1,46 @@
+{
+  "slug": "hello-grain",
+  "version": 1,
+  "intro": {
+    "en": "The SDK's example chat: a greeting, a made-up key shown as a secret, and a small report sent as a file.",
+    "ru": "Чат-пример SDK: приветствие, ключ-пример в виде секрета и маленький отчёт файлом."
+  },
+  "commands": [
+    {
+      "name": "hello",
+      "title": { "en": "Say hello", "ru": "Поздороваться" },
+      "help": { "en": "A greeting with buttons that reply, open the grain and run a command", "ru": "Приветствие с кнопками" },
+      "params": [
+        { "name": "name", "title": { "en": "Your name", "ru": "Ваше имя" }, "kind": { "text": { "max": 32 } } }
+      ]
+    },
+    {
+      "name": "key",
+      "title": { "en": "A key", "ru": "Ключ" },
+      "help": { "en": "A made-up one-time key: the example mints nothing", "ru": "Ключ-пример: пример ничего не выпускает" },
+      "confirm": true,
+      "params": [
+        {
+          "name": "site", "title": { "en": "Site", "ru": "Сайт" }, "required": true,
+          "kind": { "choice": { "options": [
+            { "value": "web", "title": { "en": "Web", "ru": "Веб" } },
+            { "value": "docs", "title": { "en": "Docs", "ru": "Документы" } }
+          ] } }
+        },
+        { "name": "duration", "title": { "en": "Valid for", "ru": "Действует" }, "required": true, "kind": { "duration": { "options": [600, 3600, 86400] } } }
+      ]
+    },
+    {
+      "name": "report",
+      "title": { "en": "A report", "ru": "Отчёт" },
+      "help": { "en": "Sessions of a day as CSV, with an invoice to thank the example", "ru": "Сессии за день в CSV и счёт" },
+      "params": [
+        { "name": "day", "title": { "en": "Day", "ru": "День" }, "kind": "date" },
+        { "name": "errors_only", "title": { "en": "Errors only", "ru": "Только ошибки" }, "kind": "flag" },
+        { "name": "top", "title": { "en": "Rows", "ru": "Строк" }, "kind": { "number": { "min": 1, "max": 50 } } }
+      ]
+    }
+  ],
+  "keeps": 0,
+  "ai": false
+}

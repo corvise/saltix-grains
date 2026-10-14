@@ -1,5 +1,5 @@
 import { ed25519 } from "@noble/curves/ed25519";
-import { Reader, Writer, derive } from "./bytes.js";
+import { Reader, Writer, derive, fromBase64, toBase64 } from "./bytes.js";
 import { type NetworkName, accountId, decodeAddress } from "./address.js";
 
 /**
@@ -149,12 +149,12 @@ export function signMailboxAck(secret: Uint8Array, msgId: string, at: number): U
   return new Writer().raw(body).fixed(sign(ACK, body, secret), 64).done();
 }
 
+/** Base64url without padding (without Node's `Buffer`, so a browser runs it too). */
 export function toBase64Url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
+  return toBase64(bytes, true);
 }
 
 /** Base64url with or without padding, as relays send it. */
 export function fromBase64Url(text: string): Uint8Array {
-  if (!/^[A-Za-z0-9_-]*={0,2}$/.test(text)) throw new TypeError("base64url expected");
-  return new Uint8Array(Buffer.from(text, "base64url"));
+  return fromBase64(text, true);
 }

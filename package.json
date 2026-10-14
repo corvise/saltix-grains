@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces && npm run build:simulator",
-    "build:simulator": "esbuild simulator/simulator.ts --bundle --format=esm --outfile=simulator/dist/simulator.js",
+    "build:simulator": "tsc -p simulator/tsconfig.json && esbuild simulator/simulator.ts --bundle --format=esm --outfile=simulator/dist/simulator.js",
     "test": "npm run build && npm test --workspaces",
     "dev": "npm run build && node scripts/dev.mjs"
   },
