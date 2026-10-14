@@ -1,6 +1,6 @@
 /**
  * `@saltix/grain`: the bridge between a grain and the Saltix wallet it runs in
- * (Saltix specs/12-grains.md §5, bridge version 1).
+ * (Saltix specs/12-grains.md §5, bridge version 1; the chat, 22-grain-chats §5, version 2).
  *
  * In a wallet the page has `window.saltix`, defined before its scripts run; in the simulator
  * (an iframe named `saltix-simulator`) requests go to the simulator page instead. Outside both,
@@ -156,6 +156,23 @@ export function slugLink(slug: string, start?: string): string {
   return "salt:grain/" + slug + (start ? "?start=" + start : "");
 }
 
+/**
+ * The link that opens a registered grain's chat (22-grain-chats §6): `salt:grain/<slug>?chat`, with the server key's
+ * certificate (the hex your server's `encodeCert` gives) so the wallet starts without fetching it.
+ */
+export function chatLink(slug: string, cert?: string): string {
+  const link = slugLink(slug) + "?chat";
+  if (cert === undefined) return link;
+  if (!/^([0-9a-fA-F]{2})+$/.test(cert)) throw new GrainError(ErrorCode.InvalidParams, "cert: the hex of the certificate's Borsh");
+  return link + "&cert=" + base64url(unhex(cert.toLowerCase()));
+}
+
+function base64url(bytes: Uint8Array): string {
+  let text = "";
+  for (const b of bytes) text += String.fromCharCode(b);
+  return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function checkStart(start?: string): void {
   if (start !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(start)) throw new GrainError(ErrorCode.InvalidParams, "start: 1 to 64 of [A-Za-z0-9_-]");
 }
@@ -254,6 +271,24 @@ export const grain = {
       return () => {
         provider()?.off?.("relay", wrapped);
       };
+    },
+  },
+  /** The grain's chat (22-grain-chats, bridge version 2): signed cards from your server and typed actions. */
+  chat: {
+    /**
+     * Open the grain's chat in the wallet. Pass the certificate and spec your server serves at
+     * `/.well-known/saltix-grain-chat` (hex) when the page has them, so the wallet need not fetch them; it checks both
+     * against the registry's manifest either way.
+     */
+    open: (options: { cert?: string; spec?: string } = {}) => {
+      const params: Record<string, string> = {};
+      for (const name of ["cert", "spec"] as const) {
+        const value = options[name];
+        if (value === undefined) continue;
+        if (!/^([0-9a-fA-F]{2})+$/.test(value)) return Promise.reject(new GrainError(ErrorCode.InvalidParams, `${name}: hex of its Borsh`));
+        params[name] = value.toLowerCase();
+      }
+      return call<null>("grain_chat_open", params);
     },
   },
   /** Notifications from your server while the grain is closed (12-grains §5.5). */

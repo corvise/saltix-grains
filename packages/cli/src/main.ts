@@ -11,6 +11,7 @@ import { serve, linkFor } from "./dev.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
+import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
@@ -27,6 +28,14 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            (a key file, for test networks) when owner.key is there
   grain retire --slug S --node URL         close the slug for good; the deposit returns 30 days later
   grain show --slug S --node URL [--out F] what the registry holds for a slug; F gets its signed manifest
+  grain chat-spec [--spec chat.json] [--cert cert.json] [--out chat.signed.json]
+                                           lint the chat spec and sign it with the owner key: the document to serve
+                                           at /.well-known/saltix-grain-chat ({spec, cert} with --cert)
+  grain cert init                          a server key (server.key): it signs the chat's messages, invoices and
+                                           notifications on your server
+  grain cert [--server server.key | --server-key HEX] [--days 30] [--out cert.json]
+                                           the owner key certifies the server key for the grain (31 days at most
+                                           for chats: issue a new one before it ends)
   grain sponsor init                       a sponsor key (sponsor.key): its account pays relays for your users
   grain sponsor --node URL                 the sponsor's account, WORK, channels and the exchanges to open one with
   grain sponsor open --exchange C --amount W --node URL   a channel with city C's exchange, W WORK deposited
@@ -193,6 +202,41 @@ async function main(argv: string[]): Promise<number> {
       writeFileSync(manifestPath, JSON.stringify(next, null, 2) + "\n");
       console.log(`${out}: ${made.files.length} files, ${made.size} bytes, bundle ${made.hash}`);
       console.log(`${manifestPath} names it; upload ${out} to ${("sealed" in next.entry ? next.entry.sealed.sources : []).join(", ")}, raise "version" if it was published, then grain publish`);
+      return 0;
+    }
+    case "chat-spec": {
+      const spec = readChatSpec(text(flags, "spec", CHAT_SPEC_FILE));
+      const manifest = existsSync(manifestPath) ? readManifest(manifestPath).manifest : undefined;
+      const secret = readKey(keyPath);
+      const { errors, warnings } = lintChatSpec(spec, manifest, publicKeyOf(secret));
+      for (const w of warnings) console.log(`warning: ${w}`);
+      for (const e of errors) console.error(`error: ${e}`);
+      if (errors.length > 0) return 1;
+      const certPath = flags.get("cert");
+      const cert = typeof certPath === "string" ? readCert(certPath) : null;
+      const out = text(flags, "out", CHAT_DOCUMENT_FILE);
+      const doc = signedChatDocument(spec, secret, cert, out);
+      writeFileSync(out, JSON.stringify(doc, null, 2) + "\n");
+      console.log(`${out}: ${spec.slug}'s chat spec v${spec.version}, ${spec.commands.length} commands` +
+        (cert ? `; serve it at /.well-known/saltix-grain-chat` : `; add --cert ${CERT_FILE} for the document to serve, or pass the spec to ChatServer`));
+      return 0;
+    }
+    case "cert": {
+      const serverKey = text(flags, "server", SERVER_KEY_FILE);
+      if (positional[0] === "init") {
+        const key = newKey(serverKey);
+        console.log(`a server key in ${serverKey} (keep it secret, on your server); its public key ${key}`);
+        console.log(`next: grain cert (the owner key certifies it)`);
+        return 0;
+      }
+      const given = flags.get("server-key");
+      const key = typeof given === "string" ? given.toLowerCase() : publicKeyOf(readKey(serverKey));
+      const slug = text(flags, "slug", existsSync(manifestPath) ? readManifest(manifestPath).manifest.slug : undefined);
+      const { cert, warnings } = issueCert(readKey(keyPath), slug, key, Number(text(flags, "days", "30")));
+      for (const w of warnings) console.log(`warning: ${w}`);
+      const out = text(flags, "out", CERT_FILE);
+      writeFileSync(out, JSON.stringify(cert, null, 2) + "\n");
+      console.log(`${out}: ${slug}'s server key ${key} until ${new Date(cert.expires_at).toISOString()}`);
       return 0;
     }
     case "sponsor": {
