@@ -44,21 +44,40 @@ export function invoiceMessage(inv: Invoice, genesisHash: string): Uint8Array {
   return derive("Saltix grain invoice v1", fromHex(genesisHash, 32), encodeInvoice(inv));
 }
 
-function certMessage(slug: string, key: Uint8Array, expiresAt: number): Uint8Array {
+/** What the owner key signs to certify `key` for `slug` until `expiresAt` (12-grains §5.2). */
+export function certMessage(slug: string, key: Uint8Array, expiresAt: number): Uint8Array {
   return derive("Saltix grain invoice key v1", new Writer().string(slug).fixed(key, 32).u64(expiresAt).done());
+}
+
+/** An `InvoiceKeyCert` in Borsh, as a chat message and a spec frame carry it (22-grain-chats). */
+export function writeCertBody(w: Writer, cert: InvoiceKeyCert): Writer {
+  return w.string(cert.slug).fixed(fromHex(cert.key, 32), 32).u64(cert.expires_at).fixed(fromHex(cert.signature, 64), 64);
+}
+
+export function readCertBody(r: Reader): InvoiceKeyCert {
+  return { slug: r.string(64), key: toHex(r.fixed(32)), expires_at: r.u64n(), signature: toHex(r.fixed(64)) };
+}
+
+/** The hex of `cert`'s Borsh: the `cert` of `/.well-known/saltix-grain-chat` and of a chat link (22-grain-chats §2, §6). */
+export function encodeCert(cert: InvoiceKeyCert): string {
+  return toHex(writeCertBody(new Writer(), cert).done());
+}
+
+/** `encodeCert`'s hex (or bytes) read back. */
+export function decodeCert(hex: string | Uint8Array): InvoiceKeyCert {
+  const r = new Reader(typeof hex === "string" ? fromHex(hex) : hex);
+  const cert = readCertBody(r);
+  r.end();
+  return cert;
 }
 
 /** `Option<InvoiceKeyCert>` in Borsh, as invoices and notifications carry it. */
 export function writeCert(w: Writer, cert: InvoiceKeyCert | null | undefined): Writer {
-  if (!cert) return w.u8(0);
-  return w.u8(1).string(cert.slug).fixed(fromHex(cert.key, 32), 32).u64(cert.expires_at).fixed(fromHex(cert.signature, 64), 64);
+  return w.option(cert, writeCertBody);
 }
 
 export function readCert(r: Reader): InvoiceKeyCert | null {
-  const tag = r.u8();
-  if (tag === 0) return null;
-  if (tag !== 1) throw new TypeError("borsh: bad option");
-  return { slug: r.string(64), key: toHex(r.fixed(32)), expires_at: Number(r.u64()), signature: toHex(r.fixed(64)) };
+  return r.option(readCertBody);
 }
 
 /**
@@ -89,22 +108,32 @@ export function signInvoice(inv: Invoice, secret: Uint8Array, genesisHash: strin
   return toHex(writeCert(new Writer().raw(encodeInvoice(inv)), cert).raw(signature).done());
 }
 
-/** The signed invoice in `hex` read back. */
-export function decodeInvoice(hex: string): { invoice: Invoice; cert: InvoiceKeyCert | null; signature: string } {
-  const r = new Reader(fromHex(hex));
+/** A signed invoice read from `r`: what a chat's `Invoice` block carries. */
+export function readSignedInvoice(r: Reader): { invoice: Invoice; cert: InvoiceKeyCert | null; signature: string } {
+  const slug = r.string(64);
+  const to = toHex(r.fixed(32));
+  const asset = r.u8();
+  if (asset > 1) throw new TypeError("borsh: an asset's tag");
   const invoice: Invoice = {
-    slug: r.string(64),
-    to: toHex(r.fixed(32)),
-    asset: r.u8() === 0 ? "SALT" : "WORK",
+    slug,
+    to,
+    asset: asset === 0 ? "SALT" : "WORK",
     amount: r.u64(),
     memo: r.string(800),
     reference: toHex(r.fixed(16)),
-    expires_at: Number(r.u64()),
+    expires_at: r.u64n(),
   };
   const cert = readCert(r);
   const signature = toHex(r.fixed(64));
-  r.end();
   return { invoice, cert, signature };
+}
+
+/** The signed invoice in `hex` read back. */
+export function decodeInvoice(hex: string): { invoice: Invoice; cert: InvoiceKeyCert | null; signature: string } {
+  const r = new Reader(fromHex(hex));
+  const signed = readSignedInvoice(r);
+  r.end();
+  return signed;
 }
 
 /** What a wallet checks (12-grains §5.2): why it would refuse `hex`, or null. */

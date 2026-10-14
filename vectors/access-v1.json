@@ -56,6 +56,7 @@
     "all Borsh, integers little-endian; µWORK for WORK amounts, slots for times",
     "actions after Registry (tag 1): OpenChannel tag 2 {exchange: [u8; 32], amount: u64}; TopUpChannel tag 3 {exchange, amount}; CloseChannel tag 4 {exchange}; StakeAccess tag 5 {amount: u64 SALT}; UnstakeAccess tag 6",
     "registry calls after UpdateCity (tag 3): OpenExchange tag 4 {city: [u8; 32], fee_bp: u16} paid in WORK; CloseExchange tag 5 {city}; ExchangeDebt tag 6 is the ledger's own",
+    "the labor fund (01-foundation §5.3): BuyWork tag 19, paid in SALT, credits `amount` µWORK (1 SALT = 1 000 WORK, a base unit for a µWORK); ReturnWork tag 21, paid in WORK, returns it at par; Give tag 22 {fund: u8}, paid in SALT, fund FuturePayments 0 | Gratitude 1",
     "allowance: {exchange [32], payer [32], relay [32], client_key [32], amount u64, issued u64, expires u64, nonce [16]}; id = BLAKE3 derive_key(\"Saltix access allowance v1\", genesis hash ‖ allowance); the operator signs the id",
     "allowance request: {exchange [32], payer [32], relay [32], client_key [32], amount u64, grant Option<{certificate, signature [64]}>, nonce [16], at u64}; client_key signs BLAKE3 derive_key(\"Saltix allowance request v1\", genesis hash ‖ request); the allowance takes the nonce, issued = the exchange's slot, expires = issued + 86 400",
     "voucher: client_key signs BLAKE3 derive_key(\"Saltix access voucher v1\", allowance id ‖ total as u64 big-endian)",
@@ -180,6 +181,56 @@
       "nonce": "10",
       "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0a00000000000000d007000000000000a086010000000000011300e40b540200000000e4dce706ca4a40f50803aa931be3f04337de555145825e472b4085314b4794db1bb143d375133419d2f461d08c8d37d4ae8f95b673548f626e780e9c72c4910c",
       "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0a00000000000000d007000000000000a086010000000000011300e40b5402000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "2500000000",
+        "call": {
+          "call": "return_work"
+        },
+        "kind": "registry"
+      },
+      "fee": "2000",
+      "id_hex": "4cbc732ff0a79c782802cfa7c6c7ed65cb7040f6df2376b17d7ca5a93957aeaf",
+      "name": "return-work",
+      "nonce": "11",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0b00000000000000d007000000000000a086010000000000011500f90295000000000021206b4243a4d60beb1e4fca6d30a831ce89ea4f9033ffad3562905b4a4b2a6b5e68c0f568048f9fda02e4822263be539fea0dfc634d1b71e29107e86a03d406",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0b00000000000000d007000000000000a086010000000000011500f9029500000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "1000000000",
+        "call": {
+          "call": "give",
+          "fund": "future_payments"
+        },
+        "kind": "registry"
+      },
+      "fee": "2000",
+      "id_hex": "d5000f5a3015a420721f8a177c49fe0df4535c9ece18f8091dce61afd316a2be",
+      "name": "give-future-payments",
+      "nonce": "12",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0c00000000000000d007000000000000a08601000000000001160000ca9a3b000000000089e8e6df6972a8e63c0e36b00416f3f3d8eabc381db38b533dfab3eb4b8e9d5011de81be1b8573aa4860e766cacc7f0a5e88593228323dfaa85b3ef0f1deaa0d",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0c00000000000000d007000000000000a08601000000000001160000ca9a3b00000000",
+      "valid_until_slot": "100000"
+    },
+    {
+      "action": {
+        "amount": "500000000",
+        "call": {
+          "call": "give",
+          "fund": "gratitude"
+        },
+        "kind": "registry"
+      },
+      "fee": "2000",
+      "id_hex": "b2478abc815f35eaccdd11498706a201b8dfba130b022bbb33561c2ca6f4f9e6",
+      "name": "give-gratitude",
+      "nonce": "13",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0d00000000000000d007000000000000a0860100000000000116010065cd1d0000000000cde7e0ff1e422af10cb9a46af0637ca3a4a905a09ead0f86480c5662e8925f0305a7e5059a54fc772070d106786fa40d8f037dfa7f117446bedcee23bd05fd0d",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0d00000000000000d007000000000000a0860100000000000116010065cd1d00000000",
       "valid_until_slot": "100000"
     }
   ],
