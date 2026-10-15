@@ -3,8 +3,9 @@
  * alias registered at the development relay (`npm run dev`, /relay), requests signed by the grain key and sealed to the
  * server's checked key, and every message checked before it is drawn — from the server key's address, the key one the
  * registry names (or a certificate of the owner's within 31 days), not revoked, in bounds, timely, signed. Unasked
- * messages count against 10 a day and show only while allowed. A private app gets a member proof signed by the
- * simulator's account key with every request, and every request names the page's language as Saltix names its own;
+ * messages count against 10 a day (100 when the account is on the app's team) and show only while allowed. A private
+ * app gets a member proof signed by the simulator's account key with every request, and so does the app whose team the
+ * account is on (its console, 24-app-studio §4); every request names the page's language as Saltix names its own;
  * the numbers the app reports are shown as reported, once checked. A developer tool: the alias uses `register` on a
  * connection of its own, and the history lives in this page.
  */
@@ -16,13 +17,13 @@ import {
 } from "../packages/server/src/records";
 import { messagingPublic, openFrame, sealFrame } from "../packages/server/src/seal";
 import {
-  CHAT_UNASKED_PER_DAY, type ChainParams, type ChatArgs, type ChatValue, type SignedChatMessage, type SignedGrainChatSpec,
+  CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, type ChainParams, type ChatArgs, type ChatValue, type SignedChatMessage, type SignedGrainChatSpec,
   chatCertHolds, chatMessageProblem, commandOf, decodeChatDocument, decodeChatFrame, encodeChatFrame, newChatId, requestFitProblem,
   signChatRequest, signedChatSpecProblem,
 } from "../packages/server/src/chat";
 import { type FileRef, fileRefProblem, openFile, sealFile } from "../packages/server/src/file";
 import { type InvoiceKeyCert, decodeCert, invoiceProblem } from "../packages/server/src/invoice";
-import { MEMBER_PROOF_LIFE_MS, signMemberProof } from "../packages/server/src/member";
+import { MEMBER_PROOF_LIFE_MS, onTeam, signMemberProof } from "../packages/server/src/member";
 import { type SignedGrainStats, grainStatsProblem } from "../packages/server/src/stats";
 import type { DeviceKey } from "../packages/server/src/keys";
 import { argOf } from "../packages/server/src/chat-card";
@@ -60,8 +61,10 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   let cert: InvoiceKeyCert | null = null;
   /** The server keys the registry names, as last read. */
   let servers: string[] = [];
-  /** Whether the registry says the app is private: only then does a wallet send a member proof. */
+  /** Whether the registry says the app is private, and whether this account is on its team: a wallet sends a member
+   *  proof only then. */
   let privateApp = false;
+  let teamMember = false;
   let ws: WebSocket | null = null;
   let registered = false;
   const keys = new Map<string, Uint8Array | null>();
@@ -199,10 +202,11 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     const msg = m.message;
     const answers = msg.answers !== null && (sent.get(msg.answers) ?? 0) > Date.now();
     if (!answers) {
-      // Unasked: shown while allowed, within 10 a day (notifications included).
+      // Unasked: shown while allowed, within 10 a day, or 100 to the app's team (notifications included).
       const recent = unasked.filter((at) => at > Date.now() - DAY);
+      const limit = teamMember ? CHAT_UNASKED_TEAM_PER_DAY : CHAT_UNASKED_PER_DAY;
       if (!$<HTMLInputElement>("chat-unasked").checked) return host.log("chat: an unasked message, dropped (not allowed)");
-      if (recent.length >= CHAT_UNASKED_PER_DAY) return host.log(`chat: an unasked message, dropped (${CHAT_UNASKED_PER_DAY} today already)`);
+      if (recent.length >= limit) return host.log(`chat: an unasked message, dropped (${limit} today already)`);
       unasked.splice(0, unasked.length, ...recent, Date.now());
     }
     const handlers = {
@@ -213,7 +217,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
       reply: (text: string, id: string) => void sendRequest("", [], text, id),
     };
     const bubble = el("div", { className: "msg in" },
-      el("div", { className: "mark", textContent: `from ${host.slug()}, verified${answers ? "" : " · unasked"}` }),
+      el("div", { className: "mark", textContent: `from ${host.slug()}, verified${answers ? "" : teamMember ? " · to the team" : " · unasked"}` }),
       ...msg.blocks.map((b) => renderBlock(b, handlers)), renderActions(msg.actions, msg.id, handlers));
     const earlier = msg.replaces ? drawn.get(msg.replaces) : undefined;
     if (earlier) earlier.replaceWith(bubble);
@@ -254,8 +258,9 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   async function sendRequest(command: string, args: ChatArgs, text: string, viaId: string | null): Promise<void> {
     if (!spec || !chain || !registered || !serverKey()) return note("Load the chat first.", "bad");
     const now = Date.now();
-    // A private app's member proves its account with every request; a public app is never sent one (24-app-studio §2a).
-    const member = privateApp && $<HTMLInputElement>("chat-proof").checked
+    // A private app's member proves its account with every request, and so does the app's team to a public app, so that
+    // the app reaches it in its console (24-app-studio §2a, §4); a public app's users never send one.
+    const member = (privateApp || teamMember) && $<HTMLInputElement>("chat-proof").checked
       ? signMemberProof({ slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS - 60_000 }, host.account(), chain.genesis)
       : null;
     // The page's language, as Saltix sends its display language with every request (22-grain-chats §3).
@@ -313,6 +318,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     servers = dev.servers;
     const a = dev.access;
     privateApp = a?.public === false;
+    teamMember = a !== null && onTeam(a, myAccount());
     $("chat-access").textContent = a === null ? "" : a.public ? "Public app: anyone may use it." :
       `Private app: its owner and ${a.members.length} member(s)${a.members.some((m) => m.account === myAccount()) ? ", this account among them" : ""}.`;
     $<HTMLInputElement>("chat-private").checked = a?.public === false;

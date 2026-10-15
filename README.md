@@ -153,7 +153,10 @@ the spec, and stops once the owner replaces or revokes the key. Requests are che
 takes its owner's and members' only (member proofs, checked against the registry and the accounts' keys); files go next
 to the relay; unasked messages are at most 10 a day per user; the numbers it reports are signed hourly. Each request
 names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it when you can,
-else in English.
+else in English. The team's chat with its own app is the app's **console** (24-app-studio §4): `chat.team()` reads who
+is on the team, `chat.notifyTeam(card)` writes to it (100 a day each), and `chat.report(error)` sends an error as a card
+made for an AI agent, scrubbed of secrets and folded within an hour; handlers' errors are reported on their own. In
+Saltix, long-press the report → Copy for an AI agent → paste it into Claude Code.
 
 ```ts
 const chat = await ChatServer.start({ appKey: process.env.SALTIX_APP_KEY!, spec, store: fileChatStore("chat.store.json") });
@@ -164,6 +167,8 @@ chat.command("report", async (ask) => {
   const file = await chat.upload(csv, { name: "games.csv", mime: "text/csv" });
   return card().text("Your games this week.").file(file, { format: "csv" });
 });
+await chat.notifyTeam(card().text("A player reported a bug in game 7"));   // the owner and developers, in the console
+await chat.report(error, { context: { command: "/rating" } });              // a card for an AI agent to read
 ```
 
 A **sponsor** pays the relays for your users' grain frames when the free share is busy (Saltix 11-access, 12-grains §5.4):

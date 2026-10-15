@@ -30,6 +30,9 @@ export const CHAT_CERT_LIFE_MS = 31 * 86_400_000;
 export const MAX_CHAT_SPEC = 32 * 1024;
 /** Unasked messages, notifications included, a wallet shows per grain a day. */
 export const CHAT_UNASKED_PER_DAY = 10;
+/** The same to an account on the grain's team (its owner, developers and viewers, 22-grain-chats §4): error reports and
+ *  feedback reach the people who build the app. */
+export const CHAT_UNASKED_TEAM_PER_DAY = 100;
 /** How long a request may live, ms. */
 export const MAX_REQUEST_LIFE_MS = 7 * 86_400_000;
 /** How old a message a wallet still shows may be, ms. */

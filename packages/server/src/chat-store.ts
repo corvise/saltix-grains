@@ -1,8 +1,9 @@
 // What a chat server remembers between frames (Saltix 22-grain-chats §3, §4): the requests it took, until they expire,
 // so each is answered once; the unasked messages it sent each user in the last 24 hours; the spec version each user
-// was last sent; and what the app reports about its use (24-app-studio §6a): when each user last sent a request, for
-// 30 days and no longer, and how many requests came in each hour of those 30 days. `memoryChatStore` forgets on
-// restart; `fileChatStore` keeps it in a file of its own.
+// was last sent; what the app reports about its use (24-app-studio §6a): when each user last sent a request, for
+// 30 days and no longer, and how many requests came in each hour of those 30 days; and where the grain's team is
+// (24-app-studio §4): each member's address in the grain, as their proof showed it, while they are on the team.
+// `memoryChatStore` forgets on restart; `fileChatStore` keeps it in a file of its own.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 export interface ChatStore {
@@ -23,6 +24,12 @@ export interface ChatStore {
   seen?(user: string, now: number): void | Promise<void>;
   /** The numbers at `now`, after forgetting every user and hour older than 30 days. */
   usage?(now: number): ChatUsage | Promise<ChatUsage>;
+  /** The team's addresses in the grain by account (hex), as their proofs showed them. A store without `team` and
+   *  `setTeam` leaves them to the server's memory: after a restart, each member reaches the console again once they
+   *  have written to the app. */
+  team?(): Record<string, string> | Promise<Record<string, string>>;
+  /** Keep `account`'s address in the grain, or forget it (`null`: no longer on the team). */
+  setTeam?(account: string, address: string | null): void | Promise<void>;
 }
 
 /** Distinct users who sent a request in the last day and the last 30 days, and the requests of the last 30 days. */
@@ -94,6 +101,7 @@ interface State {
   unasked: Record<string, number[]>;
   specs: Record<string, number>;
   usage: UsageState;
+  team: Record<string, string>;
 }
 
 class Store implements ChatStore {
@@ -151,6 +159,16 @@ class Store implements ChatStore {
     return this.state.specs[user] ?? null;
   }
 
+  team(): Record<string, string> {
+    return { ...this.state.team };
+  }
+
+  setTeam(account: string, address: string | null): void {
+    if (address === null) delete this.state.team[account];
+    else this.state.team[account] = address;
+    this.saved();
+  }
+
   setSpecSent(user: string, version: number): void {
     this.state.specs[user] = version;
     this.saved();
@@ -169,18 +187,18 @@ class Store implements ChatStore {
 /** A store in memory: a restart forgets which requests were answered (a request answered just before it, whose
  *  acknowledgement had not left, may be answered again). */
 export function memoryChatStore(): ChatStore {
-  return new Store({ taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} } });
+  return new Store({ taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} }, team: {} });
 }
 
 /** A store kept in the JSON file `path` (owner-only), written whole on every change: enough for a small grain. A
  *  larger one implements `ChatStore` over its own database. */
 export function fileChatStore(path: string): ChatStore {
-  let state: State = { taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} } };
+  let state: State = { taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} }, team: {} };
   if (existsSync(path)) {
     const read = JSON.parse(readFileSync(path, "utf8")) as Partial<State>;
     state = {
       taken: read.taken ?? {}, unasked: read.unasked ?? {}, specs: read.specs ?? {},
-      usage: { users: read.usage?.users ?? {}, hours: read.usage?.hours ?? {} },
+      usage: { users: read.usage?.users ?? {}, hours: read.usage?.hours ?? {} }, team: read.team ?? {},
     };
   }
   return new Store(state, () => {

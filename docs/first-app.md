@@ -40,7 +40,7 @@ npm run example
 
 ```text
 starting AppKey(dsalt 6f4c9ce9ccbafc18 your-app, key 1476ff04a2885b87…)
-the chat of your-app answers at dsalt1q… on devnet (spec v2)
+the chat of your-app answers at dsalt1q… on devnet (spec v3)
 ```
 
 `npm run example` runs [`examples/hello-grain/server.mjs`](../examples/hello-grain/server.mjs): it reads the key from
@@ -48,9 +48,10 @@ the chat of your-app answers at dsalt1q… on devnet (spec v2)
 app, signs [`chat.json`](../examples/hello-grain/chat.json) with the key and answers. The key never appears in its
 output.
 
-In Saltix, open **My apps → your app → Chat**. Pick **Say hello**: the answer is a card marked "from your-app, verified",
-because the registry names the key that signed it. Try **A key** (a secret, masked until you tap it) and **A report** (a
-CSV file next to the relay).
+In Saltix, tap your app in **My apps**: with its program running, it opens its chat, which is your app's **console**
+(long-press manages the app instead). Pick **Say hello**: the answer is a card marked "from your-app, verified", because
+the registry names the key that signed it. Try **A key** (a secret, masked until you tap it), **A report** (a CSV file
+next to the relay) and **Fail on purpose** (below).
 
 ## 3. Add a command (3 minutes)
 
@@ -131,6 +132,26 @@ grain bind --handle @your_app --slug your-app --node URL                    # a 
 grain app-key --file app.key                                                # the key's public parts; is it registered?
 ```
 
+## When something fails, you hear of it
+
+Your chat with your own app is its console. When a handler throws, the user gets "failed", and you and your developers
+get a report in the console: the error, where it happened, the command and request, your app's version, the time in UTC
+and the stack. Try it with **Fail on purpose** in the example.
+
+To fix it with a coding agent: long-press the report → **Copy for an AI agent** → paste it into Claude Code (or
+another agent) in your app's folder, with "fix this". The copy carries the app, the message's id and the time, and never
+a secret: the SDK scrubs keys out of every report.
+
+```js
+const chat = await ChatServer.start({ appKey, spec, store: fileChatStore("chat.store.json"), version: "1.0.3" });
+await chat.notifyTeam(card().text("Someone asked for a feature: dark dice"));   // feedback, digests, alerts
+await chat.report(error, { context: { command: "/roll" } });                    // an error you caught yourself
+```
+
+Your app reaches you once you have written to it: your wallet proves who you are with each of your requests to your own
+app, and the server remembers where your chat is. The same error is reported once an hour, with a count; the team gets
+at most 100 such messages a day. More in [docs/chats.md](chats.md#your-apps-console).
+
 ## What the server does for you
 
 - **Checks every request** as the protocol says: from its key's address, signed, alive, fitting the spec; a private
@@ -141,6 +162,8 @@ grain app-key --file app.key                                                # th
   key is replaced or revoked.
 - **Reports its numbers**: users of the last day and 30 days and the requests, signed hourly; the marketplace shows them
   as "reported by the app". It keeps nothing about a user longer than 30 days for them.
+- **Tells your team** what goes wrong: handlers' errors as reports in the console, folded within an hour and scrubbed of
+  secrets.
 
 ## When it does not start
 

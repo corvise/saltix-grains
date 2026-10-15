@@ -53,6 +53,26 @@
 
 ### Added
 
+- **The app's console** (Saltix 24-app-studio §4, 22-grain-chats §3–§4): the team's chat with its own app is where the
+  app talks to the people who build it.
+  - `chat.team()`: the owner and the members with the developer or viewer role, from the registry (cached per beacon
+    block), each with their address in the app once their proof showed it. The team's wallets send their member proof
+    to their own app, public ones too; the server keeps the address (`ChatStore.team`/`setTeam`, kept by
+    `fileChatStore`), forgets a member the registry drops, and ignores anyone else's proof at no cost to the node.
+    Handlers see `ask.member` and `ask.fromTeam` for the team's requests (`onTeam`, `teamMemberOf`,
+    `needsTeamController`, `TEAM_ROLES`).
+  - `chat.notifyTeam(card, { roles? })`: unasked, to the owner and the developers by default, within
+    `CHAT_UNASKED_TEAM_PER_DAY` (100) a day each; it skips members it cannot reach yet or whose day is spent and logs
+    counts only. `notify`, `notification` and late `replace`s give a team member's address the same budget;
+    `ChatBudgetSpent` says its `limit`.
+  - `chat.report(error, { context?, roles? })`: a card made for an AI agent to read (`reportCard`: a `failed` status,
+    fields for the app, the error, where, the command, the request, the app's `version`, the spec, the time in UTC,
+    the stack as text, all within a card's bounds); the same error folds for an hour (`REPORT_FOLD_MS`, "×N" in the
+    next card, `flushReports`); developer keys, hex of 64 digits or more, the server secret and the options' `redact`
+    are scrubbed (`scrubSecrets`, `errorFacts`); it never throws. Handlers' errors are reported on their own
+    (`reportErrors`, on by default), and their log lines are scrubbed the same way.
+  - The example's **Fail on purpose** (spec v3); the development registry makes the simulator's account a user and
+    developer, and the simulator sends the team's proof and takes 100 unasked messages a day for the team.
 - The app studio (Saltix 24-app-studio, the SDK's step 3):
   - **the developer key as the whole configuration**: `ChatServer.start({ appKey, spec })` reads
     `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>` strictly (`AppKey`, `AppKeyError`, never printing the secret), finds
