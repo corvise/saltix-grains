@@ -47,7 +47,10 @@ document.getElementById("count").addEventListener("click", async () => {
 `;
 
 export const gitignore = `owner.key
+server.key
+app.key
 signed.json
+*.store.json
 `;
 
 export const readme = (slug: string) => `# ${slug}
@@ -58,7 +61,33 @@ A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
   debug Saltix (the emulator reaches this computer at 10.0.2.2).
 - \`grain lint\` checks \`grain.json\`; set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
 - Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
-- \`grain publish --node <url>\` registers the slug (a 100 SALT deposit, back 30 days after \`grain retire\`).
+- \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
+  10 for 8 or more; back 30 days after \`grain retire\`).
 
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
+`;
+
+/** A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. */
+export const chatJson = (slug: string, name: string) => JSON.stringify({
+  slug,
+  version: 1,
+  intro: { en: `${name}: a chat-only app in Saltix.` },
+  commands: [
+    { name: "hello", title: { en: "Say hello" }, help: { en: "A greeting" }, params: [{ name: "name", title: { en: "Your name" }, kind: { text: { max: 32 } } }] },
+  ],
+  keeps: 0,
+  ai: false,
+}, null, 2) + "\n";
+
+export const chatReadme = (slug: string) => `# ${slug}
+
+A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix specs/24-app-studio.md).
+
+- \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
+  10 for 8 or more; back 30 days after \`grain retire\`). Or make the app in Saltix: My apps → New app.
+- \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key --node <url>\` names it in the
+  registry; \`grain app-key make --slug ${slug} --node <url>\` writes \`app.key\`, the developer key the server runs with.
+- Run the chat: \`ChatServer.start({ appKey, spec })\` with \`chat.json\` (docs/first-app.md).
+
+\`owner.key\`, \`server.key\` and \`app.key\` are secrets: keep them out of git.
 `;

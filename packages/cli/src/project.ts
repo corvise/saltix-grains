@@ -115,6 +115,7 @@ export function signedFor(path: string, secret: Uint8Array): SignedManifest {
 
 /** The manifest of `m` for a developer's `origin` (`grain dev`): its pages there instead of its own origins. */
 export function forOrigin(m: Manifest, origin: string): Manifest {
+  if ("chat" in m.entry) throw new Error("a chat-only grain has no page to serve: run its chat server (ChatServer) instead");
   if (!("hosted" in m.entry)) throw new Error("grain dev serves hosted grains");
   const url = new URL(m.entry.hosted.url);
   return { ...m, entry: { hosted: { url: origin + url.pathname + url.search, origins: [origin] } } };
