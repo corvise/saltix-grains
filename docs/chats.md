@@ -325,7 +325,11 @@ has no origin. Each signing also goes to the server's relay (`relay.reportStats`
 whenever the server registers): the relay's node checks them against the registry and gossips them, so every node
 answers `grain_stats` for the marketplace and the explorer (Saltix 22-grain-chats §4); the `stats` event of the
 `RelayClient` says whether the node took them, and the log says `relay_stats_taken` or `relay_stats_refused` with the
-reason. Nothing goes on chain. A wallet shows them as "reported by the app" only when a key the registry names signed them, they are at
+reason. Nothing goes on chain. **A private app's numbers are not published**: while the registry says the app is private
+(read every few minutes and at a request's new beacon block), the server hands none to its relay, sends none again
+when it registers and leaves them out of the well-known document; the log says `stats_not_reported` with the reason
+`private` once, and `stats_resumed` once the app is public, when the newest numbers go at once. Its members still get
+them in the chat, and the nodes refuse a private app's numbers anyway (`private`). A wallet shows them as "reported by the app" only when a key the registry names signed them, they are at
 most 2 days old and `users_1d ≤ users_30d ≤ requests_30d`. The count keeps, per user, only the time of their last
 request, and forgets it once that is 30 days old; requests are counted by the hour with no one's name on them
 (`UsageWindow`, kept by the `ChatStore`).

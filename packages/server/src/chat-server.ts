@@ -337,6 +337,9 @@ const MEMBER_REFUSALS: Record<MemberProblem, string> = {
  *   `CHAT_UNASKED_PER_DAY` per user in any 24 hours; past that they throw `ChatBudgetSpent`.
  * - A user who was not yet sent this spec's version gets it (`ChatFrame::Spec`) before the answer, and the numbers the
  *   app reports (`ChatFrame::Stats`) once a day.
+ * - The numbers go to the relay, whose node gossips them to every node for the marketplace and the explorer, only
+ *   while the registry says the grain is public: a private grain's are not published (`stats_not_reported` in the
+ *   log), and they go again once it is public.
  * - With a registered key, the server asks the registry every few minutes, and at every new beacon block a request
  *   comes in, whether it still names the key; once it does not, the server stops answering and says so in its log.
  * - The grain's team (its owner, developers and viewers, 24-app-studio §4) is read from the registry (`team`). A member's
@@ -369,6 +372,8 @@ export class ChatServer {
   private readonly log: ChatLog;
   private readonly now: () => number;
   private stats: SignedGrainStats | null = null;
+  /** Whether the numbers are kept from the relay and the document: the registry says the grain is private. */
+  private statsWithheld = false;
   /** When each user was last sent the numbers, for a day at most. */
   private readonly statsSent = new Map<string, number>();
   private readonly timers: NodeJS.Timeout[] = [];
@@ -529,6 +534,7 @@ export class ChatServer {
       const every = this.options.checkEveryMs ?? REGISTRY_CHECK_MS;
       this.timers.push(setInterval(() => void this.checkRegistry(), every));
     }
+    this.judgeAccess();
     if (!this.certificate) void this.publishStats().catch((e: Error) => this.log("warn", "chat_stats_failed", { reason: e.message }));
     this.timers.push(setInterval(() => void this.sweep(), SWEEP_MS));
     for (const t of this.timers) t.unref?.();
@@ -549,10 +555,10 @@ export class ChatServer {
     return this.stopReason;
   }
 
-  /** What `/.well-known/saltix-grain-chat` serves now: `{spec, cert?, stats?}` in hex. A chat-only grain has no origin:
-   *  its users get the same in the chat. */
+  /** What `/.well-known/saltix-grain-chat` serves now: `{spec, cert?, stats?}` in hex, without the numbers while the
+   *  grain is private. A chat-only grain has no origin: its users get the same in the chat. */
   document(): ChatDocument {
-    return chatDocumentOf(this.signed, this.certificate, this.stats);
+    return chatDocumentOf(this.signed, this.certificate, this.statsWithheld ? null : this.stats);
   }
 
   /** Serve the document at `CHAT_DOCUMENT_PATH` in a Node `http` server: true when it answered the request. */
@@ -642,7 +648,8 @@ export class ChatServer {
   /**
    * The numbers the app reports (24-app-studio §6a), signed by the registered key at most once an hour: distinct users
    * who sent a request in the last day and 30 days, and the requests of 30 days. Null for a certified key, whose
-   * numbers no wallet shows.
+   * numbers no wallet shows. They go to the relay only while the grain is public: a private grain's are not published
+   * (22-grain-chats §4), though its members still get them in the chat.
    */
   async publishStats(): Promise<SignedGrainStats | null> {
     if (this.certificate) return null;
@@ -652,7 +659,7 @@ export class ChatServer {
     this.stats = signGrainStats({ slug: this.slug, at: now, ...usage }, this.secret, this.chain.genesis);
     this.log("info", "chat_stats", { ...usage });
     // The relay's node gossips them to every node, for the marketplace and the explorer (22-grain-chats §4).
-    this.relay.reportStats(this.stats);
+    if (!this.statsWithheld) this.relay.reportStats(this.stats);
     return this.stats;
   }
 
@@ -673,7 +680,27 @@ export class ChatServer {
       this.log("warn", "chat_registry_unreachable", { reason: (e as Error).message });
       return null;
     }
-    return this.judgeKey();
+    const stopped = this.judgeKey();
+    if (!stopped) this.judgeAccess();
+    return stopped;
+  }
+
+  /**
+   * Keep the numbers from the relay while the registry says the grain is private, and hand the newest over again once
+   * it is public (22-grain-chats §4: only a public grain's numbers are published). Logged once per change.
+   */
+  private judgeAccess(): void {
+    if (this.certificate) return;
+    const withheld = this.record !== null && this.record.public === false;
+    if (withheld === this.statsWithheld) return;
+    this.statsWithheld = withheld;
+    if (withheld) {
+      this.relay.clearStats();
+      this.log("info", "stats_not_reported", { reason: "private" });
+      return;
+    }
+    this.log("info", "stats_resumed", { reason: "public" });
+    if (this.stats) this.relay.reportStats(this.stats);
   }
 
   private judgeKey(): ChatStopReason | null {
@@ -975,6 +1002,7 @@ export class ChatServer {
     if (!this.view) return { member: null };
     this.record = await this.view.grain(this.slug);
     if (this.judgeKey()) throw new ChatKeyNotRegistered(this.stopReason!, this.slug);
+    this.judgeAccess();
     const g = this.record;
     if (!g) return { member: null };
     const access = accessOf(g);
