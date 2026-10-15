@@ -1,6 +1,7 @@
-// Grain chats as vectors/grain-chats-v1.json has them (Saltix 22-grain-chats, 09-relay §10.5.2): every object the
-// protocol's generator builds, built here and compared byte for byte; what the file says is refused, refused; and the
-// reference's own negative cases.
+// Grain chats as vectors/grain-chats-v1.json has them (Saltix 22-grain-chats, 24-app-studio, 09-relay §10.5.2): every
+// object the protocol's generator builds, built here and compared byte for byte — specs signed by the owner and by a
+// registered server key, messages under a certificate and under a registered key, a member's proof, the numbers an app
+// reports —; what the file says is refused, refused; and the reference's own negative cases.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -14,6 +15,9 @@ import {
   chatSpecFromJson, chatSpecToJson, takesValue, dayToIso, isoToDay,
   encodeFileRef, decodeFileRef, fileRefProblem, fileRefToJson, fileRefFromJson, sealFile, openFile, relayOfEndpoint, fileRefEndpoint,
   CHAT_CERT_LIFE_MS, MAX_MESSAGE_AGE_MS, MAX_REQUEST_LIFE_MS, MESSAGE_AHEAD_MS, MAX_FRAME_BYTES, MAX_FILE_BYTES, STATUS,
+  signChatSpecAsServer, serverKeyHolds, decodeChatDocument, signMemberProof, memberProofToSign, encodeSignedMemberProof,
+  decodeSignedMemberProof, admits, signGrainStats, grainStatsToSign, encodeSignedGrainStats, decodeSignedGrainStats, grainStatsProblem,
+  STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS,
 } from "../dist/index.js";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/grain-chats-v1.json", import.meta.url), "utf8"));
@@ -23,7 +27,12 @@ const DAY = 86_400_000;
 const OWNER = fromHex(v.keys.owner_secret_hex, 32);
 const SERVER = fromHex(v.keys.server_secret_hex, 32);
 const USER = fromHex(v.keys.user_secret_hex, 32);
+const MEMBER = fromHex(v.keys.member_secret_hex, 32);
 const ownerKey = { ed25519: v.keys.owner_public_hex };
+/** The server keys the registry names, as the file says. */
+const servers = v.keys.registered_servers;
+/** The private access grain, as the file says. */
+const access = { owner: v.access.owner_hex, public: v.access.public, members: v.access.members };
 const address = (secret) => encodeAddress("devnet", accountId(ed25519.getPublicKey(secret)));
 const userAddress = address(USER);
 const serverAddress = address(SERVER);
@@ -73,8 +82,13 @@ const cert = () => issueInvoiceKeyCert(OWNER, "access", toHex(ed25519.getPublicK
 const request = () => ({
   slug: "access", id: repeat("11", 16), at: NOW, expires_at: NOW + DAY, via: null, command: "key",
   args: [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "saltix-io" }]],
-  text: "",
+  text: "", member: null,
 });
+const PROOF_EXPIRES = NOW + 30 * DAY;
+const memberProof = () => ({
+  slug: "access", account: toHex(accountId(ed25519.getPublicKey(MEMBER))), grain_key: toHex(ed25519.getPublicKey(USER)), expires_at: PROOF_EXPIRES,
+});
+const stats = () => ({ slug: "access", at: NOW, users_1d: 7, users_30d: 23, requests_30d: 312 });
 const reportFile = () => ({
   relay: `wss://85.192.42.65:30335/#${repeat("5d", 32)}`, id: "q3Vb1Hk9xQ2mN0pL7rT4sw", key: repeat("44", 32), iv: repeat("55", 12),
   hash: repeat("66", 32), size: 18_432, name: "digest-2027-01-15.csv", mime: "text/csv",
@@ -103,6 +117,9 @@ const report = () => ({
 const textRequest = () => ({ ...request(), id: repeat("12", 16), command: "", args: [], text: "Привет" });
 
 test("the keys and addresses are the vectors'", () => {
+  assert.equal(toHex(accountId(ed25519.getPublicKey(MEMBER))), v.keys.member_account_hex);
+  assert.equal(toHex(accountId(ed25519.getPublicKey(OWNER))), v.access.owner_hex);
+  assert.deepEqual(servers, [v.keys.server_public_hex]);
   assert.equal(toHex(ed25519.getPublicKey(OWNER)), v.keys.owner_public_hex);
   assert.equal(toHex(ed25519.getPublicKey(SERVER)), v.keys.server_public_hex);
   assert.equal(toHex(ed25519.getPublicKey(USER)), v.keys.user_public_hex);
@@ -120,7 +137,21 @@ test("the spec, its signature and the well-known document are the node's", () =>
   assert.equal(encodeCert(cert()), v.cert.borsh_hex);
   assert.equal(cert().expires_at, Number(v.cert.expires_at_ms));
   assert.deepEqual(decodeCert(v.cert.borsh_hex), cert());
-  assert.deepEqual(chatDocumentOf(signed, cert()), v.spec_doc.well_known);
+  const signedStats = signGrainStats(stats(), SERVER, chain.genesis);
+  assert.deepEqual(chatDocumentOf(signed, cert(), signedStats), v.spec_doc.well_known);
+  const read = decodeChatDocument(v.spec_doc.well_known);
+  assert.deepEqual(read, { spec: signed, cert: cert(), stats: signedStats });
+  assert.deepEqual(decodeChatDocument({ spec: v.spec_doc.well_known.spec, cert: null }), { spec: signed, cert: null, stats: null }, "cert and stats optional");
+  assert.throws(() => decodeChatDocument({ cert: v.cert.borsh_hex }), /spec/);
+  assert.throws(() => decodeChatDocument({ spec: v.spec_doc.well_known.spec, stats: 7 }), /stats/);
+
+  // Signed by the registered server key: the same spec, the key named, its own signature.
+  const byServer = signChatSpecAsServer(spec(), SERVER);
+  assert.equal(byServer.server, v.keys.server_public_hex);
+  assert.equal(hex(encodeSignedChatSpec(byServer)), v.server_spec.signed_hex);
+  assert.deepEqual(decodeSignedChatSpec(v.server_spec.signed_hex), byServer);
+  assert.equal(hex(encodeChatFrame({ spec: { spec: byServer, cert: null } })), v.server_spec.frame_hex);
+  assert.equal(signedChatSpecProblem(byServer, "access", ownerKey, servers), null);
   // The JSON form a developer writes round-trips to the same bytes.
   const json = JSON.parse(JSON.stringify(chatSpecToJson(spec())));
   assert.equal(hex(encodeChatSpec(chatSpecFromJson(json))), hex(encodeChatSpec(spec())));
@@ -143,20 +174,45 @@ test("requests, answers, reports and frames are the node's", () => {
   assert.equal(hex(encodeChatFrame({ message: signedAnswer })), v.answer.frame_hex);
   assert.deepEqual(decodeSignedChatMessage(fromHex(v.answer.signed_hex)), signedAnswer);
 
-  const signedReport = signChatMessage(report(), SERVER, chain.genesis, cert());
+  // The report is signed by the registered key: no certificate, the key itself.
+  const signedReport = signChatMessage(report(), SERVER, chain.genesis);
+  assert.deepEqual(signedReport.server, { registered: v.keys.server_public_hex });
   assert.equal(hex(encodeSignedChatMessage(signedReport)), v.report.signed_hex);
   assert.equal(hex(encodeChatFrame({ message: signedReport })), v.report.frame_hex);
+  assert.deepEqual(decodeSignedChatMessage(fromHex(v.report.signed_hex)), signedReport);
 
   const specFrame = { spec: { spec: signChatSpec(spec(), OWNER), cert: cert() } };
   assert.equal(hex(encodeChatFrame(specFrame)), v.spec_frame_hex);
 
+  // A member's proof, and the request that carries it.
+  const proof = signMemberProof(memberProof(), MEMBER, chain.genesis);
+  assert.equal(hex(memberProofToSign(memberProof(), chain.genesis)), v.member_proof.message_hex);
+  assert.equal(hex(encodeSignedMemberProof(proof)), v.member_proof.signed_hex);
+  assert.equal(proof.proof.expires_at, Number(v.member_proof.expires_at_ms));
+  assert.deepEqual(decodeSignedMemberProof(fromHex(v.member_proof.signed_hex)), proof);
+  const memberRequest = signChatRequest({ ...request(), id: repeat("13", 16), member: proof }, USER, chain.genesis);
+  assert.equal(hex(encodeSignedChatRequest(memberRequest)), v.member_request.signed_hex);
+  assert.equal(hex(encodeChatFrame({ request: memberRequest })), v.member_request.frame_hex);
+  assert.deepEqual(decodeSignedChatRequest(fromHex(v.member_request.signed_hex)), memberRequest);
+
+  // The numbers the app reports.
+  const signedStats = signGrainStats(stats(), SERVER, chain.genesis);
+  assert.equal(hex(grainStatsToSign(stats(), chain.genesis)), v.stats.message_hex);
+  assert.equal(hex(encodeSignedGrainStats(signedStats)), v.stats.signed_hex);
+  assert.equal(hex(encodeChatFrame({ stats: signedStats })), v.stats.frame_hex);
+  assert.deepEqual(decodeSignedGrainStats(v.stats.signed_hex), signedStats);
+
   // Every frame reads back to the same bytes.
-  for (const frame of [v.request.frame_hex, v.text_request.frame_hex, v.answer.frame_hex, v.report.frame_hex, v.spec_frame_hex]) {
-    assert.equal(hex(encodeChatFrame(decodeChatFrame(fromHex(frame)))), frame);
-  }
+  const frames = [
+    v.request.frame_hex, v.text_request.frame_hex, v.answer.frame_hex, v.report.frame_hex, v.spec_frame_hex, v.server_spec.frame_hex,
+    v.member_request.frame_hex, v.stats.frame_hex,
+  ];
+  for (const frame of frames) assert.equal(hex(encodeChatFrame(decodeChatFrame(fromHex(frame)))), frame);
   assert.ok("request" in decodeChatFrame(fromHex(v.request.frame_hex)));
   assert.ok("message" in decodeChatFrame(fromHex(v.answer.frame_hex)));
   assert.ok("spec" in decodeChatFrame(fromHex(v.spec_frame_hex)));
+  assert.equal(decodeChatFrame(fromHex(v.server_spec.frame_hex)).spec.cert, null, "a registered key's spec frame carries no certificate");
+  assert.ok("stats" in decodeChatFrame(fromHex(v.stats.frame_hex)));
 });
 
 test("a client checks everything from the file alone", () => {
@@ -168,8 +224,15 @@ test("a client checks everything from the file alone", () => {
   }
   for (const name of ["answer", "report"]) {
     const m = decodeSignedChatMessage(fromHex(v[name].signed_hex));
-    assert.equal(chatMessageProblem(m, { chain, ownerKey, spec: s, from: serverAddress, now: NOW + 5_000 }), null, name);
+    assert.equal(chatMessageProblem(m, { chain, ownerKey, servers, spec: s, from: serverAddress, now: NOW + 5_000 }), null, name);
   }
+  assert.equal(signedChatSpecProblem(decodeSignedChatSpec(v.server_spec.signed_hex), "access", ownerKey, servers), null);
+  const member = decodeSignedChatRequest(fromHex(v.member_request.signed_hex));
+  assert.deepEqual(member.request.member, decodeSignedMemberProof(fromHex(v.member_proof.signed_hex)));
+  assert.equal(chatRequestProblem(member, { chain, spec: s, from: userAddress, now: NOW }), null);
+  const admitted = (r, a = access, now = NOW) => admits(a, { genesis: chain.genesis, slug: "access", requestKey: r.key, proof: r.request.member, controller: null, now });
+  assert.equal(admitted(member), null);
+  assert.equal(grainStatsProblem(decodeSignedGrainStats(v.stats.signed_hex), { genesis: chain.genesis, slug: "access", servers, now: NOW }), null);
 });
 
 test("the file reference is the node's, in Borsh and JSON", () => {
@@ -192,7 +255,7 @@ test("what the file says is refused is refused", () => {
   const resigned = (r) => signChatRequest(r, USER, chain.genesis);
   const check = (r, over = {}) => chatRequestProblem(r, { chain, spec: s, from: userAddress, now: NOW, ...over });
   const refused = new Map(v.refused.map((r) => [r.change, r]));
-  assert.equal(v.refused.length, 9);
+  assert.equal(v.refused.length, 16);
 
   const short = structuredClone(base);
   short.args[0][1] = { duration: 3_600 };
@@ -205,15 +268,42 @@ test("what the file says is refused is refused", () => {
   assert.equal(check(signed, { now: base.expires_at }), "time", refused.get("now = expires_at").why);
 
   const answerSigned = decodeSignedChatMessage(fromHex(v.answer.signed_hex));
-  const show = (m, over = {}) => chatMessageProblem(m, { chain, ownerKey, spec: s, from: serverAddress, now: NOW, ...over });
-  assert.equal(show(answerSigned, { spec: { ...s, revoked: [answerSigned.cert.key] } }), "cert", refused.get("spec.revoked += the server key").why);
-  const longCert = issueInvoiceKeyCert(OWNER, "access", answerSigned.cert.key, NOW + CHAT_CERT_LIFE_MS + 1);
+  const answerCert = answerSigned.server.certified;
+  const show = (m, over = {}) => chatMessageProblem(m, { chain, ownerKey, servers, spec: s, from: serverAddress, now: NOW, ...over });
+  assert.equal(show(answerSigned, { spec: { ...s, revoked: [answerCert.key] } }), "cert", refused.get("spec.revoked += the server key").why);
+  const longCert = issueInvoiceKeyCert(OWNER, "access", answerCert.key, NOW + CHAT_CERT_LIFE_MS + 1);
   assert.equal(show(signChatMessage(answerSigned.message, SERVER, chain.genesis, longCert)), "cert", refused.get("cert.expires_at = now + 31 days + 1 ms").why);
   const old = { ...answerSigned.message, at: NOW - MAX_MESSAGE_AGE_MS - 1 };
-  assert.equal(show(signChatMessage(old, SERVER, chain.genesis, answerSigned.cert)), "time", refused.get("at = now - 30 days - 1 ms").why);
+  assert.equal(show(signChatMessage(old, SERVER, chain.genesis, answerCert)), "time", refused.get("at = now - 30 days - 1 ms").why);
   const priced = structuredClone(s);
   priced.commands[0].price = 1n;
   assert.equal(chatSpecProblem(priced), "price", refused.get("commands.key.price = 1").why);
+  // A server key signs no price, whatever this version's price rule says; the owner key's spec with a price is refused
+  // by the rule itself.
+  const pricedByServer = { spec: priced, server: v.keys.server_public_hex, signature: toHex(ed25519.sign(chatSpecToSign(priced), SERVER)) };
+  assert.equal(signedChatSpecProblem(pricedByServer, "access", ownerKey, servers), "server_price", refused.get("server_spec with commands.key.price = 1").why);
+  assert.throws(() => signChatSpecAsServer(priced, SERVER), /free/);
+  assert.equal(signedChatSpecProblem(signChatSpecAsServer(s, SERVER), "access", ownerKey, []), "cert", "a key the registry does not name");
+  assert.equal(signedChatSpecProblem(signChatSpecAsServer({ ...s, revoked: [v.keys.server_public_hex] }, SERVER), "access", ownerKey, servers), "cert", "a key the spec revokes");
+  const reportSigned = decodeSignedChatMessage(fromHex(v.report.signed_hex));
+  assert.equal(show(reportSigned, { servers: [] }), "cert", refused.get("registered_servers = []").why);
+  assert.equal(show(reportSigned, { servers: ["77".repeat(32)] }), "cert", "another key is registered");
+  assert.equal(show(reportSigned, { spec: { ...s, revoked: [v.keys.server_public_hex] } }), "cert", "a registered key the spec revokes");
+
+  const member = decodeSignedChatRequest(fromHex(v.member_request.signed_hex));
+  const proof = member.request.member.proof;
+  const withProof = (p) => signChatRequest({ ...member.request, member: p === null ? null : signMemberProof(p, MEMBER, chain.genesis) }, USER, chain.genesis);
+  const admitted = (r, a = access, now = NOW) => admits(a, { genesis: chain.genesis, slug: "access", requestKey: r.key, proof: r.request.member, controller: null, now });
+  assert.equal(admitted(withProof(null)), "missing", refused.get("member = none").why);
+  assert.equal(admitted(withProof({ ...proof, grain_key: v.keys.server_public_hex })), "mismatch", refused.get("member_proof.grain_key = the server's key").why);
+  assert.equal(admitted(withProof({ ...proof, expires_at: NOW + 30 * DAY + 1 })), "expired", refused.get("member_proof.expires_at = now + 30 days + 1 ms").why);
+  assert.equal(proof.expires_at, NOW + MEMBER_PROOF_LIFE_MS);
+  assert.equal(admitted(member, { ...access, members: [] }), "not_member", refused.get("access.members = []").why);
+
+  const signedStats = decodeSignedGrainStats(v.stats.signed_hex);
+  const shown = (over = {}) => grainStatsProblem(signedStats, { genesis: chain.genesis, slug: "access", servers, now: NOW, ...over });
+  assert.equal(shown({ now: NOW + STATS_MAX_AGE_MS + 1 }), "time", refused.get("now = at + 2 days + 1 ms").why);
+  assert.equal(shown({ now: NOW + STATS_MAX_AGE_MS }), null, "2 days exactly");
 });
 
 // The reference's own unit tests (crates/saltix-types/src/grain/chat/tests.rs), the negative cases included.
@@ -237,7 +327,7 @@ function smallSpec() {
 }
 const smallRequest = () => ({
   slug: "access", id: repeat("07", 16), at: NOW, expires_at: NOW + 60_000, via: null, command: "key",
-  args: [["duration", { duration: 3_600 }], ["site", { choice: "saltix-io" }]], text: "",
+  args: [["duration", { duration: 3_600 }], ["site", { choice: "saltix-io" }]], text: "", member: null,
 });
 
 test("a spec is signed by the owner key, and a spec out of bounds is refused", () => {
@@ -372,6 +462,52 @@ function smallMessage() {
   };
 }
 
+test("a spec signed by a registered key is free, and checked against the keys the registry names", () => {
+  const s = smallSpec();
+  const other = toHex(ed25519.getPublicKey(fromHex("40".repeat(32), 32)));
+  const registered = [other, v.keys.server_public_hex];
+  const signed = signChatSpecAsServer(s, SERVER);
+  assert.equal(signedChatSpecProblem(signed, "access", ownerKey, registered), null);
+  assert.equal(signedChatSpecProblem(signed, "access", ownerKey, [other]), "cert", "a key the registry does not name, or no longer");
+  assert.equal(signedChatSpecProblem(signed, "access", ownerKey), "cert", "no keys named at all");
+  assert.equal(signedChatSpecProblem(signChatSpecAsServer({ ...s, revoked: [v.keys.server_public_hex] }, SERVER), "access", ownerKey, registered), "cert", "a key its own spec revokes");
+  const priced = structuredClone(s);
+  priced.commands[1].price = 1n;
+  const pricedByServer = { spec: priced, server: v.keys.server_public_hex, signature: toHex(ed25519.sign(chatSpecToSign(priced), SERVER)) };
+  assert.equal(signedChatSpecProblem(pricedByServer, "access", ownerKey, registered), "server_price", "a price needs the owner key");
+  const pricedByOwner = { spec: priced, server: null, signature: toHex(ed25519.sign(chatSpecToSign(priced), OWNER)) };
+  assert.equal(signedChatSpecProblem(pricedByOwner, "access", ownerKey, registered), "price", "the owner's priced spec waits for paid actions");
+  assert.equal(signedChatSpecProblem({ ...signed, server: other }, "access", ownerKey, registered), "signature", "named as another registered key");
+  assert.equal(signedChatSpecProblem({ ...signed, server: null }, "access", ownerKey, registered), "signature", "a server key's signature is not the owner's");
+  assert.equal(signedChatSpecProblem({ ...signed, spec: { ...s, slug: "other" } }, "access", ownerKey, registered), "slug");
+});
+
+test("a wallet shows a message signed by a registered key while the registry names it", () => {
+  const s = smallSpec();
+  const other = toHex(ed25519.getPublicKey(fromHex("40".repeat(32), 32)));
+  const registered = [other, v.keys.server_public_hex];
+  const signed = signChatMessage(smallMessage(), SERVER, chain.genesis);
+  assert.deepEqual(signed.server, { registered: v.keys.server_public_hex });
+  const show = (m, over = {}) => chatMessageProblem(m, { chain, ownerKey, servers: registered, spec: s, from: serverAddress, now: NOW, ...over });
+  assert.equal(show(signed), null);
+  assert.equal(show(signed, { servers: [other] }), "cert", "the owner removed the key: refused from that block on");
+  assert.equal(show(signed, { servers: [] }), "cert", "revoked: no key at all");
+  assert.equal(show(signed, { servers: undefined }), "cert", "a wallet that knows no registered key");
+  assert.equal(show(signed, { from: userAddress }), "sender");
+  assert.equal(show(signed, { spec: { ...s, revoked: [v.keys.server_public_hex] } }), "cert", "the spec revoked the key");
+  const forged = structuredClone(signed);
+  forged.message.blocks.pop();
+  assert.equal(show(forged), "signature");
+  const strangerSecret = fromHex("41".repeat(32), 32);
+  const stranger = signChatMessage(smallMessage(), strangerSecret, chain.genesis);
+  assert.equal(show(stranger, { from: address(strangerSecret) }), "cert", "a key nobody registered");
+  assert.ok(serverKeyHolds(signed.server, "access", ownerKey, registered, s, NOW));
+  assert.ok(!serverKeyHolds(signed.server, "access", ownerKey, [other], s, NOW));
+  // A certificate still works beside registered keys.
+  const day = issueInvoiceKeyCert(OWNER, "access", v.keys.server_public_hex, NOW + DAY);
+  assert.equal(show(signChatMessage(smallMessage(), SERVER, chain.genesis, day), { servers: [] }), null);
+});
+
 test("a wallet shows a message signed by a certified key", () => {
   const s = smallSpec();
   const day = issueInvoiceKeyCert(OWNER, "access", v.keys.server_public_hex, NOW + DAY);
@@ -445,7 +581,7 @@ test("frames: the magic, the size, and nothing but a frame", () => {
   other[3] = 0x32;
   assert.throws(() => decodeChatFrame(other), /grain-chat frame/, "SGC2");
   const tag = frame.slice();
-  tag[4] = 3;
+  tag[4] = 4;
   assert.throws(() => decodeChatFrame(tag), /grain-chat frame/, "no such frame");
   assert.throws(() => decodeChatFrame(Uint8Array.of(...frame, 0)), /left over/);
   assert.throws(() => decodeChatFrame(frame.subarray(0, frame.length - 1)), /short/);

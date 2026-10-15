@@ -1,6 +1,6 @@
 // The example grain's chat (Saltix 22-grain-chats): three commands that show every block a card has — text, fields,
-// a secret, a file, an invoice and a status — and every action: run, open and reply. `npm run dev` starts it on the
-// development relay; on a real network, pass `node` (or `endpoints`) instead.
+// a secret, a file, an invoice and a status — and every action: run, open and reply. `server.mjs` runs it from a
+// developer key on a real network; `npm run dev` on the development relay.
 import { randomBytes } from "node:crypto";
 import { ChatServer, ChatRefusal, card, signInvoice, toHex } from "../../packages/server/dist/index.js";
 
@@ -18,20 +18,26 @@ function sessions(day, top, errorsOnly) {
   return { csv: ["day,session,length,result", ...rows].join("\n") + "\n", rows: rows.length };
 }
 
+/** Whether the grain has a screen to open: a chat-only one (24-app-studio §2) has none. Without a registry to ask, it
+ *  is this example's own grain, which has. */
+const hasScreen = (chat) => !chat.grain?.manifest || !("chat" in chat.grain.manifest.manifest.entry);
+
 /**
- * Start the chat: `options` are `ChatServer.start`'s (slug, signed spec, server key and certificate, chain, relays);
- * `owner` is the account invoices pay.
+ * Start the chat: `options` are `ChatServer.start`'s (a developer key, or the slug, server key and certificate, and the
+ * spec and relays); `owner` is the account invoices pay, when the server key has a certificate that lets it sign them.
  */
-export async function startChat(options, owner) {
+export async function startChat(options, owner = null) {
   const chat = await ChatServer.start(options);
 
-  chat.command("hello", (ask) =>
-    card()
-      .text(`Hello, ${ask.args.name ?? "friend"}! This is a grain's chat: every card is signed by a key the grain's owner certified.`)
-      .fields({ "You are, to this grain": `${ask.key.slice(0, 16)}…`, "Asked at": new Date(ask.request.at).toISOString() })
-      .reply("Thanks")
-      .open("Open the grain", "chat")
-      .run("Get a key", "key", { site: "web", duration: 600 }));
+  chat.command("hello", (ask) => {
+    const c = card()
+      .text(`Hello, ${ask.args.name ?? "friend"}! This is an app's chat: every card is signed by a key the app's registry record names, so your wallet marks it verified.`)
+      .fields({ "You are, to this app": `${ask.key.slice(0, 16)}…`, "Asked at": new Date(ask.request.at).toISOString() });
+    if (ask.member) c.fields({ "Your account (a private app knows it)": `${ask.member.account.slice(0, 16)}…` });
+    c.reply("Thanks");
+    if (hasScreen(chat)) c.open("Open the grain", "chat");
+    return c.run("Get a key", "key", { site: "web", duration: 600 });
+  });
 
   chat.command("key", (ask) => {
     const { site, duration } = ask.args;
@@ -50,15 +56,18 @@ export async function startChat(options, owner) {
     await ask.working("Building the report…");
     const { csv, rows } = sessions(day, top, ask.args.errors_only === true);
     const file = await chat.upload(new TextEncoder().encode(csv), { name: `sessions-${day}.csv`, mime: "text/csv" });
-    const invoice = signInvoice({
-      slug: options.slug, to: owner, asset: "SALT", amount: 1_000_000n, memo: "Thanks for the example", reference: toHex(randomBytes(16)),
-      expires_at: Date.now() + 10 * 60_000,
-    }, options.secret, options.chain.genesis, options.cert);
-    return card()
+    const c = card()
       .text(`Sessions of ${day}: ${rows} rows${ask.args.errors_only ? ", errors only" : ""}.\nThe file has every row.`)
-      .file(file, { title: `Sessions, ${day}`, format: "csv" })
-      .invoice(invoice)
-      .status("done", "The invoice is optional: the simulator makes no payment");
+      .file(file, { title: `Sessions, ${day}`, format: "csv" });
+    // An invoice is signed by the owner key or a key it certified (12-grains §5.2): a registered key alone signs none.
+    if (options.cert && options.secret && owner) {
+      c.invoice(signInvoice({
+        slug: chat.slug, to: owner, asset: "SALT", amount: 1_000_000n, memo: "Thanks for the example", reference: toHex(randomBytes(16)),
+        expires_at: Date.now() + 10 * 60_000,
+      }, options.secret, chat.chain.genesis, options.cert));
+      return c.status("done", "The invoice is optional: the simulator makes no payment");
+    }
+    return c.status("done");
   });
 
   chat.text((ask) => card().text(`You wrote: “${ask.text.slice(0, 200)}”. This chat answers its commands: hello, key and report.`).reply("Hello", "hello"));

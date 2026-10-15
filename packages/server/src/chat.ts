@@ -1,8 +1,12 @@
 // Grain chats (Saltix 22-grain-chats): a user and a grain's server talking in a 1:1 chat under the user's grain key.
-// - `GrainChatSpec`: what the chat offers, signed by the manifest's owner key (§2);
-// - `ChatRequest`: what the user sends, typed by the spec, signed by the user's grain key (§3);
-// - `ChatMessage`: what the app answers, in blocks and actions, signed by a server key the owner certified (§4);
-// - `ChatFrame`: the plaintext of a sealed frame, "SGC1" ‖ Borsh.
+// - `GrainChatSpec`: what the chat offers, signed by the manifest's owner key, or while every command is free by a
+//   server key the grain's registry record names (§2, 24-app-studio §2);
+// - `ChatRequest`: what the user sends, typed by the spec, signed by the user's grain key, with a member's proof for a
+//   private grain (§3, 24-app-studio §2a);
+// - `ChatMessage`: what the app answers, in blocks and actions, signed by a server key the owner certified or the
+//   registry names (`ServerKey`, §4);
+// - `ChatFrame`: the plaintext of a sealed frame, "SGC1" ‖ Borsh: a request, a message, a newer spec, or the numbers the
+//   app reports (24-app-studio §6a).
 // Byte for byte the protocol's (vectors/grain-chats-v1.json), with every check its reference makes.
 //
 // No Node APIs here: the simulator runs it in a browser.
@@ -12,6 +16,8 @@ import { Reader, Writer, compareUtf8, derive, fromHex, toHex } from "./bytes.js"
 import { type FileRef, MAX_FILE_BYTES, fileRefProblem, readFileRef, writeFileRef } from "./file.js";
 import { type InvoiceKeyCert, certMessage, decodeInvoice, readCertBody, readSignedInvoice, writeCertBody } from "./invoice.js";
 import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
+import { type SignedMemberProof, readSignedMemberProof, writeSignedMemberProof } from "./member.js";
+import { type SignedGrainStats, readSignedGrainStats, writeSignedGrainStats } from "./stats.js";
 
 export const CHAT_SPEC_DOMAIN = "Saltix grain chat spec v1";
 export const CHAT_REQUEST_DOMAIN = "Saltix grain chat request v1";
@@ -95,7 +101,10 @@ export interface GrainChatSpec {
 
 export interface SignedGrainChatSpec {
   spec: GrainChatSpec;
-  /** By the manifest's owner key: Ed25519, or a managed owner's phone's P-256 (hex). */
+  /** Null: signed by the manifest's owner key. A key (hex): signed by that server key, one the grain's registry record
+   *  names, which the spec may do only while every command's price is 0 (24-app-studio §2). */
+  server: string | null;
+  /** By the owner key (Ed25519, or a managed owner's phone's P-256) or by `server` (hex). */
   signature: string;
 }
 
@@ -128,6 +137,8 @@ export interface ChatRequest {
   /** Sorted by name, each at most once. */
   args: ChatArgs;
   text: string;
+  /** A private grain's member proof (24-app-studio §2a); null for a public grain. */
+  member: SignedMemberProof | null;
 }
 
 export interface SignedChatRequest {
@@ -176,22 +187,32 @@ export interface ChatMessage {
   actions: Action[];
 }
 
+/** The server key a message is signed by (§1): one the owner key certified (12-grains §5.2), or one the grain's
+ *  registry record names (24-app-studio §2), in hex. */
+export type ServerKey = { certified: InvoiceKeyCert } | { registered: string };
+
+/** The key of a `ServerKey`, hex. */
+export const serverKeyOf = (server: ServerKey): string => ("certified" in server ? server.certified.key : server.registered);
+
 export interface SignedChatMessage {
   message: ChatMessage;
-  cert: InvoiceKeyCert;
+  server: ServerKey;
   signature: string;
 }
 
-/** The plaintext of a grain-chat frame, after "SGC1" (§4). `spec` goes from the server to users only. */
+/** The plaintext of a grain-chat frame, after "SGC1" (§4). `spec` and `stats` go from the server to users only; a
+ *  spec frame carries the server key's certificate when the grain's keys are certified rather than registered. */
 export type ChatFrame =
   | { request: SignedChatRequest }
   | { message: SignedChatMessage }
-  | { spec: { spec: SignedGrainChatSpec; cert: InvoiceKeyCert } };
+  | { spec: { spec: SignedGrainChatSpec; cert: InvoiceKeyCert | null } }
+  | { stats: SignedGrainStats };
 
 /**
  * Why a check failed, as the reference names it: `slug`, `version`, `bounds:<what>` (`text`, `languages`, `intro`,
  * `choice`, `parameter kind`, `revoked`, `spec size`, `block`, `blocks and actions`, `action`), `language`, `name`,
- * `price`, `unknown_command`, `argument:<name>`, `time`, `cert`, `signature`, `sender`.
+ * `price`, `server_price` (a server key signed a spec with a price), `unknown_command`, `argument:<name>`, `time`,
+ * `cert` (a key that does not speak for the grain), `signature`, `sender`.
  */
 export type ChatProblem = string;
 
@@ -372,12 +393,14 @@ function readSpec(r: Reader): GrainChatSpec {
 
 export const encodeChatSpec = (s: GrainChatSpec): Uint8Array => writeSpec(new Writer(), s).done();
 
+const key32 = (w: Writer, hex: string) => w.fixed(fromHex(hex, 32), 32);
+
 function writeSignedSpec(w: Writer, s: SignedGrainChatSpec): Writer {
-  return writeSpec(w, s.spec).fixed(fromHex(s.signature, 64), 64);
+  return writeSpec(w, s.spec).option(s.server, key32).fixed(fromHex(s.signature, 64), 64);
 }
 
 function readSignedSpec(r: Reader): SignedGrainChatSpec {
-  return { spec: readSpec(r), signature: toHex(r.fixed(64)) };
+  return { spec: readSpec(r), server: r.option((r) => toHex(r.fixed(32))), signature: toHex(r.fixed(64)) };
 }
 
 export const encodeSignedChatSpec = (s: SignedGrainChatSpec): Uint8Array => writeSignedSpec(new Writer(), s).done();
@@ -425,13 +448,13 @@ const id16 = (w: Writer, hex: string) => w.fixed(fromHex(hex, 16), 16);
 
 function writeRequest(w: Writer, q: ChatRequest): Writer {
   u64Safe(u64Safe(id16(w.string(q.slug), q.id), q.at), q.expires_at).option(q.via, id16);
-  return writeArgs(w.string(q.command), q.args).string(q.text);
+  return writeArgs(w.string(q.command), q.args).string(q.text).option(q.member, writeSignedMemberProof);
 }
 
 function readRequest(r: Reader): ChatRequest {
   return {
     slug: r.string(), id: toHex(r.fixed(16)), at: r.u64n(), expires_at: r.u64n(), via: r.option((r) => toHex(r.fixed(16))),
-    command: r.string(), args: readArgs(r), text: r.string(),
+    command: r.string(), args: readArgs(r), text: r.string(), member: r.option(readSignedMemberProof),
   };
 }
 
@@ -519,12 +542,26 @@ function readMessage(r: Reader): ChatMessage {
 
 export const encodeChatMessage = (m: ChatMessage): Uint8Array => writeMessage(new Writer(), m).done();
 
+function writeServerKey(w: Writer, server: ServerKey): Writer {
+  if ("certified" in server) return writeCertBody(w.u8(0), server.certified);
+  if ("registered" in server) return key32(w.u8(1), server.registered);
+  throw new TypeError("a server key: certified or registered");
+}
+
+function readServerKey(r: Reader): ServerKey {
+  switch (r.u8()) {
+    case 0: return { certified: readCertBody(r) };
+    case 1: return { registered: toHex(r.fixed(32)) };
+    default: throw new TypeError("borsh: a server key's tag");
+  }
+}
+
 function writeSignedMessage(w: Writer, s: SignedChatMessage): Writer {
-  return writeCertBody(writeMessage(w, s.message), s.cert).fixed(fromHex(s.signature, 64), 64);
+  return writeServerKey(writeMessage(w, s.message), s.server).fixed(fromHex(s.signature, 64), 64);
 }
 
 function readSignedMessage(r: Reader): SignedChatMessage {
-  return { message: readMessage(r), cert: readCertBody(r), signature: toHex(r.fixed(64)) };
+  return { message: readMessage(r), server: readServerKey(r), signature: toHex(r.fixed(64)) };
 }
 
 export const encodeSignedChatMessage = (s: SignedChatMessage): Uint8Array => writeSignedMessage(new Writer(), s).done();
@@ -541,7 +578,8 @@ export function encodeChatFrame(frame: ChatFrame): Uint8Array {
   const w = new Writer().raw(CHAT_FRAME_MAGIC);
   if ("request" in frame) writeSignedRequest(w.u8(0), frame.request);
   else if ("message" in frame) writeSignedMessage(w.u8(1), frame.message);
-  else if ("spec" in frame) writeCertBody(writeSignedSpec(w.u8(2), frame.spec.spec), frame.spec.cert);
+  else if ("spec" in frame) writeSignedSpec(w.u8(2), frame.spec.spec).option(frame.spec.cert, writeCertBody);
+  else if ("stats" in frame) writeSignedGrainStats(w.u8(3), frame.stats);
   else throw new TypeError("a frame's kind");
   return w.done();
 }
@@ -557,7 +595,8 @@ export function decodeChatFrame(bytes: Uint8Array): ChatFrame {
   switch (r.u8()) {
     case 0: frame = { request: readSignedRequest(r) }; break;
     case 1: frame = { message: readSignedMessage(r) }; break;
-    case 2: frame = { spec: { spec: readSignedSpec(r), cert: readCertBody(r) } }; break;
+    case 2: frame = { spec: { spec: readSignedSpec(r), cert: r.option(readCertBody) } }; break;
+    case 3: frame = { stats: readSignedGrainStats(r) }; break;
     default: throw new TypeError("not a grain-chat frame");
   }
   r.end();
@@ -591,8 +630,8 @@ export function chatSpecProblem(s: GrainChatSpec): ChatProblem | null {
   return null;
 }
 
-/** What the owner key signs: the spec's Borsh under its domain (no genesis hash: a spec is the grain's, on every
- *  network it is registered in). */
+/** What the owner key or a server key signs: the spec's Borsh under its domain (no genesis hash: a spec is the
+ *  grain's, on every network it is registered in). */
 export const chatSpecToSign = (s: GrainChatSpec): Uint8Array => derive(CHAT_SPEC_DOMAIN, encodeChatSpec(s));
 
 /** `s`, checked, signed with the owner key's Ed25519 secret (`grain chat-spec`). A managed owner's phone signs with
@@ -600,19 +639,45 @@ export const chatSpecToSign = (s: GrainChatSpec): Uint8Array => derive(CHAT_SPEC
 export function signChatSpec(s: GrainChatSpec, ownerSecret: Uint8Array): SignedGrainChatSpec {
   const problem = chatSpecProblem(s);
   if (problem) throw new TypeError(`chat spec: ${problem}`);
-  return { spec: s, signature: toHex(ed25519.sign(chatSpecToSign(s), ownerSecret)) };
+  return { spec: s, server: null, signature: toHex(ed25519.sign(chatSpecToSign(s), ownerSecret)) };
+}
+
+/** `s`, checked, signed with a server key the grain's registry record names (24-app-studio §2): a spec whose commands
+ *  are all free, which a developer changes without the owner's phone. */
+export function signChatSpecAsServer(s: GrainChatSpec, serverSecret: Uint8Array): SignedGrainChatSpec {
+  if (s.commands.some((c) => c.price !== 0n)) throw new TypeError("chat spec: a server key signs a spec whose commands are all free; a price needs the owner key");
+  const problem = chatSpecProblem(s);
+  if (problem) throw new TypeError(`chat spec: ${problem}`);
+  return { spec: s, server: toHex(ed25519.getPublicKey(serverSecret)), signature: toHex(ed25519.sign(chatSpecToSign(s), serverSecret)) };
 }
 
 /**
- * Why a wallet would refuse `signed` as `slug`'s chat spec (§2), or null: in bounds, for `slug`, and signed by the
- * manifest's `ownerKey`. Whether that key still speaks for the owner, and whether the version is new enough, are the
- * wallet's to check against the registry and what it holds.
+ * Why a wallet would refuse `signed` as `slug`'s chat spec (§2), or null, in the reference's order: for `slug`; signed
+ * by the manifest's `ownerKey`, or by a key of `servers` (the grain's registry record's, hex) that the spec does not
+ * revoke while every command is free (`cert` otherwise, `server_price` for a price); in bounds; and the signature holds.
+ * Whether the owner key still speaks for the owner, and whether the version is new enough, are the wallet's to check
+ * against the registry and what it holds.
  */
-export function signedChatSpecProblem(signed: SignedGrainChatSpec, slug: string, ownerKey: DeviceKey): ChatProblem | null {
+export function signedChatSpecProblem(signed: SignedGrainChatSpec, slug: string, ownerKey: DeviceKey, servers: readonly string[] = []): ChatProblem | null {
+  if (signed.spec.slug !== slug) return "slug";
+  const message = chatSpecToSign(signed.spec);
+  let ok: boolean;
+  if (signed.server === null) ok = verifyByDeviceKey(ownerKey, message, signed.signature);
+  else {
+    if (!servers.includes(signed.server) || signed.spec.revoked.includes(signed.server)) return "cert";
+    if (signed.spec.commands.some((c) => c.price !== 0n)) return "server_price";
+    ok = verifies(signed.server, message, signed.signature);
+  }
   const problem = chatSpecProblem(signed.spec);
   if (problem) return problem;
-  if (signed.spec.slug !== slug) return "slug";
-  return verifyByDeviceKey(ownerKey, chatSpecToSign(signed.spec), signed.signature) ? null : "signature";
+  return ok ? null : "signature";
+}
+
+/** Whether `server` may speak in `slug`'s chat at `now` (§1): a certificate that holds (`chatCertHolds`), or a key of
+ *  `servers`, the grain's registry record's at the wallet's canonical beacon block; either not revoked by `spec`. */
+export function serverKeyHolds(server: ServerKey, slug: string, ownerKey: DeviceKey, servers: readonly string[], spec: GrainChatSpec, now: number): boolean {
+  if ("certified" in server) return chatCertHolds(server.certified, slug, ownerKey, spec, now);
+  return servers.includes(server.registered) && !spec.revoked.includes(server.registered);
 }
 
 /** Whether `cert` lets its key speak in `slug`'s chat at `now` (§1): signed by `ownerKey`, unexpired, ending within
@@ -743,31 +808,36 @@ export const messageTimely = (m: ChatMessage, now: number): boolean => m.at <= n
 export const chatMessageToSign = (m: ChatMessage, genesis: string): Uint8Array =>
   derive(CHAT_MESSAGE_DOMAIN, fromHex(genesis, 32), encodeChatMessage(m));
 
-/** `m`, checked, signed with the server key `serverSecret` that `cert` certifies, for the network of `genesis`. */
-export function signChatMessage(m: ChatMessage, serverSecret: Uint8Array, genesis: string, cert: InvoiceKeyCert): SignedChatMessage {
+/** `m`, checked, signed with the server key `serverSecret` for the network of `genesis`: under the certificate `cert`
+ *  for that key, or without one as a key the grain's registry record names (`ServerKey::Registered`). */
+export function signChatMessage(m: ChatMessage, serverSecret: Uint8Array, genesis: string, cert?: InvoiceKeyCert | null): SignedChatMessage {
   const problem = chatMessageBoundsProblem(m);
   if (problem) throw new TypeError(`chat message: ${problem}`);
-  if (toHex(ed25519.getPublicKey(serverSecret)) !== cert.key) throw new TypeError("the certificate is not the server key's");
-  return { message: m, cert, signature: toHex(ed25519.sign(chatMessageToSign(m, genesis), serverSecret)) };
+  const key = toHex(ed25519.getPublicKey(serverSecret));
+  if (cert && key !== cert.key) throw new TypeError("the certificate is not the server key's");
+  const server: ServerKey = cert ? { certified: cert } : { registered: key };
+  return { message: m, server, signature: toHex(ed25519.sign(chatMessageToSign(m, genesis), serverSecret)) };
 }
 
 /**
  * What a wallet checks before it shows a message (§4), in the reference's order: the grain's slug, it came from the
- * certified key's personal address `from`, the certificate holds (the owner key's, unexpired, within 31 days, not
- * revoked), the message is in bounds, timely at `now`, and signed. Whether it answers a request or counts as unasked
- * is the wallet's to judge. The problem, or null.
+ * server key's personal address `from`, the key speaks for the grain (`serverKeyHolds`: a certificate of the owner key,
+ * unexpired, within 31 days; or one of `servers`, the registry record's server keys at the wallet's canonical beacon
+ * block; either not revoked by the spec), the message is in bounds, timely at `now`, and signed. Whether it answers a
+ * request or counts as unasked is the wallet's to judge. The problem, or null.
  */
 export function chatMessageProblem(
   s: SignedChatMessage,
-  check: { chain: ChainParams; ownerKey: DeviceKey; spec: GrainChatSpec; from: string; now: number },
+  check: { chain: ChainParams; ownerKey: DeviceKey; servers?: readonly string[]; spec: GrainChatSpec; from: string; now: number },
 ): ChatProblem | null {
   if (s.message.slug !== check.spec.slug) return "slug";
-  if (!isPersonalAddressOf(check.from, s.cert.key, check.chain.network)) return "sender";
-  if (!chatCertHolds(s.cert, check.spec.slug, check.ownerKey, check.spec, check.now)) return "cert";
+  const key = serverKeyOf(s.server);
+  if (!isPersonalAddressOf(check.from, key, check.chain.network)) return "sender";
+  if (!serverKeyHolds(s.server, check.spec.slug, check.ownerKey, check.servers ?? [], check.spec, check.now)) return "cert";
   const bounds = chatMessageBoundsProblem(s.message);
   if (bounds) return bounds;
   if (!messageTimely(s.message, check.now)) return "time";
-  return verifies(s.cert.key, chatMessageToSign(s.message, check.chain.genesis), s.signature) ? null : "signature";
+  return verifies(key, chatMessageToSign(s.message, check.chain.genesis), s.signature) ? null : "signature";
 }
 
 /** 16 random bytes in hex: a request's or a message's id. */
@@ -789,16 +859,52 @@ export function isoToDay(iso: string): number | null {
   return days <= 0xffffffff ? days : null;
 }
 
-/** Both forms of the `/.well-known/saltix-grain-chat` document: `{spec, cert}` in hex of their Borsh (§2). */
+/** The `/.well-known/saltix-grain-chat` document (§2): `{spec, cert?, stats?}` in hex of their Borsh. `cert`, the
+ *  current server key's certificate when it has one; `stats`, the numbers the app reports (24-app-studio §6a). */
 export interface ChatDocument {
   spec: string;
-  cert: string;
+  cert?: string;
+  stats?: string;
 }
 
-export const chatDocumentOf = (spec: SignedGrainChatSpec, cert: InvoiceKeyCert): ChatDocument => ({
-  spec: toHex(encodeSignedChatSpec(spec)),
-  cert: toHex(writeCertBody(new Writer(), cert).done()),
-});
+export function chatDocumentOf(spec: SignedGrainChatSpec, cert?: InvoiceKeyCert | null, stats?: SignedGrainStats | null): ChatDocument {
+  const doc: ChatDocument = { spec: toHex(encodeSignedChatSpec(spec)) };
+  if (cert) doc.cert = toHex(writeCertBody(new Writer(), cert).done());
+  if (stats) doc.stats = toHex(writeSignedGrainStats(new Writer(), stats).done());
+  return doc;
+}
+
+/** The document read back as a wallet reads it: `cert` and `stats` absent or null when there are none. Throws a
+ *  `TypeError` for anything else. */
+export function decodeChatDocument(value: unknown): { spec: SignedGrainChatSpec; cert: InvoiceKeyCert | null; stats: SignedGrainStats | null } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new TypeError("a chat document is an object");
+  const doc = value as Record<string, unknown>;
+  const hex = (name: string, required: boolean): string | null => {
+    const v = doc[name];
+    if (v === undefined || v === null) {
+      if (required) throw new TypeError(`a chat document's ${name}: missing`);
+      return null;
+    }
+    if (typeof v !== "string") throw new TypeError(`a chat document's ${name}: hex expected`);
+    return v;
+  };
+  const spec = decodeSignedChatSpec(hex("spec", true)!);
+  const cert = hex("cert", false);
+  const stats = hex("stats", false);
+  const certOf = (h: string) => {
+    const r = new Reader(fromHex(h));
+    const c = readCertBody(r);
+    r.end();
+    return c;
+  };
+  const statsOf = (h: string) => {
+    const r = new Reader(fromHex(h));
+    const s = readSignedGrainStats(r);
+    r.end();
+    return s;
+  };
+  return { spec, cert: cert === null ? null : certOf(cert), stats: stats === null ? null : statsOf(stats) };
+}
 
 // ── the JSON form a developer writes a spec in (`grain chat-spec`) ──
 

@@ -53,8 +53,9 @@ export function notificationMessage(n: GrainNotification, genesisHash: string): 
 }
 
 /**
- * Sign `n` with `secret` — the owner's, or the server key's with the owner's `cert` for it — for the
- * network of `genesisHash`: the bytes `RelayClient.notify` seals to the user.
+ * Sign `n` with `secret` — the owner's; the server key's with the owner's `cert` for it; or, without a certificate, a
+ * server key the grain's registry record names (24-app-studio §2) — for the network of `genesisHash`: the bytes
+ * `RelayClient.notify` seals to the user.
  */
 export function signNotification(n: GrainNotification, secret: Uint8Array, genesisHash: string, cert?: InvoiceKeyCert): Uint8Array {
   const signature = ed25519.sign(notificationMessage(n, genesisHash), secret);
@@ -78,9 +79,12 @@ export function decodeNotification(bytes: Uint8Array): { notification: GrainNoti
 
 /**
  * What a wallet checks (12-grains §5.5): why it would not show `bytes` as `slug`'s notification, or
- * null. `ownerKey` is the manifest's owner key.
+ * null. `ownerKey` is the manifest's owner key; `servers` the server keys (hex) the grain's registry record names, which
+ * a notification without a certificate may be signed by as well (24-app-studio §2).
  */
-export function notificationProblem(bytes: Uint8Array, slug: string, ownerKey: DeviceKey, genesisHash: string, now = Date.now()): string | null {
+export function notificationProblem(
+  bytes: Uint8Array, slug: string, ownerKey: DeviceKey, genesisHash: string, now = Date.now(), servers: readonly string[] = [],
+): string | null {
   let decoded;
   try {
     decoded = decodeNotification(bytes);
@@ -94,5 +98,7 @@ export function notificationProblem(bytes: Uint8Array, slug: string, ownerKey: D
   if (n.at + NOTIFICATION_LIMITS.maxAgeMs < now || n.at > now + NOTIFICATION_LIMITS.aheadMs) return "time";
   const signer = signerOf(cert, slug, ownerKey, now);
   if (!signer) return "cert";
-  return verifyByDeviceKey(signer, notificationMessage(n, genesisHash), signature) ? null : "signature";
+  const message = notificationMessage(n, genesisHash);
+  const registered = () => cert === null && servers.some((key) => verifyByDeviceKey({ ed25519: key }, message, signature));
+  return verifyByDeviceKey(signer, message, signature) || registered() ? null : "signature";
 }

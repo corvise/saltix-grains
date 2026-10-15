@@ -14,7 +14,10 @@ export const PERMISSIONS = {
 
 export type Entry =
   | { hosted: { url: string; origins: string[] } }
-  | { sealed: { bundle: string; size: number; sources: string[]; start: string; connect: string[] } };
+  | { sealed: { bundle: string; size: number; sources: string[]; start: string; connect: string[] } }
+  /** No page and no origin: the grain is its chat (Saltix 24-app-studio §2), served from the server keys its registry
+   *  record names. Its JSON form is `{"chat": {}}`, an empty object. */
+  | { chat: Record<string, never> };
 
 /** A grain's manifest (12-grains §2); bytes in lowercase hex. */
 export interface Manifest {
@@ -82,12 +85,16 @@ export function encodeManifest(m: Manifest): Uint8Array {
     const e = m.entry.hosted;
     w.u8(0).string(e.url).u32(e.origins.length);
     e.origins.forEach((o) => w.string(o));
-  } else {
+  } else if ("sealed" in m.entry) {
     const e = m.entry.sealed;
     w.u8(1).fixed(fromHex(e.bundle, 32), 32).u64(e.size).u32(e.sources.length);
     e.sources.forEach((s) => w.string(s));
     w.string(e.start).u32(e.connect.length);
     e.connect.forEach((c) => w.string(c));
+  } else if ("chat" in m.entry) {
+    w.u8(2);
+  } else {
+    throw new TypeError("a manifest's entry: hosted, sealed or chat");
   }
   w.u32(m.permissions);
   if (m.sponsor === null) w.u8(0);
@@ -117,7 +124,7 @@ export function manifestProblem(m: Manifest, dev = false): string | null {
     if (e.origins.length < 1 || e.origins.length > 4 || !e.origins.every((o) => isOrigin(o, dev))) return "origins";
     const o = originOf(e.url, dev);
     if (e.url.length > 2048 || o === null || !e.origins.includes(o)) return "url";
-  } else {
+  } else if ("sealed" in m.entry) {
     const e = m.entry.sealed;
     if (!(e.size >= 1 && e.size <= 20 * 1024 * 1024)) return "size";
     if (e.sources.length < 1 || e.sources.length > 8 || !e.sources.every((s) => s.length <= 2048 && originOf(s, dev) !== null)) return "sources";
@@ -125,11 +132,20 @@ export function manifestProblem(m: Manifest, dev = false): string | null {
     if (!/^[A-Za-z0-9._/-]{1,256}$/.test(e.start) || e.start.startsWith("/") || parts.some((p) => p === "" || p === "." || p === ".."))
       return "start";
     if (e.connect.length > 8 || !e.connect.every((o) => isOrigin(o))) return "connect";
+  } else if ("chat" in m.entry) {
+    // A chat-only grain has no page, so nothing a page asks for: its notifications only (24-app-studio §2).
+    if (typeof m.entry.chat !== "object" || m.entry.chat === null || Object.keys(m.entry.chat).length > 0) return "entry";
+    if ((m.permissions & ~PERMISSIONS.notifications) !== 0) return "entry";
+  } else {
+    return "entry";
   }
   if ((m.permissions & ~127) !== 0) return "permissions";
   if (!Number.isInteger(m.min_host) || m.min_host < 1 || m.min_host > 0xffff) return "min_host";
   return null;
 }
+
+/** Whether `m` is a chat-only grain (`Entry::Chat`): no page, no origin. */
+export const isChatOnly = (m: Manifest): boolean => "chat" in m.entry;
 
 /** Sign `m` with the owner key's 32-byte Ed25519 secret: the JSON form to publish. `dev` takes developer origins. (A
  *  managed account's phone signs with P-256 in its wallet.) */

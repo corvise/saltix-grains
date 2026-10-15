@@ -22,14 +22,19 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const frame = $<HTMLIFrameElement>("grain");
 const log = $<HTMLPreElement>("log");
 
-function secret(): Uint8Array {
-  let hex = localStorage.getItem("sim.secret");
+/** A test key kept in this browser under `name`, made the first time. */
+function kept(name: string): Uint8Array {
+  let hex = localStorage.getItem(name);
   if (!hex) {
     hex = toHex(crypto.getRandomValues(new Uint8Array(32)));
-    localStorage.setItem("sim.secret", hex);
+    localStorage.setItem(name, hex);
   }
   return fromHex(hex, 32);
 }
+/** The simulator's grain secret (12-grains §5.1). */
+const secret = () => kept("sim.secret");
+/** The simulator's account key: a plain account's own key, which signs member proofs (24-app-studio §2a). */
+const account = () => kept("sim.account");
 
 const settings = () => ({
   slug: $<HTMLInputElement>("slug").value.trim(),
@@ -191,6 +196,7 @@ const chat = setupChat({
   owner: () => settings().owner,
   language: () => settings().language,
   secret,
+  account,
   log: write,
   open: (start) => {
     $<HTMLInputElement>("start").value = start;
@@ -214,6 +220,10 @@ $<HTMLButtonElement>("frame").onclick = () => {
   emit("relay", { from, payload: toHex(new TextEncoder().encode(text)) });
   write(`relay ← ${from}: ${text.length} characters`);
 };
+/** The server keys the development registry names, if `npm run dev` serves one: a notification may be signed by one. */
+let registered: string[] = [];
+void fetch("/api/dev").then((r) => r.json()).then((d: { servers?: string[] }) => { registered = d.servers ?? []; }).catch(() => {});
+
 $<HTMLButtonElement>("notification").onclick = () => {
   const s = settings();
   const hex = prompt("A signed notification from your server (hex)");
@@ -225,7 +235,7 @@ $<HTMLButtonElement>("notification").onclick = () => {
   } catch {
     return write("notification ✖ malformed");
   }
-  const problem = notificationProblem(bytes, s.slug, s.owner, s.genesis);
+  const problem = notificationProblem(bytes, s.slug, s.owner, s.genesis, Date.now(), registered);
   if (problem) return write(`notification ✖ ${problem}`);
   const { notification: n } = decodeNotification(bytes);
   write(`notification ✔ "${n.title}" ${n.body}${n.start ? ` (opens with ${n.start})` : ""}`);

@@ -1,14 +1,17 @@
 // `npm run dev`: serve the simulator and the hello-grain example on this computer, with the grain's
 // server side (12-grains §5): its manifest at /.well-known/saltix-grain (signed for the origin a
 // request came to: localhost for the simulator, 10.0.2.2 for a debug Saltix in the emulator),
-// sign-in checks, an invoice, and the payment found through a node; and its chat (22-grain-chats):
-// a development relay at /relay (scripts/dev-relay.mjs), the chat server of examples/hello-grain/chat.mjs
-// on it, and its spec and certificate at /.well-known/saltix-grain-chat.
+// sign-in checks, an invoice, and the payment found through a node; and its chat (22-grain-chats,
+// 24-app-studio): a development relay at /relay (scripts/dev-relay.mjs), a development registry that
+// names the example's server key and says who may use it, the chat server of
+// examples/hello-grain/chat.mjs on both, run from its developer key as a real app's server is, and its
+// spec and the numbers it reports at /.well-known/saltix-grain-chat.
 //
 //   PORT       where to listen (8090)
 //   NODE_RPC   a node's wallet interface (http://127.0.0.1:30734), for the genesis and payments
 //   CHAT_NODE  a devnet node's wallet interface: the chat uses its relays and genesis instead of the
-//              development relay, so a debug Saltix on that devnet can talk to it
+//              development relay, under a certificate (that devnet's registry does not name its key), so
+//              a debug Saltix on that devnet can talk to it
 import { createServer } from "node:http";
 import { readFileSync, existsSync, writeFileSync, statSync } from "node:fs";
 import { join, normalize, extname, dirname } from "node:path";
@@ -17,7 +20,7 @@ import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   signManifest, iconHash, newChallenge, verifyLogin, signInvoice, accountId, encodeAddress, findPayment, rpc, toHex, fromHex,
-  chatSpecFromJson, signChatSpec, issueInvoiceKeyCert, fileChatStore,
+  chatSpecFromJson, signChatSpec, issueInvoiceKeyCert, fileChatStore, AppKey, ROLES,
 } from "../packages/server/dist/index.js";
 import { createDevRelay } from "./dev-relay.mjs";
 import { startChat } from "../examples/hello-grain/chat.mjs";
@@ -75,10 +78,60 @@ async function body(req) {
 
 let chat = null;
 let chain = null;
+
+/**
+ * The development registry: what a node's wallet interface would say of the example grain (`node_status`,
+ * `grain_get`, `account_get`, `relay_list`), the server key named in it, public until the simulator makes it private.
+ * Every change is a new beacon block, which the chat server reads within seconds.
+ */
+const registry = {
+  height: 1,
+  grain: null,
+  status() {
+    return { network: "devnet", genesis: chain.genesis, slot: this.height, beacon: { height: this.height, hash: this.height.toString(16).padStart(64, "0") }, shards: [] };
+  },
+  record() {
+    this.grain ??= {
+      slug: SLUG, owner: toHex(ownerId), version: 1, id: "00".repeat(32), registered: 1, updated: 1, retired: null, deposit: "30000000000",
+      manifest: manifestFor(`http://localhost:${PORT}`), servers: [toHex(ed25519.getPublicKey(serverSecret))], category: 9, public: true,
+      members: [], handles: [], ratings: { count: 0, sum: 0, citizens_count: 0, citizens_sum: 0 },
+    };
+    return this.grain;
+  },
+  wallet: {
+    async call(method, params = {}) {
+      switch (method) {
+        case "node_status": return registry.status();
+        case "grain_get": return { grain: params.slug === SLUG ? structuredClone(registry.record()) : null, deposit: "30000000000" };
+        case "account_get": return { account: params.address, shard: "", controller: null };
+        case "relay_list": return { relays: [] };
+        default: throw new Error(`the development registry does not answer ${method}`);
+      }
+    },
+  },
+  /** Make the grain public, or private with `members` (accounts in hex, users), at a new block. */
+  setAccess(open, members) {
+    const g = this.record();
+    g.public = open;
+    g.members = members.filter((m) => /^[0-9a-f]{64}$/.test(m) && m !== g.owner).slice(0, 64).map((account) => ({ account, roles: ROLES.user }));
+    this.height++;
+  },
+};
 const server = createServer(async (req, res) => {
   try {
     if (relay.handle(req, res) || chat?.serveDocument(req, res)) return;
-    if (req.url === "/api/dev") return send(res, 200, { chain, chat: chat?.address ?? null, relay: process.env.CHAT_NODE ? null : "/relay" });
+    if (req.url === "/api/dev") {
+      const g = process.env.CHAT_NODE ? null : registry.record();
+      return send(res, 200, {
+        chain, chat: chat?.address ?? null, relay: process.env.CHAT_NODE ? null : "/relay",
+        servers: g?.servers ?? [], access: g ? { owner: g.owner, public: g.public, members: g.members } : null,
+      });
+    }
+    if (req.url === "/api/dev/access" && req.method === "POST" && !process.env.CHAT_NODE) {
+      const { public: open, members } = await body(req);
+      registry.setAccess(open !== false, Array.isArray(members) ? members : []);
+      return send(res, 200, { access: { public: registry.grain.public, members: registry.grain.members } });
+    }
     const host = (req.headers.host ?? "").split(":")[0];
     const origin = `http://${req.headers.host}`;
     const url = new URL(req.url, origin);
@@ -126,8 +179,10 @@ const server = createServer(async (req, res) => {
 });
 const relay = createDevRelay({ server, path: "/relay" });
 
-/** The chat: its spec and the server key's certificate signed now by the owner key (a real grain does both offline,
- *  with grain chat-spec and grain cert), on the development relay or a devnet node's relays. */
+/** The chat. On the development relay: from the example's developer key, which the development registry names, with
+ *  the spec signed by that key, as your app's server runs (examples/hello-grain/server.mjs). On a devnet node's relays
+ *  (CHAT_NODE): under a certificate the owner key signs now, with the spec the owner key signs (a real grain does both
+ *  offline, with grain chat-spec and grain cert). */
 async function chatOn() {
   const node = process.env.CHAT_NODE;
   let genesis = "00".repeat(32);
@@ -138,14 +193,17 @@ async function chatOn() {
     if (node) throw new Error(`CHAT_NODE ${node} does not answer`);
   }
   chain = { genesis, network: "devnet" };
-  const spec = signChatSpec(chatSpecFromJson(JSON.parse(readFileSync(join(root, "examples/hello-grain/chat.json"), "utf8"))), ownerSecret);
+  const json = chatSpecFromJson(JSON.parse(readFileSync(join(root, "examples/hello-grain/chat.json"), "utf8")));
+  const store = fileChatStore(join(root, "examples/hello-grain/chat.store.json"));
+  const log = (level, event, meta) => level !== "info" && console.log(`chat ${level} ${event} ${JSON.stringify(meta ?? {})}`);
+  if (!node) {
+    const appKey = AppKey.of("devnet", genesis, SLUG, serverSecret);
+    return startChat({ appKey, spec: json, wallet: registry.wallet, endpoints: [{ url: `ws://127.0.0.1:${PORT}/relay`, cert_sha256: null }], store, log });
+  }
   const serverKey = toHex(ed25519.getPublicKey(serverSecret));
   const cert = issueInvoiceKeyCert(ownerSecret, SLUG, serverKey, Date.now() + 30 * 86_400_000);
-  const relays = node ? { node } : { endpoints: [{ url: `ws://127.0.0.1:${PORT}/relay`, cert_sha256: null }] };
   return startChat({
-    slug: SLUG, spec, secret: serverSecret, cert, chain, ownerKey: { ed25519: ownerKey }, ...relays,
-    store: fileChatStore(join(root, "examples/hello-grain/chat.store.json")),
-    log: (level, event, meta) => level !== "info" && console.log(`chat ${level} ${event} ${JSON.stringify(meta ?? {})}`),
+    slug: SLUG, spec: signChatSpec(json, ownerSecret), secret: serverSecret, cert, chain, ownerKey: { ed25519: ownerKey }, node, store, log,
   }, toHex(ownerId));
 }
 

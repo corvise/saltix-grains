@@ -60,8 +60,15 @@
   <div class="phone"><iframe id="grain" name="saltix-simulator" title="grain"></iframe></div>
   <section class="chat">
     <div class="row" style="align-items:center;justify-content:space-between"><h2>Chat</h2><button id="chat-load">Load the chat</button></div>
-    <p style="font-size:12px;color:#9fb0d8;margin:0">The grain's chat as a wallet sees it (22-grain-chats): every card checked against the owner key, forms from the spec, secrets masked. Load the manifest first.</p>
+    <p style="font-size:12px;color:#9fb0d8;margin:0">The grain's chat as a wallet sees it (22-grain-chats, 24-app-studio): every card checked against the server keys the registry names (or the owner key's certificate), forms from the spec, secrets masked. Load the manifest first.</p>
     <div id="chat-card"></div>
+    <div id="chat-stats" class="note"></div>
+    <div id="chat-access" class="note"></div>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="chat-private"> Private app</label>
+      <label class="check"><input type="checkbox" id="chat-member"> This account is a member</label>
+      <label class="check"><input type="checkbox" id="chat-proof" checked> Send a member proof (to a private app)</label>
+    </div>
     <div id="chat-log"></div>
     <select id="chat-command"></select>
     <div id="chat-form"></div>

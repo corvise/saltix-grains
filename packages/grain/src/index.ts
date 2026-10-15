@@ -158,7 +158,8 @@ export function slugLink(slug: string, start?: string): string {
 
 /**
  * The link that opens a registered grain's chat (22-grain-chats §6): `salt:grain/<slug>?chat`, with the server key's
- * certificate (the hex your server's `encodeCert` gives) so the wallet starts without fetching it.
+ * certificate (the hex your server's `encodeCert` gives) so the wallet starts without fetching it. A grain whose
+ * registry record names its server keys (24-app-studio §2) needs no certificate: the wallet writes to the first key.
  */
 export function chatLink(slug: string, cert?: string): string {
   const link = slugLink(slug) + "?chat";
@@ -276,9 +277,9 @@ export const grain = {
   /** The grain's chat (22-grain-chats, bridge version 2): signed cards from your server and typed actions. */
   chat: {
     /**
-     * Open the grain's chat in the wallet. Pass the certificate and spec your server serves at
-     * `/.well-known/saltix-grain-chat` (hex) when the page has them, so the wallet need not fetch them; it checks both
-     * against the registry's manifest either way.
+     * Open the grain's chat in the wallet. Pass the spec, and the certificate when the server key has one, that your
+     * server serves at `/.well-known/saltix-grain-chat` (hex) when the page has them, so the wallet need not fetch them;
+     * it checks both against the registry's record and manifest either way.
      */
     open: (options: { cert?: string; spec?: string } = {}) => {
       const params: Record<string, string> = {};

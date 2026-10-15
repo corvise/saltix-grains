@@ -6,7 +6,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import {
   encodeManifest, manifestId, manifestMessage, verifyManifest, signManifest, iconHash, bundleHash, manifestProblem,
   loginMessage, verifyLogin, decodeInvoice, invoiceMessage, invoiceProblem, signInvoice, issueInvoiceKeyCert, memoText,
-  referenceInMemo, toHex, fromHex,
+  referenceInMemo, toHex, fromHex, isChatOnly,
 } from "../dist/index.js";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
@@ -28,6 +28,14 @@ test("manifests: Borsh, id, message and the owner's signature", () => {
   }
   const managed = v.manifests.find((c) => c.name === "managed").json.manifest;
   assert.ok("p256" in managed.owner_key);
+  // A chat-only grain (24-app-studio §2): no page, no origin, notifications only.
+  const chat = v.manifests.find((c) => c.name === "chat").json.manifest;
+  assert.deepEqual(chat.entry, { chat: {} });
+  assert.ok(isChatOnly(chat));
+  assert.equal(manifestProblem({ ...chat, permissions: 4 | 1 }), "entry", "a chat-only grain asks for notifications only");
+  assert.equal(manifestProblem({ ...chat, permissions: 0 }), null);
+  assert.equal(manifestProblem({ ...chat, entry: { chat: { origins: [] } } }), "entry", "an empty object only");
+  assert.equal(manifestProblem({ ...chat, entry: { page: {} } }), "entry");
   // The owner key's JSON names one kind, in lowercase hex of its length.
   for (const owner_key of [{ p256: "ab".repeat(32) }, { ed25519: "AB".repeat(32) }, { rsa: "ab".repeat(32) }, "ab".repeat(32)]) {
     assert.equal(manifestProblem({ ...managed, owner_key }), "owner_key");

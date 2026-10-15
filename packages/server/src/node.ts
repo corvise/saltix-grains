@@ -12,7 +12,19 @@ export interface Payment {
   confirmations: number;
 }
 
-/** A JSON-RPC call to a node's wallet interface (Saltix 08-node §6), plain HTTP: your own node or a tunnel. */
+/** A node's answer that is an error (`code` as 08-node §6 numbers them: 1, it does not follow the account's shard). */
+export class RpcError extends Error {
+  constructor(public readonly method: string, public readonly code: number, detail: string) {
+    super(`${method}: ${detail} (${code})`);
+    this.name = "RpcError";
+  }
+}
+
+/** The node does not follow the shard an account lives in: another node may. */
+export const NOT_FOLLOWED = 1;
+
+/** A JSON-RPC call to a node's wallet interface (Saltix 08-node §6), plain HTTP: your own node or a tunnel. Throws an
+ *  `RpcError` for the node's error answer. */
 export async function rpc<T>(url: string, method: string, params: object = {}): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -20,7 +32,7 @@ export async function rpc<T>(url: string, method: string, params: object = {}): 
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
   const body = (await response.json()) as { result?: T; error?: { code: number; message: string } };
-  if (body.error) throw new Error(`${method}: ${body.error.message} (${body.error.code})`);
+  if (body.error) throw new RpcError(method, body.error.code, body.error.message);
   return body.result as T;
 }
 

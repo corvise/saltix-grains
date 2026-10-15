@@ -1,4 +1,10 @@
 {
+  "app_key": {
+    "code": "saltix-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:6363636363636363636363636363636363636363636363636363636363636363",
+    "server_public": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
+    "server_secret": "6363636363636363636363636363636363636363636363636363636363636363",
+    "slug": "chess"
+  },
   "hashes": {
     "bundle": "49e95070094efaf164687f13d51bc28bbb8084e589ad0329e119f51558fb31d3",
     "bundle_of": "notes bundle",
@@ -176,6 +182,37 @@
       "message": "9be3f2b695a4642cb14fe4d210d4194f4c2a2033115d3729ae75489123b8f986",
       "name": "managed",
       "signature": "68c5dbcc28af9b45904af52fe4352845af990b6b37fa2211e1e4fd5cf50214df6b0c1f4f25b0ddbfc9e347092becc0034baf4f450d949b3cfa498a002931a1f4"
+    },
+    {
+      "borsh": "0900000063686573732d626f7401000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e20612063686174aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc0204000000000100",
+      "id": "f58a1d575c3577dbf326b31c65106f2dcc0f6a9c76c2d58fd17f7ba8245909fe",
+      "json": {
+        "manifest": {
+          "description": {
+            "en": "Puzzles in a chat"
+          },
+          "entry": {
+            "chat": {}
+          },
+          "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+          "min_host": 1,
+          "name": {
+            "en": "Chess coach"
+          },
+          "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+          "owner_key": {
+            "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
+          },
+          "permissions": 4,
+          "slug": "chess-bot",
+          "sponsor": null,
+          "version": 1
+        },
+        "signature": "a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f01"
+      },
+      "message": "6e7c8c383df74f7d5ca954ea82a7211a49310c0f2b59af253a792fd6927af1e6",
+      "name": "chat",
+      "signature": "a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f01"
     }
   ],
   "notes": [
@@ -189,7 +226,10 @@
     "the payment's public memo: the reference in lowercase hex, a space, the invoice's text",
     "grain messaging key: X25519 secret derive_key(\"Saltix grain messaging key v1\", secret || slug); frames to a grain alias are base64url(nonce 24 || NaCl crypto_box) between messaging keys",
     "notification: the owner or the certified server key signs derive_key(\"Saltix grain notification v1\", genesis_hash || Borsh(GrainNotification)); SignedGrainNotification is Borsh {notification, cert: Option<InvoiceKeyCert>, signature}",
-    "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least GRAIN_DEPOSIT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner, and its owner_key speaks for it (13-accounts §5); ids as in transaction-v3.json"
+    "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least the slug's deposit (deposits below), kept up to 100 SALT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner, and its owner_key speaks for it (13-accounts §5); ids as in transaction-v3.json",
+    "app studio (24-app-studio): Entry tag 2 Chat (no fields; JSON {\"chat\": {}}), notifications only; ConfigureGrain tag 34 {slug, servers: Vec<[u8;32]> (0-4, valid Ed25519, distinct, each one live grain's only), category: u8 (0-9)}; SetGrainAccess tag 36 {slug, public: bool, members: Vec<(AccountId, u8 roles: 1 user, 2 developer, 4 viewer)> (0-64, distinct, not the owner)}; RateGrain tag 37 {slug, score: u8 (1-5, 0 withdraws), review: String (at most 140 characters, no control characters)} by any account but the owner; BindHandle tag 35 is in handles-v1.json",
+    "a registered server key signs a notification with cert None, as the owner key does: a wallet checks it against the owner key and the server keys of the grain's registry record (by-registered-key, registered_servers)",
+    "developer key: saltix-app:1:<hrp>:<first 8 bytes of the genesis hash, hex>:<slug>:<the server key's Ed25519 secret, hex>, lower case, nothing else"
   ],
   "notifications": {
     "cases": [
@@ -204,15 +244,50 @@
         "message": "ce2b753039842c0ed5cc78c16f80a321ed2fe4a137c0fcfad97a1610eea3a5d4",
         "name": "by-server-key",
         "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000dac6b5c3f809e81f028d8a881e4f27010c81f695d8f815d122613d4b933a9f5d43ea53b27a6372bfaf8777aba2666c40afd084c7a2d9c62060994f580772ce073cbe01da32f803aa6049f0646537d2fb778f6277e2d435d74829fe6001820222d9050ad58f934a660f0dc5fac816d9c8118d8dae390d745f1208817846a0320b"
+      },
+      {
+        "borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000",
+        "message": "ce2b753039842c0ed5cc78c16f80a321ed2fe4a137c0fcfad97a1610eea3a5d4",
+        "name": "by-registered-key",
+        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000003cbe01da32f803aa6049f0646537d2fb778f6277e2d435d74829fe6001820222d9050ad58f934a660f0dc5fac816d9c8118d8dae390d745f1208817846a0320b"
       }
     ],
     "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
     "network": "testnet",
-    "now": 1790000000000
+    "now": 1790000000000,
+    "registered_servers": [
+      "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367"
+    ]
   },
   "owner_secret": "6161616161616161616161616161616161616161616161616161616161616161",
   "registry": {
     "deposit": "100000000000",
+    "deposits": [
+      {
+        "deposit": "100000000000",
+        "slug": "abc"
+      },
+      {
+        "deposit": "100000000000",
+        "slug": "chess"
+      },
+      {
+        "deposit": "30000000000",
+        "slug": "access"
+      },
+      {
+        "deposit": "30000000000",
+        "slug": "chess-1"
+      },
+      {
+        "deposit": "10000000000",
+        "slug": "chessbot"
+      },
+      {
+        "deposit": "10000000000",
+        "slug": "chess-bot"
+      }
+    ],
     "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
     "network": "testnet",
     "transactions": [
@@ -314,6 +389,102 @@
         "nonce": "2",
         "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a086010000000000010905000000636865737300000000000000000069a6061850752eb1f525e908bf129bc62f3bd67d907338275f88635c0c434cf45d86cd7724143e3a7ae3b4ce466daef4e44e60bc83cc4c05ebeb0f9ff9e68e06",
         "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a08601000000000001090500000063686573730000000000000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "10000000000",
+        "call": {
+          "call": "register_grain",
+          "manifest": {
+            "manifest": {
+              "description": {
+                "en": "Puzzles in a chat"
+              },
+              "entry": {
+                "chat": {}
+              },
+              "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+              "min_host": 1,
+              "name": {
+                "en": "Chess coach"
+              },
+              "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+              "owner_key": {
+                "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
+              },
+              "permissions": 4,
+              "slug": "chess-bot",
+              "sponsor": null,
+              "version": 1
+            },
+            "signature": "a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f01"
+          }
+        },
+        "fee": "150000",
+        "id_hex": "2e94a204e48e86cc449a5605c24d8360541ce38e865835d111136632978b3c59",
+        "name": "register-chat",
+        "nonce": "3",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0300000000000000f049020000000000a08601000000000001070900000063686573732d626f7401000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e20612063686174aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc0204000000000100a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f0100e40b5402000000005f4be7f0b7ba970b5237dcd9a736416491bda9e56a3a0a6555dc04a41def6b8e67a453ab840ad5d66e9564413f7f4c59c3c1edf6e3372d41532707bf8815de05",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0300000000000000f049020000000000a08601000000000001070900000063686573732d626f7401000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e20612063686174aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc0204000000000100a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f0100e40b5402000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "configure_grain",
+          "category": 4,
+          "servers": [
+            "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367"
+          ],
+          "slug": "chess"
+        },
+        "fee": "150000",
+        "id_hex": "5d2fbe0796f8a93db990254aab3a392624e55c4325008d4a934d44e8a266cf0a",
+        "name": "configure",
+        "nonce": "4",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367040000000000000000001f17e5cd6e89016895ce71751cbc39ca6ad123bd37e7f4ad47af9b608408b312a94c438faad9a47725a1012984b6aa6f962718bd4aca872cdfa7f739f8a99204",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367040000000000000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "set_grain_access",
+          "members": [
+            {
+              "account": "4545454545454545454545454545454545454545454545454545454545454545",
+              "roles": 3
+            },
+            {
+              "account": "4646464646464646464646464646464646464646464646464646464646464646",
+              "roles": 4
+            }
+          ],
+          "public": false,
+          "slug": "chess"
+        },
+        "fee": "150000",
+        "id_hex": "552200adc3bf606a0f7900a8936980cfc94b6cb7f5deb35d8ec894c9a7fd8502",
+        "name": "access",
+        "nonce": "5",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0500000000000000f049020000000000a086010000000000012405000000636865737300020000004545454545454545454545454545454545454545454545454545454545454545034646464646464646464646464646464646464646464646464646464646464646040000000000000000002363493b546c5f3ec03b56104471661a5b4a46ab08bc462536078a922ae2cf8fd6d92ceaaae5831fd6177e07210713631f4ff5686aadd2be92c9d8d6276a0a06",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0500000000000000f049020000000000a086010000000000012405000000636865737300020000004545454545454545454545454545454545454545454545454545454545454545034646464646464646464646464646464646464646464646464646464646464646040000000000000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "rate_grain",
+          "review": "Лучшие шахматы",
+          "score": 5,
+          "slug": "chess"
+        },
+        "fee": "150000",
+        "id_hex": "adb5f99aed063ca20071a0fd969a243f0a92bc407f48e121c898a3a980c4c0ea",
+        "name": "rate",
+        "nonce": "0",
+        "signed_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b0000000000000000002e5a38a8e24597a45cb76c610f30d66b72f30f2925795b7709c1c847dd858d7e1d7b302d6051bef1ac64e857d7ac819074f342bc852a79f9db41642ed57bd301",
+        "transaction_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b0000000000000000",
         "valid_until_slot": "100000"
       }
     ]
