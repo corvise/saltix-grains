@@ -2,7 +2,9 @@
 // use, in one process with no node. It checks address records as relays do (this relay, this connection's challenge,
 // the time, the signatures), forwards frames with `from`, keeps kept frames in the addressee's mailbox until a signed
 // ack (and delivers them again on the next registration), and keeps files: `file_new`, then `PUT /_file/<id>` with
-// `X-Offset`, `GET …/status`, `POST …/done`, `GET /_file/<id>`. Plain `ws://` and `http://`: loopback only.
+// `X-Offset`, `GET …/status`, `POST …/done`, `GET /_file/<id>`; an app's numbers (`grain_stats`), the newest of each
+// grain, as they come (a real relay's node checks them against the registry and gossips them; this relay has no node).
+// Plain `ws://` and `http://`: loopback only.
 //
 //   const relay = await createDevRelay();                  // its own server on 127.0.0.1, a free port
 //   const relay = createDevRelay({ server, path: "/relay" }) // or beside your routes: call relay.handle(req, res)
@@ -12,6 +14,7 @@ import { WebSocketServer } from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   accountId, encodeAddress, decodeAddressRecord, recordProblem, fromBase64Url, toBase64Url, toHex, derive, Reader,
+  decodeSignedGrainStats, encodeSignedGrainStats,
 } from "../packages/server/dist/index.js";
 
 const MAX_FILE = 50 * 1024 * 1024 + 16;
@@ -26,6 +29,7 @@ export function createDevRelay(options = {}) {
   const sessions = new Map();
   const mailboxes = new Map();
   const files = new Map();
+  const stats = new Map();
   const sent = [];
   const awaited = [];
   const own = !options.server;
@@ -69,11 +73,28 @@ export function createDevRelay(options = {}) {
           return ack(ws, f);
         case "file_new":
           return fileNew(ws, f);
+        case "grain_stats":
+          return grainStats(ws, f);
         default:
           return send(ws, { type: "error", message: "unsupported", detail: f.type });
       }
     });
   });
+
+  // An app's numbers (09-relay §3): the newest of each grain; the same ones again are taken again, older ones are stale.
+  function grainStats(ws, f) {
+    let signed;
+    try {
+      signed = decodeSignedGrainStats(fromBase64Url(String(f.stats)));
+    } catch {
+      return send(ws, { type: "grain_stats_refused", reason: "malformed" });
+    }
+    const kept = stats.get(signed.stats.slug);
+    const same = kept && toHex(encodeSignedGrainStats(kept)) === toHex(encodeSignedGrainStats(signed));
+    if (kept && !same && signed.stats.at <= kept.stats.at) return send(ws, { type: "grain_stats_refused", reason: "stale" });
+    stats.set(signed.stats.slug, signed);
+    send(ws, { type: "grain_stats_taken", slug: signed.stats.slug, at: signed.stats.at });
+  }
 
   function register(ws, f, nonce, sts) {
     let r;
@@ -172,6 +193,8 @@ export function createDevRelay(options = {}) {
 
   const relay = {
     network, records, mailboxes, files, sent,
+    /** The newest numbers of each grain its servers reported (`grain_stats`), by slug. */
+    stats,
     /** `(id, offset, bytes) => status | undefined`: answer a piece with this status instead (404 also drops the file). */
     filePutHook: null,
     handle,

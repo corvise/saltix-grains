@@ -53,6 +53,11 @@
 
 ### Added
 
+- **An app's numbers reach every node through its relay** (Saltix 22-grain-chats §4, 09-relay §3): `RelayClient.reportStats(signed)`
+  sends the newest `SignedGrainStats` in a `grain_stats` frame and again whenever the client registers; the `stats`
+  event carries the relay's answer (`{taken, slug, at}` or `{taken: false, reason}`), logged as `relay_stats_taken` or
+  `relay_stats_refused`. The chat server reports each signing (at most hourly). The development relay keeps the newest
+  numbers of each grain (`relay.stats`) and answers as a relay does.
 - **The app's console** (Saltix 24-app-studio §4, 22-grain-chats §3–§4): the team's chat with its own app is where the
   app talks to the people who build it.
   - `chat.team()`: the owner and the members with the developer or viewer role, from the registry (cached per beacon

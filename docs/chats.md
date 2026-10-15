@@ -321,7 +321,11 @@ a card:
 With a registered key, the server signs `GrainStats` at most once an hour (`chat.publishStats()`, `chat.reported`):
 distinct users who sent a request in the last day and the last 30 days, and the requests of 30 days. They are in the
 well-known document (`stats`) and go to each user once a day before an answer (`ChatFrame::Stats`), since a chat-only app
-has no origin. A wallet shows them as "reported by the app" only when a key the registry names signed them, they are at
+has no origin. Each signing also goes to the server's relay (`relay.reportStats`, a `grain_stats` frame, sent again
+whenever the server registers): the relay's node checks them against the registry and gossips them, so every node
+answers `grain_stats` for the marketplace and the explorer (Saltix 22-grain-chats §4); the `stats` event of the
+`RelayClient` says whether the node took them, and the log says `relay_stats_taken` or `relay_stats_refused` with the
+reason. Nothing goes on chain. A wallet shows them as "reported by the app" only when a key the registry names signed them, they are at
 most 2 days old and `users_1d ≤ users_30d ≤ requests_30d`. The count keeps, per user, only the time of their last
 request, and forgets it once that is 30 days old; requests are counted by the hour with no one's name on them
 (`UsageWindow`, kept by the `ChatStore`).

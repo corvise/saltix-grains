@@ -323,3 +323,39 @@ test("a kept frame leaves the mailbox when the handler says, and a refused file 
     await relay.close();
   }
 });
+
+test("an app's numbers go to its relay, again on each registration, and the relay says what came of them", async () => {
+  const { createDevRelay } = await import("../../../scripts/dev-relay.mjs");
+  const { signGrainStats, decodeSignedGrainStats } = await import("../dist/index.js");
+  const relay = await createDevRelay();
+  const secret = fromHex("51".repeat(32), 32);
+  const genesis = "07".repeat(32);
+  const client = await RelayClient.connect({ endpoints: [relay.endpoint()], secret, network: "devnet" });
+  const outcomes = [];
+  client.on("stats", (o) => outcomes.push(o));
+  const until = async (done) => {
+    for (let i = 0; i < 100 && !done(); i++) await new Promise((r) => setTimeout(r, 50));
+    assert.ok(done(), "in time");
+  };
+  try {
+    const at = Date.now();
+    const signed = signGrainStats({ slug: "chess-club", at, users_1d: 1, users_30d: 2, requests_30d: 3 }, secret, genesis);
+    const frame = relay.next("grain_stats");
+    client.reportStats(signed);
+    assert.deepEqual(decodeSignedGrainStats(fromBase64Url((await frame).stats)), signed, "base64url of its Borsh");
+    await until(() => outcomes.length === 1);
+    assert.deepEqual(outcomes[0], { taken: true, slug: "chess-club", at });
+    // The connection drops: the next registration sends the newest numbers again.
+    const again = relay.next("grain_stats");
+    relay.kick(client.address);
+    assert.deepEqual(decodeSignedGrainStats(fromBase64Url((await again).stats)), signed);
+    // Older numbers than the relay keeps are refused, and the client hears why.
+    const older = signGrainStats({ slug: "chess-club", at: at - 1, users_1d: 1, users_30d: 2, requests_30d: 3 }, secret, genesis);
+    client.reportStats(older);
+    await until(() => outcomes.some((o) => !o.taken));
+    assert.deepEqual(outcomes.find((o) => !o.taken), { taken: false, reason: "stale" });
+  } finally {
+    client.close();
+    await relay.close();
+  }
+});

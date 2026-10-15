@@ -651,6 +651,8 @@ export class ChatServer {
     const usage: ChatUsage = await (this.store.usage ? this.store.usage(now) : this.window.usage(now));
     this.stats = signGrainStats({ slug: this.slug, at: now, ...usage }, this.secret, this.chain.genesis);
     this.log("info", "chat_stats", { ...usage });
+    // The relay's node gossips them to every node, for the marketplace and the explorer (22-grain-chats §4).
+    this.relay.reportStats(this.stats);
     return this.stats;
   }
 

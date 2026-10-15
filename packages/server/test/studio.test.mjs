@@ -7,10 +7,16 @@ import { ed25519 } from "@noble/curves/ed25519";
 import {
   ChatServer, ChatKeyNotRegistered, AppKey, AppKeyError, card, toHex, fromHex, accountId, decodeChatDocument, grainStatsProblem,
   signedChatSpecProblem, signMemberProof, signChatSpecAsServer, registeredKeyStatus, memoryChatStore, ROLES, STATS_EVERY_MS,
-  decodeNotification, notificationProblem,
+  decodeNotification, notificationProblem, decodeSignedGrainStats, fromBase64Url,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep } from "./chat-helpers.mjs";
+
+/** Wait until `done()` holds, at most 5 seconds. */
+async function waitFor(done) {
+  for (let i = 0; i < 100 && !done(); i++) await sleep(50);
+  assert.ok(done(), "in time");
+}
 
 const MEMBER = fromHex("50".repeat(32), 32);
 const memberAccount = toHex(accountId(ed25519.getPublicKey(MEMBER)));
@@ -343,6 +349,12 @@ test("the numbers are signed at most hourly, count each user once, and reach wal
     assert.deepEqual(next.stats, { slug: "access", at: t, users_1d: 2, users_30d: 2, requests_30d: 4 });
     assert.equal(grainStatsProblem(next, { genesis: chain.genesis, slug: "access", servers: [serverKey], now: t }), null);
     assert.deepEqual(decodeChatDocument(server.document()).stats, next, "the well-known document carries them");
+    // Each signing goes to the relay, whose node gossips it (22-grain-chats §4); a new connection gets it again.
+    await waitFor(() => relay.stats.get("access")?.stats.at === t);
+    assert.deepEqual(relay.stats.get("access"), next);
+    const again = relay.next("grain_stats");
+    relay.kick(server.address);
+    assert.deepEqual(decodeSignedGrainStats(fromBase64Url((await again).stats)), next, "sent again on registering");
     assert.equal(grainStatsProblem(next, { genesis: chain.genesis, slug: "access", servers: [], now: t }), "key", "once the key is removed, no wallet shows them");
     // A day later, the numbers reach a user again before their next answer.
     t += DAY;
