@@ -11,6 +11,7 @@ import {
   type KeyBinding, encodeAddressRecord, fromBase64Url, messagingKeyOf, signAddressRecord, signKeyBinding, signMailboxAck, toBase64Url,
 } from "./records.js";
 import { messagingPublic, openFrame, sealFrame, serverMessagingSecret } from "./seal.js";
+import { type SignedGrainStats, encodeSignedGrainStats } from "./stats.js";
 
 /** A relay's client endpoint as `relay_list` gives it: `cert_sha256` pins a self-signed certificate. */
 export interface RelayEndpoint {
@@ -41,6 +42,9 @@ export interface RelayOptions {
    */
   ackKept?: "on_receipt" | "by_handler";
 }
+
+/** What a relay's node made of the numbers `reportStats` sent (Saltix 09-relay §3): taken, or why not. */
+export type StatsOutcome = { taken: true; slug: string; at: number } | { taken: false; reason: string };
 
 /** A frame to your address, opened. `kept`: it was kept in your mailbox. */
 export interface RelayFrame {
@@ -128,6 +132,8 @@ export class RelayClient extends EventEmitter {
   /** The endpoint of the registered connection. */
   private current: RelayEndpoint | null = null;
   private readonly slots = new Map<string, { resolve: (slot: FileSlot) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
+  /** The newest numbers the app reported: sent again whenever the client registers. */
+  private stats: SignedGrainStats | null = null;
 
   private constructor(private readonly options: RelayOptions) {
     super();
@@ -223,6 +229,21 @@ export class RelayClient extends EventEmitter {
         return;
       }
     });
+  }
+
+  /**
+   * Hand the app's newest signed numbers (`signGrainStats`, 24-app-studio §6a) to the relay (`grain_stats`, Saltix
+   * 09-relay §3): its node checks them against the registry and gossips them, so every node answers `grain_stats` for
+   * the marketplace and the explorer. Kept and sent again whenever the client registers, at this relay or another; the
+   * `stats` event says what the node made of them. Nothing goes on chain.
+   */
+  reportStats(signed: SignedGrainStats): void {
+    this.stats = signed;
+    if (this.ws) this.sendStats(this.ws, signed);
+  }
+
+  private sendStats(ws: WebSocket, signed: SignedGrainStats): void {
+    ws.send(JSON.stringify({ type: "grain_stats", stats: toBase64Url(encodeSignedGrainStats(signed)) }));
   }
 
   /** Send a notification (`signNotification`'s bytes) to `to`: kept, so it reaches the wallet with the grain closed. */
@@ -347,6 +368,7 @@ export class RelayClient extends EventEmitter {
           this.current = endpoint;
           ping = setInterval(() => ws.ping(), PING_MS);
           this.log("info", "relay_registered", { url: endpoint.url, address: this.address });
+          if (this.stats) this.sendStats(ws, this.stats);
           const waiters = this.waiters;
           this.waiters = [];
           waiters.forEach((w) => w());
@@ -421,6 +443,18 @@ export class RelayClient extends EventEmitter {
       case "message":
         void this.onMessage(f);
         return;
+      case "grain_stats_taken": {
+        const outcome: StatsOutcome = { taken: true, slug: String(f.slug), at: Number(f.at) };
+        this.log("info", "relay_stats_taken", { url: endpoint.url, slug: outcome.slug, at: outcome.at });
+        this.emit("stats", outcome);
+        return;
+      }
+      case "grain_stats_refused": {
+        const outcome: StatsOutcome = { taken: false, reason: String(f.reason) };
+        this.log("warn", "relay_stats_refused", { url: endpoint.url, reason: outcome.reason });
+        this.emit("stats", outcome);
+        return;
+      }
     }
   }
 

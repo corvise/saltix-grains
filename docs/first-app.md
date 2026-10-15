@@ -160,8 +160,8 @@ at most 100 such messages a day. More in [docs/chats.md](chats.md#your-apps-cons
   offline, and takes requests that came while it was down.
 - **Watches the registry**: it starts only when the registry names the key, and stops — saying so in its log — once the
   key is replaced or revoked.
-- **Reports its numbers**: users of the last day and 30 days and the requests, signed hourly; the marketplace shows them
-  as "reported by the app". It keeps nothing about a user longer than 30 days for them.
+- **Reports its numbers**: users of the last day and 30 days and the requests, signed hourly and handed to its relay,
+  which gossips them to every node; the marketplace and the explorer show them as "reported by the app". It keeps nothing about a user longer than 30 days for them.
 - **Tells your team** what goes wrong: handlers' errors as reports in the console, folded within an hour and scrubbed of
   secrets.
 
