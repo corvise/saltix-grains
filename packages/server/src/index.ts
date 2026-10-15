@@ -2,8 +2,8 @@
  * `@saltix/grain-server`: the server side of a grain (Saltix specs/12-grains.md, 22-grain-chats.md, 24-app-studio.md)
  * — check sign-ins, make and sign invoices, find their payments on chain, sign the manifest, the registry's calls,
  * write to users through the relays (frames and notifications), and talk with them in the grain's chat
- * (`ChatServer`, from a developer key alone). Byte for byte the node's formats (vectors/grains-v1.json,
- * vectors/grain-chats-v1.json, vectors/handles-v1.json).
+ * (`ChatServer`, from a developer key alone), its team included: errors reach the team in the app's console. Byte for
+ * byte the node's formats (vectors/grains-v1.json, vectors/grain-chats-v1.json, vectors/handles-v1.json).
  */
 export * from "./bytes.js";
 export * from "./address.js";
@@ -27,6 +27,7 @@ export * from "./chat.js";
 export * from "./upload.js";
 export * from "./chat-card.js";
 export * from "./chat-store.js";
+export * from "./report.js";
 export * from "./app-key.js";
 export * from "./network.js";
 export * from "./chat-server.js";

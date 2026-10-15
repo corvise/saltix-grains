@@ -1,6 +1,7 @@
 // The example grain's chat (Saltix 22-grain-chats): three commands that show every block a card has — text, fields,
-// a secret, a file, an invoice and a status — and every action: run, open and reply. `server.mjs` runs it from a
-// developer key on a real network; `npm run dev` on the development relay.
+// a secret, a file, an invoice and a status — and every action: run, open and reply; and one that fails on purpose, so
+// that the app's team gets the error in its console (24-app-studio §4). `server.mjs` runs it from a developer key on a
+// real network; `npm run dev` on the development relay.
 import { randomBytes } from "node:crypto";
 import { ChatServer, ChatRefusal, card, signInvoice, toHex } from "../../packages/server/dist/index.js";
 
@@ -70,6 +71,13 @@ export async function startChat(options, owner = null) {
     return c.status("done");
   });
 
-  chat.text((ask) => card().text(`You wrote: “${ask.text.slice(0, 200)}”. This chat answers its commands: hello, key and report.`).reply("Hello", "hello"));
+  // An error on purpose: the user gets "failed", and the owner and developers who have written to the app get a report
+  // made for an AI agent (the SDK reports handlers' errors unless `reportErrors: false`).
+  chat.command("fail", () => {
+    const sessions = undefined;
+    return card().text(`${sessions.length} sessions`);
+  });
+
+  chat.text((ask) => card().text(`You wrote: “${ask.text.slice(0, 200)}”. This chat answers its commands: hello, key, report and fail.`).reply("Hello", "hello"));
   return chat;
 }

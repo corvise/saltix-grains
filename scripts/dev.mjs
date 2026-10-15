@@ -109,11 +109,12 @@ const registry = {
       }
     },
   },
-  /** Make the grain public, or private with `members` (accounts in hex, users), at a new block. */
+  /** Make the grain public or private, with `members` (accounts in hex) who use and develop it: on its team, so their
+   *  proofs reach the chat server and its reports reach them (24-app-studio §4). At a new block. */
   setAccess(open, members) {
     const g = this.record();
     g.public = open;
-    g.members = members.filter((m) => /^[0-9a-f]{64}$/.test(m) && m !== g.owner).slice(0, 64).map((account) => ({ account, roles: ROLES.user }));
+    g.members = members.filter((m) => /^[0-9a-f]{64}$/.test(m) && m !== g.owner).slice(0, 64).map((account) => ({ account, roles: ROLES.user | ROLES.developer }));
     this.height++;
   },
 };

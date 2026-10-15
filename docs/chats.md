@@ -12,7 +12,8 @@ What makes it unlike other messengers' bots:
 - every card is signed by your server key, which the grain's registry record names (or your owner key certified), so
   the wallet marks it "from `<slug>`, verified" because the chain says so, and the card stays verifiable when forwarded;
 - actions are declared ahead and checked by the wallet before anything leaves the phone;
-- your app cannot start a conversation, and writes unasked at most 10 times a day per user, notifications included;
+- your app cannot start a conversation, and writes unasked at most 10 times a day per user, notifications included
+  (100 to your app's own team: [its console](#your-apps-console));
 - requests and answers wait in mailboxes: an offline phone and a restarting server both catch up.
 
 ## Setting up
@@ -194,7 +195,7 @@ carries at most 48 000 bytes, so a larger report goes as a file.
 | names no command of the spec, or an argument missing, unknown, repeated, out of order or out of bounds | a `refused` status saying which |
 | has a command with no handler, or is text without `chat.text` | a `refused` status |
 | makes the handler throw `ChatRefusal` | a `refused` status with its text |
-| makes the handler throw anything else | a `failed` status ("Something went wrong"); the error goes to your log only |
+| makes the handler throw anything else | a `failed` status ("Something went wrong"); the error goes to your log, and to your team's console as a report ([below](#your-apps-console)) |
 | did not come from its key's address, is not signed by it on this network, is another grain's, or expired | nothing: dropped |
 | does not read: a language out of form (below), say | nothing: dropped (`chat_frame_malformed` in your log) |
 | was answered already (the same `key` and `id`) | nothing |
@@ -215,7 +216,8 @@ answer went out, comes again and is answered then. `memoryChatStore` (the defaul
 
 **Writing unasked.** `chat.notify(user, card)` writes a message that answers no request, and
 `chat.notification(user, {title, body, start})` sends a grain notification (12-grains §5.5) signed by the server key.
-Both count against **10 per user in any 24 hours** and throw `ChatBudgetSpent` past it. `chat.replace(sent, card)`
+Both count against **10 per user in any 24 hours** (100 to a member of the app's team) and throw `ChatBudgetSpent` past
+it. `chat.replace(sent, card)`
 updates a message in place: while the request it answered lives, the update answers it too; after that it counts as
 unasked. A user is their address in the grain or their grain key in hex.
 
@@ -231,8 +233,9 @@ An app is public (anyone) or private (its owner and members, at most 64), as its
 
 The wallet of a member adds a **member proof** to every request to a private app: the account, the grain key it uses in
 this app, an end at most 30 days ahead, signed by a key that speaks for the account (its own key, or a device of a
-managed account; `SignedMemberProof`, 24-app-studio §2a). A public app is never sent one and never learns who its users
-are. The server takes a request to a private app only if `admits` holds:
+managed account; `SignedMemberProof`, 24-app-studio §2a). A public app is sent one only by its own team (the
+[console](#your-apps-console)), and never learns who its users are. The server takes a request to a private app only if
+`admits` holds:
 
 - the proof is for this app and the request's key, unexpired and at most 30 days long;
 - its key speaks for the account now: the account's own key, or a device of its controller (not a guardian), read with
@@ -243,6 +246,75 @@ Membership is read from `grain_get` and the accounts' keys from `account_get`, c
 record) or the account's shard's tip moves, so removing a member or a device takes effect with the block that does it.
 A proof that cannot pass whatever the account's keys are (another app's, expired, a stranger's, a bad signature) costs
 the node nothing. The handler of an admitted request sees `ask.member`: `{ account, roles }`.
+
+## Your app's console
+
+In Saltix, the chat of an app whose **team** you are on is the app's **console** (24-app-studio §4). The team is the
+app's owner and the members with the *developer* or *viewer* role; a member who only uses a private app is not on it.
+Errors and feedback reach the team there, and Saltix writes its own notices beside them (the app created, keys made or
+replaced, the program's first answer, silent for 2 days, new ratings, members, access). Long-press a report → **Copy
+for an AI agent** → paste it into Claude Code or another coding agent: it gets the app, the message's id, the time in
+UTC and the version with the card's text, and never a secret.
+
+```ts
+const chat = await ChatServer.start({ appKey, spec, store: fileChatStore("chat.store.json"), version: "1.4.2" });
+
+// Who is on the team, from the registry (cached per beacon block), and whether the app can reach each one yet.
+const team = await chat.team();      // [{ account, owner: true, roles: 7, address: "dsalt1q…" }, { …, address: null }]
+
+// Feedback, digests, alerts: unasked, to the owner and the developers by default.
+await chat.notifyTeam(card().text("A user wrote: the key did not open the site").fields({ Site: "saltix.io" }));
+await chat.notifyTeam(card().text("Daily digest: 41 sessions, 3 errors"), { roles: ["owner", "viewer"] });
+// → { sent: 1, unreachable: 1, spent: 0, failed: 0 }
+
+// An error, as a card made for an AI agent to read. Handlers' errors go this way on their own.
+try {
+  await mint(site);
+} catch (e) {
+  await chat.report(e, { context: { command: "/key", site } });
+}
+
+// Admin commands: the team proves itself to its own app, public or private.
+chat.command("stats", (ask) => {
+  if (!ask.fromTeam) throw new ChatRefusal("For the app's team only.");
+  return card().fields({ Users: String(users()) });
+});
+```
+
+**How the app reaches the team.** A user of a public app is a key the app cannot tie to an account. The team's wallets
+therefore send their member proof with every request to their own app, public or private (22-grain-chats §3), and the
+server keeps each member's address in the app from it (`ChatStore.team`, so a `fileChatStore` keeps it across
+restarts). Until a member has written to the app once, it cannot reach them: `notifyTeam` counts them as
+`unreachable`, and Saltix's console says so. A member the registry drops is forgotten at the next `team()`. Proofs from
+anyone else are ignored and cost the node nothing; handlers see `ask.member` and `ask.fromTeam` for the team's
+requests only.
+
+**The budget.** A wallet shows the team up to **100** unasked messages a day per app (`CHAT_UNASKED_TEAM_PER_DAY`), so
+that reports get through while you work on the app; everyone else keeps 10. `notifyTeam` skips a member whose day is
+spent (`spent`), and `notify` follows the same rule for a member's address. Saltix's own notices in the console never
+count.
+
+**Error reports.** `chat.report(error, { context?, roles? })` sends the team (the owner and the developers by default)
+a card:
+
+| Block | What |
+|---|---|
+| Status | `failed` (`refused` for a `ChatRefusal`): `TypeError: Cannot read properties of undefined (reading 'site')` |
+| Fields | App, Error, Message, Where (the top frame), Command, Request, App version (`version` of the server or the context), Chat spec, Time (UTC), Occurrences (when folded), then the context's other keys, up to 16 rows |
+| Text | the full message when the field cut it, and the stack with its causes, cut at a line to fit 4 000 characters |
+
+- **Folding.** The same error (name, message and top frame) is reported once an hour: the ones in between are counted,
+  and the next card says "×N since the last report". If they stop, the count goes out within 10 minutes after the hour
+  (`flushReports()`, which you may also call before stopping). A loop of one error sends at most one card an hour, and
+  the team's budget bounds the rest.
+- **No secrets.** Before anything leaves, the card is scrubbed of developer keys (`saltix-app:1:…`), every run of 64 or
+  more hex digits (keys and secrets, and also hashes and accounts, which cannot be told apart by look: name them by a
+  prefix in your errors), the server key's secret in base64, and whatever you name in `redact` (text of 8 characters or
+  more, or patterns). Handlers' errors in your log are scrubbed the same way. A request's arguments and text never go
+  in a report on their own: put in `context` only what the agent needs.
+- **On its own.** Every error a handler throws, other than a `ChatRefusal`, is reported with its command and request
+  id, the user still getting a `failed` status. `ChatServer.start({ reportErrors: false })` turns it off. It needs the
+  registry (a developer key, or `node`); `report` never throws, and says in your log what it could not do.
 
 ## The numbers an app reports
 
@@ -255,7 +327,8 @@ request, and forgets it once that is 30 days old; requests are counted by the ho
 (`UsageWindow`, kept by the `ChatStore`).
 
 **Logs** carry names and numbers (`chat_request`, `chat_request_refused`, `chat_request_dropped`,
-`chat_handler_failed`, `chat_budget_spent`, `file_uploaded`…), never keys, secrets, arguments or what users wrote.
+`chat_handler_failed`, `chat_budget_spent`, `chat_team_notified`, `chat_error_reported`, `chat_error_folded`,
+`file_uploaded`…), never keys, secrets, arguments, what users wrote or who is on the team.
 
 ## Files
 
@@ -288,7 +361,8 @@ It refuses:
   ahead or more than 30 days old, or whose signature does not check;
 - **reported numbers** not signed by a key the registry names, older than 2 days or contradicting each other;
 - **an unasked message** (one that answers no request of the user's that still lives) while the user has not allowed
-  them (allowed by default once they sent a request), or past 10 that day, notifications included;
+  them (allowed by default once they sent a request), or past 10 that day (100 to the app's team), notifications
+  included;
 - **a frame** that is not a grain chat's: dropped and taken off the mailbox.
 
 It draws messages natively, never as web content: text without markup; fields as a table; secrets masked until tapped,
@@ -308,7 +382,9 @@ signed ack, files), a development registry that names the example's server key, 
 developer key (`examples/hello-grain/chat.json`, `chat.mjs`). In the simulator, load the manifest, then **Load the chat**
 (or **Open the chat** in the grain): it plays the wallet's side exactly, checks every card against the registered keys,
 builds forms from the spec, masks secrets and shows the numbers the app reports. **Private app** and **This account is a
-member** change the development registry; **Send a member proof** is the wallet's side. `CHAT_NODE=<a devnet node's
+member** change the development registry (a member uses and develops the app, so it is on its team); **Send a member
+proof** is the wallet's side, to a private app or as the team. As a member, run **Fail on purpose**: the answer says
+"failed", and the error report arrives as a message to the team. `CHAT_NODE=<a devnet node's
 wallet interface>` runs the chat on that node's relays under a certificate instead, for a debug Saltix on that devnet.
 
 `npm run example` runs the same chat as your app's server from your developer key (`SALTIX_APP_KEY`, or `app.key`).

@@ -1,7 +1,8 @@
 // A grain's chat server (Saltix 22-grain-chats §8, 24-app-studio): it talks with users through the relays under the
 // server key, takes their requests as the spec says (§3) — a private grain's from its owner and members only —, routes
 // each to a handler by command, and answers with cards it signs (§4). Requests are answered once each; the app writes
-// unasked within the daily budget; a newer spec reaches users; the numbers it reports are signed hourly.
+// unasked within the daily budget; a newer spec reaches users; the numbers it reports are signed hourly. The grain's
+// team (24-app-studio §4) is known from the registry and reached in its console, where errors are reported.
 //
 // Its key speaks for the grain in either of two ways: registered (the grain's registry record names it; a developer
 // key carries it, and is the server's whole configuration), or certified by the owner key for at most 31 days.
@@ -9,23 +10,26 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, decodeAddress, encodeAddress } from "./address.js";
 import { AppKey } from "./app-key.js";
-import { fromHex, toHex } from "./bytes.js";
+import { fromHex, toBase64, toHex } from "./bytes.js";
 import {
-  CHAT_CERT_LIFE_MS, CHAT_FRAME_MAGIC, CHAT_UNASKED_PER_DAY, MAX_FRAME_BYTES, type ChainParams, type ChatDocument, type ChatMessage,
-  type ChatRequest, type GrainChatSpec, type SignedChatRequest, type SignedGrainChatSpec, chatCertHolds, chatDocumentOf,
-  chatRequestProblem, chatSpecProblem, commandOf, decodeChatFrame, decodeSignedChatSpec, encodeChatFrame, newChatId,
-  signChatMessage, signChatSpecAsServer, signedChatSpecProblem,
+  CHAT_CERT_LIFE_MS, CHAT_FRAME_MAGIC, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, MAX_FRAME_BYTES, type ChainParams,
+  type ChatDocument, type ChatMessage, type ChatRequest, type GrainChatSpec, type SignedChatRequest, type SignedGrainChatSpec,
+  chatCertHolds, chatDocumentOf, chatMessageBoundsProblem, chatRequestProblem, chatSpecProblem, commandOf, decodeChatFrame,
+  decodeSignedChatSpec, encodeChatFrame, newChatId, signChatMessage, signChatSpecAsServer, signedChatSpecProblem,
 } from "./chat.js";
 import { type Args, Card, argOf } from "./chat-card.js";
 import { type ChatStore, type ChatUsage, UsageWindow, memoryChatStore } from "./chat-store.js";
 import type { FileRef } from "./file.js";
 import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
-import { type GrainAccess, type MemberProblem, admits, needsController, rolesOf } from "./member.js";
+import {
+  type GrainAccess, type MemberProblem, TEAM_ROLES, admits, needsController, needsTeamController, onTeam, rolesOf, teamMemberOf,
+} from "./member.js";
 import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
-import type { RegisteredGrain } from "./registry.js";
+import { ROLES, type RegisteredGrain } from "./registry.js";
 import { RelayClient, type RelayEndpoint, type RelayFrame } from "./relay.js";
+import { type ErrorFacts, REPORT_FOLD_MS, type ReportContext, errorFacts, errorFingerprint, reportCard, scrubSecrets } from "./report.js";
 import { STATS_EVERY_MS, type SignedGrainStats, signGrainStats } from "./stats.js";
 import { uploadFile } from "./upload.js";
 
@@ -37,6 +41,7 @@ export type ChatLog = (level: "info" | "warn" | "error", event: string, meta?: R
 /** How often the server asks the registry whether it still names its key, by default: 5 minutes. */
 export const REGISTRY_CHECK_MS = 5 * 60_000;
 const SWEEP_MS = 10 * 60_000;
+const UNASKED = { answers: null, expiresAt: null, replaces: null } as const;
 const DAY_MS = 86_400_000;
 const SEND_TRIES = 3;
 
@@ -82,6 +87,17 @@ export interface ChatServerOptions {
   checkEveryMs?: number;
   /** Called once if the server stops because the registry no longer names its key. */
   onStop?: (reason: ChatStopReason) => void;
+  /** Your app's version (`1.4.2`, a commit): the error reports the team gets name it. */
+  version?: string;
+  /**
+   * Report every error a handler throws, other than a `ChatRefusal`, to the grain's team (`report`): on by default. The
+   * user still gets a `failed` status; the owner and developers get a card for an AI agent in the app's console. It
+   * needs the registry (a developer key, or `node`).
+   */
+  reportErrors?: boolean;
+  /** What error reports and logs must never carry besides developer keys and long hex: your own tokens, as text (8
+   *  characters or more) or patterns. */
+  redact?: ReadonlyArray<string | RegExp>;
 }
 
 /** Why a server with a registered key stopped: the registry dropped the key from the grain's record (`revoked`: no key
@@ -132,13 +148,68 @@ export class ChatRefusal extends Error {
   }
 }
 
-/** `notify`, `notification` or a late `replace` past `CHAT_UNASKED_PER_DAY` unasked messages to one user in 24 hours. */
+/** `notify`, `notification` or a late `replace` past `CHAT_UNASKED_PER_DAY` unasked messages to one user in 24 hours
+ *  (`CHAT_UNASKED_TEAM_PER_DAY` to a member of the grain's team). */
 export class ChatBudgetSpent extends Error {
-  constructor() {
-    super(`the unasked budget for this user is spent: at most ${CHAT_UNASKED_PER_DAY} a day, notifications included`);
+  constructor(readonly limit: number = CHAT_UNASKED_PER_DAY) {
+    super(`the unasked budget for this user is spent: at most ${limit} a day, notifications included`);
     this.name = "ChatBudgetSpent";
   }
 }
+
+/** A role on the grain's team (24-app-studio §2a, §4): its owner, or a member who develops or views it. */
+export type TeamRole = "owner" | "developer" | "viewer";
+
+/** Whom `notifyTeam` and `report` write to unless told: the owner and the developers. */
+export const DEFAULT_TEAM_ROLES: readonly TeamRole[] = ["owner", "developer"];
+
+/** A member of the grain's team, as the registry names it now. */
+export interface TeamMember {
+  /** The account id, hex. */
+  account: string;
+  /** Whether it is the grain's owner (who has every role). */
+  owner: boolean;
+  /** A bit set of `ROLES`. */
+  roles: number;
+  /** Their address in the grain, from the proof their wallet sent with a request; null until they have written to the
+   *  app once, and the app cannot reach them before. */
+  address: string | null;
+}
+
+/** What `notifyTeam` did: messages sent, members it cannot reach yet (they have not written to the app), members whose
+ *  day's budget is spent, and sends that failed. */
+export interface TeamDelivery {
+  sent: number;
+  unreachable: number;
+  spent: number;
+  failed: number;
+}
+
+/** What `report` did: folded into an earlier report of the same error (sent nothing), or sent as `notifyTeam` says. */
+export interface ReportOutcome extends TeamDelivery {
+  folded: boolean;
+}
+
+/** Whether `m` plays one of `roles`. The owner plays "owner" only, whatever bits its roles have. */
+function plays(m: TeamMember, roles: readonly TeamRole[]): boolean {
+  if (m.owner) return roles.includes("owner");
+  return (roles.includes("developer") && (m.roles & ROLES.developer) !== 0) || (roles.includes("viewer") && (m.roles & ROLES.viewer) !== 0);
+}
+
+const accessOf = (g: RegisteredGrain): GrainAccess => ({ owner: g.owner, public: g.public !== false, members: g.members ?? [] });
+
+/** An error being folded: the facts of the last report, when it went, and how many came since. */
+interface Folding {
+  facts: ErrorFacts;
+  sentAt: number;
+  folded: number;
+  context: ReportContext | undefined;
+  roles: readonly TeamRole[] | undefined;
+}
+
+/** Distinct errors a server folds at once; past it, the oldest is forgotten. */
+const MAX_FOLDING = 256;
+const NO_DELIVERY: TeamDelivery = { sent: 0, unreachable: 0, spent: 0, failed: 0 };
 
 /** What a handler answers with: a card, or nothing when it answered itself (`ask.answer`). */
 export type ChatHandler<A extends Args = Args> = (ask: ChatAsk<A>) => Card | void | Promise<Card | void>;
@@ -170,8 +241,14 @@ export class ChatAsk<A extends Args = Args> {
   readonly lang: string;
   /** The message whose action this request runs, or null. */
   readonly via: string | null;
-  /** In a private grain, the member's account and roles its proof showed; null in a public one, which never knows. */
+  /**
+   * Who asked, when the request carried a member proof that checks: in a private grain, a member's account and roles;
+   * in a public one, only a member of the grain's team, whose wallet proves itself to its own app (24-app-studio §4).
+   * Null for everyone else: a public grain never knows its users.
+   */
   readonly member: ChatMember | null;
+  /** Whether the request came from the grain's team (its owner, a developer or a viewer): gate admin commands on it. */
+  readonly fromTeam: boolean;
   private progress: ChatSent | null = null;
   /** Whether the request was answered. */
   answered = false;
@@ -185,6 +262,7 @@ export class ChatAsk<A extends Args = Args> {
     this.lang = signed.request.lang;
     this.via = signed.request.via;
     this.member = member;
+    this.fromTeam = member !== null && (member.roles & TEAM_ROLES) !== 0;
     this.args = Object.fromEntries(signed.request.args.map(([name, value]) => [name, argOf(value)])) as A;
   }
 
@@ -261,6 +339,10 @@ const MEMBER_REFUSALS: Record<MemberProblem, string> = {
  *   app reports (`ChatFrame::Stats`) once a day.
  * - With a registered key, the server asks the registry every few minutes, and at every new beacon block a request
  *   comes in, whether it still names the key; once it does not, the server stops answering and says so in its log.
+ * - The grain's team (its owner, developers and viewers, 24-app-studio §4) is read from the registry (`team`). A member's
+ *   wallet proves itself with every request to its own app, so the server learns where their chat (the app's console)
+ *   is. `notifyTeam` writes to them, within 100 unasked messages a day each, and `report` sends an error as a card for
+ *   an AI agent; handlers' errors are reported by default (`reportErrors`).
  */
 export class ChatServer {
   /** The server's address at the relays: users' wallets write to it. */
@@ -292,6 +374,12 @@ export class ChatServer {
   private readonly timers: NodeJS.Timeout[] = [];
   private stopReason: ChatStopReason | null = null;
   private readonly onFrameListener: (frame: RelayFrame) => void;
+  /** The team's addresses by account, when the store keeps none. */
+  private readonly teamMemory = new Map<string, string>();
+  /** Errors reported in the last hour, by fingerprint. */
+  private readonly folding = new Map<string, Folding>();
+  /** What reports and logs never carry: the options' `redact`, and the server secret's base64 forms (hex goes anyway). */
+  private readonly redactions: ReadonlyArray<string | RegExp>;
 
   private constructor(private readonly options: ChatServerOptions, setup: Setup, relay: RelayClient, signed: SignedGrainChatSpec) {
     this.relay = relay;
@@ -307,6 +395,7 @@ export class ChatServer {
     this.store = options.store ?? memoryChatStore();
     this.log = options.log ?? (() => {});
     this.now = options.now ?? Date.now;
+    this.redactions = [...(options.redact ?? []), toBase64(setup.secret), toBase64(setup.secret, true)];
     this.address = encodeAddress(setup.chain.network, accountId(fromHex(setup.key, 32)));
     this.onFrameListener = (frame: RelayFrame) => {
       this.onFrame(frame).catch((e: Error) => this.log("error", "chat_frame_failed", { reason: e.message }));
@@ -440,10 +529,8 @@ export class ChatServer {
       const every = this.options.checkEveryMs ?? REGISTRY_CHECK_MS;
       this.timers.push(setInterval(() => void this.checkRegistry(), every));
     }
-    if (!this.certificate) {
-      void this.publishStats().catch((e: Error) => this.log("warn", "chat_stats_failed", { reason: e.message }));
-      this.timers.push(setInterval(() => void this.sweep(), SWEEP_MS));
-    }
+    if (!this.certificate) void this.publishStats().catch((e: Error) => this.log("warn", "chat_stats_failed", { reason: e.message }));
+    this.timers.push(setInterval(() => void this.sweep(), SWEEP_MS));
     for (const t of this.timers) t.unref?.();
   }
 
@@ -625,14 +712,19 @@ export class ChatServer {
     const now = this.now();
     const cert = this.certificate;
     if (cert && cert.expires_at <= now) throw new Error("the server key's certificate has expired: issue a new one (grain cert) and pass it to setCert");
-    const message: ChatMessage = {
-      slug: this.slug, id: newChatId(), at: now, answers: how.answers, replaces: how.replaces, blocks: card.blocks,
-      actions: card.actions((name) => commandOf(this.signed.spec, name)),
-    };
+    const message = this.message(card, how);
     const frame = encodeChatFrame({ message: signChatMessage(message, this.secret, this.chain.genesis, cert) });
     if (frame.length > MAX_FRAME_BYTES) throw new RangeError(`the message is ${frame.length} bytes, a frame carries ${MAX_FRAME_BYTES}: send a larger report as a file (upload)`);
     await this.deliver(address, frame);
     return { user: address, id: message.id, answers: how.answers, expiresAt: how.expiresAt };
+  }
+
+  /** `card` as a message of this chat, dated now. */
+  private message(card: Card, how: { answers: string | null; replaces: string | null }): ChatMessage {
+    return {
+      slug: this.slug, id: newChatId(), at: this.now(), answers: how.answers, replaces: how.replaces, blocks: card.blocks,
+      actions: card.actions((name) => commandOf(this.signed.spec, name)),
+    };
   }
 
   private async deliver(address: string, plaintext: Uint8Array): Promise<void> {
@@ -651,10 +743,204 @@ export class ChatServer {
   }
 
   private async spend(address: string): Promise<void> {
-    if (!(await this.store.spend(address, this.now(), CHAT_UNASKED_PER_DAY))) {
-      this.log("warn", "chat_budget_spent", {});
-      throw new ChatBudgetSpent();
+    const limit = await this.unaskedLimit(address);
+    if (!(await this.store.spend(address, this.now(), limit))) {
+      this.log("warn", "chat_budget_spent", { limit });
+      throw new ChatBudgetSpent(limit);
     }
+  }
+
+  /** The unasked budget of `address` a wallet holds the app to: the team's when it is a member's on the team now. */
+  private async unaskedLimit(address: string): Promise<number> {
+    if (!this.view) return CHAT_UNASKED_PER_DAY;
+    const known = await this.knownTeam();
+    const account = Object.keys(known).find((a) => known[a] === address);
+    if (account === undefined) return CHAT_UNASKED_PER_DAY;
+    try {
+      const g = await this.view.grain(this.slug);
+      return g && onTeam(accessOf(g), account) ? CHAT_UNASKED_TEAM_PER_DAY : CHAT_UNASKED_PER_DAY;
+    } catch {
+      return CHAT_UNASKED_PER_DAY;
+    }
+  }
+
+  /**
+   * The grain's team as the registry names it now (cached per beacon tip): its owner, then the members with the
+   * developer or viewer role, each with their address in the grain once their wallet's proof showed it. A member the
+   * registry no longer names is forgotten here. Throws without a registry to read (a certified key with no node).
+   */
+  async team(): Promise<TeamMember[]> {
+    if (!this.view) throw new Error("the team is read from the registry: start the server from a developer key, or pass node");
+    const g = await this.view.grain(this.slug);
+    if (!g) return [];
+    const access = accessOf(g);
+    const known = await this.knownTeam();
+    for (const account of Object.keys(known)) {
+      if (onTeam(access, account)) continue;
+      await this.setTeamAddress(account, null);
+      delete known[account];
+    }
+    const members = access.members.filter((m) => (m.roles & TEAM_ROLES) !== 0);
+    return [
+      { account: g.owner, owner: true, roles: ROLES.user | ROLES.developer | ROLES.viewer, address: known[g.owner] ?? null },
+      ...members.map((m) => ({ account: m.account, owner: false, roles: m.roles, address: known[m.account] ?? null })),
+    ];
+  }
+
+  /**
+   * Write `card` unasked to each member of the team who plays one of `roles` (by default the owner and the
+   * developers): in the app's console, within `CHAT_UNASKED_TEAM_PER_DAY` messages a day each. A member who has not
+   * written to the app yet cannot be reached and is skipped, as is one whose day's budget is spent; a send that fails
+   * is counted and the others still go. The log says how many, never to whom. Throws for a card out of bounds.
+   */
+  async notifyTeam(card: Card, options: { roles?: readonly TeamRole[] } = {}): Promise<TeamDelivery> {
+    this.running();
+    const roles = options.roles ?? DEFAULT_TEAM_ROLES;
+    if (roles.length === 0 || roles.some((r) => r !== "owner" && r !== "developer" && r !== "viewer")) {
+      throw new TypeError(`roles: some of ${["owner", "developer", "viewer"].join(", ")}`);
+    }
+    const problem = chatMessageBoundsProblem(this.message(card, UNASKED));
+    if (problem) throw new TypeError(`chat message: ${problem}`);
+    const result = { ...NO_DELIVERY };
+    for (const m of await this.team()) {
+      if (!plays(m, roles)) continue;
+      if (m.address === null) {
+        result.unreachable++;
+        continue;
+      }
+      if (!(await this.store.spend(m.address, this.now(), CHAT_UNASKED_TEAM_PER_DAY))) {
+        result.spent++;
+        continue;
+      }
+      try {
+        await this.send(m.address, card, UNASKED);
+        result.sent++;
+      } catch (e) {
+        if (e instanceof ChatKeyNotRegistered) throw e;
+        result.failed++;
+      }
+    }
+    this.log(result.failed > 0 || (result.sent === 0 && result.unreachable > 0) ? "warn" : "info", "chat_team_notified", {
+      ...result, ...(result.sent === 0 && result.unreachable > 0 ? { hint: "no one on the team has written to the app yet: it reaches each member once they have" } : {}),
+    });
+    return result;
+  }
+
+  /**
+   * Report `error` to the team (`notifyTeam`, by default the owner and the developers) as a card made for an AI agent
+   * to read: a `failed` status with the error, fields for where it happened (the command, the request, your app's
+   * version, the time in UTC, the context's further keys), and the stack. Developer keys, hex of 64 characters or
+   * more, the server secret and the options' `redact` are scrubbed out first. The same error (name, message and top
+   * frame) is reported once an hour: the ones in between are counted, and the count goes in the next card, or within
+   * 10 minutes after the hour (`flushReports`). It never throws: what it could not do goes to the log.
+   */
+  async report(error: unknown, options: { context?: ReportContext; roles?: readonly TeamRole[] } = {}): Promise<ReportOutcome> {
+    try {
+      const now = this.now();
+      const facts = errorFacts(error, this.redactions);
+      const key = errorFingerprint(facts);
+      const known = this.folding.get(key);
+      if (known && now >= known.sentAt && now - known.sentAt < REPORT_FOLD_MS) {
+        known.folded++;
+        known.context = options.context;
+        known.roles = options.roles;
+        this.log("info", "chat_error_folded", { times: known.folded });
+        return { folded: true, ...NO_DELIVERY };
+      }
+      const folded = known && known.folded > 0 ? { times: known.folded + 1, since: known.sentAt } : null;
+      this.folding.delete(key);
+      if (this.folding.size >= MAX_FOLDING) this.folding.delete(this.folding.keys().next().value!);
+      this.folding.set(key, { facts, sentAt: now, folded: 0, context: options.context, roles: options.roles });
+      const delivery = await this.notifyTeam(this.errorCard(facts, options.context, folded, now), { roles: options.roles });
+      this.log("info", "chat_error_reported", { ...delivery });
+      return { folded: false, ...delivery };
+    } catch (e) {
+      this.log("warn", "chat_report_failed", { reason: scrubSecrets((e as Error).message, this.redactions) });
+      return { folded: false, ...NO_DELIVERY };
+    }
+  }
+
+  /** Send the counts of errors folded within an hour that has passed, one card each: how many reports it sent. The
+   *  server does it every 10 minutes; call it before stopping to lose none. */
+  async flushReports(): Promise<number> {
+    const now = this.now();
+    let cards = 0;
+    for (const [key, r] of [...this.folding]) {
+      if (now >= r.sentAt && now - r.sentAt < REPORT_FOLD_MS) continue;
+      if (r.folded === 0) {
+        this.folding.delete(key);
+        continue;
+      }
+      const card = this.errorCard(r.facts, r.context, { times: r.folded, since: r.sentAt }, now);
+      this.folding.set(key, { ...r, sentAt: now, folded: 0 });
+      try {
+        await this.notifyTeam(card, { roles: r.roles });
+        cards++;
+      } catch (e) {
+        this.log("warn", "chat_report_failed", { reason: scrubSecrets((e as Error).message, this.redactions) });
+      }
+    }
+    return cards;
+  }
+
+  private errorCard(facts: ErrorFacts, context: ReportContext | undefined, folded: { times: number; since: number } | null, at: number): Card {
+    const version = context?.version ?? this.options.version;
+    return reportCard(facts, {
+      slug: this.slug, at, specVersion: this.signed.spec.version, folded, extra: this.redactions,
+      context: { ...context, ...(version !== undefined ? { version } : {}) },
+    });
+  }
+
+  /** A handler's error to the team, unless the options turn it off or there is no registry to find the team in. */
+  private reportHandlerError(e: unknown, ask: ChatAsk): void {
+    if (this.options.reportErrors === false || !this.view) return;
+    void this.report(e, { context: { command: ask.command ? `/${ask.command}` : "(text)", request: ask.request.id } });
+  }
+
+  private async knownTeam(): Promise<Record<string, string>> {
+    return this.store.team ? { ...(await this.store.team()) } : Object.fromEntries(this.teamMemory);
+  }
+
+  private async setTeamAddress(account: string, address: string | null): Promise<void> {
+    if (this.store.setTeam) await this.store.setTeam(account, address);
+    else if (address === null) this.teamMemory.delete(account);
+    else this.teamMemory.set(account, address);
+  }
+
+  /** Keep where `account`'s chat is: the address of the grain key its proof showed. */
+  private async remember(account: string, key: string): Promise<void> {
+    const address = this.userAddress(key);
+    if ((await this.knownTeam())[account] === address) return;
+    await this.setTeamAddress(account, address);
+    this.log("info", "chat_team_reachable", {});
+  }
+
+  /**
+   * The team member whose proof `check` carries, remembered with their address; null when it carries none that checks
+   * for an account on the team. A proof from anyone else costs the node nothing; a node that does not answer leaves the
+   * proof unread, and refuses nothing.
+   */
+  private async learnTeam(access: GrainAccess, check: Parameters<typeof needsTeamController>[1]): Promise<string | null> {
+    const proof = check.proof;
+    if (!proof) return null;
+    if (!needsTeamController(access, check)) {
+      this.log("info", "chat_team_proof_ignored", { reason: onTeam(access, proof.proof.account) ? "proof" : "not_team" });
+      return null;
+    }
+    let controller;
+    try {
+      controller = await this.view!.controller(proof.proof.account);
+    } catch (e) {
+      this.log("warn", "chat_team_unchecked", { reason: (e as Error).message });
+      return null;
+    }
+    const account = teamMemberOf(access, { ...check, controller });
+    if (account === null) {
+      this.log("info", "chat_team_proof_ignored", { reason: "signer" });
+      return null;
+    }
+    await this.remember(account, check.requestKey);
+    return account;
   }
 
   /** An address of a user in the grain, from it or from the grain key (hex). */
@@ -674,24 +960,36 @@ export class ChatServer {
     } catch (e) {
       this.log("warn", "chat_stats_failed", { reason: (e as Error).message });
     }
+    if (!this.stopReason) await this.flushReports();
   }
 
   /**
    * Whether the request's sender may use the grain (24-app-studio §2a): anyone in a public grain; in a private one a
-   * member whose proof `admits` takes. A grain the registry does not hold, or a server without a node, is public.
+   * member whose proof `admits` takes. A grain the registry does not hold, or a server without a node, is public. Either
+   * way, a proof from the grain's team says where that member's chat is (§4): a public grain knows its team, and only
+   * its team.
    */
   private async admit(signed: SignedChatRequest, now: number): Promise<{ member: ChatMember | null } | { refused: MemberProblem }> {
     if (!this.view) return { member: null };
     this.record = await this.view.grain(this.slug);
     if (this.judgeKey()) throw new ChatKeyNotRegistered(this.stopReason!, this.slug);
     const g = this.record;
-    if (!g || g.public !== false) return { member: null };
-    const access: GrainAccess = { owner: g.owner, public: false, members: g.members ?? [] };
+    if (!g) return { member: null };
+    const access = accessOf(g);
     const check = { genesis: this.chain.genesis, slug: this.slug, requestKey: signed.key, proof: signed.request.member, now };
+    if (access.public) {
+      const account = await this.learnTeam(access, check);
+      return { member: account === null ? null : { account, roles: rolesOf(access, account) } };
+    }
     const controller = needsController(access, check) ? await this.view.controller(signed.request.member!.proof.account) : null;
     const problem = admits(access, { ...check, controller });
-    if (problem) return { refused: problem };
+    if (problem) {
+      // A viewer is on the team, though it does not use a private grain: its console still gets reports.
+      if (problem === "not_member") await this.learnTeam(access, check);
+      return { refused: problem };
+    }
     const account = signed.request.member!.proof.account;
+    if (onTeam(access, account)) await this.remember(account, signed.key);
     return { member: { account, roles: rolesOf(access, account) } };
   }
 
@@ -807,17 +1105,15 @@ export class ChatServer {
       if (result instanceof Card && !ask.answered) await ask.answer(result);
       else if (!ask.answered) this.log("warn", "chat_unanswered", { command });
     } catch (e) {
-      if (ask.answered) {
-        this.log("error", "chat_handler_failed", { command, reason: (e as Error).message, after: "answer" });
-        return;
-      }
-      if (e instanceof ChatRefusal) {
+      if (e instanceof ChatRefusal && !ask.answered) {
         await ask.refuse(e.message.slice(0, 200));
         this.log("info", "chat_request_refused", { command, reason: "handler" });
         return;
       }
-      this.log("error", "chat_handler_failed", { command, reason: (e as Error).message });
-      await ask.answer(new Card().status("failed", "Something went wrong. Try again later."));
+      const reason = scrubSecrets(e instanceof Error ? e.message : String(e), this.redactions);
+      this.log("error", "chat_handler_failed", { command, reason, ...(ask.answered ? { after: "answer" } : {}) });
+      this.reportHandlerError(e, ask);
+      if (!ask.answered) await ask.answer(new Card().status("failed", "Something went wrong. Try again later."));
       return;
     }
     this.log("info", "chat_request", { command, ms: this.now() - started });

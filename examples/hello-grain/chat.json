@@ -1,9 +1,9 @@
 {
   "slug": "hello-grain",
-  "version": 2,
+  "version": 3,
   "intro": {
-    "en": "The SDK's example chat: a greeting, a made-up key shown as a secret, and a small report sent as a file.",
-    "ru": "Чат-пример SDK: приветствие, ключ-пример в виде секрета и маленький отчёт файлом."
+    "en": "The SDK's example chat: a greeting, a made-up key shown as a secret, a small report sent as a file, and an error on purpose that reaches the app's team.",
+    "ru": "Чат-пример SDK: приветствие, ключ-пример в виде секрета, маленький отчёт файлом и нарочная ошибка, которая приходит команде приложения."
   },
   "commands": [
     {
@@ -39,6 +39,12 @@
         { "name": "errors_only", "title": { "en": "Errors only", "ru": "Только ошибки" }, "kind": "flag" },
         { "name": "top", "title": { "en": "Rows", "ru": "Строк" }, "kind": { "number": { "min": 1, "max": 50 } } }
       ]
+    },
+    {
+      "name": "fail",
+      "title": { "en": "Fail on purpose", "ru": "Сбой нарочно" },
+      "help": { "en": "Throws an error: you get \"failed\", the app's team a report in its console", "ru": "Бросает ошибку: вам «сбой», команде приложения — отчёт в консоли" },
+      "params": []
     }
   ],
   "keeps": 0,
