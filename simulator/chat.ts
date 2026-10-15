@@ -1,10 +1,12 @@
 /**
- * A grain's chat in the simulator, played as a wallet plays it (Saltix 22-grain-chats): the user's grain alias
- * registered at the development relay (`npm run dev`, /relay), requests signed by the grain key and sealed to the
- * server's checked key, and every message checked before it is drawn — from the certified key's address, the
- * certificate the owner's and within 31 days, not revoked, in bounds, timely, signed. Unasked messages count against
- * 10 a day and show only while allowed. A developer tool: the alias uses `register` on a connection of its own, and the
- * history lives in this page.
+ * A grain's chat in the simulator, played as a wallet plays it (Saltix 22-grain-chats, 24-app-studio): the user's grain
+ * alias registered at the development relay (`npm run dev`, /relay), requests signed by the grain key and sealed to the
+ * server's checked key, and every message checked before it is drawn — from the server key's address, the key one the
+ * registry names (or a certificate of the owner's within 31 days), not revoked, in bounds, timely, signed. Unasked
+ * messages count against 10 a day and show only while allowed. A private app gets a member proof signed by the
+ * simulator's account key with every request, and every request names the page's language as Saltix names its own;
+ * the numbers the app reports are shown as reported, once checked. A developer tool: the alias uses `register` on a
+ * connection of its own, and the history lives in this page.
  */
 import { ed25519 } from "@noble/curves/ed25519";
 import { derive, fromHex, toHex } from "../packages/server/src/bytes";
@@ -15,11 +17,13 @@ import {
 import { messagingPublic, openFrame, sealFrame } from "../packages/server/src/seal";
 import {
   CHAT_UNASKED_PER_DAY, type ChainParams, type ChatArgs, type ChatValue, type SignedChatMessage, type SignedGrainChatSpec,
-  chatCertHolds, chatMessageProblem, commandOf, decodeChatFrame, decodeSignedChatSpec, encodeChatFrame, newChatId, requestFitProblem,
+  chatCertHolds, chatMessageProblem, commandOf, decodeChatDocument, decodeChatFrame, encodeChatFrame, newChatId, requestFitProblem,
   signChatRequest, signedChatSpecProblem,
 } from "../packages/server/src/chat";
 import { type FileRef, fileRefProblem, openFile, sealFile } from "../packages/server/src/file";
 import { type InvoiceKeyCert, decodeCert, invoiceProblem } from "../packages/server/src/invoice";
+import { MEMBER_PROOF_LIFE_MS, signMemberProof } from "../packages/server/src/member";
+import { type SignedGrainStats, grainStatsProblem } from "../packages/server/src/stats";
 import type { DeviceKey } from "../packages/server/src/keys";
 import { argOf } from "../packages/server/src/chat-card";
 import { el, pick, renderActions, renderBlock, renderForm, renderSpecCard } from "./chat-ui";
@@ -30,6 +34,8 @@ export interface ChatHost {
   language(): string;
   /** The simulator's grain secret (12-grains §5.1). */
   secret(): Uint8Array;
+  /** The simulator's account key (Ed25519 secret): it signs member proofs for private apps. */
+  account(): Uint8Array;
   log(line: string): void;
   /** Open the grain's screen with `start`. */
   open(start: string): void;
@@ -38,11 +44,24 @@ export interface ChatHost {
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const DAY = 86_400_000;
 
+interface DevInfo {
+  chain: ChainParams;
+  relay: string | null;
+  /** The server keys the development registry names. */
+  servers: string[];
+  /** Who may use the example grain, as the development registry has it. */
+  access: { owner: string; public: boolean; members: Array<{ account: string; roles: number }> } | null;
+}
+
 export function setupChat(host: ChatHost): { open(cert?: string, spec?: string): Promise<void> } {
   const pane = $("chat-log");
   let chain: ChainParams | null = null;
   let spec: SignedGrainChatSpec | null = null;
   let cert: InvoiceKeyCert | null = null;
+  /** The server keys the registry names, as last read. */
+  let servers: string[] = [];
+  /** Whether the registry says the app is private: only then does a wallet send a member proof. */
+  let privateApp = false;
   let ws: WebSocket | null = null;
   let registered = false;
   const keys = new Map<string, Uint8Array | null>();
@@ -59,19 +78,27 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   const grainKey = () => derive("Saltix grain key v1", host.secret(), new TextEncoder().encode(host.slug()));
   const messagingSecret = () => derive("Saltix grain messaging key v1", host.secret(), new TextEncoder().encode(host.slug()));
   const me = () => encodeAddress("devnet", accountId(ed25519.getPublicKey(grainKey())));
-  const serverAddress = () => (cert ? encodeAddress("devnet", accountId(fromHex(cert.key, 32))) : null);
+  /** The chat's address: the certificate's key when there is one, else the first key the registry names (§1). */
+  const serverKey = () => (cert ? cert.key : servers[0] ?? null);
+  const serverAddress = () => {
+    const key = serverKey();
+    return key ? encodeAddress("devnet", accountId(fromHex(key, 32))) : null;
+  };
   const note = (text: string, kind = "note") => pane.append(el("div", { className: kind, textContent: text }));
+  const myAccount = () => toHex(accountId(ed25519.getPublicKey(host.account())));
 
-  function adopt(next: SignedGrainChatSpec, nextCert: InvoiceKeyCert, source: string): boolean {
+  function adopt(next: SignedGrainChatSpec, nextCert: InvoiceKeyCert | null, source: string): boolean {
     const owner = host.owner();
     if (!owner) return note("Set the owner key (load the manifest) to check the chat spec.", "bad"), false;
-    const problem = signedChatSpecProblem(next, host.slug(), owner);
+    const problem = signedChatSpecProblem(next, host.slug(), owner, servers);
     if (problem) return note(`${source}: spec refused (${problem})`, "bad"), false;
     if (spec && next.spec.version < spec.spec.version) return note(`${source}: spec v${next.spec.version} refused, v${spec.spec.version} is held`, "bad"), false;
-    if (!chatCertHolds(nextCert, host.slug(), owner, next.spec, Date.now())) return note(`${source}: the server key's certificate is refused`, "bad"), false;
+    if (nextCert && !chatCertHolds(nextCert, host.slug(), owner, next.spec, Date.now())) return note(`${source}: the server key's certificate is refused`, "bad"), false;
+    if (!nextCert && servers.length === 0) return note(`${source}: no certificate, and the registry names no server key`, "bad"), false;
     spec = next;
     cert = nextCert;
-    $("chat-card").replaceChildren(renderSpecCard(next.spec, host.language(), "verified by the owner key"));
+    const by = next.server === null ? "signed by the owner key" : "signed by a server key the registry names";
+    $("chat-card").replaceChildren(renderSpecCard(next.spec, host.language(), by));
     const select = $<HTMLSelectElement>("chat-command");
     select.replaceChildren(el("option", { value: "", textContent: "Pick a command…" }), ...next.spec.commands.map((c) => el("option", { value: c.name, textContent: pick(c.title, host.language()) })));
     host.log(`chat: spec v${next.spec.version} of ${next.spec.slug} taken (${source})`);
@@ -141,15 +168,33 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
       return host.log("chat: not a chat frame, dropped");
     }
     if ("spec" in frame) {
-      if (from === encodeAddress("devnet", accountId(fromHex(frame.spec.cert.key, 32)))) adopt(frame.spec.spec, frame.spec.cert, "pushed in the chat");
+      const key = frame.spec.cert?.key ?? serverKey();
+      if (key && from === encodeAddress("devnet", accountId(fromHex(key, 32)))) adopt(frame.spec.spec, frame.spec.cert, "pushed in the chat");
+      return;
+    }
+    if ("stats" in frame) {
+      if (from === serverAddress()) showStats(frame.stats, "in the chat");
       return;
     }
     if (!("message" in frame) || !spec || !chain) return host.log("chat: dropped (not a message, or no spec held)");
     show(frame.message, from);
   }
 
+  /** The numbers the app reports, shown as reported and only once checked: a registered key's, at most 2 days old. */
+  function showStats(signed: SignedGrainStats, source: string): void {
+    const problem = grainStatsProblem(signed, { genesis: chain!.genesis, slug: host.slug(), servers, now: Date.now() });
+    const box = $("chat-stats");
+    if (problem) {
+      box.textContent = `Reported numbers (${source}) refused: ${problem}`;
+      return;
+    }
+    const s = signed.stats;
+    box.textContent = `Reported by the app: users today ${s.users_1d}, this month ${s.users_30d}; requests in 30 days ${s.requests_30d} ` +
+      `(${new Date(s.at).toLocaleTimeString()}, ${source})`;
+  }
+
   function show(m: SignedChatMessage, from: string): void {
-    const problem = chatMessageProblem(m, { chain: chain!, ownerKey: host.owner()!, spec: spec!.spec, from, now: Date.now() });
+    const problem = chatMessageProblem(m, { chain: chain!, ownerKey: host.owner()!, servers, spec: spec!.spec, from, now: Date.now() });
     if (problem) return note(`A message was refused: ${problem}`, "bad");
     const msg = m.message;
     const answers = msg.answers !== null && (sent.get(msg.answers) ?? 0) > Date.now();
@@ -207,9 +252,14 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   }
 
   async function sendRequest(command: string, args: ChatArgs, text: string, viaId: string | null): Promise<void> {
-    if (!spec || !chain || !registered || !cert) return note("Load the chat first.", "bad");
+    if (!spec || !chain || !registered || !serverKey()) return note("Load the chat first.", "bad");
     const now = Date.now();
-    const request = { slug: host.slug(), id: newChatId(), at: now, expires_at: now + DAY, via: viaId, command, args, text };
+    // A private app's member proves its account with every request; a public app is never sent one (24-app-studio §2a).
+    const member = privateApp && $<HTMLInputElement>("chat-proof").checked
+      ? signMemberProof({ slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS - 60_000 }, host.account(), chain.genesis)
+      : null;
+    // The page's language, as Saltix sends its display language with every request (22-grain-chats §3).
+    const request = { slug: host.slug(), id: newChatId(), at: now, expires_at: now + DAY, via: viaId, command, args, text, member, lang: host.language() };
     const problem = requestFitProblem(request, spec.spec);
     if (problem) return note(`Not sent: ${problem}`, "bad");
     const c = commandOf(spec.spec, command);
@@ -256,19 +306,45 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     input.value = "";
   };
 
+  /** What the development registry says of the grain: its server keys and who may use it. */
+  async function readRegistry(): Promise<DevInfo> {
+    const dev = await (await fetch("/api/dev")).json() as DevInfo;
+    chain = dev.chain;
+    servers = dev.servers;
+    const a = dev.access;
+    privateApp = a?.public === false;
+    $("chat-access").textContent = a === null ? "" : a.public ? "Public app: anyone may use it." :
+      `Private app: its owner and ${a.members.length} member(s)${a.members.some((m) => m.account === myAccount()) ? ", this account among them" : ""}.`;
+    $<HTMLInputElement>("chat-private").checked = a?.public === false;
+    $<HTMLInputElement>("chat-member").checked = a?.members.some((m) => m.account === myAccount()) ?? false;
+    return dev;
+  }
+
   async function open(certHex?: string, specHex?: string): Promise<void> {
     try {
-      const dev = await (await fetch("/api/dev")).json() as { chain: ChainParams; relay: string | null };
-      chain = dev.chain;
-      let doc = { cert: certHex, spec: specHex };
-      if (!doc.cert || !doc.spec) doc = await (await fetch("/.well-known/saltix-grain-chat")).json();
-      if (!adopt(decodeSignedChatSpec(doc.spec!), decodeCert(doc.cert!), "the well-known document")) return;
+      const dev = await readRegistry();
+      const doc = specHex
+        ? { spec: decodeChatDocument({ spec: specHex }).spec, cert: certHex ? decodeCert(certHex) : null, stats: null }
+        : decodeChatDocument(await (await fetch("/.well-known/saltix-grain-chat")).json());
+      if (!adopt(doc.spec, doc.cert, "the well-known document")) return;
+      if (doc.stats) showStats(doc.stats, "the well-known document");
       if (!dev.relay) return note("The chat runs on a node's relays (CHAT_NODE): try it in a debug Saltix.", "bad");
       if (!registered) await connect(dev.relay);
     } catch (e) {
       note(`The chat did not load: ${(e as Error).message}`, "bad");
     }
   }
+
+  /** Make the example private or public in the development registry, with this account a member or not. */
+  async function setAccess(): Promise<void> {
+    const open = !$<HTMLInputElement>("chat-private").checked;
+    const members = $<HTMLInputElement>("chat-member").checked ? [myAccount()] : [];
+    await fetch("/api/dev/access", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ public: open, members }) });
+    await readRegistry();
+    host.log(`chat: the development registry makes the app ${open ? "public" : `private, ${members.length ? "this account a member" : "this account not a member"}`}`);
+  }
+  $<HTMLInputElement>("chat-private").onchange = () => void setAccess();
+  $<HTMLInputElement>("chat-member").onchange = () => void setAccess();
   $<HTMLButtonElement>("chat-load").onclick = () => void open();
   return { open };
 }

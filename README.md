@@ -1,28 +1,36 @@
 # saltix-grains
 
-SDKs and tools for **grains**, apps that open inside Saltix wallets (in the Saltix app: Apps → Grains). The
-rules are in the protocol's [12-grains](https://github.com/corvise/saltix/blob/main/specs/12-grains.md).
-A grain uses the wallet's identity, payments, storage and relays, and never holds the wallet's keys.
+SDKs and tools for **grains**, apps that open inside Saltix wallets (in the Saltix app: Apps). The rules are in the
+protocol's [12-grains](https://github.com/corvise/saltix/blob/main/specs/12-grains.md),
+[22-grain-chats](https://github.com/corvise/saltix/blob/main/specs/22-grain-chats.md) and
+[24-app-studio](https://github.com/corvise/saltix/blob/main/specs/24-app-studio.md). A grain uses the wallet's identity,
+payments, storage and relays, and never holds the wallet's keys. It may be a page, or a chat and nothing else.
+
+**[Your first app in ten minutes](docs/first-app.md)**: make it in Saltix, copy its developer key, `npm run example`.
 
 | Package | What it is |
 |---|---|
 | [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()` |
-| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the owner's registry transactions, Address v1, and the grain's chat (`ChatServer`) |
-| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert` |
+| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the registry's calls, Address v1, and the grain's chat (`ChatServer`, from a developer key alone) |
+| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key` |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development, with a chat pane |
-| [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat |
-| [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, files, and what a wallet shows and refuses |
+| [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
+| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public |
+| [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the numbers an app reports, files, and what a wallet shows and refuses |
 
-The packages reproduce `vectors/grains-v1.json` (manifests, logins, invoices, registry transactions), the addresses of
-`vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json` and the
-chats and file references of `vectors/grain-chats-v1.json` byte for byte; `scripts/sync-vectors.sh ../saltix` (a
-checkout of corvise/saltix) refreshes them.
+The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones included, logins, invoices, notifications,
+the registry transactions of 12-grains and 24-app-studio, deposits, the developer key), the addresses of
+`vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
+chats, member proofs, reported numbers and file references of `vectors/grain-chats-v1.json` and the usernames bound to
+apps of `vectors/handles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a checkout of
+corvise/saltix) refreshes them.
 
 ## Quick start
 
 ```sh
 npm install
 npm run dev            # builds, then serves the simulator and hello-grain on :8090
+npm run example        # hello-grain's chat as your app's server, from your developer key (SALTIX_APP_KEY or app.key)
 ```
 
 - **In a desktop browser:** open `http://localhost:8090/` (the simulator), press *Load a manifest*,
@@ -44,11 +52,19 @@ npx grain icon icon.png                   # the hash grain.json names its 256x25
 npx grain sign                            # signed.json: serve it at /.well-known/saltix-grain
 npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
                                           # a sealed grain: public/ as one ZIP named by its hash
-npx grain publish --node http://127.0.0.1:30334   # a QR code: the owner's Saltix registers it (100 SALT)
+npx grain publish --node http://127.0.0.1:30334   # a QR code: the owner's Saltix registers it (the node quotes the deposit)
 npx grain publish --node … --key owner.key --wait # or sign with a key file (test networks)
 npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
 npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
+npx grain init coach --chat               # a chat-only grain: grain.json and chat.json, no page
+npx grain configure --slug dice --server server.key --category games --node …   # the registry names the server key
+npx grain app-key make --slug dice --node …     # app.key: its developer key, owner-only, never printed
+npx grain app-key --file app.key          # a developer key's public parts, and whether the registry names it
+npx grain access --slug dice --private --member dsalt1q…:user+developer --node …  # its owner and members only
+npx grain access --slug dice --public --node …  # anyone
+npx grain bind --handle @dice --slug dice --node …   # a username you hold opens the app's chat
+npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …   # rate someone else's app
 ```
 
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
@@ -62,7 +78,16 @@ npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, serv
   unregistered → `RegisterGrain` with the deposit; the owner's with a lower version → `UpdateGrain`;
   anything else is refused before a transaction is made — checks the balance, signs and submits
   through the node's wallet interface (plain HTTP: a local node or an SSH tunnel).
-- `grain show --slug S --node … --out signed.json` writes the signed manifest the registry holds.
+- `grain show --slug S --node … --out signed.json` writes the signed manifest the registry holds; for a free slug it
+  says the deposit registering it keeps: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more (24-app-studio §5).
+- `configure`, `access` and `bind` are the owner's (the handle's holder's) calls: signed with `owner.key` on test
+  networks, refused before a node would refuse them; without a key file the tool says what to do in the owner's Saltix
+  (My apps) and waits for the registry (`--timeout`). `configure` replaces the server keys and the category
+  (`--revoke-all` names no key, which stops every developer key at once); `access` replaces public or private and the
+  members. A rating names its account and is signed by the rater's key (`--key`), or given in Saltix.
+- `grain app-key` reads a developer key from `SALTIX_APP_KEY`, `--file` or stdin, never from the command line (shells
+  keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
+  (through the network's public relays, or `--node`).
 - `grain bundle` seals `public/` (Saltix 12-grains §8): one ZIP of its files — sorted, no times, so
   the same files make the same bytes — at most 20 MiB, and `grain.json` names its hash, size,
   `sources` (where you upload `bundle.zip`), `start` and the `connect` origins the grain may reach.
@@ -121,12 +146,18 @@ await relay.send(userGrainAddress, bytes);                       // live; { keep
 relay.on("frame", ({ from, payload, kept }) => handle(from, payload));
 ```
 
-**A chat** (Saltix 22-grain-chats, [docs/chats.md](docs/chats.md)): users send typed actions your chat spec declares,
-your server answers with cards it signs with the server key. Requests are checked and answered once; files go next to
-the relay; unasked messages are at most 10 a day per user.
+**A chat** (Saltix 22-grain-chats, 24-app-studio, [docs/chats.md](docs/chats.md)): users send typed actions your chat
+spec declares, your server answers with cards it signs with the server key. The developer key Saltix gives for the app
+is the server's whole configuration: it finds the network's public relays, checks that the registry names the key, signs
+the spec, and stops once the owner replaces or revokes the key. Requests are checked and answered once; a private app
+takes its owner's and members' only (member proofs, checked against the registry and the accounts' keys); files go next
+to the relay; unasked messages are at most 10 a day per user; the numbers it reports are signed hourly. Each request
+names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it when you can,
+else in English.
 
 ```ts
-const chat = await ChatServer.start({ slug: "chess", spec, secret: serverSecret, cert, chain: { genesis, network: "testnet" }, node: nodeUrl });
+const chat = await ChatServer.start({ appKey: process.env.SALTIX_APP_KEY!, spec, store: fileChatStore("chat.store.json") });
+// or under the owner key's certificate: { slug: "chess", spec, secret: serverSecret, cert, chain, node }
 chat.command("rating", (ask) => card().fields({ Rating: rating(ask.key) }).status("done").open("Play", "lobby"));
 chat.command("report", async (ask) => {
   await ask.working();                                            // replaced in place by the answer
@@ -154,15 +185,18 @@ The wallet checks the grant against the manifest's sponsor and network; the exch
 itself, its messaging key derived from that key (`serverMessagingSecret`); it trusts a relay's self-signed
 certificate only by the hash in the relay's record, takes users' messaging keys only from records it checked,
 acknowledges kept frames with a signed proof, and reconnects on its own, to another relay when one fails. Its
-frames use the free share for now. `notificationProblem` checks a notification as a wallet does.
+frames use the free share for now. `notificationProblem` checks a notification as a wallet does: signed by the owner key,
+a certified key, or a key the registry names (`servers`).
 
 The manifest your site serves at `/.well-known/saltix-grain` is `signManifest(manifest,
 ownerSecret)`'s output (`grain sign`); keep the owner's key off servers. A manifest names its `owner`
 account and an `owner_key` that speaks for it (Saltix 12-grains §2): a key file's own account and
 key (`{ "ed25519": "<hex>" }`), or — published from Saltix by a managed account — its phone's P-256 key
 (`{ "p256": "<hex>" }`). `invoiceProblem` and `notificationProblem` take that `owner_key`;
-`verifyByDeviceKey` checks either kind. `signGrainTx` makes a plain owner's registry transactions
-(`RegisterGrain`, `UpdateGrain`, `RetireGrain`) as `grain publish` does.
+`verifyByDeviceKey` checks either kind. `signGrainTx` makes a plain account's registry transactions as the `grain`
+command line does: `RegisterGrain` (with the deposit `grainDeposit(slug)` or a node's quote, `grainQuote`),
+`UpdateGrain`, `RetireGrain`, `ConfigureGrain`, `SetGrainAccess`, `RateGrain` and `BindHandle` (`parseHandle`,
+`displayHandle`), each refused first as the shard would refuse it (`grainCallProblem`).
 
 ## Checks
 

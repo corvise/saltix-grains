@@ -1,6 +1,6 @@
 {
   "slug": "hello-grain",
-  "version": 1,
+  "version": 2,
   "intro": {
     "en": "The SDK's example chat: a greeting, a made-up key shown as a secret, and a small report sent as a file.",
     "ru": "Чат-пример SDK: приветствие, ключ-пример в виде секрета и маленький отчёт файлом."
@@ -33,7 +33,7 @@
     {
       "name": "report",
       "title": { "en": "A report", "ru": "Отчёт" },
-      "help": { "en": "Sessions of a day as CSV, with an invoice to thank the example", "ru": "Сессии за день в CSV и счёт" },
+      "help": { "en": "Sessions of a day as a CSV file", "ru": "Сессии за день файлом CSV" },
       "params": [
         { "name": "day", "title": { "en": "Day", "ru": "День" }, "kind": "date" },
         { "name": "errors_only", "title": { "en": "Errors only", "ru": "Только ошибки" }, "kind": "flag" },

@@ -5,3 +5,6 @@ dist/
 examples/**/owner.key
 examples/**/server.key
 examples/**/*.store.json
+examples/**/app.key
+/app.key
+/chat.store.json

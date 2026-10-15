@@ -23,6 +23,8 @@ export interface RelayOptions {
   node?: string;
   /** Or the endpoints to use, tried in random order. */
   endpoints?: RelayEndpoint[];
+  /** More endpoints, asked before each round of relays (`ChatServer` asks the network's relays for the rest). */
+  discover?: () => Promise<RelayEndpoint[]>;
   /** The Ed25519 secret of the address you write from — your grain's server key. It never leaves the process. */
   secret: Uint8Array;
   network: NetworkName;
@@ -274,7 +276,17 @@ export class RelayClient extends EventEmitter {
         this.log("warn", "relay_list_failed", { reason: (e as Error).message });
       }
     }
-    return list.filter(usableEndpoint).sort(() => Math.random() - 0.5);
+    if (this.options.discover) {
+      try {
+        list = [...list, ...(await this.options.discover())];
+      } catch (e) {
+        this.log("warn", "relay_list_failed", { reason: (e as Error).message });
+      }
+    }
+    // One entry an endpoint, the latest source's pin winning: a relay record is fresher than a list given at start.
+    const byUrl = new Map<string, RelayEndpoint>();
+    for (const e of list.filter(usableEndpoint)) byUrl.set(e.url, e);
+    return [...byUrl.values()].sort(() => Math.random() - 0.5);
   }
 
   private async run(): Promise<void> {

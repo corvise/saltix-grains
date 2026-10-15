@@ -74,17 +74,24 @@ test("a messaging key is taken only from a record that checks and names the addr
   assert.equal(messagingKeyOf(binding.address, "not base64!", at), null);
 });
 
-test("notifications are the node's, by the owner and by a certified server key", () => {
+test("notifications are the node's, by the owner, a certified server key and a registered one", () => {
   const n = grains.notifications;
   const inv = grains.invoices;
+  assert.deepEqual(n.cases.map((c) => c.name), ["by-owner", "by-server-key", "by-registered-key"]);
   for (const c of n.cases) {
     const { notification, cert, signature } = decodeNotification(fromHex(c.signed_borsh));
     assert.equal(toHex(encodeNotification(notification)), c.borsh, c.name);
     assert.equal(toHex(notificationMessage(notification, n.genesis_hash)), c.message);
-    const secret = cert ? fromHex(inv.server_secret, 32) : fromHex(grains.owner_secret, 32);
+    // The registered key signs with no certificate, as the owner key does (24-app-studio §2).
+    const secret = cert || c.name === "by-registered-key" ? fromHex(inv.server_secret, 32) : fromHex(grains.owner_secret, 32);
     assert.equal(toHex(signNotification(notification, secret, n.genesis_hash, cert ?? undefined)), c.signed_borsh, c.name);
     const bytes = fromHex(c.signed_borsh);
-    assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, n.now), null, c.name);
+    assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, n.now, n.registered_servers), null, c.name);
+    if (c.name === "by-registered-key") {
+      assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, n.now), "signature", "a key the registry does not name");
+      assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, n.now, ["77".repeat(32)]), "signature", "removed");
+      continue;
+    }
     assert.equal(notificationProblem(bytes, "go-game", { ed25519: inv.owner_key }, n.genesis_hash, n.now), "grain");
     assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, "00".repeat(32), n.now), "signature");
     assert.equal(notificationProblem(bytes, "chess", { ed25519: inv.owner_key }, n.genesis_hash, notification.at + 7 * 86_400_000 + 1), "time");
