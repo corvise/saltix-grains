@@ -4,6 +4,19 @@
 
 ### Changed
 
+- **Breaking for chat clients**: the grain chat formats of the app studio (Saltix 24-app-studio, 22-grain-chats;
+  `vectors/grain-chats-v1.json` regenerated, synced from Saltix bc63456). `SignedChatMessage` names its key as
+  `server: ServerKey` (`{certified: InvoiceKeyCert}` or `{registered: key}`) instead of `cert`; `SignedGrainChatSpec`
+  gains `server` (null: the owner key; a key: a registered server key, every price 0); `ChatRequest` ends with
+  `member` (a private grain's `SignedMemberProof`, or null); `ChatFrame` gains `stats` and a spec frame's `cert` is
+  optional. Old `SGC1` frames no longer decode either way. `chatMessageProblem` and `signedChatSpecProblem` take the
+  registry's `servers` (`server_price` for a priced spec a server key signed); `signChatMessage` without a certificate
+  signs as a registered key; `notificationProblem` takes `servers` too (notifications keep their encoding).
+- `RegisterGrain` sends the deposit of the slug's length, as the node quotes it (`grainQuote`; 100 SALT for 3–5
+  characters, 30 for 6–7, 10 for 8 or more), or 100 SALT to a node from before; `grain publish` and `grain show` say it.
+- The chat's well-known document is `{spec, cert?, stats?}` (`chatDocumentOf(spec, cert?, stats?)`, `decodeChatDocument`).
+- `rpc` throws an `RpcError` with the node's error code.
+
 - `decodeInvoice` and the certificates in notifications refuse an asset tag other than 0 or 1 and a time beyond 2^53
   ms instead of reading them loosely; relay records' base64url no longer needs Node's `Buffer`, so the formats run in a
   browser.
@@ -33,6 +46,34 @@
 - `npm run dev`: `/` redirects to the simulator's own path, so its page finds its script (it was not found at `/`).
 
 ### Added
+
+- The app studio (Saltix 24-app-studio, the SDK's step 3):
+  - **the developer key as the whole configuration**: `ChatServer.start({ appKey, spec })` reads
+    `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>` strictly (`AppKey`, `AppKeyError`, never printing the secret), finds
+    the network's public relays (`PUBLIC_RELAYS`: the test network's three, pinned by their certificates) and the rest
+    from `relay_list`, reads the node through the relays' gateways (`RelayGateways`), refuses a key of another or reset
+    network, starts only if the registry names the key (`ChatKeyNotRegistered`), signs an unsigned spec with it, and
+    asks the registry every few minutes and at each new beacon block a request comes in: once the key is replaced or
+    revoked, or the grain retired, it stops answering, leaves the relays, logs `chat_stopped` and calls `onStop`;
+  - **private apps**: `admits`, `memberProofProblem`, `signMemberProof`, `keyStandsFor` byte for byte the reference;
+    the server takes a private app's requests from its owner and its users and developers only, their proofs checked
+    against `grain_get` and `account_get` (`ChainView`, cached per tip), refuses everyone else with a refusal and
+    nothing more, and fails rather than admits when the node does not answer; handlers see `ask.member`;
+  - **the numbers an app reports**: `GrainStats`, `signGrainStats`, `grainStatsProblem`; the server counts distinct
+    users of the last day and 30 days and the requests of 30 days (`UsageWindow`: a user's last request only, forgotten
+    after 30 days; requests by the hour), signs them at most hourly and serves them in the well-known document and as
+    `ChatFrame::Stats`;
+  - the registry calls 34–37 (`ConfigureGrain`, `BindHandle`, `SetGrainAccess`, `RateGrain`) with the shard's checks
+    (`grainCallProblem`), deposits by length (`grainDeposit`), handles (`parseHandle`, `displayHandle`,
+    `encodeHandle`), chat-only manifests (`Entry::Chat`, `isChatOnly`), byte for byte `vectors/grains-v1.json` and
+    `vectors/handles-v1.json` (now synced);
+  - `grain configure`, `grain access`, `grain rate`, `grain bind`, `grain app-key` (public parts and whether the
+    registry names it; `make` writes one for a server key file, owner-only), `grain init --chat`; repeated flags;
+  - the example's chat runs from a developer key (`npm run example`, `examples/hello-grain/server.mjs`); `npm run dev`
+    serves a development registry and runs the chat from its developer key; the simulator checks registered keys,
+    plays private apps (member proofs, refusals) and shows the reported numbers;
+  - [docs/first-app.md](docs/first-app.md), "Your first app in ten minutes"; docs/chats.md on registered keys,
+    private apps and members, and reported numbers.
 
 - Grain chats (Saltix 22-grain-chats, step 2: the server SDK; [docs/chats.md](docs/chats.md)):
   - `@saltix/grain-server`: the formats and every check of the reference, byte for byte `vectors/grain-chats-v1.json`
