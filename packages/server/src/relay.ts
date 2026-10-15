@@ -242,6 +242,14 @@ export class RelayClient extends EventEmitter {
     if (this.ws) this.sendStats(this.ws, signed);
   }
 
+  /**
+   * Forget the numbers `reportStats` kept, so that none go to a relay again when the client registers: a private
+   * app's numbers are not published (Saltix 22-grain-chats §4), and its relay's node refuses them (`private`).
+   */
+  clearStats(): void {
+    this.stats = null;
+  }
+
   private sendStats(ws: WebSocket, signed: SignedGrainStats): void {
     ws.send(JSON.stringify({ type: "grain_stats", stats: toBase64Url(encodeSignedGrainStats(signed)) }));
   }

@@ -49,6 +49,13 @@
 
 ### Fixed
 
+- **A private app publishes no numbers** (Saltix 22-grain-chats §4, 24-app-studio §6a; the owner's rule, 2026-10-16):
+  while the registry says the grain is private, the chat server hands none to its relay (`RelayClient.clearStats()`
+  forgets the kept ones, so none go again on registering) and leaves `stats` out of its well-known document; it logs
+  `stats_not_reported {reason: "private"}` once per change, and `stats_resumed {reason: "public"}` when the grain is
+  public again, handing the newest numbers over at once. The registry is read as before: every few minutes and at a
+  request's new beacon block. Its members still get them in the chat. The nodes refuse a private grain's numbers
+  (`private`) anyway.
 - `npm run dev`: `/` redirects to the simulator's own path, so its page finds its script (it was not found at `/`).
 
 ### Added

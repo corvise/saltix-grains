@@ -373,3 +373,68 @@ test("the numbers are signed at most hourly, count each user once, and reach wal
     await close();
   }
 });
+
+test("a private app's numbers do not go to its relay, and go again once it is public", async () => {
+  const fake = fakeChain();
+  fake.state.grain.public = false;
+  let t = Date.now();
+  const { relay, server, events, close } = await studio(fake, { now: () => t });
+  const user = await wallet(relay, 0x68, server.address, [serverKey]);
+  server.command("idle", () => card().text("idle"));
+  const reports = () => relay.sent.filter((f) => f.type === "grain_stats").length;
+  const registers = () => relay.sent.filter((f) => f.type === "register").length;
+  const logged = (event) => events.filter((e) => e.event === event).map((e) => e.meta);
+  /** A new connection of the server, and time for it to send what it keeps for the relay. */
+  const reconnect = async () => {
+    const n = registers();
+    relay.kick(server.address);
+    await waitFor(() => registers() > n);
+    await sleep(200);
+  };
+  try {
+    // Private from the start: signed for its members' chats, but not sent to the relay nor put in the document.
+    await waitFor(() => server.reported !== null);
+    await sleep(200);
+    assert.deepEqual(logged("stats_not_reported"), [{ reason: "private" }]);
+    assert.equal(reports(), 0, "nothing to the relay");
+    assert.equal(server.document().stats, undefined, "nor in the document");
+    // An hour later: signed again, a registry read, a new connection; still nothing, and logged once.
+    t += STATS_EVERY_MS;
+    const signed = await server.publishStats();
+    assert.equal(signed.stats.at, t);
+    fake.block();
+    assert.equal(await server.checkRegistry(), null);
+    await reconnect();
+    assert.equal(reports(), 0, "none sent again on registering");
+    assert.equal(logged("stats_not_reported").length, 1, "logged once per change");
+
+    // Public again: the newest numbers go at once, and are in the document.
+    fake.state.grain.public = true;
+    fake.block();
+    assert.equal(await server.checkRegistry(), null);
+    assert.deepEqual(logged("stats_resumed"), [{ reason: "public" }]);
+    await waitFor(() => relay.stats.get("access")?.stats.at === t);
+    assert.deepEqual(relay.stats.get("access"), signed);
+    assert.deepEqual(decodeChatDocument(server.document()).stats, signed);
+
+    // Private again, seen at a request's new beacon block: withheld before the request is refused, logged again.
+    fake.state.grain.public = false;
+    fake.block();
+    t += 3_000;
+    const r = user.request("idle", [], { at: t, expires_at: t + DAY });
+    await user.send(r);
+    await user.until(() => user.answers(r.request.id).length === 1);
+    assert.match(user.answers(r.request.id)[0].message.blocks[0].status.text, /private/);
+    assert.deepEqual(logged("stats_not_reported"), [{ reason: "private" }, { reason: "private" }]);
+    const before = reports();
+    t += STATS_EVERY_MS;
+    await server.publishStats();
+    await reconnect();
+    assert.equal(reports(), before, "nothing more to the relay");
+    assert.equal(server.document().stats, undefined);
+    assert.equal(logged("stats_resumed").length, 1);
+  } finally {
+    user.client.close();
+    await close();
+  }
+});

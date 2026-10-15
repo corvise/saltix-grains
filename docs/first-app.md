@@ -161,7 +161,9 @@ at most 100 such messages a day. More in [docs/chats.md](chats.md#your-apps-cons
 - **Watches the registry**: it starts only when the registry names the key, and stops — saying so in its log — once the
   key is replaced or revoked.
 - **Reports its numbers**: users of the last day and 30 days and the requests, signed hourly and handed to its relay,
-  which gossips them to every node; the marketplace and the explorer show them as "reported by the app". It keeps nothing about a user longer than 30 days for them.
+  which gossips them to every node; the marketplace and the explorer show them as "reported by the app". A private
+  app reports none (its log says `stats_not_reported`) until it is public. It keeps nothing about a user longer than 30
+  days for them.
 - **Tells your team** what goes wrong: handlers' errors as reports in the console, folded within an hour and scrubbed of
   secrets.
 
