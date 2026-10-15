@@ -2,7 +2,7 @@
 // - `GrainChatSpec`: what the chat offers, signed by the manifest's owner key, or while every command is free by a
 //   server key the grain's registry record names (§2, 24-app-studio §2);
 // - `ChatRequest`: what the user sends, typed by the spec, signed by the user's grain key, with a member's proof for a
-//   private grain (§3, 24-app-studio §2a);
+//   private grain (§3, 24-app-studio §2a) and the language the user reads;
 // - `ChatMessage`: what the app answers, in blocks and actions, signed by a server key the owner certified or the
 //   registry names (`ServerKey`, §4);
 // - `ChatFrame`: the plaintext of a sealed frame, "SGC1" ‖ Borsh: a request, a message, a newer spec, or the numbers the
@@ -139,6 +139,10 @@ export interface ChatRequest {
   text: string;
   /** A private grain's member proof (24-app-studio §2a); null for a public grain. */
   member: SignedMemberProof | null;
+  /** The language the user's Saltix shows, named as maps of texts name languages (2–8 of `[a-z-]`: "en", "ru",
+   *  "pt-br"), or "" when the app does not say. Answer in it when you can, else in English; it says nothing else about
+   *  the user. No reader takes another form (`requestLangOk`). */
+  lang: string;
 }
 
 export interface SignedChatRequest {
@@ -241,10 +245,16 @@ function longTextOk(text: string, min: number, max: number): boolean {
 
 const sortedKeys = (texts: Texts) => Object.keys(texts).sort(compareUtf8);
 
+/** Whether `lang` names a language as maps of texts do: 2–8 of `[a-z-]`. */
+const langOk = (lang: string) => /^[a-z-]{2,8}$/.test(lang);
+
+/** Whether `lang` may be a request's language (§3): "", or 2–8 of `[a-z-]`. */
+export const requestLangOk = (lang: string): boolean => lang === "" || langOk(lang);
+
 function textsProblem(texts: Texts, maxChars: number, needsEn: boolean): ChatProblem | null {
   const keys = sortedKeys(texts);
   for (const lang of keys) {
-    if (!/^[a-z-]{2,8}$/.test(lang)) return "language";
+    if (!langOk(lang)) return "language";
     if (!textOk(texts[lang]!, 1, maxChars)) return "bounds:text";
   }
   if (keys.length > 16 || (needsEn && !Object.hasOwn(texts, "en"))) return "bounds:languages";
@@ -448,13 +458,21 @@ const id16 = (w: Writer, hex: string) => w.fixed(fromHex(hex, 16), 16);
 
 function writeRequest(w: Writer, q: ChatRequest): Writer {
   u64Safe(u64Safe(id16(w.string(q.slug), q.id), q.at), q.expires_at).option(q.via, id16);
-  return writeArgs(w.string(q.command), q.args).string(q.text).option(q.member, writeSignedMemberProof);
+  return writeArgs(w.string(q.command), q.args).string(q.text).option(q.member, writeSignedMemberProof).string(q.lang);
+}
+
+/** A request's language, refused unless `requestLangOk`: no reader takes another, as none takes bytes that are not
+ *  canonical. */
+function readRequestLang(r: Reader): string {
+  const lang = r.string();
+  if (!requestLangOk(lang)) throw new TypeError("borsh: a request's language: \"\" or 2–8 of [a-z-]");
+  return lang;
 }
 
 function readRequest(r: Reader): ChatRequest {
   return {
     slug: r.string(), id: toHex(r.fixed(16)), at: r.u64n(), expires_at: r.u64n(), via: r.option((r) => toHex(r.fixed(16))),
-    command: r.string(), args: readArgs(r), text: r.string(), member: r.option(readSignedMemberProof),
+    command: r.string(), args: readArgs(r), text: r.string(), member: r.option(readSignedMemberProof), lang: readRequestLang(r),
   };
 }
 
@@ -706,9 +724,10 @@ function argsProblem(command: Command, args: ChatArgs): ChatProblem | null {
 }
 
 /** Whether `q` fits `spec` (§3): a command it has, with every required argument and nothing else, each of its kind
- *  and within its bounds; or text alone. The problem, or null. */
+ *  and within its bounds; or text alone. Its language is "" or a language code. The problem, or null. */
 export function requestFitProblem(q: ChatRequest, spec: GrainChatSpec): ChatProblem | null {
   if (q.slug !== spec.slug) return "slug";
+  if (typeof q.lang !== "string" || !requestLangOk(q.lang)) return "language";
   if (q.command === "") return q.args.length > 0 || !longTextOk(q.text, 1, 2_000) ? "bounds:text" : null;
   const command = commandOf(spec, q.command);
   if (!command) return "unknown_command";

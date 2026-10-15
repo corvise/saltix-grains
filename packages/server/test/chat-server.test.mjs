@@ -44,14 +44,14 @@ test("a request is checked, routed by command with typed arguments, and answered
   try {
     let seen;
     server.command("key", (ask) => {
-      seen = { args: ask.args, key: ask.key, user: ask.user, command: ask.command };
+      seen = { args: ask.args, key: ask.key, user: ask.user, command: ask.command, lang: ask.lang };
       return card().secret("Key", "7KQ2-M9XA-4F", { expiresAt: Date.now() + DAY }).fields({ Site: ask.args.site, For: `${ask.args.duration} s` })
         .status("done", "Opens the site once").run("Revoke", "revoke", { id: "k-0042" }).open("All keys", "keys").reply("Thanks");
     });
     const request = user.request("key", [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "saltix-io" }]]);
     await user.send(request);
     await user.until(() => user.answers(request.request.id).length === 1);
-    assert.deepEqual(seen, { args: { duration: 86_400, note: "for the tester", site: "saltix-io" }, key: user.key, user: user.address, command: "key" });
+    assert.deepEqual(seen, { args: { duration: 86_400, note: "for the tester", site: "saltix-io" }, key: user.key, user: user.address, command: "key", lang: "en" });
 
     // The spec first (the user had not been sent this version), then the answer, which the wallet shows.
     assert.ok("spec" in user.frames[0], "the spec came first");
@@ -117,11 +117,12 @@ test("requests that do not fit are refused with a reason; untrusted or expired o
     const expired = user.request("key", [["duration", { duration: 600 }], ["site", { choice: "web" }]], { at: now - DAY, expires_at: now - 1 });
     const otherNetwork = signChatRequest({ ...user.request("idle").request }, user.secret, "6d".repeat(32));
     const otherGrain = user.request("idle", [], { slug: "chess" });
-    for (const r of [forged, expired, otherNetwork, otherGrain]) await user.send(r);
+    const badLang = user.request("idle", [], { lang: "RU" }); // no reader takes it
+    for (const r of [forged, expired, otherNetwork, otherGrain, badLang]) await user.send(r);
     const relayed = user.request("idle");
     await other.send(relayed); // a request signed by user's key, sent from another address
     await sleep(500);
-    for (const r of [forged, expired, otherNetwork, otherGrain, relayed]) {
+    for (const r of [forged, expired, otherNetwork, otherGrain, badLang, relayed]) {
       assert.equal(user.answers(r.request.id).length + other.answers(r.request.id).length, 0, "no answer");
     }
     assert.equal(relay.mailboxes.get(server.address)?.size ?? 0, 0, "acknowledged");
@@ -129,6 +130,28 @@ test("requests that do not fit are refused with a reason; untrusted or expired o
   } finally {
     user.client.close();
     other.client.close();
+    await close();
+  }
+});
+
+test("a handler learns the user's language and answers in it, else in English", async () => {
+  const { relay, server, close } = await serverOn();
+  const user = await wallet(relay, 0x44, server.address);
+  try {
+    const greeting = { ru: "Ключ готов", en: "Your key is ready" };
+    const langs = [];
+    server.command("idle", (ask) => {
+      langs.push(ask.lang);
+      return card().text(greeting[ask.lang] ?? greeting.en);
+    });
+    const requests = ["ru", "", "de"].map((lang) => user.request("idle", [], { lang }));
+    for (const r of requests) await user.send(r);
+    await user.until(() => requests.every((r) => user.answers(r.request.id).length === 1));
+    const text = (r) => user.answers(r.request.id)[0].message.blocks[0].text.text;
+    assert.deepEqual(requests.map(text), ["Ключ готов", "Your key is ready", "Your key is ready"]);
+    assert.deepEqual(langs.sort(), ["", "de", "ru"]);
+  } finally {
+    user.client.close();
     await close();
   }
 });

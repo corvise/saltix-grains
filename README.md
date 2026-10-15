@@ -151,7 +151,9 @@ spec declares, your server answers with cards it signs with the server key. The 
 is the server's whole configuration: it finds the network's public relays, checks that the registry names the key, signs
 the spec, and stops once the owner replaces or revokes the key. Requests are checked and answered once; a private app
 takes its owner's and members' only (member proofs, checked against the registry and the accounts' keys); files go next
-to the relay; unasked messages are at most 10 a day per user; the numbers it reports are signed hourly.
+to the relay; unasked messages are at most 10 a day per user; the numbers it reports are signed hourly. Each request
+names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it when you can,
+else in English.
 
 ```ts
 const chat = await ChatServer.start({ appKey: process.env.SALTIX_APP_KEY!, spec, store: fileChatStore("chat.store.json") });

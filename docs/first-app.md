@@ -105,6 +105,9 @@ chat.text(() => card().text("Pick Roll below."));
 node server.mjs
 ```
 
+Every request names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it
+when you can, and in English otherwise.
+
 The spec is signed by your server key, which may sign a spec while every command is free. A wallet keeps the highest
 version it has seen: start above the spec Saltix signed when it made the app, and raise `version` with every change.
 Each user gets the new spec before their next answer.

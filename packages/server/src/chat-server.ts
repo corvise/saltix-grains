@@ -163,6 +163,11 @@ export class ChatAsk<A extends Args = Args> {
   /** The arguments, checked against the spec: see `ArgValue` for their types. */
   readonly args: A;
   readonly text: string;
+  /**
+   * The language the user's Saltix shows ("en", "ru", "pt-br": 2–8 of `[a-z-]`), or "" when the app does not say.
+   * Answer in it when you can, and in English otherwise; it says nothing else about the user.
+   */
+  readonly lang: string;
   /** The message whose action this request runs, or null. */
   readonly via: string | null;
   /** In a private grain, the member's account and roles its proof showed; null in a public one, which never knows. */
@@ -177,6 +182,7 @@ export class ChatAsk<A extends Args = Args> {
     this.request = signed.request;
     this.command = signed.request.command;
     this.text = signed.request.text;
+    this.lang = signed.request.lang;
     this.via = signed.request.via;
     this.member = member;
     this.args = Object.fromEntries(signed.request.args.map(([name, value]) => [name, argOf(value)])) as A;

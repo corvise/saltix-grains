@@ -82,7 +82,7 @@ const cert = () => issueInvoiceKeyCert(OWNER, "access", toHex(ed25519.getPublicK
 const request = () => ({
   slug: "access", id: repeat("11", 16), at: NOW, expires_at: NOW + DAY, via: null, command: "key",
   args: [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "saltix-io" }]],
-  text: "", member: null,
+  text: "", member: null, lang: "ru",
 });
 const PROOF_EXPIRES = NOW + 30 * DAY;
 const memberProof = () => ({
@@ -114,7 +114,7 @@ const report = () => ({
   ],
   actions: [{ label: "Thanks", kind: { reply: { text: "Thanks" } } }],
 });
-const textRequest = () => ({ ...request(), id: repeat("12", 16), command: "", args: [], text: "Привет" });
+const textRequest = () => ({ ...request(), id: repeat("12", 16), command: "", args: [], text: "Привет", lang: "" });
 
 test("the keys and addresses are the vectors'", () => {
   assert.equal(toHex(accountId(ed25519.getPublicKey(MEMBER))), v.keys.member_account_hex);
@@ -222,6 +222,8 @@ test("a client checks everything from the file alone", () => {
     const r = decodeSignedChatRequest(fromHex(v[name].signed_hex));
     assert.equal(chatRequestProblem(r, { chain, spec: s, from: userAddress, now: NOW }), null, name);
   }
+  assert.equal(decodeSignedChatRequest(fromHex(v.request.signed_hex)).request.lang, "ru", "the user's language");
+  assert.equal(decodeSignedChatRequest(fromHex(v.text_request.signed_hex)).request.lang, "", "an app that does not say");
   for (const name of ["answer", "report"]) {
     const m = decodeSignedChatMessage(fromHex(v[name].signed_hex));
     assert.equal(chatMessageProblem(m, { chain, ownerKey, servers, spec: s, from: serverAddress, now: NOW + 5_000 }), null, name);
@@ -255,7 +257,19 @@ test("what the file says is refused is refused", () => {
   const resigned = (r) => signChatRequest(r, USER, chain.genesis);
   const check = (r, over = {}) => chatRequestProblem(r, { chain, spec: s, from: userAddress, now: NOW, ...over });
   const refused = new Map(v.refused.map((r) => [r.change, r]));
-  assert.equal(v.refused.length, 16);
+  assert.equal(v.refused.length, 17);
+
+  // A request in a language no reader takes: built here byte for byte, and refused as it is read. With the code in
+  // lower case the same bytes read, and the signature, made over "RU", then fails.
+  const badLang = refused.get('lang = "RU", id = 14…14');
+  const badSigned = signChatRequest({ ...base, id: repeat("14", 16), lang: "RU" }, USER, chain.genesis);
+  assert.equal(hex(encodeChatFrame({ request: badSigned })), badLang.frame_hex, badLang.why);
+  assert.throws(() => decodeChatFrame(fromHex(badLang.frame_hex)), /language/, badLang.why);
+  const lowered = fromHex(badLang.frame_hex);
+  const at = lowered.length - 64 - 32 - 2;
+  assert.equal(new TextDecoder().decode(lowered.subarray(at, at + 2)), "RU", "lang is the request's last field");
+  lowered.set(new TextEncoder().encode("ru"), at);
+  assert.equal(check(decodeChatFrame(lowered).request), "signature");
 
   const short = structuredClone(base);
   short.args[0][1] = { duration: 3_600 };
@@ -327,7 +341,7 @@ function smallSpec() {
 }
 const smallRequest = () => ({
   slug: "access", id: repeat("07", 16), at: NOW, expires_at: NOW + 60_000, via: null, command: "key",
-  args: [["duration", { duration: 3_600 }], ["site", { choice: "saltix-io" }]], text: "", member: null,
+  args: [["duration", { duration: 3_600 }], ["site", { choice: "saltix-io" }]], text: "", member: null, lang: "en",
 });
 
 test("a spec is signed by the owner key, and a spec out of bounds is refused", () => {
@@ -399,6 +413,36 @@ test("a request fits its command", () => {
   assert.equal(refused((r) => { r.command = ""; r.args = []; r.text = "x".repeat(2_001); }), "bounds:text");
   assert.equal(refused((r) => { r.command = ""; r.args = []; r.text = "a\nb"; }), null, "line breaks in text");
   assert.equal(refused((r) => { r.command = ""; r.args = []; r.text = "a\u0000b"; }), "bounds:text", "no other control characters");
+});
+
+test("a request names the user's language or none", () => {
+  const s = smallSpec();
+  for (const lang of ["", "en", "ru", "pt-br", "zh-hant", "--"]) {
+    const r = { ...smallRequest(), lang };
+    assert.equal(requestFitProblem(r, s), null, lang);
+    const signed = signChatRequest(r, USER, chain.genesis);
+    assert.equal(chatRequestProblem(signed, { chain, spec: s, from: userAddress, now: NOW }), null, lang);
+    assert.deepEqual(decodeChatFrame(encodeChatFrame({ request: signed })), { request: signed }, lang);
+  }
+  for (const lang of ["RU", "En", "x", "abcdefghi", "r_u", "r1", "ру", " en", "en\n"]) {
+    const r = { ...smallRequest(), lang };
+    assert.equal(requestFitProblem(r, s), "language", JSON.stringify(lang));
+    // Signed, it is still refused: by the server's check...
+    const signed = signChatRequest(r, USER, chain.genesis);
+    assert.equal(chatRequestProblem(signed, { chain, spec: s, from: userAddress, now: NOW }), "language", JSON.stringify(lang));
+    // ...and by every reader, as bytes that are not canonical are.
+    assert.throws(() => decodeChatFrame(encodeChatFrame({ request: signed })), /language/, JSON.stringify(lang));
+    assert.throws(() => decodeSignedChatRequest(encodeSignedChatRequest(signed)), /language/, JSON.stringify(lang));
+  }
+  assert.equal(requestFitProblem({ ...smallRequest(), lang: undefined }, s), "language", "a client that forgot it");
+  // The last field, signed: a u32 length and the code's bytes, after `member`.
+  const ru = encodeChatRequest({ ...smallRequest(), lang: "ru" });
+  const none = encodeChatRequest({ ...smallRequest(), lang: "" });
+  assert.deepEqual([...none.subarray(none.length - 4)], [0, 0, 0, 0]);
+  assert.deepEqual([...ru], [...none.subarray(0, none.length - 4), 2, 0, 0, 0, 0x72, 0x75]);
+  const forged = signChatRequest({ ...smallRequest(), lang: "ru" }, USER, chain.genesis);
+  forged.request = { ...forged.request, lang: "en" };
+  assert.equal(chatRequestProblem(forged, { chain, spec: s, from: userAddress, now: NOW }), "signature", "the language is signed");
 });
 
 test("every kind takes its own values within bounds", () => {

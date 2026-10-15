@@ -4,11 +4,17 @@
 
 ### Changed
 
+- **Breaking for chat clients**: a chat request names the user's language (Saltix 22-grain-chats §3; vectors synced
+  from Saltix f99df76). `ChatRequest` ends with `lang`: the language the user's Saltix shows (2–8 of `[a-z-]`, as
+  the spec's maps name languages), or `""` when the app does not say. Handlers read it as `ask.lang` and answer in it
+  when they can, else in English, so a stranger's refusal comes in one language. `decodeChatFrame` and
+  `decodeSignedChatRequest` refuse any other value, `requestFitProblem` says `language` (`requestLangOk` checks one).
+  The simulator sends the page's language. It joins the app studio's change below in the same release.
 - **Breaking for chat clients**: the grain chat formats of the app studio (Saltix 24-app-studio, 22-grain-chats;
   `vectors/grain-chats-v1.json` regenerated, synced from Saltix bc63456). `SignedChatMessage` names its key as
   `server: ServerKey` (`{certified: InvoiceKeyCert}` or `{registered: key}`) instead of `cert`; `SignedGrainChatSpec`
-  gains `server` (null: the owner key; a key: a registered server key, every price 0); `ChatRequest` ends with
-  `member` (a private grain's `SignedMemberProof`, or null); `ChatFrame` gains `stats` and a spec frame's `cert` is
+  gains `server` (null: the owner key; a key: a registered server key, every price 0); `ChatRequest` gains
+  `member` after `text` (a private grain's `SignedMemberProof`, or null); `ChatFrame` gains `stats` and a spec frame's `cert` is
   optional. Old `SGC1` frames no longer decode either way. `chatMessageProblem` and `signedChatSpecProblem` take the
   registry's `servers` (`server_price` for a priced spec a server key signed); `signChatMessage` without a certificate
   signs as a registered key; `notificationProblem` takes `servers` too (notifications keep their encoding).

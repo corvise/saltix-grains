@@ -4,8 +4,9 @@
  * server's checked key, and every message checked before it is drawn — from the server key's address, the key one the
  * registry names (or a certificate of the owner's within 31 days), not revoked, in bounds, timely, signed. Unasked
  * messages count against 10 a day and show only while allowed. A private app gets a member proof signed by the
- * simulator's account key with every request; the numbers the app reports are shown as reported, once checked. A
- * developer tool: the alias uses `register` on a connection of its own, and the history lives in this page.
+ * simulator's account key with every request, and every request names the page's language as Saltix names its own;
+ * the numbers the app reports are shown as reported, once checked. A developer tool: the alias uses `register` on a
+ * connection of its own, and the history lives in this page.
  */
 import { ed25519 } from "@noble/curves/ed25519";
 import { derive, fromHex, toHex } from "../packages/server/src/bytes";
@@ -257,7 +258,8 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     const member = privateApp && $<HTMLInputElement>("chat-proof").checked
       ? signMemberProof({ slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS - 60_000 }, host.account(), chain.genesis)
       : null;
-    const request = { slug: host.slug(), id: newChatId(), at: now, expires_at: now + DAY, via: viaId, command, args, text, member };
+    // The page's language, as Saltix sends its display language with every request (22-grain-chats §3).
+    const request = { slug: host.slug(), id: newChatId(), at: now, expires_at: now + DAY, via: viaId, command, args, text, member, lang: host.language() };
     const problem = requestFitProblem(request, spec.spec);
     if (problem) return note(`Not sent: ${problem}`, "bad");
     const c = commandOf(spec.spec, command);

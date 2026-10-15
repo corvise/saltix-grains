@@ -170,7 +170,9 @@ chat.command("report", async (ask) => {
   return card().text("Yesterday: 41 sessions, 3 errors.").file(file, { title: "Daily digest", format: "csv" }).status("done");
 });
 
-chat.command("revoke", (ask) => { throw new ChatRefusal("No key k-1 is yours."); });   // a "refused" status
+chat.command("revoke", (ask) => {                // a "refused" status, in the user's language when you have it
+  throw new ChatRefusal(ask.lang === "ru" ? "Ключ k-1 не ваш." : "No key k-1 is yours.");
+});
 chat.text((ask) => card().text("Pick a command below.").reply("Hello", "hello"));
 
 http.createServer((req, res) => chat.serveDocument(req, res) || app(req, res));
@@ -194,9 +196,17 @@ carries at most 48 000 bytes, so a larger report goes as a file.
 | makes the handler throw `ChatRefusal` | a `refused` status with its text |
 | makes the handler throw anything else | a `failed` status ("Something went wrong"); the error goes to your log only |
 | did not come from its key's address, is not signed by it on this network, is another grain's, or expired | nothing: dropped |
+| does not read: a language out of form (below), say | nothing: dropped (`chat_frame_malformed` in your log) |
 | was answered already (the same `key` and `id`) | nothing |
 | reaches a private grain without a member proof its owner or a user or developer signed with a key that speaks for the account now | a `refused` status and nothing more: no command runs, no spec or file is sent |
 | reaches a private grain while the node does not answer | a `failed` status ("could not check its members"): never admitted unchecked |
+
+**The user's language.** Every request names the language the user's Saltix shows, as `ask.lang`: `en`, `ru`, `pt-br`
+(2–8 of `[a-z-]`, as the spec's maps name languages), or `""` when the app does not say. Answer in it when you can, and
+in English otherwise, so a stranger reads one language rather than all you know. It says nothing else about the user,
+and the request's signature covers it. The spec's own texts (intro, titles, help) need nothing from you: the wallet
+picks them from their maps itself. A request whose `lang` is in any other form does not read (`decodeChatFrame`,
+`decodeSignedChatRequest` throw; `requestFitProblem` says `language`, `requestLangOk` checks one).
 
 Each request is answered once: its `(key, id)` is remembered until it expires. A kept frame leaves the server's mailbox
 only once its request is answered, so one that arrives while the server is down, or whose handling failed before an

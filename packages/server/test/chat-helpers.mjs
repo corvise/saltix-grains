@@ -135,7 +135,7 @@ export async function wallet(relay, seed, serverAddress, servers = []) {
     /** A request, signed by this wallet's grain key: `over` changes it before it is signed. */
     request(command, args = [], over = {}) {
       const now = Date.now();
-      return signChatRequest({ slug: "access", id: newChatId(), at: now, expires_at: now + DAY, via: null, command, args, text: "", member: null, ...over }, secret, chain.genesis);
+      return signChatRequest({ slug: "access", id: newChatId(), at: now, expires_at: now + DAY, via: null, command, args, text: "", member: null, lang: "en", ...over }, secret, chain.genesis);
     },
     send: (signed) => client.send(serverAddress, encodeChatFrame({ request: signed }), { keep: true }),
     /** The messages so far that answer `id`. */
