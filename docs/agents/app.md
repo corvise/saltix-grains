@@ -147,6 +147,7 @@ chat.text((ask) => card().text("Pick Plan below."));
   const t = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers, access: "private", members: { ann: ["user"] } });
   const reply = await t.as("ann").ask("plan", { minutes: 30n, level: "hard" }, { lang: "ru" });
   assert.deepEqual(reply.fields, { Minutes: "30", Sets: "6" });
+  assertCardStandard(reply.message, t.chat.spec);                                               // the card standard
   assert.equal((await t.ask("plan", { minutes: 30n, level: "hard" })).status.state, "refused");  // a stranger
   await t.as("owner").hello();                         // the owner's console, before anyone writes
   await t.close();

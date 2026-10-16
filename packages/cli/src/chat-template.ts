@@ -96,7 +96,7 @@ import { card } from "@saltix/grain-server";
 export function handlers(chat) {
   chat.command("hello", (ask) => {
     const name = ask.args.name || (ask.lang === "ru" ? "друг" : "friend");
-    return card().text(ask.lang === "ru" ? \`Привет, \${name}!\` : \`Hello, \${name}!\`).status("done").run("Again", "hello", {});
+    return card().status("done").text(ask.lang === "ru" ? \`Привет, \${name}!\` : \`Hello, \${name}!\`).run("Again", "hello", {});
   });
   chat.text((ask) => card().text(ask.lang === "ru" ? "Выберите команду ниже." : "Pick a command below.").reply("Hello", "hello"));
 }
@@ -107,6 +107,7 @@ export const chatTest = (slug: string) => `// ${slug}'s chat end to end (npm tes
 // with a development key (never a real one), asked as Saltix asks and every card checked as Saltix checks it.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { assertCardStandard } from "@saltix/grain-server";
 import { testChat } from "@saltix/grain-server/testing";
 import { handlers } from "../chat.mjs";
 
@@ -116,6 +117,7 @@ test("hello greets by name, in the user's language", async (t) => {
   const reply = await chat.ask("hello", { name: "Ann" });
   assert.equal(reply.text, "Hello, Ann!");
   assert.equal(reply.status?.state, "done");
+  assertCardStandard(reply.message, chat.chat.spec);   // the card design standard (AGENTS.md)
   assert.equal((await chat.ask("hello", {}, { lang: "ru" })).text, "Привет, друг!");
 });
 
