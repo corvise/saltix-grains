@@ -169,7 +169,9 @@ at most 100 such messages a day. More in [docs/chats.md](chats.md#your-apps-cons
 
 | It says | Do |
 |---|---|
-| `the registry does not name this server key for your-app: …` | The key was replaced or revoked, or the app retired: make a new developer key in Saltix |
+| `the registry does not name this server key for your-app: the owner replaced this server key` (or `names no server key`) | Make a new developer key in Saltix (My apps → your app → Developer key), or run the server that holds the new one |
+| `…: the grain is retired` | A retired slug is never used again: make a new app |
+| `…: the registry has no such grain` | Just made? Wait until Saltix shows the app live in My apps, then start again |
 | `the developer key is for devnet 6f4c…, but the network answering is …: was the network reset?` | The test network was reset: make the app and its key again |
 | `not a developer key` / `a malformed developer key` | Copy the whole key again (it starts with `saltix-app:1:`) |
 | `no public relays are known for mainnet` | Pass `node` (your own node's wallet interface) to `ChatServer.start`, or `NODE_RPC` to the example |

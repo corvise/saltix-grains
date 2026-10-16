@@ -86,16 +86,24 @@ test("a developer key is the server's whole configuration", async () => {
 test("a server starts only while the registry names its key, on the key's network", async () => {
   const relay = await createDevRelay();
   const start = (fake, over = {}) => ChatServer.start({ appKey: appKey(), spec: spec(), wallet: fake.wallet, endpoints: [relay.endpoint()], log: quiet, ...over });
-  const refused = async (change, reason) => {
+  const refused = async (change, reason, remedy) => {
     const fake = fakeChain();
     change(fake.state);
-    await assert.rejects(start(fake), (e) => e instanceof ChatKeyNotRegistered && e.reason === reason && /Developer key/.test(e.message), reason);
+    await assert.rejects(start(fake), (e) => e instanceof ChatKeyNotRegistered && e.reason === reason && remedy.test(e.message), reason);
   };
   try {
-    await refused((s) => (s.grain.servers = []), "revoked");
-    await refused((s) => (s.grain.servers = ["77".repeat(32)]), "replaced");
-    await refused((s) => (s.grain.retired = 900), "retired");
-    await refused((s) => (s.grain = null), "unregistered");
+    // Each reason says what to do about it: a new key for a live grain, a new app for a retired one, and for one the
+    // registry does not hold yet, waiting for its registration or making it.
+    await refused((s) => (s.grain.servers = []), "revoked", /no server key.*My apps → access → Developer key/);
+    await refused((s) => (s.grain.servers = ["77".repeat(32)]), "replaced", /replaced this server key.*Developer key.*or run the server that holds/);
+    await refused((s) => (s.grain.retired = 900), "retired", /retired.*never used again: make a new app/);
+    await refused((s) => (s.grain = null), "unregistered", /no such grain\. If access was just made, wait until its registration is in a block/);
+    for (const reason of ["retired", "unregistered"]) {
+      const fake = fakeChain();
+      if (reason === "retired") fake.state.grain.retired = 900;
+      else fake.state.grain = null;
+      await assert.rejects(start(fake), (e) => !/Developer key/.test(e.message), `${reason}: a new developer key would not help`);
+    }
     const elsewhere = fakeChain();
     elsewhere.state.status.genesis = "6d".repeat(32);
     await assert.rejects(start(elsewhere), /reset/, "a key of another genesis");
@@ -155,7 +163,7 @@ test("a revoked or replaced key stops the server, which says so and answers no m
       const stopped = events.find((e) => e.event === "chat_stopped");
       assert.equal(stopped.level, "error");
       assert.equal(stopped.meta.reason, reason);
-      assert.match(stopped.meta.hint, /stopped answering.*Developer key/);
+      assert.match(stopped.meta.hint, reason === "retired" ? /stopped answering\. A retired slug is never used again/ : /stopped answering\. Make a new developer key/);
       // Nothing more goes out under the key: requests wait in the mailbox, unanswered; sending throws.
       const after = user.request("idle");
       await user.send(after);
