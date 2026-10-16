@@ -101,7 +101,7 @@ export function parse(argv: string[]): Parsed {
 }
 
 /** Lines of `help` that start a command's entry: `  grain <command>…`. */
-const ENTRY = /^ {2}grain ([a-z-]+)/;
+const ENTRY = /^ {2}grain ([a-z][a-z-]*)/;
 
 /**
  * The part of the whole `help` about `command`: its entries (each with the lines that go on under it), then the notes
