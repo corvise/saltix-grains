@@ -111,9 +111,9 @@ export class Card {
     this.blocks.push({ file: { file, title: options.title ?? "", format: options.format } });
     return this;
   }
-  /** An invoice your server signed (`signInvoice`, hex): it opens the wallet's own payment sheet. */
-  invoice(signedInvoice: string): this {
-    this.blocks.push({ invoice: { invoice: signedInvoice } });
+  /** An invoice your server signed (`chat.invoice`, or `signInvoice`'s hex): it opens the wallet's own payment sheet. */
+  invoice(signedInvoice: string | { hex: string }): this {
+    this.blocks.push({ invoice: { invoice: typeof signedInvoice === "string" ? signedInvoice : signedInvoice.hex } });
     return this;
   }
   /** Where a request stands: working, done, refused or failed, with up to 200 characters. */

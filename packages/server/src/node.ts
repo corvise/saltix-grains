@@ -1,4 +1,5 @@
 import { referenceInMemo } from "./invoice.js";
+import type { WalletInterface } from "./network.js";
 
 /** A payment found on chain. */
 export interface Payment {
@@ -49,11 +50,17 @@ interface HistoryEntry {
 
 /**
  * The payment of the invoice whose reference is `reference` to `address`, if the node's canonical
- * chain has it (the latest `limit` entries of the account's history). Check its amount and asset
- * against your invoice, and wait for the confirmations you need.
+ * chain has it (the latest `limit` entries of the account's history). `node` is your node's URL, or
+ * any wallet interface (`ChatServer` reaches one through the relays: `chat.paymentOf`). Check its
+ * amount and asset against your invoice, and wait for the confirmations you need.
  */
-export async function findPayment(nodeUrl: string, address: string, reference: string, limit = 200): Promise<Payment | null> {
-  const { entries } = await rpc<{ entries: HistoryEntry[] }>(nodeUrl, "account_history", { address, limit });
+export async function findPayment(
+  node: string | WalletInterface, address: string, reference: string, limit = 200,
+): Promise<Payment | null> {
+  const params = { address, limit };
+  const { entries } = typeof node === "string"
+    ? await rpc<{ entries: HistoryEntry[] }>(node, "account_history", params)
+    : await node.call<{ entries: HistoryEntry[] }>("account_history", params);
   const e = entries.find(
     (x) => (x.kind === "received" || x.kind === "receipt") && x.memo?.text !== undefined && referenceInMemo(x.memo.text) === reference,
   );

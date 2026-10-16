@@ -21,6 +21,7 @@ at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENTS.md), [Designing 
 | [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing for a full-screen app |
 | [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's full-screen layout, and work on this repository; `CLAUDE.md` points to it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
+| [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
 
 The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones included, logins, invoices, notifications,
 the registry transactions of 12-grains and 24-app-studio, deposits, the developer key), the addresses of
@@ -172,14 +173,17 @@ wallet).
 ## The server
 
 ```ts
-import { newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification, grantFor } from "@saltix/grain-server";
+import { AppKey, newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification, grantFor } from "@saltix/grain-server";
 
 // Sign-in: give the page a challenge, check what grain.login returned.
 const ok = verifyLogin(answer, { slug: "chess", origin: "https://chess.example", challenge });
 
-// Invoices: certify a server key once with the owner's key (offline), then sign with it.
+// Invoices from a developer key (a registered server key): to the grain's owner only (docs/payments.md).
+const invoice = signInvoice({ slug: "chess", to: grain.owner, asset: "SALT", amount: 2_500_000_000n, memo: "Premium",
+  reference, expires_at: Date.now() + 600_000 }, AppKey.parse(developerKey), genesisHash);
+// Or certify a server key once with the owner's key (offline) and sign with it, to any payee.
 const cert = issueInvoiceKeyCert(ownerSecret, "chess", serverKeyHex, Date.now() + 90 * 86_400_000);
-const invoice = signInvoice({ slug: "chess", to, asset: "SALT", amount: 2_500_000_000n, memo: "Premium",
+const certified = signInvoice({ slug: "chess", to, asset: "SALT", amount: 2_500_000_000n, memo: "Premium",
   reference, expires_at: Date.now() + 600_000 }, serverSecret, genesisHash, cert);
 
 // The payment, by the reference its public memo carries.

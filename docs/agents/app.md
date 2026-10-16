@@ -92,6 +92,10 @@ chat.text((ask) => card().text("Pick Plan below."));
   `.file(ref, {format})`). Slow work: `await ask.working("…")` first; the answer replaces it.
 - **Refuse** with `throw new ChatRefusal(text)` (a `refused` status, in the user's language). Any other error answers
   `failed` and is reported to your team's console.
+- **Payments**: `const inv = chat.invoice({ amount: "2.5", memo: "Premium, 1 month" })`, then
+  `card().text(…).invoice(inv)`. The developer key's invoice pays the app's owner only. Keep `inv.invoice` with what
+  the user asked for, and deliver once `await chat.paymentOf(inv.invoice)` has the confirmations you need
+  ([../payments.md](../payments.md)).
 
 ## The rules every app follows
 
@@ -110,6 +114,10 @@ chat.text((ask) => card().text("Pick Plan below."));
   top right corner. Follow the full-screen rules in `AGENTS.md`: nothing tappable under the controls, text inside the
   safe area.
 - **Formats**: never build a protocol message by hand. The SDK makes and checks every one, byte for byte the network's.
+- **Money**: never deliver on the page's or the user's word: only on `chat.paymentOf` (or `findPayment`) with enough
+  confirmations. Never put another payee in an invoice: a developer key's invoice pays the owner, and wallets refuse
+  anything else (`payee`). Say in the card what to do if the payment sheet does not open (Saltix 0.1.53 and older
+  refuse a developer key's invoice: update Saltix).
 
 ## Test
 
