@@ -73,9 +73,10 @@ async function fakeNode(relay, slug, servers) {
   return { url: `http://127.0.0.1:${http.address().port}`, close: () => http.close() };
 }
 
-/** `npm start` in `dir` (node server.mjs) with `env`; its log lines as they come, and its exit. */
-function start(dir, env) {
-  const child = spawn("node", ["server.mjs"], { cwd: dir, env: { ...process.env, SALTIX_APP_KEY: "", ...env } });
+/** `node <dir>/server.mjs` (what `npm start` runs) from `cwd` (`dir` itself by default) with `env`; its log lines as they
+ *  come, and its exit. */
+function start(dir, env, cwd = dir) {
+  const child = spawn("node", [join(dir, "server.mjs")], { cwd, env: { ...process.env, SALTIX_APP_KEY: "", SALTIX_APP_KEY_FILE: "", STATE_DIRECTORY: "", ...env } });
   const lines = [];
   let out = "";
   child.stdout.on("data", (c) => {
@@ -143,7 +144,11 @@ test("a chat-only grain's server starts from its developer key alone and answers
   assert.match((await open.until("not_started")).error, /readable by others/);
   chmodSync(join(dir, "app.key"), 0o600);
 
-  const server = start(dir, { NODE_RPC: node.url });
+  // As a supervisor runs it: started elsewhere, the key in a credential file, its state in a directory of its own.
+  const elsewhere = mkdtempSync(join(tmpdir(), "grain-run-"));
+  const state = mkdtempSync(join(tmpdir(), "grain-state-"));
+  writeFileSync(join(elsewhere, "credential"), key.reveal(), { mode: 0o600 });
+  const server = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY_FILE: join(elsewhere, "credential"), STATE_DIRECTORY: state }, elsewhere);
   t.after(() => server.child.kill());
   const ready = await server.until("ready");
   // Above the spec of version 1 Saltix signs when it makes an app: a wallet takes only a higher one.
@@ -176,6 +181,8 @@ test("a chat-only grain's server starts from its developer key alone and answers
   }), null, "a wallet shows it, verified");
   server.child.kill("SIGTERM");
   assert.equal(await server.exited, 0);
+  assert.ok(existsSync(join(state, "chat.store.json")), "the store is in the state directory");
+  assert.ok(!existsSync(join(elsewhere, "chat.store.json")) && !existsSync(join(dir, "chat.store.json")));
 
   // A key the registry does not name: 78, which a supervisor does not restart on. The log never holds the key.
   servers = ["ab".repeat(32)];

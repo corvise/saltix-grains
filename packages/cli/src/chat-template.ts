@@ -30,33 +30,39 @@ export const chatPackageJson = (slug: string, sdk: string) => JSON.stringify({
 export const chatServer = (slug: string) => `// The chat of ${slug}, run by its developer key (Saltix 24-app-studio §3): the key names the app, its network and
 // the server key the registry trusts; the server finds the network's public relays and answers chat.json's commands.
 //
-//   npm start      the key from app.key (owner-only) or SALTIX_APP_KEY; NODE_RPC: your own node, for a network
-//                  with no public relays
+//   npm start             the key from SALTIX_APP_KEY, the file SALTIX_APP_KEY_FILE names (a systemd credential), or
+//                         app.key (owner-only)
+//   NODE_RPC              your own node's wallet interface, for a network with no public relays
+//   STATE_DIRECTORY       where chat.store.json is kept (systemd sets it with StateDirectory=; else here)
 //
 // The log is one JSON line per event, and never holds a key or what users wrote.
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { AppKey, ChatServer, card, chatSpecFromJson, fileChatStore } from "@saltix/grain-server";
 
 /** The exit code when the key cannot work (EX_CONFIG): a supervisor restarting the server would not help. */
 const DEAD_KEY = 78;
 
 const log = (level, event, meta = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), level, event, ...meta }));
+/** A file next to this one, wherever the server is started from. */
+const beside = (name) => new URL(name, import.meta.url);
 
-/** The developer key from SALTIX_APP_KEY or app.key: never from the command line, which shells keep. */
+/** The developer key from SALTIX_APP_KEY or a file only its owner reads: never from the command line, which shells keep. */
 function developerKey() {
   if (process.env.SALTIX_APP_KEY?.trim()) return AppKey.parse(process.env.SALTIX_APP_KEY);
-  if (!existsSync("app.key")) throw new Error("no developer key: put it in app.key (owner-only) or SALTIX_APP_KEY");
-  if (process.platform !== "win32" && (statSync("app.key").mode & 0o077) !== 0) throw new Error("app.key: readable by others; chmod 600 it");
-  return AppKey.parse(readFileSync("app.key", "utf8"));
+  const file = process.env.SALTIX_APP_KEY_FILE || "app.key";
+  if (!existsSync(file)) throw new Error(\`no developer key: put it in \${file} (owner-only) or SALTIX_APP_KEY\`);
+  if (process.platform !== "win32" && (statSync(file).mode & 0o077) !== 0) throw new Error(\`\${file}: readable by others; chmod 600 it\`);
+  return AppKey.parse(readFileSync(file, "utf8"));
 }
 
 let chat;
 try {
   chat = await ChatServer.start({
     appKey: developerKey(),
-    spec: chatSpecFromJson(JSON.parse(readFileSync("chat.json", "utf8"))),
-    store: fileChatStore("chat.store.json"),
-    version: process.env.npm_package_version,
+    spec: chatSpecFromJson(JSON.parse(readFileSync(beside("chat.json"), "utf8"))),
+    store: fileChatStore(join(process.env.STATE_DIRECTORY || ".", "chat.store.json")),
+    version: JSON.parse(readFileSync(beside("package.json"), "utf8")).version,
     node: process.env.NODE_RPC,
     log,
     onStop: () => process.exit(DEAD_KEY),
