@@ -71,8 +71,8 @@ export async function startChat(options, owner = null) {
     return c.status("done");
   });
 
-  // An error on purpose: the user gets "failed", and the owner and developers who have written to the app get a report
-  // made for an AI agent (the SDK reports handlers' errors unless `reportErrors: false`).
+  // An error on purpose: the user gets "failed", and the owner and developers the app can reach (their wallets said hello,
+  // or they wrote to it) get a report made for an AI agent (the SDK reports handlers' errors unless `reportErrors: false`).
   chat.command("fail", () => {
     const sessions = undefined;
     return card().text(`${sessions.length} sessions`);

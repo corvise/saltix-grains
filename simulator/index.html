@@ -11,8 +11,38 @@
     label { font-size: 12px; color: #9fb0d8; display: flex; flex-direction: column; gap: 4px; }
     input, select, button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid #2a3560; background: #121a33; color: inherit; }
     button { cursor: pointer; background: #1e2d5c; }
-    .phone { width: 390px; height: 780px; border: 1px solid #2a3560; border-radius: 28px; overflow: hidden; background: #fff; }
-    iframe { width: 100%; height: 100%; border: 0; }
+    .device { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    /* The phone: the page edge to edge, the system's bars and the wallet's controls over it (12-grains §7). */
+    .phone { position: relative; width: 390px; height: 844px; border: 1px solid #2a3560; border-radius: 28px; overflow: hidden; background: #fff; flex: none; }
+    .phone iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .phone .bar { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font-size: 12px; font-weight: 600; pointer-events: none; }
+    .phone .bar.status { top: 0; }
+    .phone .bar.nav { bottom: 0; justify-content: center; }
+    .phone .bar.nav span { width: 108px; height: 4px; border-radius: 2px; background: currentColor; opacity: .7; }
+    .phone[data-glyphs="light"] .bar { color: #fff; }
+    .phone[data-glyphs="dark"] .bar { color: #0b1020; }
+    .capsule { position: absolute; display: flex; }
+    .capsule::before { content: ""; position: absolute; inset: 8px 4px; border-radius: 16px; backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5); }
+    .phone[data-glyphs="light"] .capsule::before { background: rgba(14, 18, 32, .42); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .22); }
+    .phone[data-glyphs="dark"] .capsule::before { background: rgba(255, 255, 255, .62); box-shadow: inset 0 0 0 .5px rgba(11, 16, 32, .16); }
+    .capsule button { position: relative; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 17px; line-height: 1; cursor: pointer; }
+    .phone[data-glyphs="light"] .capsule button { color: #fff; }
+    .phone[data-glyphs="dark"] .capsule button { color: #0b1020; }
+    .capsule button + button::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: currentColor; opacity: .3; }
+    .capsule.outlined { outline: 1px dashed #ff4fd8; outline-offset: 0; }
+    .splash { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #0b1020; color: #e6ecff; }
+    .splash .progress { position: absolute; top: 0; left: 0; height: 2px; width: 40%; background: #4f8bff; animation: progress 1.2s ease-in-out infinite; }
+    @keyframes progress { from { left: -40%; } to { left: 100%; } }
+    .splash .icon { width: 64px; height: 64px; border-radius: 16px; background: #1e2d5c; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+    .closed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #0b1020; color: #9fb0d8; font-size: 13px; }
+    .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; }
+    .sheet { width: 100%; background: #121a33; color: #e6ecff; border-radius: 18px 18px 0 0; padding: 12px 12px 28px; display: flex; flex-direction: column; gap: 4px; }
+    .sheet .who { display: flex; align-items: center; gap: 10px; padding: 4px 4px 10px; font-size: 13px; }
+    .sheet .who .icon { width: 36px; height: 36px; border-radius: 10px; background: #1e2d5c; display: flex; align-items: center; justify-content: center; }
+    .sheet button { text-align: left; border: 0; background: none; padding: 10px 6px; border-radius: 8px; }
+    .sheet button:hover { background: #1e2d5c; }
+    .sheet .note { padding: 6px; }
+    [hidden] { display: none !important; }
     pre { font-size: 11px; white-space: pre-wrap; background: #070b17; padding: 10px; border-radius: 10px; max-height: 40vh; overflow: auto; }
     .row { display: flex; gap: 8px; }
     .chat { min-width: 0; }
@@ -35,7 +65,7 @@
     .preview { max-width: 100%; max-height: 240px; overflow: auto; }
     .form { display: flex; flex-direction: column; gap: 6px; }
     label.check { flex-direction: row; align-items: center; }
-    @media (max-width: 1100px) { body { grid-template-columns: 1fr; } .phone { width: 100%; } }
+    @media (max-width: 1100px) { body { grid-template-columns: 1fr; } .device { overflow-x: auto; } }
   </style>
 </head>
 <body>
@@ -57,7 +87,38 @@
     <label>Genesis hash (hex, to check invoices and notifications) <input id="genesis"></label>
     <pre id="log"></pre>
   </section>
-  <div class="phone"><iframe id="grain" name="saltix-simulator" title="grain"></iframe></div>
+  <div class="device">
+    <div class="row" style="align-items:center;flex-wrap:wrap">
+      <label>Size <select id="size"></select></label>
+      <button id="back" title="The system's Back: the page's own history first, then it closes the app">Back</button>
+      <label class="check"><input type="checkbox" id="box"> The controls' box</label>
+    </div>
+    <p style="font-size:12px;color:#9fb0d8;margin:0;max-width:390px">Full screen, as Saltix opens every app: a status bar of 32 and a navigation bar of 24 CSS px over the page (<code>safe_area</code>), the wallet's ⋯ | ✕ at <code>controls</code>. Keep tappable things out of that box; test at the Galaxy Z Fold sizes, light and dark (AGENTS.md).</p>
+    <div class="phone" id="phone" data-glyphs="light">
+      <iframe id="grain" name="saltix-simulator" title="grain"></iframe>
+      <div class="bar status" id="status-bar"><span>9:41</span><span>▂▄▆ ▮</span></div>
+      <div class="bar nav" id="nav-bar"><span></span></div>
+      <div class="capsule" id="capsule" role="group" aria-label="The wallet's controls">
+        <button id="more" aria-label="More: the app's sheet">⋯</button><button id="close" aria-label="Close the app">✕</button>
+      </div>
+      <div class="splash" id="splash" hidden><div class="progress"></div><div class="icon" id="splash-icon"></div><div id="splash-name"></div></div>
+      <div class="closed" id="closed" hidden><span>The app is closed.</span><button id="reopen">Open again</button></div>
+      <div class="scrim" id="sheet" hidden>
+        <div class="sheet" role="dialog" aria-label="The app's sheet">
+          <div class="who"><div class="icon" id="sheet-icon">◆</div><div><strong id="sheet-name"></strong><div class="note">hosted · unlisted · the simulator</div></div></div>
+          <button data-row="chat">Chat</button>
+          <button data-row="manage">Manage</button>
+          <button data-row="awaiting">Awaiting you</button>
+          <button data-row="share">Share</button>
+          <button data-row="reload">Reload</button>
+          <button data-row="permissions">Quick pay and permissions</button>
+          <button data-row="report">Report</button>
+          <button data-row="forget">Forget</button>
+          <div class="note">The wallet's own sheet, never inside the page. A hosted app's server can change its code at any time.</div>
+        </div>
+      </div>
+    </div>
+  </div>
   <section class="chat">
     <div class="row" style="align-items:center;justify-content:space-between"><h2>Chat</h2><button id="chat-load">Load the chat</button></div>
     <p style="font-size:12px;color:#9fb0d8;margin:0">The grain's chat as a wallet sees it (22-grain-chats, 24-app-studio): every card checked against the server keys the registry names (or the owner key's certificate), forms from the spec, secrets masked. Load the manifest first.</p>

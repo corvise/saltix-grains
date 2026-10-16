@@ -1,6 +1,10 @@
 /**
  * The wallet's side of the bridge on a computer (Saltix 12-grains §10): it opens a grain in an
- * iframe named `saltix-simulator`, and `@saltix/grain` in the page sends its requests here.
+ * iframe named `saltix-simulator`, and `@saltix/grain` in the page sends its requests here. The
+ * page is shown full screen as Saltix shows it (bridge version 3, `./phone.ts`): under the system's
+ * bars, with the wallet's ⋯ | ✕ over its top right corner, at a phone's and the Galaxy Z Fold's
+ * sizes. `npm run dev` serves it with the example grain, `grain dev` with yours
+ * (`?manifest=<url>` loads a manifest and opens its page).
  * Sign-in uses a test grain secret kept in this browser (real signatures, checkable by
  * `@saltix/grain-server`); invoices are checked like a wallet checks them; payments are not made
  * (it answers a made-up id); storage lives in this browser. Relay frames the grain sends are logged,
@@ -17,6 +21,7 @@ import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
 import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
 import { type DeviceKey, deviceKeyOf } from "../packages/server/src/keys";
 import { setupChat } from "./chat";
+import { setupPhone } from "./phone";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const frame = $<HTMLIFrameElement>("grain");
@@ -80,9 +85,11 @@ async function handle(origin: string, method: string, params: Record<string, unk
   const storageKey = (k: unknown) => `sim.storage.${s.slug}.${String(k)}`;
   switch (method) {
     case "grain_info":
+      // Bridge version 3: the page is full screen, under the bars `safe_area` says, with the wallet's controls at
+      // `controls` (12-grains §5).
       return {
         slug: s.slug, version: 1, form: "hosted", listing: "unlisted", host: "simulator", host_version: "0.1.0",
-        bridge: 2, language: s.language, theme: s.theme, safe_area: { top: 0, bottom: 0 }, network: "devnet", start: s.start,
+        bridge: 3, language: s.language, theme: s.theme, ...phone.insets(), network: "devnet", start: s.start,
       };
     case "grain_login": {
       if (!consents.has("login") && !confirm(`${s.slug} asks to sign you in under a key of its own.`)) throw new Refusal(4001, "the user declined");
@@ -161,10 +168,31 @@ async function handle(origin: string, method: string, params: Record<string, unk
     case "grain_openLink":
       window.open(String(params.url), "_blank", "noopener");
       return null;
+    case "grain_manage_open": {
+      // The wallet's own manage page (bridge 3): only for the app's team, within 5 seconds of a tap. The simulator has
+      // no manage page; it checks the section and says what Saltix would open.
+      const section = params.section;
+      if (section !== undefined && section !== "members") throw new Refusal(-32602, "section: members");
+      write(`grain_manage_open: Saltix opens ${s.slug}'s manage page${section ? ` at its ${section}` : ""}, above the app, for its team (a mock here)`);
+      return null;
+    }
     case "grain_chat_open":
       await chat.open(typeof params.cert === "string" ? params.cert : undefined, typeof params.spec === "string" ? params.spec : undefined);
       return null;
-    case "grain_ready": case "grain_close": case "grain_expand": case "grain_setHeader": case "grain_haptic": case "grain_share":
+    case "grain_ready":
+      phone.ready();
+      return null;
+    case "grain_close":
+      phone.close("grain_close");
+      return null;
+    case "grain_setHeader": {
+      const color = String(params.color ?? "");
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Refusal(-32602, "color: #rrggbb");
+      phone.setHeader(color);
+      return null;
+    }
+    // A grain is always full screen (bridge 3): expanding changes nothing.
+    case "grain_expand": case "grain_haptic": case "grain_share":
       return null;
     default:
       throw new Refusal(4200, `unsupported method ${method}`);
@@ -191,6 +219,25 @@ function emit(event: string, data: object) {
   frame.contentWindow?.postMessage({ saltixSim: 1, event, data }, "*");
 }
 
+/** Open the grain's page at the URL the form holds. */
+function openGrain(): void {
+  const url = $<HTMLInputElement>("url").value.trim();
+  if (!url) return write("no page to open: a chat-only app has none (its home is Saltix's own screen)");
+  phone.opened();
+  frame.src = url;
+  write(`opened ${frame.src}`);
+}
+
+const phone = setupPhone({
+  frame,
+  name: () => settings().slug,
+  theme: () => settings().theme,
+  log: write,
+  emit,
+  openChat: () => void chat.open(),
+  reopen: openGrain,
+});
+
 const chat = setupChat({
   slug: () => settings().slug,
   owner: () => settings().owner,
@@ -200,16 +247,15 @@ const chat = setupChat({
   log: write,
   open: (start) => {
     $<HTMLInputElement>("start").value = start;
-    frame.src = $<HTMLInputElement>("url").value.trim();
-    write(`opened ${frame.src} with start ${start}`);
+    openGrain();
   },
 });
 
-$<HTMLButtonElement>("open").onclick = () => {
-  frame.src = $<HTMLInputElement>("url").value.trim();
-  write(`opened ${frame.src}`);
+$<HTMLButtonElement>("open").onclick = openGrain;
+$<HTMLSelectElement>("theme").onchange = () => {
+  emit("theme", { theme: settings().theme });
+  phone.repaint();
 };
-$<HTMLSelectElement>("theme").onchange = () => emit("theme", { theme: settings().theme });
 $<HTMLButtonElement>("hide").onclick = () => emit("visibility", { visible: false });
 $<HTMLButtonElement>("show").onclick = () => emit("visibility", { visible: true });
 $<HTMLButtonElement>("frame").onclick = () => {
@@ -240,13 +286,26 @@ $<HTMLButtonElement>("notification").onclick = () => {
   const { notification: n } = decodeNotification(bytes);
   write(`notification ✔ "${n.title}" ${n.body}${n.start ? ` (opens with ${n.start})` : ""}`);
 };
+/** Load the manifest at `url`: its slug, owner key and page (a hosted grain's URL, a sealed grain's start page where
+ *  `grain dev` serves `public/`, or none for a chat-only grain). */
+async function loadManifest(url: string): Promise<void> {
+  const signed = await (await fetch(url)).json();
+  const m = signed.manifest;
+  $<HTMLInputElement>("slug").value = m.slug;
+  const key = m.owner_key;
+  $<HTMLInputElement>("owner").value = "ed25519" in key ? key.ed25519 : JSON.stringify(key);
+  $<HTMLInputElement>("url").value = m.entry.hosted?.url ?? (m.entry.sealed ? new URL(m.entry.sealed.start, url).href : "");
+  phone.repaint();
+  write(`manifest of ${m.slug} v${m.version} loaded`);
+}
+
 $<HTMLButtonElement>("manifest").onclick = async () => {
   const url = prompt("The grain's manifest URL", new URL("/.well-known/saltix-grain", location.href).href);
-  if (!url) return;
-  const signed = await (await fetch(url)).json();
-  $<HTMLInputElement>("slug").value = signed.manifest.slug;
-  const key = signed.manifest.owner_key;
-  $<HTMLInputElement>("owner").value = "ed25519" in key ? key.ed25519 : JSON.stringify(key);
-  $<HTMLInputElement>("url").value = signed.manifest.entry.hosted?.url ?? "";
-  write(`manifest of ${signed.manifest.slug} v${signed.manifest.version} loaded`);
+  if (url) await loadManifest(url);
 };
+
+// `grain dev` opens the simulator with its manifest: load it and open the page.
+const asked = new URLSearchParams(location.search).get("manifest");
+if (asked) {
+  void loadManifest(new URL(asked, location.href).href).then(openGrain, (e: Error) => write(`manifest ✖ ${e.message}`));
+}

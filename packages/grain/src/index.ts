@@ -1,6 +1,7 @@
 /**
  * `@saltix/grain`: the bridge between a grain and the Saltix wallet it runs in
- * (Saltix specs/12-grains.md §5, bridge version 1; the chat, 22-grain-chats §5, version 2).
+ * (Saltix specs/12-grains.md §5, bridge version 1; the chat, 22-grain-chats §5, version 2; the full-screen page, its
+ * insets and the wallet's controls, and the app's own manage page, version 3: `grain.layout()`, `grain.manage.open()`).
  *
  * In a wallet the page has `window.saltix`, defined before its scripts run; in the simulator
  * (an iframe named `saltix-simulator`) requests go to the simulator page instead. Outside both,
@@ -20,6 +21,145 @@ export const ErrorCode = {
   /** Not in a wallet (or the simulator): nothing to ask. */
   NoWallet: 4900,
 } as const;
+
+// ── the full-screen page (12-grains §5, §7; bridge version 3) ──
+//
+// Saltix opens every grain edge to edge, under the status bar and the navigation bar, with its own controls (`⋯ | ✕`)
+// floating in the top right corner. The page keeps its text and controls inside the safe area, and every tappable
+// element out of the controls' box. What the page reads, and every fallback, is decided in one place (`layoutOf`):
+// - Saltix with bridge 3 or newer: the wallet's `safe_area` and `controls`;
+// - Saltix with bridge 1 or 2: its header sits above the page, so nothing of the page is under the system's bars: a
+//   safe area of 0 and no controls;
+// - a plain browser (no wallet): the browser's own insets (`env(safe-area-inset-*)`) and no controls.
+// In CSS pixels, which equal dp in a grain's view. This file is copied whole into projects (`grain init`): it stays one
+// module.
+
+/** How far the status bar, the navigation bar and a display cutout reach into the page from each edge. */
+export interface SafeArea {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/** The wallet's controls over the page: `top` from the page's top edge, `right` from its right edge. */
+export interface Controls {
+  top: number;
+  right: number;
+  width: number;
+  height: number;
+}
+
+/** Where the page is drawn, and what is over it. */
+export interface Layout {
+  safeArea: SafeArea;
+  /** The wallet's controls over the page, or null where there are none (Saltix bridge 1–2, a plain browser). */
+  controls: Controls | null;
+  /** Where the values come from: Saltix with bridge 3 or newer (`wallet`), an older Saltix (`legacy`), or no wallet
+   *  (`browser`). */
+  source: "wallet" | "legacy" | "browser";
+}
+
+/** What the wallet answers in `grain_info` and in the `insets` event, as far as the layout reads it. */
+export interface LayoutInfo {
+  bridge?: number;
+  safe_area?: Partial<SafeArea> | null;
+  controls?: Partial<Controls> | null;
+}
+
+/**
+ * The wallet's controls (12-grains §7, §11): two 48 dp targets, ⋯ then ✕, in a box 96 × 48 dp, 8 dp from the right
+ * inset and 4 dp below the top inset.
+ */
+export const CONTROLS_BOX = { width: 96, height: 48, right: 8, below: 4 } as const;
+
+/** The first bridge version whose page is full screen (`safe_area` with its four sides, `controls`, `insets`). */
+export const FULL_SCREEN_BRIDGE = 3;
+
+/** The CSS custom properties `grain.layout()` sets on `:root`, in pixels. */
+export const LAYOUT_VARIABLES = {
+  safeTop: "--saltix-safe-top",
+  safeBottom: "--saltix-safe-bottom",
+  safeLeft: "--saltix-safe-left",
+  safeRight: "--saltix-safe-right",
+  controlsTop: "--saltix-controls-top",
+  controlsRight: "--saltix-controls-right",
+  controlsWidth: "--saltix-controls-width",
+  controlsHeight: "--saltix-controls-height",
+} as const;
+
+const ZERO: SafeArea = { top: 0, bottom: 0, left: 0, right: 0 };
+
+/** Where Saltix draws its controls over a page whose insets are `safeArea`: what a wallet reports as `controls`. For
+ *  tools that play the wallet (the simulator, `grain dev`). */
+export function controlsFor(safeArea: SafeArea): Controls {
+  return { top: safeArea.top + CONTROLS_BOX.below, right: safeArea.right + CONTROLS_BOX.right, width: CONTROLS_BOX.width, height: CONTROLS_BOX.height };
+}
+
+/** A length the wallet gave: a finite number of 0 or more, anything else 0 (a field it does not give is 0). */
+const length = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
+
+/**
+ * The layout from what the wallet answered (`grain_info`, or an `insets` event with the bridge it came under), or from
+ * nothing (`info` null: no wallet) with the browser's own insets. Every fallback is here, and nowhere else.
+ */
+export function layoutOf(info: LayoutInfo | null, insets: SafeArea = ZERO): Layout {
+  if (info === null) return { safeArea: { ...insets }, controls: null, source: "browser" };
+  if ((info.bridge ?? 1) < FULL_SCREEN_BRIDGE) return { safeArea: { ...ZERO }, controls: null, source: "legacy" };
+  const s = info.safe_area ?? {};
+  const c = info.controls;
+  return {
+    safeArea: { top: length(s.top), bottom: length(s.bottom), left: length(s.left), right: length(s.right) },
+    controls: c ? { top: length(c.top), right: length(c.right), width: length(c.width), height: length(c.height) } : null,
+    source: "wallet",
+  };
+}
+
+const px = (n: number) => `${n}px`;
+
+/** The values `grain.layout()` gives the CSS variables: pixels, or in a plain browser the browser's own insets, so that
+ *  they follow its viewport without a script. Controls that are not there are 0. */
+export function cssVariables(layout: Layout): Record<string, string> {
+  const v = LAYOUT_VARIABLES;
+  const s = layout.safeArea;
+  const c = layout.controls ?? { top: 0, right: 0, width: 0, height: 0 };
+  const safe: Record<keyof SafeArea, string> = layout.source === "browser"
+    ? { top: "env(safe-area-inset-top, 0px)", bottom: "env(safe-area-inset-bottom, 0px)", left: "env(safe-area-inset-left, 0px)", right: "env(safe-area-inset-right, 0px)" }
+    : { top: px(s.top), bottom: px(s.bottom), left: px(s.left), right: px(s.right) };
+  return {
+    [v.safeTop]: safe.top, [v.safeBottom]: safe.bottom, [v.safeLeft]: safe.left, [v.safeRight]: safe.right,
+    [v.controlsTop]: px(c.top), [v.controlsRight]: px(c.right), [v.controlsWidth]: px(c.width), [v.controlsHeight]: px(c.height),
+  };
+}
+
+interface Doc {
+  documentElement?: { style?: { setProperty(name: string, value: string): void } };
+  body?: { appendChild(node: unknown): unknown };
+  createElement?(tag: string): { style: { cssText: string }; remove(): void };
+}
+
+/** The browser's own insets in pixels, measured where there is a document (0 elsewhere). */
+export function browserInsets(): SafeArea {
+  const g = globalThis as unknown as { document?: Doc; getComputedStyle?: (e: unknown) => Record<string, string> };
+  const d = g.document;
+  if (!d?.body || !d.createElement || typeof g.getComputedStyle !== "function") return { ...ZERO };
+  const probe = d.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;" +
+    "padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
+  d.body.appendChild(probe);
+  const style = g.getComputedStyle(probe);
+  const read = (v: string | undefined) => length(parseFloat(v ?? ""));
+  const out = { top: read(style.paddingTop), bottom: read(style.paddingBottom), left: read(style.paddingLeft), right: read(style.paddingRight) };
+  probe.remove();
+  return out;
+}
+
+/** Set the CSS variables of `layout` on `:root`, where there is a document. */
+export function applyLayout(layout: Layout): void {
+  const style = (globalThis as unknown as { document?: Doc }).document?.documentElement?.style;
+  if (!style) return;
+  for (const [name, value] of Object.entries(cssVariables(layout))) style.setProperty(name, value);
+}
 
 export class GrainError extends Error {
   constructor(public readonly code: number, message: string) {
@@ -42,7 +182,11 @@ export interface GrainInfo {
   bridge: number;
   language: string;
   theme: Theme;
-  safe_area: { top: number; bottom: number };
+  /** How far the system's bars reach into the page (bridge 3; `left` and `right` from bridge 3, and 0 in bridge 1–2,
+   *  whose header sits above the page). Read it through `grain.layout()`, which takes a missing field as 0. */
+  safe_area: SafeArea;
+  /** The wallet's controls over the page (bridge 3): keep every tappable element out of this box. Absent before. */
+  controls?: Controls;
   network: Network;
   start: string | null;
 }
@@ -71,9 +215,16 @@ export type Haptic = "light" | "medium" | "heavy" | "success" | "warning" | "err
 export interface Events {
   theme: { theme: Theme };
   visibility: { visible: boolean };
+  /** The page's insets or the wallet's controls changed (bridge 3): the phone turned, unfolded or folded, the window
+   *  resized. `grain.layout()` follows it. */
+  insets: { safe_area: SafeArea; controls: Controls };
   /** A frame to the grain's alias at the relay (`relay.open`), opened by the wallet: `payload` is hex. */
   relay: { from: string; payload: string };
 }
+
+/** The sections of the app's manage page a grain may open it at (`grain.manage.open`, 12-grains §5). */
+export const MANAGE_SECTIONS = ["members"] as const;
+export type ManageSection = (typeof MANAGE_SECTIONS)[number];
 
 /** The most a frame through the relays carries, in bytes (12-grains §11). */
 export const MAX_RELAY_PAYLOAD = 48_000;
@@ -205,9 +356,24 @@ export const grain = {
   /** The grain is drawn: the wallet hides its splash. */
   ready: () => call<null>("grain_ready"),
   close: () => call<null>("grain_close"),
+  /** Changes nothing since bridge 3: a grain is always full screen. */
   expand: () => call<null>("grain_expand"),
-  /** The wallet's header colour above the grain: `#rrggbb`. */
+  /** The colour at the top of the page (`#rrggbb`): the wallet draws the status bar's icons and its controls to contrast
+   *  with it (bridge 3; before, the colour of its header above the grain). */
   setHeader: (color: string) => call<null>("grain_setHeader", { color }),
+  /**
+   * Lay the page out as Saltix shows it (12-grains §5, §7): full screen, edge to edge, with the wallet's controls
+   * `⋯ | ✕` floating in the top right corner. Resolves with the safe area and the controls' box, and keeps both current
+   * (the `insets` event, window resizes and theme changes), calling `onChange` with each new layout. It sets, on
+   * `:root`, `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left`, `--saltix-safe-right`,
+   * `--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width` and `--saltix-controls-height`, so
+   * CSS alone can keep text inside the safe area and a top bar clear of the controls. The returned object's fields are
+   * the current layout (a destructured copy is not); `stop()` stops following.
+   *
+   * Outside Saltix bridge 3 it falls back (`layoutOf`): an older Saltix draws its header above the page, so the safe area
+   * is 0 and there are no controls; a plain browser gives its own insets (`env(safe-area-inset-*)`) and no controls.
+   */
+  layout: (onChange?: (layout: Layout) => void): Promise<LayoutWatch> => watchLayout(onChange),
   haptic: (kind: Haptic = "light") => call<null>("grain_haptic", { kind }),
   copy: (text: string) => call<null>("grain_copy", { text }),
   share: (text: string, url?: string) => call<null>("grain_share", url ? { text, url } : { text }),
@@ -292,6 +458,22 @@ export const grain = {
       return call<null>("grain_chat_open", params);
     },
   },
+  /** The app's own manage page in the wallet (12-grains §5, 24-app-studio §4; bridge version 3). */
+  manage: {
+    /**
+     * Open the grain's own manage page above it, at `section` (`"members"`) when given, so that the team adds people
+     * where it sees them: the owner's wallet alone signs what changes the registry. Call it from a tap: the wallet opens
+     * it only within 5 seconds of one, and only for the grain's team (its owner, developers and viewers); anyone else
+     * gets `NotPermitted` (4100). An older wallet answers `Unsupported` (4200): say in words where the page is (My apps →
+     * the app).
+     */
+    open: (options: { section?: ManageSection } = {}) => {
+      if (options.section !== undefined && !MANAGE_SECTIONS.includes(options.section)) {
+        return Promise.reject(new GrainError(ErrorCode.InvalidParams, `section: one of ${MANAGE_SECTIONS.join(", ")}`));
+      }
+      return call<null>("grain_manage_open", options.section === undefined ? {} : { section: options.section });
+    },
+  },
   /** Notifications from your server while the grain is closed (12-grains §5.5). */
   notifications: {
     /** Ask the user once whether the grain may notify them; resolves with the answer. */
@@ -304,5 +486,94 @@ export const grain = {
     provider()?.off?.(event, handler as (data: unknown) => void);
   },
 };
+
+/** What `grain.layout()` resolves with: the current layout, kept current until `stop()`. */
+export interface LayoutWatch extends Layout {
+  stop(): void;
+}
+
+interface WindowEvents {
+  addEventListener?(type: string, handler: () => void): void;
+  removeEventListener?(type: string, handler: () => void): void;
+}
+
+async function watchLayout(onChange?: (layout: Layout) => void): Promise<LayoutWatch> {
+  const p = provider();
+  const w = globalThis as unknown as WindowEvents;
+  let current: Layout = layoutOf(p ? { bridge: 1 } : null, p ? undefined : browserInsets());
+  let bridge = 1;
+  let stopped = false;
+  // Each change bumps `seq`: a read that started before a newer `insets` event does not undo it.
+  let seq = 0;
+  let reading = false;
+  let again = false;
+
+  const apply = (next: Layout) => {
+    if (stopped) return;
+    current = next;
+    applyLayout(next);
+    onChange?.(next);
+  };
+  const read = async (): Promise<Layout> => {
+    if (!p) return layoutOf(null, browserInsets());
+    try {
+      const info = await call<LayoutInfo>("grain_info");
+      bridge = info.bridge ?? 1;
+      return layoutOf(info);
+    } catch {
+      return current;
+    }
+  };
+  // One `grain_info` at a time, and one more after it when something changed meanwhile: a window being dragged sends
+  // resizes by the dozen, and the wallet rate-limits its bridge.
+  const refresh = (): void => {
+    if (stopped) return;
+    if (reading) {
+      again = true;
+      return;
+    }
+    reading = true;
+    const mine = ++seq;
+    void read().then((next) => {
+      if (seq === mine) apply(next);
+    }).finally(() => {
+      reading = false;
+      if (again) {
+        again = false;
+        refresh();
+      }
+    });
+  };
+  const onInsets = (data: unknown) => {
+    const e = data as Partial<Events["insets"]>;
+    seq++;
+    apply(layoutOf({ bridge: Math.max(bridge, FULL_SCREEN_BRIDGE), safe_area: e.safe_area, controls: e.controls }));
+  };
+
+  // Listening first: an `insets` event that comes while `grain_info` is answered wins over its answer.
+  p?.on?.("insets", onInsets);
+  p?.on?.("theme", refresh);
+  w.addEventListener?.("resize", refresh);
+  const first = ++seq;
+  const initial = await read();
+  if (seq === first) apply(initial);
+  return {
+    get safeArea() {
+      return current.safeArea;
+    },
+    get controls() {
+      return current.controls;
+    },
+    get source() {
+      return current.source;
+    },
+    stop() {
+      stopped = true;
+      p?.off?.("insets", onInsets);
+      p?.off?.("theme", refresh);
+      w.removeEventListener?.("resize", refresh);
+    },
+  };
+}
 
 export default grain;

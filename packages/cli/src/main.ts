@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The grain command line (Saltix 12-grains §10).
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
-import { join, basename, resolve } from "node:path";
+import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, rpc, type GrainCall, type Manifest } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
@@ -11,7 +11,8 @@ import {
   APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, sendCall, serverKeyOf,
   waitForRegistry, walletFor, writeAppKey,
 } from "./studio.js";
-import { serve, linkFor } from "./dev.js";
+import { serve, linkFor, simulatorFor } from "./dev.js";
+import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
@@ -25,8 +26,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain init [dir] [--slug S] [--name N] [--chat]
                                            a new grain: grain.json, owner.key, public/; --chat a chat-only one
                                            (no page: grain.json and chat.json)
-  grain dev [--port 8090]                  serve public/ with the manifest signed for this computer
-  grain lint [--manifest grain.json]       what stops the manifest from being registered
+  grain dev [--port 8090]                  serve public/ with the manifest signed for this computer, and the
+                                           simulator: your page full screen as Saltix shows it, with the wallet's
+                                           controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704
+  grain lint [--manifest grain.json]       what stops the manifest from being registered, and warnings about
+                                           public/ (a top bar under the wallet's controls)
   grain icon <png>                         the hash a manifest names its 256x256 icon by
   grain sign [--out signed.json]           the signed manifest, for /.well-known/saltix-grain
   grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
@@ -145,6 +149,9 @@ async function main(argv: string[]): Promise<number> {
       if (!manifest.description.en) delete (manifest.description as Record<string, string>).en;
       writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
+      // The rules a coding agent follows (Saltix shows apps full screen), for every agent and for Claude Code.
+      writeFileSync(join(dir, "AGENTS.md"), template.agentsMd(slug, chat));
+      writeFileSync(join(dir, "CLAUDE.md"), template.claudeMd);
       if (chat) {
         writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
         writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
@@ -176,6 +183,7 @@ async function main(argv: string[]): Promise<number> {
       console.log(`serving ${resolve("public")} on port ${port}`);
       console.log(`  a debug Saltix in the emulator: ${linkFor(`http://10.0.2.2:${port}`)}`);
       console.log(`  this computer:                  ${linkFor(`http://localhost:${port}`)}`);
+      console.log(`  the simulator (full screen, the wallet's controls, the Galaxy Z Fold's sizes): ${simulatorFor(`http://localhost:${port}`)}`);
       return await new Promise<number>(() => {});
     }
     case "lint": {
@@ -183,6 +191,8 @@ async function main(argv: string[]): Promise<number> {
       const owner = existsSync(keyPath) ? publicKeyOf(readKey(keyPath)) : undefined;
       const { errors, warnings } = lint(manifest, owner);
       if (signed && !verifyManifest(signed)) errors.push("signature: does not check against owner_key");
+      // A page's layout: Saltix shows it full screen (12-grains §7). A chat-only grain has none.
+      if (!("chat" in manifest.entry)) warnings.push(...lintPages(join(dirname(resolve(manifestPath)), "public")));
       for (const w of warnings) console.log(`warning: ${w}`);
       for (const e of errors) console.error(`error: ${e}`);
       if (errors.length === 0) console.log(`${manifest.slug} ${manifest.version}: ready to register`);

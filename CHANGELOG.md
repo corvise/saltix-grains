@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **Breaking for chat clients**: the grain chat frames gain the team's hello and the server's welcome (Saltix
+  22-grain-chats §3a; vectors synced from Saltix 2d0c4c9, a `hello` section). `ChatFrame` tag 4 is `hello`
+  (`SignedChatHello`: `ChatHello {slug, id, at, member: SignedMemberProof, lang}`, signed by the user's grain key over
+  `"Saltix grain chat hello v1"`), user to server only; tag 5 is `welcome` (`SignedChatWelcome`:
+  `ChatWelcome {slug, hello, at}` with its `ServerKey`, signed over `"Saltix grain chat welcome v1"`), server to user
+  only. A hello whose `lang` is out of form does not read. An older server drops a hello frame and acks it (harmless:
+  the member is reached once they write, as before); a wallet needs this SDK, or the formats it follows, to take a
+  welcome. `serverKeyHolds` and `chatCertHolds` take anything with `revoked` (`Revoking`), so a wallet that holds no spec
+  yet checks a welcome with `{ revoked: [] }`.
 - **Breaking for chat clients**: a chat request names the user's language (Saltix 22-grain-chats §3; vectors synced
   from Saltix f99df76). `ChatRequest` ends with `lang`: the language the user's Saltix shows (2–8 of `[a-z-]`, as
   the spec's maps name languages), or `""` when the app does not say. Handlers read it as `ask.lang` and answer in it
@@ -83,6 +92,45 @@
 
 ### Added
 
+- **The team's hello** (Saltix 22-grain-chats §3a): an account on the grain's team introduces itself to its own app
+  without the user typing, so `proposeUpdate`, `notifyTeam` and error reports reach it before anyone writes.
+  `ChatServer` takes a hello only from the team (the owner, developers 2, viewers 4; a user-only member is not on it):
+  for its slug, from its key's address, signed, at most 5 minutes ahead and 7 days behind (`HELLO_LIFE_MS`), with a
+  member proof checked against the registry and the account's keys exactly as a request's team proof is; it keeps the
+  member's address and answers with a welcome naming the hello, signed as its messages are, at most once an hour per key
+  (`WELCOME_EVERY_MS`: a hello within it is taken and not answered); anything else gets no answer at all and its frame
+  is acked. At most `helloChecksPerMinute` hellos a minute (`HELLO_CHECKS_PER_MINUTE`, 30) reach the registry and the
+  node, counting only those that pass every check needing neither. A hello runs no handler and counts in no number,
+  budget or request memory. Under an expired certificate the address is kept and no welcome goes. Logged as
+  `chat_hello_welcomed`, `chat_hello_repeated`, `chat_hello_dropped {reason}`, `chat_hello_unchecked`,
+  `chat_hello_busy` and `chat_hello_unwelcomed`, never naming an account, a key or an address. The formats:
+  `signChatHello`, `chatHelloProblem`, `helloTimely`, `introductionProblem` (the reference's `member::introduces`,
+  `not_team`), `signChatWelcome`, `chatWelcomeProblem` (as a wallet checks one: `unasked` for another hello),
+  `HELLO_RETRY_MS`. The simulator's chat pane says hello when the account is on the app's team and checks the welcome.
+- **Full-screen pages** (Saltix 12-grains §5, §7, bridge version 3):
+  - `@saltix/grain`: `grain.layout(onChange?)` returns `{safeArea, controls, source}` from `grain_info`, keeps it current
+    on the `insets` event, window resizes and theme changes (one `grain_info` at a time), and sets
+    `--saltix-safe-top|bottom|left|right` and `--saltix-controls-top|right|width|height` on `:root`. The fallbacks are
+    decided in one place (`layoutOf`): Saltix bridge 3 or newer gives its values (a missing field 0, absent controls
+    none); bridge 1–2 a safe area of 0 and no controls; a plain browser its own `env(safe-area-inset-*)` and no controls.
+    `GrainInfo` gains `safe_area.left|right` and `controls`, `Events` the `insets` event; `controlsFor`, `CONTROLS_BOX`
+    (96 × 48, 8 from the right inset, 4 below the top one), `cssVariables`, `LAYOUT_VARIABLES`.
+  - `@saltix/grain`: `grain.manage.open({section?})` (`grain_manage_open`, bridge version 3): the app's own manage page
+    in the wallet, at `"members"` (`MANAGE_SECTIONS`), from a tap, for the app's team; the simulator answers it.
+  - The simulator shows the page full screen as Saltix does: under a status bar (32) and a navigation bar (24), with the
+    translucent `⋯ | ✕` on a blur where `controls` says, contrasting with the page's `grain_setHeader` colour or its
+    theme; ✕ closes, Back goes through the page's history then closes, ⋯ shows a mock of the wallet's sheet; a loading
+    screen until `grain_ready`; `grain_info` answers bridge 3; *Size* switches between a phone and the Galaxy Z Fold's
+    475×751, 704×932 and 932×704 and sends `insets`. `?manifest=<url>` loads a manifest and opens its page.
+  - `grain dev` serves the same simulator at `/_simulator/` (built into the command line's package) and prints its
+    address.
+  - `grain init`'s page lays out edge to edge by the variables, its top bar level with the controls and clear of them;
+    every project (`--chat` too) gets `AGENTS.md`, the rules a coding agent follows, and `CLAUDE.md`, which points to it.
+  - `grain lint` warns (`full-screen-top-bar`) when a page in `public/` has a fixed or sticky top bar (`top: 0` or a few
+    pixels, `inset`, or the classes `fixed|sticky top-0`) but no page, stylesheet or script of the app's own uses
+    `--saltix-safe-*`, `--saltix-controls-*` or `env(safe-area-inset-top)`.
+  - `AGENTS.md` and `CLAUDE.md` at the repository's root, "Designing for Saltix" in docs/first-app.md, and the example
+    grain laid out full screen.
 - **Updates the owner approves in the console** (Saltix 22-grain-chats §4, 12-grains §10; vectors synced from the
   protocol PR): the card action `publish` (`Card.publish(label, manifest | link)`, tag 3) carries the manifest's text
   as a publishing link does, and `ChatServer.proposeUpdate(manifest | link, { text?, label?, roles? })` sends it to the

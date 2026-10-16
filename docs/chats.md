@@ -283,12 +283,12 @@ chat.command("stats", (ask) => {
 ```
 
 **How the app reaches the team.** A user of a public app is a key the app cannot tie to an account. The team's wallets
-therefore send their member proof with every request to their own app, public or private (22-grain-chats §3), and the
-server keeps each member's address in the app from it (`ChatStore.team`, so a `fileChatStore` keeps it across
-restarts). Until a member has written to the app once, it cannot reach them: `notifyTeam` counts them as
-`unreachable`, and Saltix's console says so. A member the registry drops is forgotten at the next `team()`. Proofs from
-anyone else are ignored and cost the node nothing; handlers see `ask.member` and `ask.fromTeam` for the team's
-requests only.
+therefore introduce themselves to their own app, public or private, with a **hello** ([below](#the-teams-wallets-say-hello)),
+and send the same member proof with every request (22-grain-chats §3, §3a); the server keeps each member's address in
+the app from either (`ChatStore.team`, so a `fileChatStore` keeps it across restarts). A member whose wallet has not said
+hello (a Saltix from before it) nor written to the app cannot be reached: `notifyTeam` counts them as `unreachable`. A
+member the registry drops is forgotten at the next `team()`. Proofs from anyone else are ignored and cost the node
+nothing; handlers see `ask.member` and `ask.fromTeam` for the team's requests only.
 
 **The budget.** A wallet shows the team up to **100** unasked messages a day per app (`CHAT_UNASKED_TEAM_PER_DAY`), so
 that reports get through while you work on the app; everyone else keeps 10. `notifyTeam` skips a member whose day is
@@ -317,6 +317,47 @@ a card:
   id, the user still getting a `failed` status. `ChatServer.start({ reportErrors: false })` turns it off. It needs the
   registry (a developer key, or `node`); `report` never throws, and says in your log what it could not do.
 
+### The team's wallets say hello
+
+Nobody on the team has to write to their own app first. A team member's Saltix introduces itself (Saltix 22-grain-chats
+§3a) when the app is made, when the account joins the team and when the app is opened: it sends a **hello**
+(`ChatFrame::Hello`, tag 4), its member proof for this grain and the wallet's grain key, signed by that key. Nothing of
+it shows in the chat, and a user's wallet never sends one, so a public app still never learns who its users are. The
+server does it all on its own:
+
+- **It takes a hello only** if it is for this grain, came from its key's address, is signed for this network, dated at
+  most 5 minutes ahead and at most 7 days behind (`HELLO_LIFE_MS`), and its proof checks as a request's does (for this
+  grain and this key, alive and at most 30 days long, signed by a key that speaks for the account now), from the
+  **owner, a developer or a viewer**, by the registry at the beacon tip. A member who only uses a private app is not on
+  the team.
+- **Then it keeps the member's address**, as a request's proof does (`chat_team_reachable` the first time), and answers
+  with a **welcome** (`ChatFrame::Welcome`, tag 5) naming the hello's id, signed as its messages are. The wallet stops
+  sending hellos, and its console takes the app's unasked messages by default.
+- **Once an hour per key** at most (`WELCOME_EVERY_MS`): a hello within the hour is taken (the address kept again) and
+  not answered.
+- **Nothing at all** to anything else: another grain's hello, a bad signature, a proof that does not check, an account
+  off the team, one too old or dated ahead. The frame is taken off the mailbox. A hello tells your app nothing a request
+  with the same proof would not, and nothing about anyone off its team.
+- **Never a flood on your node.** At most `helloChecksPerMinute` hellos a minute (`HELLO_CHECKS_PER_MINUTE`, 30, by
+  default) reach the registry and the node; only those that pass every check needing neither count. Past the cap a hello
+  is dropped (`chat_hello_busy`, logged once a minute) and its wallet tries again within 6 hours (`HELLO_RETRY_MS`). A
+  team is a few dozen accounts whose wallets say hello once per launch at most, and only until welcomed.
+- **Never a request.** No handler runs; a hello is not in the numbers the app reports, in any budget or in the requests
+  answered.
+
+So `proposeUpdate` and `notifyTeam` reach the owner and the developers from the start. Keep the team's addresses in a
+store that survives restarts (`fileChatStore`, or `team` and `setTeam` of your own): a welcomed wallet says hello again
+only when the server key it writes to changes or its proof is renewed, 3 days before it ends. The welcomes of the last
+hour live in memory, so a restart may welcome a key once more.
+
+The log names reasons only, never an account, a key or an address: `chat_hello_welcomed`, `chat_hello_repeated` (within
+the hour), `chat_hello_dropped` with its `reason` (`slug`, `sender`, `language`, `signature`, `time`, `proof`,
+`not_team`, `member:signer`, `unregistered`, `no_registry`), `chat_hello_unchecked` (the node did not answer),
+`chat_hello_busy`, and `chat_hello_unwelcomed` (`cert_expired`: a certified key whose certificate has ended keeps the
+address and sends no welcome, which no wallet would take). A server on an SDK from before the hello cannot read one: it
+drops the frame (`chat_frame_malformed`), and a member is reached once they write, as before. A welcome sent to the
+server is dropped (`chat_frame_dropped`).
+
 ### Updates the owner approves in the console
 
 A new screen, a new bundle, a new name: each is a new manifest, and only the owner's phone signs one (`UpdateGrain`,
@@ -340,7 +381,8 @@ card().text("…").publish("Review", next);      // the same action on a card of
   developers (and viewers, if you name them) see what is proposed and that the owner approves it. Once the registry
   holds the version, the card says it is approved.
 - It goes like `notifyTeam`, within the team's budget, and `owner` says whether the owner's console got it: until
-  then (they have not written to the app yet, or their budget is spent) nobody can approve it, so propose again later.
+  then (the owner's wallet has not said hello nor written to the app, or their budget is spent) nobody can approve it,
+  so propose again later.
   The log says `chat_update_proposed` with the counts.
 - Saltix 0.1.51 and older do not know the action and drop the card: send it once the owner's Saltix is newer, or
   give them the link (`grain publish`, or `publishLink(next)`) as well.
@@ -399,8 +441,11 @@ It refuses:
   two of them; one with a `publish` action to anyone off the app's team;
 - **reported numbers** not signed by a key the registry names, older than 2 days or contradicting each other;
 - **an unasked message** (one that answers no request of the user's that still lives) while the user has not allowed
-  them (allowed by default once they sent a request), or past 10 that day (100 to the app's team), notifications
-  included;
+  them (allowed by default once they sent a request, or once the app welcomed the wallet's hello), or past 10 that day
+  (100 to the app's team), notifications included;
+- **a welcome** that is not for the hello in flight, not from the chat's server key's address, from a key that does not
+  speak for the grain, dated more than 5 minutes ahead, or whose signature does not check. It never shows a hello or a
+  welcome in the chat;
 - **a frame** that is not a grain chat's: dropped and taken off the mailbox.
 
 It draws messages natively, never as web content: text without markup; fields as a table; secrets masked until tapped,
@@ -421,8 +466,9 @@ developer key (`examples/hello-grain/chat.json`, `chat.mjs`). In the simulator, 
 (or **Open the chat** in the grain): it plays the wallet's side exactly, checks every card against the registered keys,
 builds forms from the spec, masks secrets and shows the numbers the app reports. **Private app** and **This account is a
 member** change the development registry (a member uses and develops the app, so it is on its team); **Send a member
-proof** is the wallet's side, to a private app or as the team. As a member, run **Fail on purpose**: the answer says
-"failed", and the error report arrives as a message to the team. `CHAT_NODE=<a devnet node's
+proof** is the wallet's side, to a private app or as the team. On the team, the pane says hello as Saltix does, on
+loading the chat and on joining, and the simulator's log says when the app welcomed it. As a member, run **Fail on
+purpose**: the answer says "failed", and the error report arrives as a message to the team. `CHAT_NODE=<a devnet node's
 wallet interface>` runs the chat on that node's relays under a certificate instead, for a debug Saltix on that devnet.
 
 `npm run example` runs the same chat as your app's server from your developer key (`SALTIX_APP_KEY`, or `app.key`).
@@ -430,7 +476,9 @@ wallet interface>` runs the chat on that node's relays under a certificate inste
 ## The formats
 
 For tests and TypeScript clients, byte for byte `vectors/grain-chats-v1.json`: `encodeChatFrame`/`decodeChatFrame`
-(`"SGC1"` ‖ Borsh: request, message, spec with an optional certificate, stats), `signChatSpec`, `signChatSpecAsServer`,
+(`"SGC1"` ‖ Borsh: request, message, spec with an optional certificate, stats, hello, welcome), `signChatHello`,
+`chatHelloProblem` (slug, sender, language, signature, time), `introductionProblem` (the hello's proof, from the
+team), `signChatWelcome`, `chatWelcomeProblem` (as a wallet checks one), `signChatSpec`, `signChatSpecAsServer`,
 `signedChatSpecProblem` (with the registered `servers`), `chatCertHolds`, `serverKeyHolds`, `signChatRequest`,
 `chatRequestProblem` (sender, signature, life, fit), `requestFitProblem`, `signChatMessage` (registered without a
 certificate), `chatMessageProblem` (as a wallet checks a card, with `servers`), `signMemberProof`,
@@ -450,6 +498,7 @@ text), `AppKey.of`, `isFor`, `describe`; it never prints its secret. The page op
 | A spec | 32 KiB of Borsh |
 | Unasked messages | 10 per user a day, notifications included |
 | A request's life | at most 7 days |
+| A hello | dated at most 5 minutes ahead and 7 days behind; welcomed once an hour per key; 30 checked a minute by default |
 | A message's age | at most 30 days old, 5 minutes ahead |
 | A frame | 48 000 bytes of plaintext |
 | A file | 50 MiB, kept 30 days |

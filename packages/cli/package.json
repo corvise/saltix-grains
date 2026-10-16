@@ -12,7 +12,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/main.js",
+    "build": "tsc -p tsconfig.json && chmod +x dist/main.js && esbuild ../../simulator/simulator.ts --bundle --format=esm --log-level=warning --outfile=dist/simulator/dist/simulator.js && cp ../../simulator/index.html dist/simulator/index.html",
     "test": "node --test --test-force-exit \"test/*.test.mjs\""
   },
   "dependencies": {

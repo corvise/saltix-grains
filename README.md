@@ -8,20 +8,24 @@ payments, storage and relays, and never holds the wallet's keys. It may be a pag
 
 **[Your first app in ten minutes](docs/first-app.md)**: make it in Saltix, copy its developer key, `npm run example`.
 
+**Saltix shows apps full screen**: keep tappable content clear of the wallet's controls, pad by the safe area, and test
+at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENTS.md), [Designing for Saltix](docs/first-app.md#designing-for-saltix)).
+
 | Package | What it is |
 |---|---|
-| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()` |
+| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the full-screen page's safe area and the wallet's controls, as CSS variables), `grain.manage.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the registry's calls, Address v1, and the grain's chat (`ChatServer`, from a developer key alone) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key` |
-| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development, with a chat pane |
+| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: the page full screen with the wallet's controls at a phone's and the Galaxy Z Fold's sizes, and a chat pane |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
-| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public |
-| [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the numbers an app reports, files, and what a wallet shows and refuses |
+| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing for a full-screen app |
+| [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's full-screen layout, and work on this repository; `CLAUDE.md` points to it |
+| [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 
 The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones included, logins, invoices, notifications,
 the registry transactions of 12-grains and 24-app-studio, deposits, the developer key), the addresses of
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
-chats, member proofs, reported numbers and file references of `vectors/grain-chats-v1.json` and the usernames bound to
+chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json` and the usernames bound to
 apps of `vectors/handles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a checkout of
 corvise/saltix) refreshes them.
 
@@ -34,7 +38,9 @@ npm run example        # hello-grain's chat as your app's server, from your deve
 ```
 
 - **In a desktop browser:** open `http://localhost:8090/` (the simulator), press *Load a manifest*,
-  then *Open*. Sign-in signatures are real; payments are not made. *Load the chat* talks to the example's chat through
+  then *Open*. The page is shown full screen as Saltix shows it: under a status bar and a navigation bar, with the
+  wallet's ⋯ | ✕ in its corner; *Size* switches to the Galaxy Z Fold's 475×751, 704×932 and 932×704. Sign-in signatures
+  are real; payments are not made. *Load the chat* talks to the example's chat through
   a development relay, as a wallet would ([docs/chats.md](docs/chats.md)).
 - **In a debug Saltix in the Android emulator:** open the link the server prints,
   `salt:grain?manifest=http%3A%2F%2F10.0.2.2%3A8090%2F.well-known%2Fsaltix-grain`. Debug builds take
@@ -66,9 +72,9 @@ npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/s
 ```
 
 ```sh
-npx grain init dice --name "Dice roll"   # grain.json, owner.key (owner-only), public/ with the bridge
-cd dice && npx grain dev                  # serves public/ and the manifest signed for this computer
-npx grain lint                            # what stops grain.json from being registered
+npx grain init dice --name "Dice roll"   # grain.json, owner.key (owner-only), public/ with the bridge, AGENTS.md
+cd dice && npx grain dev                  # serves public/, the manifest signed for this computer, and the simulator
+npx grain lint                            # what stops grain.json from being registered; warns of a top bar under ⋯ | ✕
 npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
 npx grain sign                            # signed.json: serve it at /.well-known/saltix-grain
 npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
@@ -93,7 +99,12 @@ npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …
   switch (`--chat`, `--wallet`, `--wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`) takes none, so
   `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never ignored.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
-  the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix.
+  the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
+  address (`/_simulator/`): the page full screen with the wallet's controls, at a phone's and the Galaxy Z Fold's sizes.
+- `grain init` lays its page out full screen by the variables `grain.layout()` sets, and writes `AGENTS.md` (the rules a
+  coding agent follows) and `CLAUDE.md` (which points to it). `grain lint` warns (`full-screen-top-bar`) when a page in
+  `public/` has a fixed or sticky top bar but uses none of `--saltix-safe-*`, `--saltix-controls-*` or
+  `env(safe-area-inset-top)`: a heuristic, never an error.
 - `publish` without a key file shows `salt:grain-publish?m=…` as a QR code (Saltix 12-grains §10):
   scan it with the owner's Saltix, which fills in its account's key, checks the manifest and the
   registry, shows the grain and the deposit and, after the PIN, signs and registers it (or records
@@ -128,6 +139,7 @@ import { grain, inWallet, walletLink } from "@saltix/grain";
 if (!inWallet()) showLink(walletLink("https://chess.example/.well-known/saltix-grain"));
 
 const info = await grain.info();               // slug, version, form, listing, language, theme, network, start
+const layout = await grain.layout();           // full screen: { safeArea, controls }, kept current, and CSS variables
 await grain.ready();
 const answer = await grain.login(challenge);   // { key, signature, at, origin }: check it on your server
 await grain.storage.set("rating", "1640");     // synced across the user's devices, 1 MiB per grain
@@ -138,9 +150,19 @@ const me = await grain.relay.open({ grant });  // the user's address in this gra
 await grain.relay.send(peer, bytes, { keep: true });   // sealed to peer's key; at most 48 000 bytes
 const stop = grain.relay.onFrame((from, payload) => apply(from, payload));
 await grain.notifications.allow();             // asked once: your server may notify with the grain closed
+await grain.manage.open({ section: "members" }); // from a tap: the app's own manage page, for its team (bridge 3)
 ```
 
 Frames without a sponsor use the relay's free share, never the user's own channel.
+
+**Full screen** (bridge version 3, Saltix 12-grains §5, §7): Saltix opens every app edge to edge, with its controls
+`⋯ | ✕` floating in the top right corner. `grain.layout(onChange?)` reads `safe_area {top, bottom, left, right}` and
+`controls {top, right, width, height}` from `grain_info`, follows the `insets` event, window resizes and theme changes,
+and sets `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left`, `--saltix-safe-right`,
+`--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width` and `--saltix-controls-height` on `:root`.
+An older Saltix (bridge 1–2) gives 0 and no controls; a plain browser its own `env(safe-area-inset-*)` and no controls
+(`layoutOf` decides it, in one place). Keep text inside the safe area and every tappable element out of the controls'
+box; no close button of your own (✕ and Back close the app). [Designing for Saltix](docs/first-app.md#designing-for-saltix).
 
 Every method rejects with a `GrainError` whose `code` is `4001` (the user refused), `4100` (not
 permitted: the manifest does not ask for it, or no tap before a payment), `4200` (unsupported),
@@ -180,8 +202,11 @@ to the relay; unasked messages are at most 10 a day per user; the numbers it rep
 names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it when you can,
 else in English. The team's chat with its own app is the app's **console** (24-app-studio §4): `chat.team()` reads who
 is on the team, `chat.notifyTeam(card)` writes to it (100 a day each), and `chat.report(error)` sends an error as a card
-made for an AI agent, scrubbed of secrets and folded within an hour; handlers' errors are reported on their own. In
-Saltix, long-press the report → Copy for an AI agent → paste it into Claude Code.
+made for an AI agent, scrubbed of secrets and folded within an hour; handlers' errors are reported on their own. The
+team's wallets say **hello** to their own app by themselves (22-grain-chats §3a): the server checks the member proof
+against the registry, keeps where the member's console is and welcomes the wallet (once an hour per key, nothing at all
+to anyone off the team, at most 30 checks a minute against the node), so the console reaches the team before anyone
+writes. In Saltix, long-press the report → Copy for an AI agent → paste it into Claude Code.
 
 ```ts
 const chat = await ChatServer.start({ appKey: process.env.SALTIX_APP_KEY!, spec, store: fileChatStore("chat.store.json") });

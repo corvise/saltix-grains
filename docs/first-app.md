@@ -48,10 +48,11 @@ the chat of your-app answers at dsalt1q… on devnet (spec v3)
 app, signs [`chat.json`](../examples/hello-grain/chat.json) with the key and answers. The key never appears in its
 output.
 
-In Saltix, tap your app in **My apps**: with its program running, it opens its chat, which is your app's **console**
-(long-press manages the app instead). Pick **Say hello**: the answer is a card marked "from your-app, verified", because
-the registry names the key that signed it. Try **A key** (a secret, masked until you tap it), **A report** (a CSV file
-next to the relay) and **Fail on purpose** (below).
+In Saltix, tap your app in **My apps**: it opens the app's **home**, Saltix's own screen drawn from your chat spec, with
+its commands as buttons and the answers as cards (long-press manages the app instead). Its chat, a secondary way in, is
+your app's **console**. Pick **Say hello**: the answer is a card marked "from your-app, verified", because the registry
+names the key that signed it. Try **A key** (a secret, masked until you tap it), **A report** (a CSV file next to the
+relay) and **Fail on purpose** (below).
 
 ## 3. Add a command (3 minutes)
 
@@ -149,9 +150,50 @@ await chat.notifyTeam(card().text("Someone asked for a feature: dark dice"));   
 await chat.report(error, { context: { command: "/roll" } });                    // an error you caught yourself
 ```
 
-Your app reaches you once you have written to it: your wallet proves who you are with each of your requests to your own
-app, and the server remembers where your chat is. The same error is reported once an hour, with a count; the team gets
-at most 100 such messages a day. More in [docs/chats.md](chats.md#your-apps-console).
+Your app reaches you from the start, without you writing to it: your Saltix says **hello** to your own app when you make
+it, when you join its team and when you open it, with a proof of who you are, and the server keeps where your console is
+and welcomes it (an older Saltix does not say hello: write to the app once). Each of your requests carries the same
+proof. The same error is reported once an hour, with a count; the team gets at most 100 such messages a day. More in
+[docs/chats.md](chats.md#the-teams-wallets-say-hello).
+
+## Designing for Saltix
+
+An app with a screen of its own (a page: `grain init`, then `grain dev`) is shown **full screen**, edge to edge, as
+Saltix shows every app (Saltix 12-grains §7). One line says it, the one Saltix ends **Copy for an AI agent** with:
+
+> Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
+
+- **The page runs under the system's bars.** Keep text and controls inside the safe area: `grain.layout()` (from
+  `@saltix/grain`) sets `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left` and `--saltix-safe-right` on
+  `:root` in pixels and keeps them current as the phone turns or unfolds. Backgrounds may run under the bars.
+- **The wallet's controls `⋯ | ✕` float in the top right corner**: a 96 × 48 box, 8 px from the right inset and 4 px below
+  the top one, which `grain_info.controls` and `--saltix-controls-top`, `-right`, `-width` and `-height` give. Never put
+  anything tappable under it. A top bar's title stops short of it, or the bar starts below it.
+- **No close button of your own.** ✕ closes the app, and the system's Back goes through your page's history first, then
+  closes it. ⋯ opens the wallet's own sheet for the app (its chat, manage, share, reload, permissions).
+- **Name the colour at the top of your page** with `grain.setHeader("#rrggbb")`: the wallet draws the status bar's icons
+  and its controls to contrast with it.
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes; CSS px equal dp) in the simulator `grain dev`
+  prints, light and dark: it draws the bars and the controls where Saltix does, and its ✕ and **Back** close the app as
+  the phone's do. `grain lint` warns (`full-screen-top-bar`) about a fixed or sticky top bar that uses none of the variables.
+
+A top bar that keeps clear, as `grain init`'s page has it:
+
+```css
+header {
+  position: sticky; top: 0;
+  padding-top: max(var(--saltix-safe-top), var(--saltix-controls-top));   /* level with the controls */
+  padding-left: calc(16px + var(--saltix-safe-left));
+  padding-right: max(calc(16px + var(--saltix-safe-right)), calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px));
+}
+header h1 { min-height: max(48px, var(--saltix-controls-height)); display: flex; align-items: center; }
+main { padding-bottom: calc(16px + var(--saltix-safe-bottom)); }
+```
+
+Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2) draws its header above the page, so
+they are 0; a plain browser gives its own insets (`env(safe-area-inset-*)`). A chat-only app has no page: Saltix draws
+its home itself. Every project `grain init` makes has an `AGENTS.md` with these rules, and a `CLAUDE.md` that points to
+it, so a coding agent follows them too.
 
 ## What the server does for you
 
@@ -167,6 +209,8 @@ at most 100 such messages a day. More in [docs/chats.md](chats.md#your-apps-cons
   days for them.
 - **Tells your team** what goes wrong: handlers' errors as reports in the console, folded within an hour and scrubbed of
   secrets.
+- **Welcomes your team's wallets**: a team member's Saltix says hello to the app by itself, and the server keeps where
+  their console is, so updates and reports reach them before anyone writes. Nobody else gets an answer to a hello.
 
 ## When it does not start
 

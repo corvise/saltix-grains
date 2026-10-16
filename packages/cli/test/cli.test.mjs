@@ -11,7 +11,9 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { UNOWNED, accountId, toHex, fromHex, verifyManifest } from "@saltix/grain-server";
 import { lint, sign, forOrigin, readKey, signedFor } from "../dist/project.js";
 import { publish, retire, walletLink, waitForPublished } from "../dist/registry.js";
-import { serve } from "../dist/dev.js";
+import { serve, simulatorFor } from "../dist/dev.js";
+import { lintPages, TOP_BAR_RULE } from "../dist/pages.js";
+import { FULL_SCREEN_RULE } from "../dist/template.js";
 import { publishLink, publishLinkManifest } from "../dist/publish.js";
 import { encodeManifest } from "@saltix/grain-server";
 
@@ -139,18 +141,100 @@ test("grain dev serves public/ and the manifest for the asking origin only", asy
     assert.equal((await get("/.well-known/saltix-grain", "evil.example")).status, 400);
     assert.equal((await get("/%2e%2e/secret.txt")).status, 404);
     assert.equal((await get("/../secret.txt")).status, 404);
+    // The simulator, built into the package: the page full screen as Saltix shows it.
+    const page = await get("/_simulator/");
+    assert.equal(page.status, 200);
+    assert.match(page.body, /name="saltix-simulator"/);
+    assert.match(page.body, /id="capsule"/);
+    assert.match(page.body, /src="\.\/dist\/simulator\.js"/);
+    const script = await get("/_simulator/dist/simulator.js");
+    assert.equal(script.status, 200);
+    assert.match(script.body, /grain_info/);
+    assert.equal((await get("/_simulator")).status, 302);
+    assert.equal((await get("/_simulator/../dev.js")).status, 404);
+    assert.equal((await get("/_simulator/%2e%2e/main.js")).status, 404);
+    assert.equal(simulatorFor("http://localhost:8090"), "http://localhost:8090/_simulator/?manifest=%2F.well-known%2Fsaltix-grain");
   } finally {
     server.close();
   }
+});
+
+/** A `public/` with these files. */
+function pages(files) {
+  const dir = mkdtempSync(join(tmpdir(), "grain-pages-"));
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(join(dir, name, ".."), { recursive: true });
+    writeFileSync(join(dir, name), text);
+  }
+  return dir;
+}
+
+test("lint warns about a top bar that ignores the safe area and the wallet's controls", () => {
+  const warned = (files) => lintPages(pages(files));
+  const bar = "<style>header { position: sticky; top: 0; background: #2f6bff }</style><header>Dice</header>";
+  const [warning] = warned({ "index.html": bar });
+  assert.ok(warning.startsWith(`${TOP_BAR_RULE}: `), warning);
+  assert.match(warning, /index\.html \(header\)/);
+  assert.match(warning, /--saltix-safe-/);
+  assert.match(warning, /heuristic/);
+  // Kept clear: by the variables, the browser's inset, or a script that reads the layout.
+  assert.deepEqual(warned({ "index.html": bar.replace("top: 0;", "top: 0; padding-top: var(--saltix-safe-top);") }), []);
+  assert.deepEqual(warned({ "index.html": bar.replace("top: 0;", "top: 0; padding-top: env(safe-area-inset-top);") }), []);
+  assert.deepEqual(warned({ "index.html": bar, "app.js": "const { safeArea } = await grain.layout(); bar.style.paddingTop = safeArea.top + 'px';" }), []);
+  assert.deepEqual(warned({ "index.html": bar, "css/app.css": ".title { margin-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width)) }" }), []);
+  // The bridge names the variables itself (and so does a bundle of it): that is not the page using them.
+  const bridge = readFileSync(fileURLToPath(import.meta.resolve("@saltix/grain")), "utf8");
+  assert.equal(warned({ "index.html": bar, "grain.js": bridge }).length, 1);
+  assert.equal(warned({ "index.html": bar, "assets/app-1f2e.js": `const x = 1;\n${bridge}` }).length, 1);
+  // Found wherever it is: a stylesheet, inside @media, a style attribute, utility classes, `inset`, a few pixels down.
+  assert.equal(warned({ "css/bar.css": "@media (min-width: 1px) { .bar { position: fixed !important; top: 0px } }" }).length, 1);
+  assert.match(warned({ "css/bar.css": ".bar { position:fixed;top:0 }" })[0], /css\/bar\.css \(\.bar\)/);
+  assert.match(warned({ "index.html": '<div style="position: fixed; top: 0">x</div>' })[0], /<div style>/);
+  assert.match(warned({ "index.html": '<nav class="sticky top-0 bg-white">x</nav>' })[0], /class="sticky top-0"/);
+  assert.equal(warned({ "index.html": "<style>.sheet { position: fixed; inset: 0 }</style>" }).length, 1);
+  assert.equal(warned({ "index.html": "<style>.bar { position: fixed; top: 8px }</style>" }).length, 1);
+  // Not a top bar: in the flow, at the bottom, or placed by the variables.
+  assert.deepEqual(warned({ "index.html": "<style>header { position: relative; top: 0 }</style>" }), []);
+  assert.deepEqual(warned({ "index.html": "<style>footer { position: fixed; bottom: 0 }</style>" }), []);
+  assert.deepEqual(warned({ "index.html": "<style>.fab { position: fixed; top: 120px }</style>" }), []);
+  assert.deepEqual(warned({ "index.html": "<style>/* header { position: fixed; top: 0 } */</style>" }), [], "a comment is not CSS");
+  assert.deepEqual(lintPages(join(tmpdir(), "no-such-public-dir")), []);
+  const many = warned(Object.fromEntries(["a", "b", "c", "d", "e"].map((n) => [`${n}.css`, `.${n} { position: fixed; top: 0 }`])));
+  assert.match(many[0], /and 2 more/);
 });
 
 test("init makes a project the owner alone can sign for", () => {
   const dir = mkdtempSync(join(tmpdir(), "grain-init-"));
   const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
   execFileSync("node", [main, "init", join(dir, "dice"), "--name", "Dice"], { stdio: "pipe" });
-  for (const f of ["grain.json", "owner.key", "public/index.html", "public/app.js", "public/grain.js", ".gitignore"]) {
+  for (const f of ["grain.json", "owner.key", "public/index.html", "public/app.js", "public/grain.js", ".gitignore", "AGENTS.md", "CLAUDE.md"]) {
     assert.ok(existsSync(join(dir, "dice", f)), f);
   }
+  // Laid out full screen, by the variables grain.layout() sets, and nothing lint warns about.
+  const html = readFileSync(join(dir, "dice", "public", "index.html"), "utf8");
+  for (const v of ["--saltix-safe-top", "--saltix-safe-bottom", "--saltix-safe-left", "--saltix-safe-right", "--saltix-controls-right", "--saltix-controls-width"]) {
+    assert.ok(html.includes(`var(${v})`), v);
+  }
+  assert.match(readFileSync(join(dir, "dice", "public", "app.js"), "utf8"), /grain\.layout\(\)/);
+  assert.deepEqual(lintPages(join(dir, "dice", "public")), []);
+  const linted = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
+  assert.ok(!linted.includes(TOP_BAR_RULE), linted);
+  // The page's script reads as a module, and the bridge it imports has the layout.
+  writeFileSync(join(dir, "app.mjs"), readFileSync(join(dir, "dice", "public", "app.js")));
+  execFileSync("node", ["--check", join(dir, "app.mjs")], { stdio: "pipe" });
+  assert.match(readFileSync(join(dir, "dice", "public", "grain.js"), "utf8"), /--saltix-controls-height/);
+  // The rules a coding agent follows; Claude Code reads them through CLAUDE.md.
+  const agents = readFileSync(join(dir, "dice", "AGENTS.md"), "utf8");
+  assert.ok(agents.includes(FULL_SCREEN_RULE));
+  assert.equal(FULL_SCREEN_RULE, "Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).");
+  for (const words of ["--saltix-controls-top", "No close button of your own", "475×751", "light and dark"]) assert.ok(agents.includes(words), words);
+  assert.match(readFileSync(join(dir, "dice", "CLAUDE.md"), "utf8"), /^@AGENTS\.md$/m);
+  // A bar that ignores them is warned about, and lint still passes.
+  writeFileSync(join(dir, "dice", "public", "index.html"), "<style>header { position: fixed; top: 0 }</style><header>Dice</header>");
+  writeFileSync(join(dir, "dice", "public", "app.js"), "");
+  const warned = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
+  assert.match(warned, new RegExp(`^warning: ${TOP_BAR_RULE}: `, "m"));
+  assert.match(warned, /ready to register/);
   assert.equal(statSync(join(dir, "dice", "owner.key")).mode & 0o777, 0o600);
   const m = JSON.parse(readFileSync(join(dir, "dice", "grain.json"), "utf8"));
   assert.equal(m.slug, "dice");

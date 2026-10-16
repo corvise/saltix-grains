@@ -4,7 +4,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   fromHex, toHex, accountId, encodeAddress, issueInvoiceKeyCert, signChatSpec, signChatRequest, encodeChatFrame, decodeChatFrame,
-  chatMessageProblem, newChatId, RelayClient, ChatServer, derive, signManifest, AppKey,
+  chatMessageProblem, newChatId, RelayClient, ChatServer, derive, signManifest, AppKey, signChatHello, signMemberProof,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 
@@ -128,9 +128,9 @@ export async function wallet(relay, seed, serverAddress, servers = []) {
     }
     for (const w of waiting.splice(0)) w();
   });
+  const key = toHex(ed25519.getPublicKey(secret));
   const w = {
-    client, secret, frames, others,
-    key: toHex(ed25519.getPublicKey(secret)),
+    client, secret, frames, others, key,
     address: encodeAddress("devnet", accountId(ed25519.getPublicKey(secret))),
     /** A request, signed by this wallet's grain key: `over` changes it before it is signed. */
     request(command, args = [], over = {}) {
@@ -138,6 +138,20 @@ export async function wallet(relay, seed, serverAddress, servers = []) {
       return signChatRequest({ slug: "access", id: newChatId(), at: now, expires_at: now + DAY, via: null, command, args, text: "", member: null, lang: "en", ...over }, secret, chain.genesis);
     },
     send: (signed) => client.send(serverAddress, encodeChatFrame({ request: signed }), { keep: true }),
+    /**
+     * A hello (22-grain-chats §3a) of the account whose key is `accountSecret`: its member proof for this wallet's grain
+     * key, signed by the grain key. `over` changes the hello and `proof` the proof before they are signed.
+     */
+    hello(accountSecret, over = {}, proof = {}) {
+      const at = over.at ?? Date.now();
+      const member = signMemberProof({
+        slug: "access", account: toHex(accountId(ed25519.getPublicKey(accountSecret))), grain_key: key, expires_at: at + DAY, ...proof,
+      }, accountSecret, chain.genesis);
+      return signChatHello({ slug: "access", id: newChatId(), at, member, lang: "en", ...over }, secret, chain.genesis);
+    },
+    sendHello: (signed) => client.send(serverAddress, encodeChatFrame({ hello: signed }), { keep: true }),
+    /** The welcomes so far. */
+    welcomes: () => frames.filter((f) => f.welcome).map((f) => f.welcome),
     /** The messages so far that answer `id`. */
     answers: (id) => frames.filter((f) => f.message?.message.answers === id).map((f) => f.message),
     /** Waits until `test(frames)` holds, at most `ms`. */

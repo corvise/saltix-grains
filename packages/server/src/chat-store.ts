@@ -24,9 +24,9 @@ export interface ChatStore {
   seen?(user: string, now: number): void | Promise<void>;
   /** The numbers at `now`, after forgetting every user and hour older than 30 days. */
   usage?(now: number): ChatUsage | Promise<ChatUsage>;
-  /** The team's addresses in the grain by account (hex), as their proofs showed them. A store without `team` and
-   *  `setTeam` leaves them to the server's memory: after a restart, each member reaches the console again once they
-   *  have written to the app. */
+  /** The team's addresses in the grain by account (hex), as their proofs showed them (a hello's or a request's). A store
+   *  without `team` and `setTeam` leaves them to the server's memory: after a restart, each member reaches the console
+   *  again once their wallet says hello again or they write to the app. */
   team?(): Record<string, string> | Promise<Record<string, string>>;
   /** Keep `account`'s address in the grain, or forget it (`null`: no longer on the team). */
   setTeam?(account: string, address: string | null): void | Promise<void>;
