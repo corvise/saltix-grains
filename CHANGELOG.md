@@ -60,6 +60,18 @@
 
 ### Added
 
+- **Updates the owner approves in the console** (Saltix 22-grain-chats §4, 12-grains §10; vectors synced from the
+  protocol PR): the card action `publish` (`Card.publish(label, manifest | link)`, tag 3) carries the manifest's text
+  as a publishing link does, and `ChatServer.proposeUpdate(manifest | link, { text?, label?, roles? })` sends it to the
+  team in the console, refusing another grain's manifest or a version the registry holds, and says whether the owner
+  got it (`owner`; logged as `chat_update_proposed`); `ChatServer.registered(fresh?)` reads what the registry holds for the
+  grain. `chatMessageBoundsProblem` refuses a `publish` of another grain
+  (`slug`), two of them, or a text out of form (`bounds:action`); `proposedManifest` and `teamOnly` read it.
+  `readPublishText`, `readPublishLink` and `decodeManifest` read the link's form strictly in any runtime (a raw DEFLATE
+  decoder of our own, `inflate.ts`, so the simulator runs it too); `publishText` and `publishLink` (with `UNOWNED`)
+  moved here from the command line. The simulator says what the owner's Saltix offers. Breaking for chat clients that
+  refuse unknown action tags: Saltix 0.1.51 and older drop such a card.
+
 - **An app's numbers reach every node through its relay** (Saltix 22-grain-chats §4, 09-relay §3): `RelayClient.reportStats(signed)`
   sends the newest `SignedGrainStats` in a `grain_stats` frame and again whenever the client registers; the `stats`
   event carries the relay's answer (`{taken, slug, at}` or `{taken: false, reason}`), logged as `relay_stats_taken` or

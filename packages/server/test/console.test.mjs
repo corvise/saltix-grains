@@ -12,9 +12,12 @@ import {
   ChatServer, ChatRefusal, ChatBudgetSpent, card, toHex, toBase64, fromHex, accountId, encodeAddress, signMemberProof, memoryChatStore,
   fileChatStore, ROLES, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, REPORT_FOLD_MS, scrubSecrets, errorFacts, errorFingerprint,
   reportCard, chatMessageBoundsProblem, encodeChatFrame, signChatMessage, MAX_FRAME_BYTES, onTeam, teamMemberOf, needsTeamController,
+  readPublishText, publishLink, teamOnly, UNOWNED,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
-import { DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep } from "./chat-helpers.mjs";
+import {
+  DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep, manifest,
+} from "./chat-helpers.mjs";
 
 const accountOf = (secret) => toHex(accountId(ed25519.getPublicKey(secret)));
 const DEV = fromHex("53".repeat(32), 32);
@@ -290,6 +293,73 @@ test("writing to the team: by role, skipping who cannot be reached, within 100 a
     await assert.rejects(server.notifyTeam(card().text("x"), { roles: ["admin"] }), /roles/);
   } finally {
     for (const w of [owner, viewer, stranger]) w.client.close();
+    await close();
+  }
+});
+
+test("an update is proposed to the team in the console, for the owner to approve", async () => {
+  const fake = teamChain();
+  const t = Date.now();
+  const { relay, server, events, close } = await studio(fake);
+  server.command("idle", () => card().text("idle"));
+  const owner = await wallet(relay, 0x78, server.address, [serverKey]);
+  const dev = await wallet(relay, 0x7b, server.address, [serverKey]);
+  const viewer = await wallet(relay, 0x79, server.address, [serverKey]);
+  const stranger = await wallet(relay, 0x7a, server.address, [serverKey]);
+  // The registry's chat-only v1, with a sealed screen: v2.
+  const next = {
+    ...manifest().manifest, version: 2, permissions: 0,
+    entry: { sealed: { bundle: "88".repeat(32), size: 4096, sources: ["https://download.saltix.io/apps/screens/a.zip"], start: "index.html", connect: ["https://api.saltix.io"] } },
+  };
+  try {
+    // Nobody on the team has written yet: nobody is reached, and the owner is told apart.
+    const early = await server.proposeUpdate(next);
+    assert.deepEqual(early, { sent: 0, unreachable: 2, spent: 0, failed: 0, version: 2, owner: false });
+    assert.equal(events.find((e) => e.event === "chat_update_proposed").level, "warn");
+
+    // The developer has written, the owner not yet: it went, but not to the one who approves it.
+    await ask(dev, proved(dev, DEV, t));
+    assert.deepEqual(await server.proposeUpdate(next), { sent: 1, unreachable: 1, spent: 0, failed: 0, version: 2, owner: false });
+    await dev.until(() => unasked(dev).length === 1);
+
+    await ask(owner, proved(owner, OWNER, t));
+    await ask(viewer, proved(viewer, VIEWER, t));
+    await ask(stranger, stranger.request("idle"));
+    const sent = await server.proposeUpdate(next);
+    assert.deepEqual(sent, { sent: 2, unreachable: 0, spent: 0, failed: 0, version: 2, owner: true });
+    await owner.until(() => unasked(owner).length === 1);
+    await dev.until(() => unasked(dev).length === 2);
+    const card0 = unasked(owner)[0];
+    assert.equal(owner.problem(card0), null, "a card the owner's wallet takes");
+    assert.ok(teamOnly(card0.message));
+    const [action] = card0.message.actions;
+    assert.equal(action.label, "Review the update");
+    assert.deepEqual(readPublishText(action.kind.publish.manifest), { ...next, ...UNOWNED });
+    assert.match(card0.message.blocks[0].text.text, /^Access has a new version \(2\)\. The owner approves it here\.$/);
+    assert.equal(unasked(viewer).length, 0, "viewers only when asked");
+    assert.equal(unasked(stranger).length, 0, "never anyone off the team");
+    const logged = events.filter((e) => e.event === "chat_update_proposed").at(-1);
+    assert.deepEqual(logged, { level: "info", event: "chat_update_proposed", meta: { version: 2, sent: 2, unreachable: 0, spent: 0, failed: 0, owner: true } });
+
+    // By its link, with the team's viewers and words of the app's own.
+    const byLink = await server.proposeUpdate(publishLink(next), { roles: ["owner", "viewer"], text: "A screen of its own.", label: "Approve" });
+    assert.equal(byLink.sent, 2);
+    await viewer.until(() => unasked(viewer).length === 1);
+    assert.equal(unasked(viewer)[0].message.actions[0].label, "Approve");
+
+    // Another grain's manifest, a version the registry holds, roles without the owner: refused before anything goes.
+    await assert.rejects(server.proposeUpdate({ ...next, slug: "other" }), /not access's/);
+    await assert.rejects(server.proposeUpdate({ ...next, version: 1 }), /registry holds access v1/);
+    await assert.rejects(server.proposeUpdate(next, { roles: ["developer"] }), /owner/);
+    await assert.rejects(server.proposeUpdate("salt:grain-publish?m=AAAA"), /a manifest to publish/);
+    assert.equal((await server.registered(true)).version, 1, "what the registry holds");
+    fake.state.grain.version = 2;
+    fake.block();
+    assert.equal((await server.registered(true)).version, 2);
+    await assert.rejects(server.proposeUpdate(next), /registry holds access v2/, "approved: nothing left to propose");
+    assert.equal(unasked(owner).length, 2, "the owner got the two proposals that went");
+  } finally {
+    for (const w of [owner, dev, viewer, stranger]) w.client.close();
     await close();
   }
 });

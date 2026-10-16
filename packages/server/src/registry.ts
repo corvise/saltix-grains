@@ -6,6 +6,7 @@ import { accountId } from "./address.js";
 import { Writer, fromHex, toHex } from "./bytes.js";
 import { type Handle, handleProblem, writeHandle } from "./handle.js";
 import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
+import { UNOWNED } from "./publish.js";
 import { rpc } from "./node.js";
 import { type TxFields, encodeTx, minimumTxFee, signTx, txId } from "./tx.js";
 
@@ -238,8 +239,6 @@ export async function grainQuote(nodeUrl: string, slug: string): Promise<{ grain
   return { grain: answer.grain, deposit: typeof answer.deposit === "string" ? BigInt(answer.deposit) : GRAIN_DEPOSIT };
 }
 
-/** The owner a publishing link leaves for the wallet to fill in (12-grains §10): zero bytes, an Ed25519 key. */
-export const UNOWNED = { owner: "00".repeat(32), owner_key: { ed25519: "00".repeat(32) } } as const;
 
 /** Whether `a` and `b` are the same manifest but for its owner and owner key: what a wallet published from a link. */
 export function sameManifest(a: Manifest, b: Manifest): boolean {

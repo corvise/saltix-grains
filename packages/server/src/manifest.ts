@@ -1,6 +1,6 @@
 import { ed25519 } from "@noble/curves/ed25519";
-import { Writer, derive, fromHex, toHex } from "./bytes.js";
-import { type DeviceKey, deviceKeyOf, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
+import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
+import { type DeviceKey, deviceKeyOf, readDeviceKey, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
 
 export const PERMISSIONS = {
   storage: 1,
@@ -100,6 +100,42 @@ export function encodeManifest(m: Manifest): Uint8Array {
   if (m.sponsor === null) w.u8(0);
   else w.u8(1).fixed(fromHex(m.sponsor, 32), 32);
   return w.u16(m.min_host).done();
+}
+
+function readTexts(r: Reader): Record<string, string> {
+  return Object.fromEntries(r.vec((r): [string, string] => [r.string(), r.string()]));
+}
+
+/** A manifest from its Borsh form, whole and canonical (what encodes back to the same bytes: no map out of order or
+ *  repeated); throws otherwise. Its bounds are `manifestProblem`'s to check. */
+export function decodeManifest(bytes: Uint8Array): Manifest {
+  const r = new Reader(bytes);
+  const slug = r.string();
+  const version = r.u32();
+  const owner = toHex(r.fixed(32));
+  const owner_key = readDeviceKey(r);
+  const name = readTexts(r);
+  const description = readTexts(r);
+  const icon = toHex(r.fixed(32));
+  let entry: Entry;
+  switch (r.u8()) {
+    case 0: entry = { hosted: { url: r.string(), origins: r.vec((r) => r.string()) } }; break;
+    case 1: entry = {
+      sealed: {
+        bundle: toHex(r.fixed(32)), size: r.u64n(), sources: r.vec((r) => r.string()), start: r.string(),
+        connect: r.vec((r) => r.string()),
+      },
+    }; break;
+    case 2: entry = { chat: {} }; break;
+    default: throw new TypeError("borsh: a manifest's entry tag");
+  }
+  const permissions = r.u32();
+  const sponsor = r.option((r) => toHex(r.fixed(32)));
+  const min_host = r.u16();
+  r.end();
+  const m: Manifest = { slug, version, owner, owner_key, name, description, icon, entry, permissions, sponsor, min_host };
+  if (toHex(encodeManifest(m)) !== toHex(bytes)) throw new TypeError("borsh: not the canonical form of a manifest");
+  return m;
 }
 
 export const manifestId = (m: Manifest) => toHex(derive("Saltix grain manifest id v1", encodeManifest(m)));

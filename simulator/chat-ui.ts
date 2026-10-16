@@ -9,6 +9,7 @@ import {
   takesValue,
 } from "../packages/server/src/chat";
 import { decodeInvoice } from "../packages/server/src/invoice";
+import { readPublishText } from "../packages/server/src/publish";
 import type { FileRef } from "../packages/server/src/file";
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: Array<Node | string>): HTMLElementTagNameMap[K] {
@@ -100,8 +101,19 @@ export function renderBlock(b: Block, h: Handlers): HTMLElement {
 
 export function renderActions(actions: Action[], messageId: string, h: Handlers): HTMLElement {
   return el("div", { className: "actions" }, ...actions.map((a) => {
-    const button = el("button", { textContent: a.label, className: "small" });
     const k = a.kind;
+    // An update for the owner (22-grain-chats §4): Saltix draws it in its own words, for the grain's team only, and the
+    // owner approves it in the publishing sheet with the PIN. The simulator only says so.
+    if ("publish" in k) {
+      let version = "?";
+      try {
+        version = String(readPublishText(k.publish.manifest).version);
+      } catch {
+        // The card's bounds were checked before it was shown.
+      }
+      return el("small", { className: "block", textContent: `App update available: v${version}. The owner approves it in Saltix (Review and approve).` });
+    }
+    const button = el("button", { textContent: a.label, className: "small" });
     button.onclick = () => ("run" in k ? h.run(k.run.command, k.run.args, messageId) : "open" in k ? h.open(k.open.start) : h.reply(k.reply.text, messageId));
     return button;
   }));
