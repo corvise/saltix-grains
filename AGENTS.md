@@ -2,6 +2,12 @@
 
 Rules for coding agents, and the people working with them: building an app for Saltix with these SDKs, and working on
 this repository (saltix-grains: the grain SDKs, the simulator and the `grain` command line). `CLAUDE.md` points here.
+Two pages go on from it:
+
+- [docs/agents/app.md](docs/agents/app.md): building an app, from a developer key to an app that runs, is tested and
+  ships; the rules every app follows; how to act on an error report pasted from Saltix's console.
+- [docs/agents/sdk.md](docs/agents/sdk.md): working on the SDK: the repository's map, its commands and tests, the golden
+  vectors, and how a change lands.
 
 ## Building an app: Saltix shows apps full screen
 
@@ -45,22 +51,18 @@ A chat-only app has no page: Saltix draws its home from the chat spec. Its serve
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
 
 Secrets (`owner.key`, `server.key`, `app.key`, a developer key `saltix-app:1:…`) are never committed, printed, logged or
-pasted into a chat.
+pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
+status of a dead key) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows).
 
 ## Working on this repository
+
+[docs/agents/sdk.md](docs/agents/sdk.md) is the whole of it. In short:
 
 - **The protocol is corvise/saltix's.** Its `specs/` are the source of truth, and its golden vectors are copied here by
   `scripts/sync-vectors.sh <a Saltix checkout>` (`vectors/SOURCE` names the commit). The SDKs reproduce them byte for
   byte, refusals included; a format changes in the specs first, never here.
-- **Commands:** `npm ci`, then `npm test` (builds every package and the simulator, then runs each package's
-  `node --test`), which is what CI runs. `npm run dev` serves the simulator with the example grain and its chat on a
-  development relay; `npm run example` runs the example's chat from a developer key.
-- **Layout:** `packages/grain` (the page's bridge, one module: `grain init` copies it whole), `packages/server` (formats,
-  checks, `ChatServer`, the relay client), `packages/cli` (`grain`; it builds the simulator into its package for
-  `grain dev`), `simulator/` (the wallet's side in a desktop browser), `examples/hello-grain`, `docs/`.
+- **`npm ci && npm test`** is what CI runs: it builds every package and the simulator, then runs each package's tests.
 - **Style:** English only, no emojis; comments say why, not what. Tests assert behaviour, refusals included; a critical
-  check is mutation-tested (a deliberately broken check must fail a test).
-- **Logs** carry event names and numbers, never keys, secrets, accounts, addresses or what users wrote.
-- **Every change** adds a line to `CHANGELOG.md` under `[Unreleased]` and keeps the README and `docs/` in step.
-- **Commits:** Conventional Commits (`feat(server): …`, scope `server`, `grain`, `cli`, `simulator`, `docs`), with `!` and
-  a `BREAKING CHANGE:` footer for a format change; work lands through a pull request.
+  check is mutation-tested. Logs carry event names and numbers, never keys, accounts, addresses or what users wrote.
+- **Every change** adds a line to `CHANGELOG.md` under `[Unreleased]` and keeps the README and `docs/` in step;
+  Conventional Commits, `!` and a `BREAKING CHANGE:` footer for a format change, through a pull request.

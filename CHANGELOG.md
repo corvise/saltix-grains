@@ -126,11 +126,17 @@
     address.
   - `grain init`'s page lays out edge to edge by the variables, its top bar level with the controls and clear of them;
     every project (`--chat` too) gets `AGENTS.md`, the rules a coding agent follows, and `CLAUDE.md`, which points to it.
+    `AGENTS.md` links the SDK's docs/agents/app.md (`APP_GUIDE`) and states, besides the full-screen rules, the five
+    every app follows (`appRules`), worded as that guide and `server.mjs` have them: the developer key from the
+    environment or a file, never logged; `chat.json`'s version raised with every change; the unasked budget (10 a day to
+    a user, 100 to the team, `ChatBudgetSpent` past it); state in `STATE_DIRECTORY`; exit 78 when the key cannot work.
+    A test holds the three together.
   - `grain lint` warns (`full-screen-top-bar`) when a page in `public/` has a fixed or sticky top bar (`top: 0` or a few
     pixels, `inset`, or the classes `fixed|sticky top-0`) but no page, stylesheet or script of the app's own uses
     `--saltix-safe-*`, `--saltix-controls-*` or `env(safe-area-inset-top)`.
-  - `AGENTS.md` and `CLAUDE.md` at the repository's root, "Designing for Saltix" in docs/first-app.md, and the example
-    grain laid out full screen.
+  - `AGENTS.md` (linking docs/agents/app.md and docs/agents/sdk.md) and `CLAUDE.md` (`@AGENTS.md`,
+    `@docs/agents/sdk.md`) at the repository's root, "Designing for Saltix" in docs/first-app.md, the SDK's map in
+    docs/agents/sdk.md, and the example grain laid out full screen.
 - **Updates the owner approves in the console** (Saltix 22-grain-chats §4, 12-grains §10; vectors synced from the
   protocol PR): the card action `publish` (`Card.publish(label, manifest | link)`, tag 3) carries the manifest's text
   as a publishing link does, and `ChatServer.proposeUpdate(manifest | link, { text?, label?, roles? })` sends it to the

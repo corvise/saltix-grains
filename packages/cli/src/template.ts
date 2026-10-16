@@ -117,15 +117,45 @@ const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the si
   the wallet's controls, at a phone's and the Galaxy Z Fold's sizes, light and dark.
 - \`npx grain lint\`: what stops \`grain.json\` from being registered, and warnings about the page.`;
 
-const CHAT_COMMANDS = `- \`npx grain lint\`: what stops \`grain.json\` from being registered.
-- \`npx grain chat-spec\`: lint \`chat.json\` (and sign it with the owner key).
-- The server: \`ChatServer.start({ appKey, spec })\` (saltix-grains docs/first-app.md).`;
+const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the developer key (below); its log is one JSON line per
+  event, and \`{"event":"ready",…}\` means the app answers.
+- \`npx grain lint\`: what stops \`grain.json\` from being registered.
+- \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).`;
+
+/** Where the SDK's page for a coding agent building an app is: a project has no copy of it. */
+export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
+
+/**
+ * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
+ * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, and the
+ * exit status of a key that cannot work.
+ */
+export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
+   (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
+   commit or report it, nor \`owner.key\`, \`server.key\` or any other key; if it is pasted to you, write it with
+   \`(umask 077 && cat > app.key)\` and never repeat it back.
+2. **Raise \`chat.json\`'s \`version\` with every change of it.** Saltix takes a spec only when its version is higher than
+   the one it holds (an app made in Saltix starts at 1): a spec changed under the same version reaches nobody, and nothing
+   says so.
+3. **Unasked messages have a budget**: \`chat.notify\` and \`chat.notification\` count against 10 per user in any 24
+   hours (100 to a member of the app's team). Past it the SDK throws \`ChatBudgetSpent\` and sends nothing
+   (\`chat.notifyTeam\` skips that member), and a wallet drops whatever goes over. Answer requests; never use the budget
+   for promotion.
+4. **Persistent state goes in \`STATE_DIRECTORY\`**, which systemd sets with \`StateDirectory=\`: \`server.mjs\` keeps its
+   store (\`chat.store.json\`: the requests answered, the budget, the team's consoles) there, and in the directory it
+   was started from without one. \`ChatServer\`'s default store keeps them in memory only, and a restart forgets them.
+5. **Exit with status 78 when the key cannot work**: the registry does not name it (replaced, revoked, the app retired,
+   not registered) or it is not a developer key. \`server.mjs\` does, at start and from \`ChatServer\`'s \`onStop\`, and
+   exits with 1 for anything else; a unit with \`RestartPreventExitStatus=78\` then does not restart a server that
+   restarting cannot help.`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
 
 Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (Saltix
-specs/12-grains.md${chat ? ", 22-grain-chats.md and 24-app-studio.md" : ""}). \`CLAUDE.md\` points here.
+specs/12-grains.md${chat ? ", 22-grain-chats.md and 24-app-studio.md" : ""}). \`CLAUDE.md\` points here. The whole path, from a developer
+key to an app that runs, is tested and ships, and what to do with an error report from Saltix's console:
+[the SDK's page for a coding agent](${APP_GUIDE}).
 
 ## The one rule to keep
 
@@ -134,16 +164,23 @@ ${FULL_SCREEN_RULE}
 ## What is here
 
 ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): no page; Saltix draws its home from \`chat.json\`.
-- \`chat.json\`: the chat spec: the commands users run. Its server is \`ChatServer\` from \`@saltix/grain-server\`, started
-  from the developer key Saltix gave (\`SALTIX_APP_KEY\` or \`app.key\`).
+- \`chat.json\`: the chat spec: the commands users run (version 2, above the 1 an app made in Saltix starts with).
+- \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave;
+  one handler for each command. \`package.json\`: \`npm start\` runs it.
 - If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the full-screen rules
   below apply to it.` : `- \`public/\`: the page. \`public/grain.js\` is \`@saltix/grain\`, the wallet's bridge: do not edit it (\`grain init\` copies it).
-- \`grain.json\`: the manifest.`}
+- \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).`}
 - \`owner.key\` (and \`server.key\`, \`app.key\` once made): secrets. Never commit, print, log or paste them.
 
 ## Commands
 
 ${chat ? CHAT_COMMANDS : PAGE_COMMANDS}
+
+## The rules every app follows
+
+${appRules}
+
+More in [the SDK's page](${APP_GUIDE}#the-rules-every-app-follows).
 
 ## A full-screen app
 
