@@ -4,16 +4,16 @@
 
 ### Changed
 
-- `ChatKeyNotRegistered` and the `chat_stopped` hint say what to do for each reason: a new developer key when the owner
-  revoked or replaced it (or run the server that holds the new one), a new app when the grain is retired, and for a
-  grain the registry does not hold yet, wait for its registration to land. Every reason used to say "make a new
-  developer key", which cannot help a retired or not yet registered grain.
 - **Breaking for chat clients**: a chat request names the user's language (Saltix 22-grain-chats §3; vectors synced
   from Saltix f99df76). `ChatRequest` ends with `lang`: the language the user's Saltix shows (2–8 of `[a-z-]`, as
   the spec's maps name languages), or `""` when the app does not say. Handlers read it as `ask.lang` and answer in it
   when they can, else in English, so a stranger's refusal comes in one language. `decodeChatFrame` and
   `decodeSignedChatRequest` refuse any other value, `requestFitProblem` says `language` (`requestLangOk` checks one).
   The simulator sends the page's language. It joins the app studio's change below in the same release.
+- `ChatKeyNotRegistered` and the `chat_stopped` hint say what to do for each reason: a new developer key when the owner
+  revoked or replaced it (or run the server that holds the new one), a new app when the grain is retired, and for a
+  grain the registry does not hold yet, wait for its registration to land. Every reason used to say "make a new
+  developer key", which cannot help a retired or not yet registered grain.
 - **Breaking for chat clients**: the grain chat formats of the app studio (Saltix 24-app-studio, 22-grain-chats;
   `vectors/grain-chats-v1.json` regenerated, synced from Saltix bc63456). `SignedChatMessage` names its key as
   `server: ServerKey` (`{certified: InvoiceKeyCert}` or `{registered: key}`) instead of `cert`; `SignedGrainChatSpec`
