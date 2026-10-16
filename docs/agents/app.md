@@ -116,6 +116,9 @@ chat.text((ask) => card().text("Pick Plan below."));
 - **Pages**: an app with a screen is shown full screen, with the wallet's controls (⋯ | ✕, the capsule) floating in its
   top right corner. Follow the full-screen rules in `AGENTS.md`: nothing tappable under the controls, text inside the
   safe area.
+- **Cards** follow the card design standard ([cards.md](cards.md)): a status first, at most 6 actions, labels of at
+  most 18 characters, the first `run` primary, destructive commands named so. Check each with `assertCardStandard(card,
+  spec)` in the tests.
 - **Formats**: never build a protocol message by hand. The SDK makes and checks every one, byte for byte the network's.
 - **Money**: never deliver on the page's or the user's word: only on `chat.paymentOf` (or `findPayment`) with enough
   confirmations. Never put another payee in an invoice: a developer key's invoice pays the owner, and wallets refuse

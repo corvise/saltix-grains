@@ -1,11 +1,11 @@
 // The AGENTS.md every `grain init` project gets says what the SDK and its guide for agents say: the full-screen rule,
-// a link to docs/agents/app.md, and the six rules every app follows, each as the server `grain init --chat` makes and
+// a link to docs/agents/app.md, and the seven rules every app follows, each as the server `grain init --chat` makes and
 // the SDK's guide have it, so the three never drift apart.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY } from "@saltix/grain-server";
-import { APP_GUIDE, FULL_SCREEN_RULE, agentsMd, appRules } from "../dist/template.js";
+import { APP_GUIDE, CARDS_GUIDE, FULL_SCREEN_RULE, agentsMd, appRules } from "../dist/template.js";
 import { chatServer } from "../dist/chat-template.js";
 
 const guide = readFileSync(new URL("../../../docs/agents/app.md", import.meta.url), "utf8");
@@ -18,13 +18,13 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
     assert.ok(text.includes(FULL_SCREEN_RULE), "the full-screen rule, word for word");
     assert.ok(text.includes(`](${APP_GUIDE})`), "the guide, by its address: a project has no copy");
     assert.ok(text.includes(`](${APP_GUIDE}#the-rules-every-app-follows)`));
-    assert.ok(text.includes(appRules), "the six rules");
+    assert.ok(text.includes(appRules), "the seven rules");
     assert.ok(text.includes("--saltix-controls-width"), "and the full-screen ones");
   }
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
-  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 6);
+  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 7);
 });
 
 test("the anchor the rules link to is the guide's heading", () => {
@@ -85,4 +85,17 @@ test("(f) payments: the SDK's calls, to the owner only, delivered on the chain's
   assert.match(appRules, /never on the page's or the user's word/);
   assert.match(guide, /never deliver on the page's or the user's word/i);
   assert.match(appRules, /Saltix 0\.1\.53 and older/);
+});
+
+test("(g) cards: the standard's rules, the lint the guide names, and the page they link to", async () => {
+  const { assertCardStandard, CARD_LIMITS, card } = await import("@saltix/grain-server");
+  const cards = readFileSync(new URL("../../../docs/agents/cards.md", import.meta.url), "utf8");
+  assert.equal(CARDS_GUIDE, "https://github.com/corvise/saltix-grains/blob/main/docs/agents/cards.md");
+  assert.ok(appRules.includes(`](${CARDS_GUIDE})`));
+  assert.match(appRules, /at most 6 actions, labels of at most 18 characters/);
+  assert.equal(CARD_LIMITS.actions, 6);
+  assert.equal(CARD_LIMITS.label, 18);
+  assert.match(cards, /At most 6 actions, 3 rows; labels at most 18 characters/);
+  assert.match(guide, /`assertCardStandard\(card,\s+spec\)`/);
+  assert.throws(() => assertCardStandard(card().text("x").reply("A label far longer than eighteen")), /label/);
 });

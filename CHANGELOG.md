@@ -12,7 +12,9 @@
   `card_standard` once per rule broken). The simulator draws cards by the standard: the action bar under the capsule,
   emphasis, choices, polls, code, collapsed text, file tiles, and a tap's spinner and check; a `run` whose arguments
   fill its form sends at once (a right click opens the form). Guides: [docs/cards.md](docs/cards.md) and
-  [docs/agents/cards.md](docs/agents/cards.md). Saltix 0.1.53 and older drop a message with a code or poll block.
+  [docs/agents/cards.md](docs/agents/cards.md), linked from `AGENTS.md`; every `grain init` project's `AGENTS.md` gains
+  a seventh rule, cards by the standard (`CARDS_GUIDE`, `assertCardStandard` in its tests). Saltix 0.1.53 and older drop
+  a message with a code or poll block.
 - **Payments from a developer key** (Saltix 12-grains §5.2, vectors synced from Saltix #223): a registered server key
   signs invoices whose `to` is the grain's owner, which wallets check against the registry. `ChatServer.invoice`
   signs one to the owner the registry names and refuses any other payee, a retired grain or an unknown record, before
