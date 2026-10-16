@@ -281,6 +281,56 @@ export interface Login {
   /** Unix ms the wallet signed at. */
   at: number;
   origin: string;
+  /**
+   * The account's member proof (hex of its Borsh) when it is on the grain's team or a private grain's member, `null`
+   * for anyone else (12-grains §5.1a). Absent from Saltix 0.1.53 and older, which attach none: forward it as it came,
+   * absent included, so your server tells the two apart.
+   */
+  member?: string | null;
+}
+
+/** What a signed-in account may do, by the grain's registry (12-grains §5.1a): its owner, a developer, a viewer, a
+ *  private grain's user, or `none` (anyone else, and anyone whose wallet proved nothing). */
+export type Rights = "owner" | "developer" | "viewer" | "user" | "none";
+
+/** The rights of the grain's team: its owner, developers and viewers. */
+export const TEAM: readonly Rights[] = ["owner", "developer", "viewer"];
+
+/** What `signIn` resolved with. */
+export interface SignIn {
+  /** Whether your server gave a session (its `signed_in`). */
+  signedIn: boolean;
+  /** What the account may do, as your server read the registry (its `rights`; `none` when it said nothing). */
+  rights: Rights;
+  /** The wallet attaches no member proofs (Saltix 0.1.53 and older): `none` may be a member it cannot show. Ask to update
+   *  Saltix; never say the app is not for them. */
+  legacy: boolean;
+  /** Your server's whole answer: a session token, your own fields. */
+  answer: Record<string, unknown>;
+}
+
+/** What a page shows once its sign-in resolved (`gateOf`): the app, a refusal page, the update to ask for, that the user
+ *  declined to sign in, that it is not in a wallet, or that the sign-in failed (try again). */
+export type Gate = "open" | "refused" | "update" | "declined" | "outside" | "failed";
+
+/**
+ * What a page that is for `admits` only shows (`TEAM` for its team; add `"user"` for a private grain's users, `"none"`
+ * for anyone signed in), from its sign-in's outcome (`signIn`'s result, or what it rejected with): `open` for a
+ * signed-in account whose rights are among `admits`; `update` for an older Saltix that cannot prove membership;
+ * `refused` for anyone else; `declined`, `outside` and `failed` for a sign-in that did not happen. Until it is known, a
+ * page shows only a splash: check first, render after.
+ */
+export function gateOf(outcome: SignIn | unknown, admits: readonly Rights[]): Gate {
+  if (outcome instanceof GrainError) {
+    if (outcome.code === ErrorCode.UserRejected) return "declined";
+    if (outcome.code === ErrorCode.NoWallet) return "outside";
+    return "failed";
+  }
+  const s = outcome as Partial<SignIn> | null;
+  if (!s || typeof s !== "object" || typeof s.signedIn !== "boolean" || typeof s.rights !== "string") return "failed";
+  if (s.signedIn && admits.includes(s.rights)) return "open";
+  if (s.legacy && s.rights === "none") return "update";
+  return "refused";
 }
 
 export type PayRequest =
@@ -303,6 +353,8 @@ export interface Events {
   /** A frame to the grain's alias at the relay (`relay.open`), opened by the wallet: `payload` is hex. */
   relay: { from: string; payload: string };
 }
+
+const RIGHTS: readonly Rights[] = ["owner", "developer", "viewer", "user", "none"];
 
 /** The sections of the app's manage page a grain may open it at (`grain.manage.open`, 12-grains §5). */
 export const MANAGE_SECTIONS = ["members"] as const;
@@ -473,6 +525,46 @@ export const grain = {
    */
   login: (challenge: Uint8Array | string) =>
     call<Login>("grain_login", { challenge: typeof challenge === "string" ? challenge.toLowerCase() : hex(challenge) }),
+  /**
+   * Sign in through your server and learn what the account may do there (12-grains §5.1a): a challenge from
+   * `<url>challenge`, the wallet's `grain_login` (with the team's member proof when the account is on it), checked at
+   * `<url>session`, which answers `{signed_in, rights, …}` (`SignIns` and `signInAnswer` in `@saltix/grain-server`).
+   * `extra` goes in the session's body too (the user's language). Show nothing but a splash until it resolves, then
+   * `gateOf` says what to render. Rejects with `UserRejected` when the user declines, `NoWallet` outside a wallet, and
+   * `Failed` when your server does not answer or refuses the login.
+   */
+  signIn: async (options: { url: string; extra?: Record<string, unknown>; fetch?: typeof fetch }): Promise<SignIn> => {
+    const base = options.url.endsWith("/") ? options.url : options.url + "/";
+    const go = options.fetch ?? globalThis.fetch.bind(globalThis);
+    const post = async (route: string, body: object): Promise<Record<string, unknown>> => {
+      let res: Response;
+      try {
+        res = await go(base + route, {
+          method: "POST", mode: "cors", credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
+          headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+        });
+      } catch {
+        throw new GrainError(ErrorCode.Failed, "the app's server did not answer");
+      }
+      const data = (await res.json().catch(() => null)) as unknown;
+      if (!res.ok || typeof data !== "object" || data === null || Array.isArray(data)) {
+        const error = typeof data === "object" && data !== null && typeof (data as { error?: unknown }).error === "string" ? (data as { error: string }).error : `${res.status}`;
+        throw new GrainError(ErrorCode.Failed, `the app's server refused the sign-in: ${error}`);
+      }
+      return data as Record<string, unknown>;
+    };
+    if (!provider()) throw new GrainError(ErrorCode.NoWallet, "not in a Saltix wallet");
+    const { challenge } = await post("challenge", {});
+    if (typeof challenge !== "string" || !/^([0-9a-f]{2}){1,64}$/.test(challenge)) throw new GrainError(ErrorCode.Failed, "the app's server gave no challenge");
+    const login = await grain.login(challenge);
+    // `member` goes as the wallet answered it, absent included: the server tells an older Saltix from a stranger by it.
+    const body: Record<string, unknown> = { ...(options.extra ?? {}), challenge, key: login.key, signature: login.signature, at: login.at, origin: login.origin };
+    const legacy = !Object.hasOwn(login, "member");
+    if (!legacy) body.member = login.member ?? null;
+    const answer = await post("session", body);
+    const rights = typeof answer.rights === "string" && (RIGHTS as readonly string[]).includes(answer.rights) ? (answer.rights as Rights) : "none";
+    return { signedIn: answer.signed_in === true, rights, legacy, answer };
+  },
   /** The account's address, when the manifest asks for it and the user agrees. */
   requestAddress: async () => (await call<{ address: string }>("grain_requestAddress")).address,
   /** A contact's address the user picks. */

@@ -1,7 +1,8 @@
 // What `grain lint` says about a grain's pages (`public/`), besides its manifest. Saltix lays a page out inside the safe
 // area unless it declares `viewport-fit=cover` (12-grains §7): then it is drawn under the status bar, the navigation bar
-// and the wallet's controls, and keeps clear of them itself. Reading CSS without a browser is a heuristic, so these are
-// warnings, never errors.
+// and the wallet's controls, and keeps clear of them itself. A page that signs in shows nothing of the app until its
+// sign-in resolves (12-grains §5.1a: check first, render after). Reading pages without a browser is a heuristic, so
+// these are warnings, never errors.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { viewportFitCover } from "@saltix/grain";
@@ -10,6 +11,10 @@ import { viewportFitCover } from "@saltix/grain";
 export const COVER_RULE = "cover-without-insets";
 /** A page declares viewport-fit=cover, and a bar is pinned to its top without keeping clear. */
 export const TOP_BAR_RULE = "full-screen-top-bar";
+/** An app signs in, and a page shows something before the sign-in resolves, or no page marks a splash. */
+export const GATE_RULE = "render-before-sign-in";
+/** The attribute that marks a page's splash: what it shows until its sign-in resolves (the app's icon and name). */
+export const SPLASH_ATTRIBUTE = "data-grain-splash";
 
 const STYLED = new Set([".html", ".htm", ".css"]);
 const PAGES = new Set([".html", ".htm"]);
@@ -25,6 +30,71 @@ const BAR_CLEAR = /--saltix-safe-top|--saltix-controls-|safe-area-inset-top/;
 /** A script that asks for `grain_info` is the bridge (`grain.js`, `@saltix/grain`) or a bundle of it: it names the
  *  variables itself, so it says nothing about whether the page uses them. */
 const BRIDGE = /["']grain_info["']/;
+
+/** What signs in: the SDK's `grain.signIn`/`grain.login`, or the bridge's method by name. */
+const SIGNS_IN = /\bsignIn\s*\(|\.login\s*\(|["']grain_login["']/;
+/** Elements that are seen even when empty. */
+const CONTENT = new Set(["img", "svg", "input", "button", "select", "textarea", "canvas", "video", "audio", "iframe", "object", "embed", "picture", "progress", "meter"]);
+/** Elements that never have children. */
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+
+/**
+ * What a page's HTML shows before any script runs, outside its splash: the outermost elements in the body that hold
+ * text, a content element (an image, a control) or any element at all (a skeleton's empty boxes), and text outside any
+ * element. An element marked `data-grain-splash` or `hidden` shows nothing of what it holds, nor do scripts, styles and
+ * templates; an empty element alone in the body (a mount point, a toast's box) shows nothing.
+ */
+export function shownBeforeSignIn(html: string): string[] {
+  const doc = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+  const at = doc.search(/<body\b[^>]*>/i);
+  const body = at < 0 ? doc.replace(/<head\b[\s\S]*?<\/head\s*>/i, "") : doc.slice(at).replace(/^<body\b[^>]*>/i, "");
+  type Frame = { name: string; hides: boolean; shown: boolean; tag: string };
+  const frames: Frame[] = [];
+  const shown: string[] = [];
+  const hidden = () => frames.some((f) => f.hides);
+  /** Something seen at the current point: the open element holds it, or the body does. */
+  const mark = (what: string) => {
+    if (hidden()) return;
+    if (frames.length === 0) shown.push(what);
+    else frames[frames.length - 1]!.shown = true;
+  };
+  /** `f` closed: if it showed anything, so does what holds it, up to the body, where it is reported. */
+  const closed = (f: Frame) => {
+    if (f.shown && !f.hides) mark(f.tag);
+  };
+  for (const m of body.matchAll(/<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>|([^<]+)/g)) {
+    if (m[4] !== undefined) {
+      const text = m[4].replace(/&nbsp;|&#160;/g, " ").trim();
+      if (text) mark(`"${text.length > 32 ? text.slice(0, 31) + "…" : text}"`);
+      continue;
+    }
+    const name = m[2]!.toLowerCase();
+    if (name === "body" || name === "html") continue;
+    if (m[1]) {
+      const open = frames.map((f) => f.name).lastIndexOf(name);
+      if (open < 0) continue;
+      while (frames.length > open) closed(frames.pop()!);
+      continue;
+    }
+    const attrs = m[3] ?? "";
+    const bare = attrs.replace(/"[^"]*"|'[^']*'/g, '""');
+    const hides = new RegExp(`(?:^|\\s)(?:hidden|${SPLASH_ATTRIBUTE})(?=[\\s=/]|$)`, "i").test(bare);
+    const id = attribute(m[0], "id");
+    const cls = attribute(m[0], "class");
+    const tag = `<${name}${id ? `#${id}` : cls ? `.${cls.trim().split(/\s+/)[0]}` : ""}>`;
+    // An element inside another is structure being drawn (a skeleton's boxes are empty): the outer one shows. Alone in
+    // the body, an empty element (a mount point, a toast's box) shows nothing.
+    if (!hides && frames.length > 0) mark(tag);
+    const leaf = VOID.has(name) || /\/\s*$/.test(attrs);
+    if (leaf) {
+      if (CONTENT.has(name) && !hides) mark(tag);
+      continue;
+    }
+    frames.push({ name, hides, shown: CONTENT.has(name), tag });
+  }
+  while (frames.length > 0) closed(frames.pop()!);
+  return shown;
+}
 
 /** A `top` (or `inset`'s first value) that pins a bar to the top edge: 0 in any unit, or a few pixels. */
 function atTheTop(value: string): boolean {
@@ -112,8 +182,9 @@ function filesOf(dir: string): string[] {
 const listed = (items: string[]) => items.slice(0, 3).join(", ") + (items.length > 3 ? ` and ${items.length - 3} more` : "");
 
 /**
- * Warnings about the pages in `publicDir`. None while no page declares `viewport-fit=cover`: Saltix lays such pages out
- * inside the safe area itself. For an app with a page that does:
+ * Warnings about the pages in `publicDir`: whether the app shows anything before its sign-in resolves (`lintSignIn`),
+ * and its frame. About the frame, none while no page declares `viewport-fit=cover`: Saltix lays such pages out inside
+ * the safe area itself. For an app with a page that does:
  * - `cover-without-insets` when no page, stylesheet or script of the app's own there reads the safe area
  *   (`--saltix-safe-*`, `env(safe-area-inset-*)`, `safe_area`); the bridge, and a bundle of it, are not read for that;
  * - `full-screen-top-bar` for a fixed or sticky bar at the top (`position: fixed|sticky` with `top: 0` or a few pixels,
@@ -129,9 +200,46 @@ export function lintPages(publicDir: string): string[] {
     ext: extname(file).toLowerCase(),
     text: readFileSync(file, "utf8"),
   }));
+  const own = files.filter((f) => !(SCRIPTS.has(f.ext) && BRIDGE.test(f.text)));
+  return [...lintCover(files, own), ...lintSignIn(files, own)];
+}
+
+type PageFile = { file: string; where: string; ext: string; text: string };
+
+/**
+ * `render-before-sign-in`, when a page or script of the app's own signs in (`grain.signIn`, `grain.login`,
+ * `grain_login`; the bridge itself is not read for that): for each page whose HTML shows something outside its splash
+ * before any script runs (`shownBeforeSignIn`), and once when no page marks a splash (`data-grain-splash`), so nothing
+ * says what it shows first. What a script draws before the sign-in resolves is not seen here.
+ */
+function lintSignIn(files: PageFile[], own: PageFile[]): string[] {
+  if (!own.some((f) => SIGNS_IN.test(f.text))) return [];
+  const pages = files.filter((f) => PAGES.has(f.ext));
+  const warnings: string[] = [];
+  for (const page of pages) {
+    const shown = shownBeforeSignIn(page.text);
+    if (shown.length === 0) continue;
+    warnings.push(
+      `${GATE_RULE}: ${page.where} shows ${listed(shown)} before the app's sign-in resolves, so someone it is not for sees ` +
+      `the app's UI for a moment. Keep only a splash in the HTML (the app's icon and name, in an element marked ` +
+      `${SPLASH_ATTRIBUTE}; the rest hidden, or drawn later), and draw the app or a refusal page once grain.signIn() and ` +
+      "gateOf() decide (AGENTS.md: check first, render after). This is a heuristic: ignore it if what shows is not the app's.",
+    );
+  }
+  if (pages.length > 0 && !pages.some((f) => new RegExp(`\\s${SPLASH_ATTRIBUTE}(?=[\\s=/>])`, "i").test(f.text))) {
+    warnings.push(
+      `${GATE_RULE}: the app signs in, and no page marks its splash (${SPLASH_ATTRIBUTE}): show the app's icon and name, ` +
+      "and nothing else, until grain.signIn() resolves, then the app or a refusal page with none of its UI (AGENTS.md: " +
+      "check first, render after).",
+    );
+  }
+  return warnings;
+}
+
+/** `cover-without-insets` and `full-screen-top-bar`: nothing while no page declares `viewport-fit=cover`. */
+function lintCover(files: PageFile[], own: PageFile[]): string[] {
   const covers = files.filter((f) => PAGES.has(f.ext) && declaresCover(f.text));
   if (covers.length === 0) return [];
-  const own = files.filter((f) => !(SCRIPTS.has(f.ext) && BRIDGE.test(f.text)));
   const readsSafeArea = own.some((f) => SAFE_AREA.test(f.text));
   const scriptLaysOut = own.some((f) => SCRIPTS.has(f.ext) && SAFE_AREA.test(f.text));
   const warnings: string[] = [];

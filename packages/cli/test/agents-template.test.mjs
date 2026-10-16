@@ -1,5 +1,5 @@
 // The AGENTS.md every `grain init` project gets says what the SDK and its guide for agents say: the full-screen rule,
-// a link to docs/agents/app.md, and the nine rules every app follows, each as the server `grain init --chat` makes and
+// a link to docs/agents/app.md, and the ten rules every app follows, each as the server `grain init --chat` makes and
 // the SDK's guide have it, so the three never drift apart.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -18,14 +18,14 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
     assert.ok(text.includes(FULL_SCREEN_RULE), "the full-screen rule, word for word");
     assert.ok(text.includes(`](${APP_GUIDE})`), "the guide, by its address: a project has no copy");
     assert.ok(text.includes(`](${APP_GUIDE}#the-rules-every-app-follows)`));
-    assert.ok(text.includes(appRules), "the nine rules");
+    assert.ok(text.includes(appRules), "the ten rules");
     assert.ok(text.includes("`connect.json`"), "the Connect profile is in the project");
     assert.ok(text.includes("--saltix-controls-width"), "and the full-screen ones");
   }
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
-  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 9);
+  assert.equal([...appRules.matchAll(/^\d+\. \*\*/gm)].length, 10);
 });
 
 test("the anchor the rules link to is the guide's heading", () => {
@@ -126,4 +126,19 @@ test("(i) the Connect profile: every app ships one and asks only for what it use
   assert.match(guide, /^## The Connect profile: `connect\.json`$/m);
   assert.match(guide, /\*\*Connect profile\*\*: every app ships a complete one/);
   assert.match(guide, /asks only for what it uses/);
+});
+
+test("(j) check first, then render: the splash, the gate and the server's check, as the guide and the template have them", async () => {
+  const { GATE_RULE, SPLASH_ATTRIBUTE } = await import("../dist/pages.js");
+  const { indexHtml, appJs } = await import("../dist/template.js");
+  assert.match(appRules, /\*\*Check first, then render\.\*\*/);
+  for (const words of [`\`${SPLASH_ATTRIBUTE}\``, "`grain.signIn({ url })`", "`gateOf(signIn, TEAM)`", "`SignIns`", "`signInAnswer`", `\`${GATE_RULE}\``,
+    "never what they may do", "update Saltix"]) {
+    assert.ok(appRules.includes(words), words);
+    assert.ok(guide.includes(words), `the guide: ${words}`);
+  }
+  assert.match(guide, /^## A page for some people only: check first, then render$/m);
+  // The template is the pattern: a splash in the HTML, the gate in the script.
+  assert.ok(indexHtml("Dice").includes(SPLASH_ATTRIBUTE));
+  for (const words of ["grain.signIn(", "gateOf(", "[data-grain-splash]"]) assert.ok(appJs.includes(words), words);
 });

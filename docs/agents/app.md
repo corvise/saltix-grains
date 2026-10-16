@@ -158,11 +158,46 @@ chat.text((ask) => card().text("Pick Plan below."));
   the user asked for, and deliver once `await chat.paymentOf(inv.invoice)` has the confirmations you need
   ([../payments.md](../payments.md)).
 
+## A page for some people only: check first, then render
+
+A public app for a limited circle shows strangers a refusal page without any of its UI; a private app's page never even
+loads for them (Saltix reads the registry first and shows only that the app is private). Saltix specs/12-grains.md
+§5.1a. On a first open Saltix Connect's sheet comes first; then your page loads, and its gate follows:
+
+1. **The HTML shows a splash and nothing else**: the app's icon and name in an element marked `data-grain-splash`,
+   the app's UI `hidden` (or not drawn yet). Never a skeleton of the UI: its layout already says what the app does.
+2. **Sign in with `grain.signIn({ url })`** (`@saltix/grain`). It posts to your server's `<url>challenge` and
+   `<url>session`; Saltix's login carries the account's member proof when it is on the app's team (its owner,
+   developers and viewers) or a private app's member, and `null` for anyone else.
+3. **Your server** answers both routes with `SignIns` (`SignIns.of(chat)` reads the registry through your chat
+   server) and `signInAnswer`: `const r = await signIns.check(body)` checks the challenge, the grain key's login and the
+   proof, and gives `r.signedIn.rights`: `owner`, `developer`, `viewer`, `user` or `none`. Give a session to those the
+   app is for only, and check its rights again on every request: the page's gate decides what people see,
+   never what they may do.
+4. **`gateOf(signIn, TEAM)`** says what to draw: `open` the app; `refused` a page that says whom the app is for and that
+   its owner can invite them, with none of the app's UI; `update` "update Saltix" (Saltix 0.1.53 and older send no
+   proof, so `none` may be a member: never tell them the app is not for them; ask them to update Saltix);
+   `declined` a sign-in button; `failed` try again; `outside` open it in Saltix.
+
+```js
+import { TEAM, gateOf, grain } from "./grain.js";
+const gate = await grain.signIn({ url: "https://api.example.com/my-app/" }).then((s) => gateOf(s, TEAM), (e) => gateOf(e, TEAM));
+document.querySelector("[data-grain-splash]").remove();
+if (gate === "open") drawApp(); else drawRefusal(gate);
+```
+
+`grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything in its HTML outside its
+splash, or marks no splash. `grain init` makes a page that does all of this (`SIGN_IN`, `FOR` in `public/app.js`).
+
 ## The rules every app follows
 
 - **Connect profile**: every app ships a complete one (`connect.json`: tagline, about, highlights, privacy, in English
   and Russian) and asks only for what it uses ([above](#the-connect-profile-connectjson)). `grain lint` fails without
   it.
+- **Check first, then render**: a page for some people only shows a splash until `grain.signIn` and `gateOf` decide,
+  then the app or a refusal page with none of its UI; a public app for a limited circle shows strangers that refusal
+  page ([above](#a-page-for-some-people-only-check-first-then-render)). The server checks the session's rights on every
+  request.
 - **Secrets**: never log, print, commit or report a key (the developer key, `owner.key`, `server.key`, `sponsor.key`)
   or a token. The SDK scrubs developer keys, long hex and the server secret from reports and its own log; name anything
   else in `redact`.

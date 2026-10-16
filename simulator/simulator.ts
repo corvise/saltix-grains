@@ -6,7 +6,8 @@
  * phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes. `npm run dev` serves it with the example grain, `grain dev` with yours
  * (`?manifest=<url>` loads a manifest and opens its page).
  * Sign-in uses a test grain secret kept in this browser (real signatures, checkable by
- * `@saltix/grain-server`); invoices are checked like a wallet checks them; payments are not made
+ * `@saltix/grain-server`), with this account's member proof when the development registry puts it on the app's team or
+ * among a private app's members (12-grains §5.1a; "Wallet" plays Saltix 0.1.53, whose sign-ins carry no member); invoices are checked like a wallet checks them; payments are not made
  * (it answers a made-up id); storage lives in this browser. Relay frames the grain sends are logged,
  * and "Frame to the grain" plays one arriving; "Check a notification" checks your server's like a
  * wallet does. The chat pane talks to the grain's chat server through the development relay as a wallet would
@@ -99,7 +100,10 @@ async function handle(origin: string, method: string, params: Record<string, unk
       if (challenge.length > 64) throw new Refusal(-32602, "challenge: at most 64 bytes");
       const seed = grainSeed(s.slug);
       const at = Date.now();
-      return { key: toHex(ed25519.getPublicKey(seed)), signature: toHex(ed25519.sign(loginMessage(s.slug, origin, challenge, at), seed)), at, origin };
+      const answer = { key: toHex(ed25519.getPublicKey(seed)), signature: toHex(ed25519.sign(loginMessage(s.slug, origin, challenge, at), seed)), at, origin };
+      // Saltix 0.1.53 puts no `member` in a sign-in; a newer one always does, the team's proof or null (12-grains §5.1a).
+      if ($<HTMLSelectElement>("wallet").value === "legacy") return answer;
+      return { ...answer, member: await chat.loginMember() };
     }
     case "grain_requestAddress":
       // Switched off on the Connect sheet: Saltix shows the sheet again with that one row, within 5 seconds of a tap.

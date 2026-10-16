@@ -126,6 +126,28 @@ export function rolesOf(access: GrainAccess, account: string): number {
   return access.members.find((m) => m.account === account)?.roles ?? 0;
 }
 
+/**
+ * What a signed-in account may do in a grain, by its strongest role (12-grains §5.1a): `owner` (the registry's owner),
+ * `developer`, `viewer`, `user` (a private grain's member who only uses it), or `none` (anyone else, and everyone whose
+ * wallet proved nothing).
+ */
+export type Rights = "owner" | "developer" | "viewer" | "user" | "none";
+
+/** Every right, strongest first. */
+export const RIGHTS: readonly Rights[] = ["owner", "developer", "viewer", "user", "none"];
+
+/** The rights of `account` (hex; null for none proven) in a grain, by its strongest role. A public grain's user role
+ *  counts for nothing: anyone uses a public grain, and its wallet sends no proof for it. */
+export function rightsOf(access: GrainAccess, account: string | null): Rights {
+  if (account === null) return "none";
+  if (account === access.owner) return "owner";
+  const roles = rolesOf(access, account);
+  if ((roles & ROLES.developer) !== 0) return "developer";
+  if ((roles & ROLES.viewer) !== 0) return "viewer";
+  if (!access.public && (roles & ROLES.user) !== 0) return "user";
+  return "none";
+}
+
 /** The roles that put a member on the grain's team (24-app-studio §2a): developer or viewer. A member with the user role
  *  alone uses a private grain and is not on its team. */
 export const TEAM_ROLES = ROLES.developer | ROLES.viewer;

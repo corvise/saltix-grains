@@ -12,7 +12,7 @@ import { UNOWNED, accountId, toHex, fromHex, verifyManifest } from "@saltix/grai
 import { lint, sign, forOrigin, readKey, signedFor } from "../dist/project.js";
 import { publish, retire, walletLink, waitForPublished } from "../dist/registry.js";
 import { serve, simulatorFor } from "../dist/dev.js";
-import { lintPages, TOP_BAR_RULE, COVER_RULE } from "../dist/pages.js";
+import { lintPages, TOP_BAR_RULE, COVER_RULE, GATE_RULE, shownBeforeSignIn } from "../dist/pages.js";
 import { FULL_SCREEN_RULE } from "../dist/template.js";
 import { publishLink, publishLinkManifest } from "../dist/publish.js";
 import { encodeManifest } from "@saltix/grain-server";
@@ -233,6 +233,45 @@ test("lint: a page inside the safe area needs nothing; one that declares viewpor
   assert.match(warned({ "index.html": meta, "b.html": meta })[0], /^cover-without-insets: b\.html, index\.html declare viewport-fit=cover/);
 });
 
+test("lint: a page that signs in shows only its splash until the gate decides (check first, render after)", () => {
+  const warned = (files) => lintPages(pages(files));
+  const splash = '<div class="splash" data-grain-splash><img src="icon.png" alt=""><strong>Pass</strong></div>';
+  const app = '<div id="app" hidden><header><h1>Keys</h1></header><nav class="tabs"><button>Keys</button></nav></div>';
+  const signsIn = { "app.js": "const s = await grain.signIn({ url }); if (gateOf(s, TEAM) === 'open') draw();" };
+  // An app that never signs in has nothing to gate.
+  assert.deepEqual(warned({ "index.html": "<body><header>Dice</header><main><button>Roll</button></main></body>" }), []);
+  // A splash and the rest hidden, or drawn later from an empty mount point: nothing to say.
+  assert.deepEqual(warned({ "index.html": `<body>${splash}${app}<div id="toast"></div><script src="app.js"></script></body>`, ...signsIn }), []);
+  assert.deepEqual(warned({ "index.html": `<body>${splash}<div id="root"></div><template><p>Keys</p></template></body>`, ...signsIn }), []);
+  // The app's UI in the HTML, a skeleton of it (empty boxes in a layout), text or a control: each is warned about.
+  for (const [body, what] of [
+    ['<header class="head"><div class="sk line"></div></header><div class="tabs"><div class="tab"></div></div>', /<header\.head>, <div\.tabs>/],
+    ["<main><p>Your keys</p></main>", /<main>/],
+    ["Loading your keys…", /"Loading your keys…"/],
+    ["<button>New key</button>", /<button>/],
+  ]) {
+    const w = warned({ "index.html": `<body>${splash}${body}</body>`, ...signsIn });
+    assert.equal(w.length, 1, body);
+    assert.ok(w[0].startsWith(`${GATE_RULE}: index.html shows `), w[0]);
+    assert.match(w[0], what);
+    assert.match(w[0], /data-grain-splash/);
+  }
+  // No splash marked anywhere: what shows first cannot be told, and the page is told how.
+  const none = warned({ "index.html": '<body><div id="root"></div></body>', ...signsIn });
+  assert.equal(none.length, 1);
+  assert.match(none[0], new RegExp(`^${GATE_RULE}: the app signs in, and no page marks its splash`));
+  // Signing in by the bridge's method or grain.login counts; the bridge itself (it names the method) does not.
+  assert.equal(warned({ "index.html": "<body><main>x</main></body>", "a.js": 'saltix.request({ method: "grain_login" })' }).length, 2);
+  assert.equal(warned({ "index.html": "<body><main>x</main></body>", "a.js": "await grain.login(challenge)" }).length, 2);
+  const bridge = readFileSync(fileURLToPath(import.meta.resolve("@saltix/grain")), "utf8");
+  assert.deepEqual(warned({ "index.html": "<body><main>x</main></body>", "grain.js": bridge }), []);
+  // Read as HTML is written: comments, scripts and styles show nothing; a hidden attribute anywhere in the tag hides.
+  assert.deepEqual(shownBeforeSignIn("<!-- <main>x</main> --><body><script>document.write('x')</script><style>p{}</style></body>"), []);
+  assert.deepEqual(shownBeforeSignIn('<body><section class="a" hidden data-x="1"><p>x</p></section></body>'), []);
+  assert.deepEqual(shownBeforeSignIn('<body><section class="hidden"><p>x</p></section></body>'), ["<section.hidden>"], "a class named hidden hides nothing");
+  assert.deepEqual(shownBeforeSignIn('<body><div title="a > b"><span>x</span></div></body>'), ["<div>"]);
+});
+
 test("init makes a project the owner alone can sign for", () => {
   const dir = mkdtempSync(join(tmpdir(), "grain-init-"));
   const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -248,6 +287,12 @@ test("init makes a project the owner alone can sign for", () => {
     assert.ok(html.includes(`var(${v})`), v);
   }
   assert.match(readFileSync(join(dir, "dice", "public", "app.js"), "utf8"), /grain\.layout\(\)/);
+  // Check first, render after: the HTML shows its splash alone; the app and the refusal wait for the gate.
+  assert.match(html, /<div class="splash" data-grain-splash>/);
+  assert.match(html, /<div id="app" hidden>/);
+  assert.deepEqual(shownBeforeSignIn(html), []);
+  const js = readFileSync(join(dir, "dice", "public", "app.js"), "utf8");
+  for (const words of ["grain.signIn({ url: SIGN_IN })", "gateOf(s, FOR)", 'document.querySelector("[data-grain-splash]").remove()']) assert.ok(js.includes(words), words);
   assert.deepEqual(lintPages(join(dir, "dice", "public")), []);
   const linted = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
   assert.ok(!linted.includes(TOP_BAR_RULE), linted);
