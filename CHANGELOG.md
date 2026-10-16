@@ -4,6 +4,10 @@
 
 ### Changed
 
+- `ChatKeyNotRegistered` and the `chat_stopped` hint say what to do for each reason: a new developer key when the owner
+  revoked or replaced it (or run the server that holds the new one), a new app when the grain is retired, and for a
+  grain the registry does not hold yet, wait for its registration to land. Every reason used to say "make a new
+  developer key", which cannot help a retired or not yet registered grain.
 - **Breaking for chat clients**: a chat request names the user's language (Saltix 22-grain-chats §3; vectors synced
   from Saltix f99df76). `ChatRequest` ends with `lang`: the language the user's Saltix shows (2–8 of `[a-z-]`, as
   the spec's maps name languages), or `""` when the app does not say. Handlers read it as `ask.lang` and answer in it

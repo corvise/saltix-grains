@@ -123,11 +123,21 @@ const STOPPED: Record<ChatStopReason, string> = {
   unregistered: "the registry has no such grain",
 };
 
+/** What the developer does about each reason: a new key for a live grain, a new grain for a retired one, and for one
+ *  the registry does not hold, waiting for its registration or making it. */
+const REMEDY: Record<ChatStopReason, (slug: string) => string> = {
+  revoked: (slug) => `Make a new developer key in Saltix (My apps → ${slug} → Developer key) and start with it.`,
+  replaced: (slug) => `Make a new developer key in Saltix (My apps → ${slug} → Developer key) and start with it, or run the server ` +
+    `that holds the key the owner put in its place.`,
+  retired: () => "A retired slug is never used again: make a new app in Saltix (Apps → My apps → New app) and start with its developer key.",
+  unregistered: (slug) => `If ${slug} was just made, wait until its registration is in a block (Saltix shows the app live in My apps) ` +
+    `and start again; otherwise make it in Saltix (Apps → My apps → New app) or register it (grain publish).`,
+};
+
 /** The server key is not one the registry names for the grain (at start), or stopped being one. */
 export class ChatKeyNotRegistered extends Error {
   constructor(public readonly reason: ChatStopReason, slug: string) {
-    super(`the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ` +
-      `Make a new developer key in Saltix (My apps → ${slug} → Developer key) and start with it.`);
+    super(`the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ${REMEDY[reason](slug)}`);
     this.name = "ChatKeyNotRegistered";
   }
 }
@@ -729,7 +739,7 @@ export class ChatServer {
     if (!this.options.relay) this.relay.close();
     this.log("error", "chat_stopped", {
       reason, slug: this.slug, key: this.key.slice(0, 16),
-      hint: `${STOPPED[reason]}: this server stopped answering. Make a new developer key in Saltix (My apps → ${this.slug} → Developer key) and restart with it.`,
+      hint: `${STOPPED[reason]}: this server stopped answering. ${REMEDY[reason](this.slug)}`,
     });
     this.options.onStop?.(reason);
   }
