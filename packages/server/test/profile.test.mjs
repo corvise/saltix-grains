@@ -11,7 +11,7 @@ import {
   checkGrainProfile, checkSiteProfile, checkProfileOwner, profileFromJson, signedProfileFromJson, profileToJson, profileText, plainOwnerOf,
   httpsLinkOk, supportOk, connectOriginOk, refusedChar, profileTextOk, readProfileLink, profileLink, unownedProfile, ProfileError, ProfileLinkError,
   MAX_PROFILE_BYTES, MAX_PROFILE_LINK, PROFILE_LINK_PREFIX, PROFILE_DOMAIN, CONNECT_PROFILE_PATH, PROFILE_LIMITS, policyOf,
-  encodeGrainTx, signGrainTx, grainCallProblem, minimumFee, toHex, fromHex, toBase64, derive,
+  encodeGrainTx, signGrainTx, grainCallProblem, minimumFee, toHex, fromHex, toBase64, derive, Writer,
 } from "../dist/index.js";
 import * as web from "../dist/web.js";
 
@@ -223,6 +223,28 @@ test("the JSON form is read as the node reads it", () => {
   const p = profileFromJson(proto);
   assert.ok(Object.hasOwn(p.texts, "__proto__"));
   assert.equal(profileProblem(p), "languages");
+});
+
+test("one signed profile has one encoding: languages out of order or repeated are refused", () => {
+  const s = signedProfileFromJson(v.accepted[0].json);
+  // The profile's Borsh with its languages in the order given, not the node's (sorted), and its signature after it.
+  const encodeAs = (langs) => {
+    const p = s.profile;
+    const w = new Writer().u8(p.version).u8(0).string(p.subject.grain.slug).fixed(fromHex(p.owner, 32), 32).u32(p.revision).u32(langs.length);
+    for (const lang of langs) {
+      const t = p.texts[lang];
+      w.string(lang).string(t.tagline).string(t.about).u32(t.highlights.length);
+      t.highlights.forEach((h) => w.string(h));
+      w.string(t.privacy);
+    }
+    const link = (w, x) => w.string(x);
+    w.option(p.website, link).option(p.support, link).option(p.terms, link).u8(0).fixed(fromHex(s.key.ed25519, 32), 32);
+    return w.fixed(fromHex(s.signature, 64), 64).done();
+  };
+  assert.equal(toHex(encodeAs(["en", "ru"])), v.accepted[0].signed_borsh_hex, "the node's order");
+  for (const langs of [["ru", "en"], ["en", "en", "ru"], ["en", "ru", "ru"]]) {
+    assert.throws(() => decodeSignedProfile(encodeAs(langs)), (e) => e instanceof ProfileError && e.reason === "encoding", langs.join(","));
+  }
 });
 
 test("profileProblem never throws, and the encoding refuses what Borsh cannot hold", () => {

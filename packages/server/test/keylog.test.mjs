@@ -117,4 +117,9 @@ test("a log made here: the root and a device, a root used again, a bad device si
   moved[1][40] ^= 1;
   assert.throws(() => checkLog(account, moved, G, pol), LogError, "another previous event");
   assert.throws(() => checkLog(account, [], G, pol), LogError, "no events");
+  // A device key of small order (the identity point here) is no device key, though it is 32 bytes.
+  const identity = new Uint8Array(32);
+  identity[0] = 1;
+  const weak = tx(0, addDevice(identity));
+  assert.throws(() => checkLog(account, build([[10, { signed: concat(weak, root(weak, 0)) }]]), G, pol), /not a valid device key/);
 });
