@@ -4,6 +4,16 @@
 
 ### Added
 
+- **The Connect profile** (Saltix 19-connect §11, 12-grains §3 and §10; vectors `connect-v1.json` and
+  `connect-profiles-v1.json` synced from corvise/saltix#224): `@saltix/grain-server` reads, writes, signs and checks a
+  service's own signed words about itself (`profile.ts`: `profileProblem` with the node's reasons, `encodeProfile`,
+  `decodeSignedProfile` canonical only, `profileFromJson`/`signedProfileFromJson`/`profileToJson`, `signProfile`,
+  `verifyProfile`, `checkGrainProfile`, `checkSiteProfile`, `checkProfileOwner`, `httpsLinkOk`, `supportOk`), the
+  profile link `salt:grain-profile?p=` (`profileLink`, `readProfileLink`), the owner's `SetGrainProfile` call (tag 38:
+  `GrainCall` `{profile: {slug, profile}}`, `RegisteredGrain.profile`), and key event logs checked offline
+  (`keylog.ts`: `checkLog`, `keySpeaksFor`), a port of the explorer's. `@saltix/grain-server/web` exports what runs in a
+  web page. Ed25519 signatures are now verified strictly, as the node does (`verifyEd25519`; a small-order key or a
+  non-canonical encoding verifies nothing), and a Borsh string keeps a leading U+FEFF, as the node reads it.
 - **The card design standard** (Saltix 22-grain-chats §4, §5a; vectors synced from corvise/saltix#221): `card().code(text)`
   and `card().poll(question, command, options, {chosen, closed, tally})` (blocks 6 and 7, typed by the spec when sent:
   `Card.typedBlocks`), `ask.update(card)` to answer a tap in place of the card tapped (a poll's new counts), the

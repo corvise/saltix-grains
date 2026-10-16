@@ -3,7 +3,8 @@
  * — check sign-ins, make and sign invoices, find their payments on chain, sign the manifest, the registry's calls,
  * write to users through the relays (frames and notifications), and talk with them in the grain's chat
  * (`ChatServer`, from a developer key alone), its team included: errors reach the team in the app's console. Byte for
- * byte the node's formats (vectors/grains-v1.json, vectors/grain-chats-v1.json, vectors/handles-v1.json).
+ * byte the node's formats (vectors/grains-v1.json, vectors/grain-chats-v1.json, vectors/handles-v1.json,
+ * vectors/connect-profiles-v1.json). `@saltix/grain-server/web` holds the parts that run in a web page too.
  */
 export * from "./bytes.js";
 export * from "./address.js";
@@ -15,6 +16,9 @@ export * from "./node.js";
 export * from "./tx.js";
 export * from "./registry.js";
 export * from "./handle.js";
+export * from "./keylog.js";
+export * from "./profile.js";
+export * from "./profile-link.js";
 export * from "./sponsor.js";
 export * from "./notification.js";
 export * from "./records.js";

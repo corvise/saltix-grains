@@ -1,11 +1,13 @@
-// The grains' registry on the beacon chain (Saltix 12-grains §3, 24-app-studio §2–§6a): the owner's transactions that
-// register, update, configure, open or close and retire a grain, a username bound to it, anyone's rating, encoded and
-// signed as the node checks them, the deposit a slug needs, and what a node says of a slug.
+// The grains' registry on the beacon chain (Saltix 12-grains §3, 24-app-studio §2–§6a, 19-connect §11): the owner's
+// transactions that register, update, configure, open or close and retire a grain, set its Connect profile, a username
+// bound to it, anyone's rating, encoded and signed as the node checks them, the deposit a slug needs, and what a node
+// says of a slug.
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId } from "./address.js";
 import { Writer, fromHex, toHex } from "./bytes.js";
 import { type Handle, handleProblem, writeHandle } from "./handle.js";
 import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
+import { type SignedConnectProfile, checkGrainProfile, encodeSignedProfile } from "./profile.js";
 import { UNOWNED } from "./publish.js";
 import { type NodeLike, nodeCall } from "./node.js";
 import { type TxFields, encodeTx, minimumTxFee, signTx, txId } from "./tx.js";
@@ -77,12 +79,15 @@ export type GrainCall =
   | { configure: { slug: string; servers: string[]; category: number } }
   | { bind: { handle: Handle; slug: string | null } }
   | { access: { slug: string; public: boolean; members: Array<{ account: string; roles: number }> } }
-  | { rate: { slug: string; score: number; review: string } };
+  | { rate: { slug: string; score: number; review: string } }
+  /** The grain's Connect profile (19-connect §11), signed by a key that speaks for the owner, of a revision above the
+   *  registry's; null clears it. */
+  | { profile: { slug: string; profile: SignedConnectProfile | null } };
 
 // Action::Registry is tag 1; RegisterGrain, UpdateGrain and RetireGrain are calls 7, 8 and 9; ConfigureGrain,
-// BindHandle, SetGrainAccess and RateGrain 34 to 37.
+// BindHandle, SetGrainAccess and RateGrain 34 to 37; SetGrainProfile 38.
 const ACTION_REGISTRY = 1;
-const CALL = { register: 7, update: 8, retire: 9, configure: 34, bind: 35, access: 36, rate: 37 } as const;
+const CALL = { register: 7, update: 8, retire: 9, configure: 34, bind: 35, access: 36, rate: 37, profile: 38 } as const;
 
 /** Why `call` would be refused before it leaves the shard (24-app-studio §9), or null; the registry checks the rest. */
 export function grainCallProblem(call: GrainCall, sender?: string): string | null {
@@ -114,6 +119,16 @@ export function grainCallProblem(call: GrainCall, sender?: string): string | nul
       return `review: at most ${MAX_REVIEW} characters, no control characters`;
     }
     return slug(call.rate.slug);
+  }
+  if ("profile" in call) {
+    const { profile } = call.profile;
+    if (profile !== null) {
+      // As the shard checks it before it leaves (12-grains §3): in bounds, signed, the grain's, and the sender's when the
+      // sender is known. That its key speaks for the owner, and its revision, are the registry's to check.
+      const problem = checkGrainProfile(profile, call.profile.slug, sender ?? profile.profile.owner);
+      if (problem) return `profile: ${problem} (Saltix 19-connect §11)`;
+    }
+    return slug(call.profile.slug);
   }
   return null;
 }
@@ -156,6 +171,8 @@ function grainAction(call: GrainCall, sender?: string): Uint8Array {
     for (const m of a.members) w.fixed(fromHex(m.account, 32), 32).u8(m.roles);
   } else if ("rate" in call) {
     w.u8(CALL.rate).string(call.rate.slug).u8(call.rate.score).string(call.rate.review);
+  } else if ("profile" in call) {
+    w.u8(CALL.profile).string(call.profile.slug).option(call.profile.profile, (w, p) => w.raw(encodeSignedProfile(p)));
   } else {
     throw new TypeError("a grain's registry call");
   }
@@ -225,6 +242,9 @@ export interface RegisteredGrain {
   /** The usernames pointing at it, as wallets write them (`@chess_coach`). */
   handles?: string[];
   ratings?: GrainRatings;
+  /** Its Connect profile (19-connect §11) in its signed JSON form, or null; absent on a node from before it. Check it
+   *  with `checkGrainProfile` against this record's slug and owner before showing it. */
+  profile?: SignedConnectProfile | null;
 }
 
 /** What the registry holds under `slug`; null when nobody registered it. */
