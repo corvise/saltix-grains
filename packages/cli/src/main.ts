@@ -15,6 +15,7 @@ import { serve, linkFor } from "./dev.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
+import * as chatTemplate from "./chat-template.js";
 import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
 import { UsageError, helpFor, parse } from "./args.js";
 
@@ -128,6 +129,10 @@ async function main(argv: string[]): Promise<number> {
       const dir = resolve(positional[0] ?? ".");
       const slug = text(flags, "slug", basename(dir).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+/, "").slice(0, 32));
       const name = text(flags, "name", slug);
+      if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(slug)) {
+        throw new Error(`the slug "${slug}" is not one: 3 to 32 of [a-z0-9-], starting with a letter or a digit` +
+          (flags.has("slug") ? "" : ` (it comes from the directory's name: pass --slug)`));
+      }
       if (existsSync(join(dir, MANIFEST_FILE))) throw new Error(`${join(dir, MANIFEST_FILE)} exists already`);
       const chat = flags.get("chat") === true;
       mkdirSync(chat ? dir : join(dir, "public"), { recursive: true });
@@ -142,9 +147,14 @@ async function main(argv: string[]): Promise<number> {
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
       if (chat) {
         writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
+        writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
+        writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
-        console.log("next: grain publish --node URL, then grain cert init and grain configure --server server.key, or make it in Saltix");
+        console.log(`next: make the app in Saltix (Apps → My apps → New app, slug ${slug}) and put its developer key in app.key ` +
+          `(owner-only, never on the command line); then npm install && npm start in ${dir}`);
+        console.log(`  or on a test network, with owner.key: grain publish --node URL, grain cert init, ` +
+          `grain configure --slug ${slug} --server server.key --node URL, grain app-key make --slug ${slug} --node URL`);
         return 0;
       }
       writeFileSync(join(dir, "public", "index.html"), template.indexHtml(name));

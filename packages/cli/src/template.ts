@@ -51,6 +51,10 @@ server.key
 app.key
 signed.json
 *.store.json
+# Every other key file too (sponsor.key, a rater's key…): whoever holds one speaks for its account.
+*.key
+bundle.zip
+node_modules/
 `;
 
 export const readme = (slug: string) => `# ${slug}
@@ -67,10 +71,11 @@ A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
 `;
 
-/** A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. */
+/** A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. Version 2: an app
+ *  made in Saltix starts with a spec of version 1 that its owner key signed, and a wallet takes only a higher one. */
 export const chatJson = (slug: string, name: string) => JSON.stringify({
   slug,
-  version: 1,
+  version: 2,
   intro: { en: `${name}: a chat-only app in Saltix.` },
   commands: [
     { name: "hello", title: { en: "Say hello" }, help: { en: "A greeting" }, params: [{ name: "name", title: { en: "Your name" }, kind: { text: { max: 32 } } }] },
@@ -83,6 +88,14 @@ export const chatReadme = (slug: string) => `# ${slug}
 
 A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix specs/24-app-studio.md).
 
+- **Run it:** put the developer key in \`app.key\` (\`(umask 077 && pbpaste > app.key)\`; never on the command line,
+  shells keep their history), then \`npm install\` and \`npm start\`: \`server.mjs\` is the server, its log one JSON line
+  per event. It exits with 78 when the key cannot work (replaced, revoked, the app retired, another network's): make a
+  new developer key in Saltix, since restarting does not help. Under systemd: the key as a credential
+  (\`LoadCredential=app-key:…\`, \`Environment=SALTIX_APP_KEY_FILE=%d/app-key\`), \`StateDirectory=\` for its store, and
+  \`RestartPreventExitStatus=78\`.
+- **Add a command:** declare it in \`chat.json\`, add its handler in \`server.mjs\`, and raise \`version\` with every change:
+  a wallet takes only a version above the one it holds, and an app made in Saltix starts at 1.
 - \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
   10 for 8 or more; back 30 days after \`grain retire\`). Or make the app in Saltix: My apps → New app.
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key --node <url>\` names it in the

@@ -55,13 +55,18 @@ next to the relay) and **Fail on purpose** (below).
 
 ## 3. Add a command (3 minutes)
 
-Make a project of your own beside the checkout:
+Make a project of your own beside the checkout, named by your app's slug (in the checkout):
 
 ```sh
-mkdir my-app && cd my-app && npm init -y && npm pkg set type=module
-npm install ../saltix-grains/packages/server     # the SDK, as npm run example built it
-mv ../saltix-grains/app.key . && echo app.key >> .gitignore
+npx grain init ../your-app --chat --slug your-app   # chat.json, server.mjs, package.json, .gitignore, README.md
+cd ../your-app && npm install                        # the SDK, from the checkout (it is not on npm yet)
+mv ../saltix-grains/app.key .                        # .gitignore keeps every *.key out of git
+npm start                                            # the starting chat: one command, hello
 ```
+
+`owner.key` is the command line's own owner key, for registering from a computer on a test network; an app made in
+Saltix has its owner on your phone and never uses it. `server.mjs` logs one JSON line per event and exits with 78 when
+the key cannot work (replaced, revoked, the app retired, another network's), which a supervisor should not restart on.
 
 `chat.json` declares what users can send; its `slug` is your app's. Each command has a title, help and typed parameters;
 the wallet draws the form and checks it before anything leaves the phone ([docs/chats.md](chats.md#the-spec)):
@@ -85,16 +90,9 @@ the wallet draws the form and checks it before anything leaves the phone ([docs/
 }
 ```
 
-`server.mjs`:
+`server.mjs` has a handler for each command of the spec: replace `hello`'s with `roll`'s.
 
 ```js
-import { readFileSync } from "node:fs";
-import { AppKey, ChatServer, card, chatSpecFromJson, fileChatStore } from "@saltix/grain-server";
-
-const appKey = AppKey.parse(readFileSync("app.key", "utf8"));
-const spec = chatSpecFromJson(JSON.parse(readFileSync("chat.json", "utf8")));
-const chat = await ChatServer.start({ appKey, spec, store: fileChatStore("chat.store.json"), log: console.log });
-
 chat.command("roll", (ask) => {
   const sides = ask.args.sides === "d20" ? 20 : 6;
   return card().fields({ Rolled: String(1 + Math.floor(Math.random() * sides)) }).run("Again", "roll", { sides: ask.args.sides });
@@ -103,7 +101,7 @@ chat.text(() => card().text("Pick Roll below."));
 ```
 
 ```sh
-node server.mjs
+npm start
 ```
 
 Every request names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it
