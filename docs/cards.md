@@ -4,9 +4,12 @@ Every Saltix draws an app's chat message the same way (Saltix
 [22-grain-chats §5a](https://github.com/corvise/saltix/blob/main/specs/22-grain-chats.md)), so you design a card once
 and it looks the same on a phone, on a foldable and in the app's own screen. This page is the standard: what each block
 is for, how many actions a card takes and how they are laid out, which emphasis to choose, and what to avoid. `lintCard`
-checks a card against it, and the simulator draws by it. The pictures are Saltix's own rendering.
+checks a card against it, and the simulator draws by it. The pictures are Saltix's own rendering (its card component,
+at a phone's width), in its dark theme unless they say otherwise.
 
 ![A card: the capsule with a status, a secret and fields, the action bar under it](cards/anatomy.png)
+
+![The same card in Saltix's light theme](cards/anatomy-light.png)
 
 ## The anatomy
 
