@@ -120,7 +120,8 @@ How to write a good one:
 `grain profile` sets it once the app is registered: a QR code the owner's Saltix scans (it fills in its account and the
 registry's revision and one, shows the profile as the sheet will, and signs after the PIN), or `--key owner.key` on the
 test network. The owner may also write it in Saltix's app studio (My apps → the app → Connect profile). `grain show`
-prints the registry's profile and whether a wallet takes it.
+prints the registry's profile and whether a wallet takes it. `grain dev`'s simulator shows a preview of the sheet from
+`connect.json` and the manifest before the app opens (**Show it again** after a change).
 
 ## Handlers and cards: `server.mjs`
 

@@ -16,6 +16,12 @@
   `grain connect-profile --origin --name --category --key [--owner] [--revision] [--out]` signs a website's profile for
   `/.well-known/saltix-connect`. `AGENTS.md`, every project's `AGENTS.md` (a ninth rule) and `docs/agents/app.md` (the
   Connect profile: how to write a good one) say so.
+- **The simulator previews the Connect sheet** (Saltix 19-connect §12): before a grain opens, from `connect.json`
+  (`grain dev` and `npm run dev` serve it at `/_connect.json`; `examples/hello-grain/connect.json`) and the manifest:
+  "Saltix Connect", the identity, "In its own words", "To continue, sign in" with a row per permission (the address
+  worded "It can follow your activity on the blockchain: balances, transfers, names", the address and notifications
+  behind switches off by default), the privacy summary and links, Continue or Cancel (Back cancels), inside the page's
+  frame below the controls' band. Continue records the sign-in and the switches; **Show it again** replays it.
 - **`@saltix/connect`** (packages/connect, Saltix 19-connect §2–§5, §13): "Sign in with Saltix" for websites and
   DApps, the page's side of Saltix Connect ported from the explorer's tested `explorer/src/connect/`. `createConnect({
   network, relays, node, name, origin?, genesis? })` runs the session (keys, a link slot through relays the page reaches,

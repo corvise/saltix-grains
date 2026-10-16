@@ -21,6 +21,7 @@ import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
 import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
 import { type DeviceKey, deviceKeyOf } from "../packages/server/src/keys";
 import { setupChat } from "./chat";
+import { type SheetManifest, fetchProfile, showConnectSheet } from "./connect-sheet";
 import { setupPhone } from "./phone";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -101,7 +102,10 @@ async function handle(origin: string, method: string, params: Record<string, unk
       return { key: toHex(ed25519.getPublicKey(seed)), signature: toHex(ed25519.sign(loginMessage(s.slug, origin, challenge, at), seed)), at, origin };
     }
     case "grain_requestAddress":
-      if (!consents.has("address") && !confirm(`${s.slug} asks for your address.`)) throw new Refusal(4001, "the user declined");
+      // Switched off on the Connect sheet: Saltix shows the sheet again with that one row, within 5 seconds of a tap.
+      if (!consents.has("address") && !confirm(`${s.slug} asks for your address: it could follow your activity on the blockchain (balances, transfers, names).`)) {
+        throw new Refusal(4001, "the user declined");
+      }
       consents.add("address");
       return { address: s.address };
     case "grain_pickContact": {
@@ -219,8 +223,37 @@ function emit(event: string, data: object) {
   frame.contentWindow?.postMessage({ saltixSim: 1, event, data }, "*");
 }
 
-/** Open the grain's page at the URL the form holds. */
-function openGrain(): void {
+/** The manifest loaded and where it came from: what the Connect sheet shows. */
+let loaded: { manifest: SheetManifest; url: string } | null = null;
+
+/** The Connect sheet the first time this account opens the app (19-connect §12.2): Continue records the sign-in and the
+ *  switches as set; Cancel opens nothing and sends nothing. Whether the app may open. */
+async function connectFirst(): Promise<boolean> {
+  if (!loaded || consents.has("login") || !$<HTMLInputElement>("connect-first").checked) return true;
+  const { profile, problem } = await fetchProfile(loaded.url, loaded.manifest.owner);
+  if (problem) write(`connect.json ✖ ${problem}: a wallet shows the app as having no Connect profile`);
+  const choice = await showConnectSheet({
+    phone: $("phone"),
+    frame: phone.sheetFrame,
+    lang: () => settings().language,
+    theme: () => settings().theme,
+    log: write,
+  }, loaded.manifest, profile, problem);
+  if (choice === null) {
+    write("Connect sheet: Cancel; Saltix opens nothing and sends nothing");
+    return false;
+  }
+  consents.add("login");
+  // A switch left off is a refusal the app learns as 4001 when it asks.
+  if (choice.address) consents.add("address");
+  if (choice.notifications) consents.add("notifications");
+  write(`Connect sheet: Continue (address ${choice.address ? "on" : "off"}, notifications ${choice.notifications ? "on" : "off"})`);
+  return true;
+}
+
+/** Open the grain's page at the URL the form holds, after the Connect sheet the first time. */
+async function openGrain(): Promise<void> {
+  if (!(await connectFirst())) return;
   const url = $<HTMLInputElement>("url").value.trim();
   if (!url) return write("no page to open: a chat-only app has none (its home is Saltix's own screen)");
   phone.opened();
@@ -235,7 +268,7 @@ const phone = setupPhone({
   log: write,
   emit,
   openChat: () => void chat.open(),
-  reopen: openGrain,
+  reopen: () => void openGrain(),
 });
 
 const chat = setupChat({
@@ -247,11 +280,16 @@ const chat = setupChat({
   log: write,
   open: (start) => {
     $<HTMLInputElement>("start").value = start;
-    openGrain();
+    void openGrain();
   },
 });
 
-$<HTMLButtonElement>("open").onclick = openGrain;
+$<HTMLButtonElement>("open").onclick = () => void openGrain();
+// The sheet again, as for an account that never opened the app (or revoked it: Settings → Connected apps and sites).
+$<HTMLButtonElement>("connect-again").onclick = () => {
+  consents.clear();
+  void openGrain();
+};
 $<HTMLSelectElement>("theme").onchange = () => {
   emit("theme", { theme: settings().theme });
   phone.repaint();
@@ -295,6 +333,8 @@ async function loadManifest(url: string): Promise<void> {
   const key = m.owner_key;
   $<HTMLInputElement>("owner").value = "ed25519" in key ? key.ed25519 : JSON.stringify(key);
   $<HTMLInputElement>("url").value = m.entry.hosted?.url ?? (m.entry.sealed ? new URL(m.entry.sealed.start, url).href : "");
+  loaded = { manifest: m, url };
+  consents.clear();
   phone.repaint();
   write(`manifest of ${m.slug} v${m.version} loaded`);
 }

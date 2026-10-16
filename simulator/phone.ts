@@ -96,6 +96,9 @@ export interface Phone {
   ready(): void;
   /** Close the app: ✕, Back past the page's history, or `grain_close`. */
   close(why: string): void;
+  /** Where the wallet's own sheets are drawn, as a page inside the safe area is: below the controls' band, clear of the
+   *  bars, the cutout and the corners (19-connect §12); and the screen's size. */
+  sheetFrame(): { view: SafeArea; width: number; height: number };
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -291,6 +294,7 @@ export function setupPhone(host: PhoneHost): Phone {
       requestAnimationFrame(() => seek());
     },
     ready: hideSplash,
+    sheetFrame: () => ({ view: frameFor(systemOf(device), false).view, width: device.width, height: device.height }),
     close(why) {
       host.frame.src = "about:blank";
       hideSplash();
@@ -341,6 +345,12 @@ export function setupPhone(host: PhoneHost): Phone {
     };
   });
   $<HTMLButtonElement>("back").onclick = () => {
+    // Back on the Connect sheet is its Cancel: nothing opens and nothing is sent.
+    const connect = phone.querySelector<HTMLButtonElement>(".connect-scrim .cs-cancel");
+    if (connect) {
+      connect.click();
+      return;
+    }
     if (!closed.hidden) return;
     if (!sheet.hidden) {
       sheet.hidden = true;
