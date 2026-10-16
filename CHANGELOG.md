@@ -113,6 +113,16 @@
   `npx grain` said "could not determine executable to run" until a second `npm install`). Before the build it says to
   build. A project outside the checkout installs the tool with `npm install --save-dev <checkout>/packages/cli`.
 
+- **A spec changed under its version stops the server** (Saltix 22-grain-chats §2, corvise/saltix#222: a wallet
+  replaces the spec it holds only with a higher version). `ChatServer` keeps the highest spec it served in its store
+  (`ChatStore.served`/`setServed`, the version and `chatSpecHash`, SHA-256 of the spec's Borsh; `fileChatStore` and
+  `memoryChatStore` keep it) and refuses to start on a spec changed under that version or below it
+  (`ChatSpecVersionError`, `code` `chat_spec_changed_under_version` or `chat_spec_version_lowered`, logged with the
+  version served and `raise "version" above N`); `setSpec` is held to it, and takes the same spec again. Before, such a
+  server started, answered, and its spec reached nobody who held that version. `setupCannotWork(e)` and `EXIT_CONFIG`
+  (78): the template's server and the example exit with 78 for it as for a key that cannot work. Saltix's access
+  grain's own guard (`checkServed`) can move to it.
+
 ### Added
 
 - **The team's hello** (Saltix 22-grain-chats §3a): an account on the grain's team introduces itself to its own app

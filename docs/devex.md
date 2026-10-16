@@ -131,6 +131,9 @@ version refused at start).
   (`chat_spec_changed_under_version`) when the spec differs under the same version; `grain chat-spec` lints it too.
 - **Effort** S. 22-grain-chats §2 says a wallet takes a version "at least" the one it holds, Saltix only a higher one:
   one of the two should change (see "For the owner" below).
+- **Built** (2026-10-16): the spec says "higher" (corvise/saltix#222); `ChatServer` keeps the highest spec served in its
+  store and refuses one changed under it or below it (`ChatSpecVersionError`), the template's server exits with 78
+  (`setupCannotWork`). `grain chat-spec` does not read a server's store, so it does not lint this.
 
 ### 6. Bundles hosted without your own server
 
