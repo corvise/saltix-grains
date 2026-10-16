@@ -6,6 +6,7 @@
   "workspaces": [
     "packages/grain",
     "packages/server",
+    "packages/connect",
     "packages/cli"
   ],
   "scripts": {

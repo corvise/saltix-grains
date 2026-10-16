@@ -39,16 +39,50 @@ export function sameDeviceKey(a: DeviceKey, b: DeviceKey): boolean {
   return "ed25519" in a ? "ed25519" in b && a.ed25519 === b.ed25519 : "p256" in b && a.p256 === b.p256;
 }
 
+/** An Ed25519 key the node takes: a canonical encoding of a point not of small order (`ed25519::is_valid_public_key`). */
+export function ed25519KeyValid(key: Uint8Array): boolean {
+  try {
+    return key.length === 32 && !ed25519.ExtendedPoint.fromHex(key).isSmallOrder();
+  } catch {
+    return false;
+  }
+}
+
+/** A device key the node takes: such an Ed25519 key, or a compressed P-256 point other than the identity. */
+export function deviceKeyValid(key: DeviceKey): boolean {
+  if ("ed25519" in key) return /^[0-9a-f]{64}$/.test(key.ed25519) && ed25519KeyValid(fromHex(key.ed25519, 32));
+  try {
+    return /^[0-9a-f]{66}$/.test(key.p256) && !p256.ProjectivePoint.fromHex(key.p256).equals(p256.ProjectivePoint.ZERO);
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Whether `signature` (64 bytes of hex) is `key`'s over the 32-byte `message`: Ed25519, or ECDSA P-256 over SHA-256 of
- * it as `r ‖ s` with a low `s` — as a phone signs a transaction (13-accounts §6.1).
+ * Strict Ed25519, as the node verifies every signature (`verify_strict`): canonical encodings of the key, `R` and `s`, and
+ * neither the key nor `R` of small order. A permissive check would take signatures the node refuses, so two readers of
+ * one signature could disagree.
+ */
+export function verifyEd25519(publicKey: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean {
+  try {
+    if (signature.length !== 64 || !ed25519KeyValid(publicKey)) return false;
+    if (ed25519.ExtendedPoint.fromHex(signature.slice(0, 32)).isSmallOrder()) return false;
+    return ed25519.verify(signature, message, publicKey, { zip215: false });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `signature` (64 bytes of hex) is `key`'s over the 32-byte `message`: Ed25519 (strictly, `verifyEd25519`), or
+ * ECDSA P-256 over SHA-256 of it as `r ‖ s` with a low `s` — as a phone signs a transaction (13-accounts §6.1).
  */
 export function verifyByDeviceKey(key: DeviceKey, message: Uint8Array, signature: string): boolean {
   try {
     const sig = fromHex(signature, 64);
-    if ("ed25519" in key) return ed25519.verify(sig, message, fromHex(key.ed25519, 32));
+    if ("ed25519" in key) return verifyEd25519(fromHex(key.ed25519, 32), message, sig);
     // The hash is given, so no library default decides it.
-    return p256.verify(sig, sha256(message), fromHex(key.p256, 33), { prehash: false, lowS: true, format: "compact" });
+    return deviceKeyValid(key) && p256.verify(sig, sha256(message), fromHex(key.p256, 33), { prehash: false, lowS: true, format: "compact" });
   } catch {
     return false;
   }

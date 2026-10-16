@@ -20,7 +20,7 @@ export interface Signing {
 }
 
 export interface Sent {
-  call: "register" | "update" | "retire" | "configure" | "access" | "rate" | "bind";
+  call: "register" | "update" | "retire" | "configure" | "access" | "rate" | "bind" | "profile";
   id: string;
   fee: bigint;
   /** What the call sent besides its fee: a registration's deposit. */
@@ -88,7 +88,7 @@ export async function submit(call: GrainCall, secret: Uint8Array, s: Signing): P
   }
   const signed = signGrainTx(secret, { nonce: account.nonce, fee, validUntilSlot: status.slot + s.validFor }, call, status.genesis);
   const answer = await nodeCall<{ id: string }>(s.node, "transaction_submit", { transaction: signed.hex });
-  const kind = (["register", "update", "retire", "configure", "access", "rate", "bind"] as const).find((k) => k in call)!;
+  const kind = (["register", "update", "retire", "configure", "access", "rate", "bind", "profile"] as const).find((k) => k in call)!;
   return { call: kind, id: answer.id, fee, amount };
 }
 

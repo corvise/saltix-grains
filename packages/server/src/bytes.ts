@@ -148,11 +148,12 @@ export class Reader {
   fixed(size: number): Uint8Array {
     return this.take(size);
   }
-  /** A UTF-8 string of at most `max` bytes (by default, what is left). */
+  /** A UTF-8 string of at most `max` bytes (by default, what is left). A leading U+FEFF is part of the string, as the
+   *  node reads it: dropping it would make a text another reader refuses look like one it takes. */
   string(max = this.data.length - this.at): string {
     const n = this.u32();
     if (n > max) throw new TypeError("borsh: string too long");
-    return new TextDecoder("utf-8", { fatal: true }).decode(this.take(n));
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(this.take(n));
   }
   end(): void {
     if (this.at !== this.data.length) throw new TypeError("borsh: bytes left over");

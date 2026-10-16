@@ -1,6 +1,7 @@
 // What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`, drawn edge to edge (it declares
 // viewport-fit=cover and keeps inside the insets, 12-grains §7), and the rules a coding agent follows (AGENTS.md, which
 // CLAUDE.md points to).
+import { httpsLinkOk } from "@saltix/grain-server";
 
 /** The one line Saltix ends "Copy for an AI agent" with (24-app-studio §4), word for word. */
 export const FULL_SCREEN_RULE =
@@ -129,16 +130,19 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
 
 const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
   the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
-- \`npx grain lint\`: what stops \`grain.json\` from being registered, and warnings about the page.
+- \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered, and warnings about the page and
+  permissions nothing uses.
 - \`npx grain publish\`: a QR code the owner's Saltix registers the app from (or \`--key owner.key\` on the test network,
   after \`npx grain faucet --wait\` for test SALT). Registry commands reach the test network through its public relays,
-  each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.`;
+  each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+- \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way.`;
 
 const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the developer key (below); its log is one JSON line per
   event, and \`{"event":"ready",…}\` means the app answers.
 - \`npm test\`: \`test/chat.test.mjs\`, the commands end to end with \`testChat\` from \`@saltix/grain-server/testing\` (a
   development relay and registry and a development key, nothing real); add a test for each command you add.
-- \`npx grain lint\`: what stops \`grain.json\` from being registered.
+- \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered; \`npx grain profile\` sets the
+  Connect profile once the app is registered (a QR code for the owner's Saltix, or \`--key owner.key\`).
 - \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).
 - \`npx grain show --slug <slug>\`, \`npx grain app-key --file app.key\`: what the registry holds, whether it names the key.
   Every registry command and \`npx grain faucet\` (test SALT) reach the test network through its public relays, each
@@ -152,7 +156,7 @@ export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/d
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
  * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, the
- * exit status of a key that cannot work, payments, and the card design standard.
+ * exit status of a key that cannot work, payments, the card design standard, tests, and the Connect profile.
  */
 export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
    (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
@@ -185,7 +189,13 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    (\`revoke_key\`, \`delete…\`). Check each card a handler returns with \`assertCardStandard(card, spec)\` in the tests.
 8. **Test every command end to end** with \`testChat\` (\`@saltix/grain-server/testing\`): it runs the handlers on a
    development relay and registry with a development key, asks as a stranger, the owner or a member, and checks every
-   card as Saltix does. Never a real developer key in a test, and never a test against the live network.`;
+   card as Saltix does. Never a real developer key in a test, and never a test against the live network.
+9. **Ship a complete Connect profile, and ask only for what the app uses.** \`connect.json\` is what Saltix's Connect
+   sheet shows before anyone signs in, as the app's own words: a tagline that says what the app is, what it does,
+   highlights that are facts (not slogans), and what it keeps about a user and for how long (required when
+   \`grain.json\` asks for \`address\` or \`storage\`), in English and Russian. \`grain lint\` checks it, and warns about a
+   permission nothing in the app uses: drop it, since the sheet shows every one. \`grain profile\` sets it (a QR code for
+   the owner's Saltix, or \`--key owner.key\` on the test network); the registry takes each change at a higher revision.`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
@@ -201,6 +211,8 @@ ${FULL_SCREEN_RULE}
 
 ## What is here
 
+- \`connect.json\`: the app's Connect profile, what Saltix shows before anyone signs in (rule 9 below); \`npx grain
+  profile\` sets it.
 ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): no page; Saltix draws its home from \`chat.json\`.
 - \`chat.json\`: the chat spec: the commands users run (version 2, above the 1 an app made in Saltix starts with).
 - \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave.
@@ -275,6 +287,54 @@ export const chatJson = (slug: string, name: string) => JSON.stringify({
   keeps: 0,
   ai: false,
 }, null, 2) + "\n";
+
+/**
+ * A new app's Connect profile (`connect.json`, Saltix 19-connect §11): the JSON form's `profile` object without `owner`
+ * and `revision`, which `grain profile` fills in. It describes the app `grain init` makes, truthfully, in English and
+ * Russian, so it passes `grain lint` as it is and shows what a good profile says: what the app is in one line, what it
+ * does, facts it is good at, and what it keeps about a user and for how long. Rewrite it as the app grows.
+ */
+export function connectJson(slug: string, name: string, chat: boolean): string {
+  const website = `https://${slug}.example/`;
+  const texts = chat
+    ? {
+      en: {
+        tagline: "Answers your requests right in a Saltix chat",
+        about: `${name} lives in your Saltix messenger: pick a command, fill in its form, and the answer comes back as a card.\nThere is nothing to install and no account to make.`,
+        highlights: ["Works inside the Saltix messenger", "No sign-up, no password", "Answers in English and Russian"],
+        privacy: "Keeps the requests it answered and how many messages it sent you, under the ID it sees for you, for as long as the app runs. It never sees your address.",
+      },
+      ru: {
+        tagline: "Отвечает на запросы прямо в чате Saltix",
+        about: `${name} живёт в мессенджере Saltix: выберите команду, заполните форму, и ответ придёт карточкой.\nНичего не нужно устанавливать и регистрировать.`,
+        highlights: ["Работает в мессенджере Saltix", "Без регистрации и пароля", "Отвечает по-русски и по-английски"],
+        privacy: "Хранит запросы, на которые ответил, и число отправленных вам сообщений под идентификатором, который видит для вас, пока приложение работает. Ваш адрес не видит.",
+      },
+    }
+    : {
+      en: {
+        tagline: "A counter that follows you to every phone",
+        about: `Tap Count to add one. ${name} keeps the count in your Saltix vault, so it is the same on every phone of your account.`,
+        highlights: ["The same count on all your phones", "No sign-up, no password", "Your data stays in your vault, encrypted"],
+        privacy: "Keeps one number, your count, encrypted in your Saltix vault until you remove the app's data. It never sees your address.",
+      },
+      ru: {
+        tagline: "Счётчик, который всегда с вами на любом телефоне",
+        about: `Нажмите Count, чтобы прибавить единицу. ${name} хранит счёт в вашем хранилище Saltix, поэтому он одинаков на всех телефонах аккаунта.`,
+        highlights: ["Один счёт на всех ваших телефонах", "Без регистрации и пароля", "Данные зашифрованы в вашем хранилище"],
+        privacy: "Хранит одно число, ваш счёт, зашифрованным в хранилище Saltix, пока вы не удалите данные приложения. Ваш адрес не видит.",
+      },
+    };
+  return JSON.stringify({
+    version: 1,
+    subject: { grain: { slug } },
+    texts,
+    // A link of a host the slug makes; replace it with the app's own site, or null for none.
+    website: httpsLinkOk(website) ? website : null,
+    support: null,
+    terms: null,
+  }, null, 2) + "\n";
+}
 
 export const chatReadme = (slug: string) => `# ${slug}
 

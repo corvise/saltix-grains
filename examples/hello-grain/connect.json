@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "subject": {
+    "grain": {
+      "slug": "hello-grain"
+    }
+  },
+  "texts": {
+    "en": {
+      "tagline": "The SDK's example app: sign in, storage and a payment",
+      "about": "Hello, grain shows what an app does in Saltix: it signs you in under a key of its own, keeps a note in your vault, shows your address when you ask it to, and asks for a small payment you confirm in Saltix.\nIt is the example of the saltix-grains SDK, for developers.",
+      "highlights": [
+        "Signs you in without a password",
+        "Keeps its data in your Saltix vault",
+        "Every payment confirmed in Saltix"
+      ],
+      "privacy": "Keeps one note in your Saltix vault until you remove the app's data. It sees your address only when you tap Address, and keeps nothing of it."
+    },
+    "ru": {
+      "tagline": "Пример приложения из SDK: вход, хранилище и платёж",
+      "about": "Hello, grain показывает, что приложение умеет в Saltix: входит под собственным ключом, хранит заметку в вашем хранилище, показывает ваш адрес, когда вы попросите, и просит небольшой платёж, который вы подтверждаете в Saltix.\nЭто пример SDK saltix-grains, для разработчиков.",
+      "highlights": [
+        "Вход без пароля",
+        "Данные — в вашем хранилище Saltix",
+        "Каждый платёж подтверждается в Saltix"
+      ],
+      "privacy": "Хранит одну заметку в вашем хранилище Saltix, пока вы не удалите данные приложения. Видит ваш адрес, только когда вы нажмёте Address, и ничего из него не хранит."
+    }
+  },
+  "website": "https://github.com/corvise/saltix-grains",
+  "support": null,
+  "terms": null
+}

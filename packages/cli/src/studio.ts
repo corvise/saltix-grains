@@ -17,7 +17,7 @@ export const APP_KEY_ENV = "SALTIX_APP_KEY";
 const ownAccount = (secret: Uint8Array) => toHex(accountId(fromHex(publicKeyOf(secret), 32)));
 
 /** A grain the key file's account owns and that is live: what the owner's calls need. */
-async function ownGrain(node: NodeLike, slug: string, secret: Uint8Array): Promise<RegisteredGrain> {
+export async function ownGrain(node: NodeLike, slug: string, secret: Uint8Array): Promise<RegisteredGrain> {
   const g = await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
   if (g.owner !== ownAccount(secret)) throw new Error(`${slug}: registered by another owner (${g.owner})`);
@@ -124,6 +124,11 @@ export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
     const h = await handleGet(node, call.bind.handle);
     return h !== null && h.app === call.bind.slug;
   }
+  if ("profile" in call) {
+    const g = await grainGet(node, call.profile.slug);
+    const wanted = call.profile.profile;
+    return g !== null && (wanted === null ? (g.profile ?? null) === null : g.profile?.signature === wanted.signature);
+  }
   return false;
 }
 
@@ -155,6 +160,9 @@ export function inSaltix(call: GrainCall): string {
     return `In the holder's Saltix: ${displayHandle(b.handle)} → ${b.slug === null ? "open no app" : `open the app ${b.slug}`}.`;
   }
   if ("rate" in call) return `In Saltix: Marketplace → ${call.rate.slug} → Rate.`;
+  if ("profile" in call) {
+    return `In the owner's Saltix: My apps → ${call.profile.slug} → Connect profile: ${call.profile.profile === null ? "clear it" : "set it"}.`;
+  }
   return "In the owner's Saltix: My apps.";
 }
 

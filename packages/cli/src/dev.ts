@@ -20,6 +20,8 @@ const TYPES: Record<string, string> = {
 
 export const WELL_KNOWN = "/.well-known/saltix-grain";
 export const DEV_BUNDLE = "/_bundle.zip";
+/** Where the project's Connect profile (`connect.json`) is served, for the simulator's preview of the Connect sheet. */
+export const DEV_CONNECT = "/_connect.json";
 /** Where the simulator is served; it loads the manifest and opens the page. */
 export const SIMULATOR = "/_simulator/";
 /** The simulator's files, built next to this module. */
@@ -47,6 +49,12 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
       const file = fileIn(SIMULATOR_DIR, path.slice(SIMULATOR.length - 1));
       if (file === null) res.writeHead(404).end("not found");
       else res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" }).end(readFileSync(file));
+      return;
+    }
+    if (path === DEV_CONNECT) {
+      const file = join(root, "connect.json");
+      if (!existsSync(file)) res.writeHead(404).end("no connect.json: every app ships a Connect profile (grain lint)");
+      else res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(readFileSync(file));
       return;
     }
     if (path === DEV_BUNDLE) {

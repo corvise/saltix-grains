@@ -140,6 +140,10 @@ const server = createServer(async (req, res) => {
       if (!DEV_HOSTS.has(host)) return send(res, 404, { error: "a developer's grain runs on localhost, 127.0.0.1 or 10.0.2.2" });
       return send(res, 200, manifestFor(origin));
     }
+    // The example's Connect profile, for the simulator's preview of the Connect sheet (as `grain dev` serves a project's).
+    if (url.pathname === "/_connect.json") {
+      return send(res, 200, readFileSync(join(root, "examples/hello-grain/connect.json")), "application/json");
+    }
     if (url.pathname === "/api/challenge") {
       const challenge = newChallenge();
       challenges.set(challenge, Date.now() + 5 * 60_000);

@@ -4,6 +4,44 @@
 
 ### Added
 
+- **Every app ships a Connect profile** (Saltix 19-connect §11–§12, 12-grains §10): `grain init` writes `connect.json`
+  (every template, chat-only included: the JSON form's `profile` without `owner` and `revision`, in English and Russian,
+  describing the app it makes). `grain lint` fails without it and checks every rule of the format with the field and
+  its limit, the privacy summary (required when the manifest asks for `address` or `storage`), the subject's slug, the
+  icon file (`icon.png` or `public/icon.png`: 256×256, the hash `grain.json` names), the Borsh size; it warns about an
+  empty about, English alone, owner or revision given, a link too long for a QR code, and each permission nothing in
+  the app's sources uses ("asks only for what it uses"). `grain profile` sets it: a QR code of `salt:grain-profile?p=…`
+  for the owner's Saltix (waiting for the registry), or with `--key` signed at the registry's revision and one and sent
+  as `SetGrainProfile`; `--clear` removes it. `grain show` prints the registry's profile and whether a wallet takes it.
+  `grain connect-profile --origin --name --category --key [--owner] [--revision] [--out]` signs a website's profile for
+  `/.well-known/saltix-connect`. `AGENTS.md`, every project's `AGENTS.md` (a ninth rule) and `docs/agents/app.md` (the
+  Connect profile: how to write a good one) say so.
+- **The simulator previews the Connect sheet** (Saltix 19-connect §12): before a grain opens, from `connect.json`
+  (`grain dev` and `npm run dev` serve it at `/_connect.json`; `examples/hello-grain/connect.json`) and the manifest:
+  "Saltix Connect", the identity, "In its own words", "To continue, sign in" with a row per permission (the address
+  worded "It can follow your activity on the blockchain: balances, transfers, names", the address and notifications
+  behind switches off by default), the privacy summary and links, Continue or Cancel (Back cancels), inside the page's
+  frame below the controls' band. Continue records the sign-in and the switches; **Show it again** replays it.
+- **`@saltix/connect`** (packages/connect, Saltix 19-connect §2–§5, §13): "Sign in with Saltix" for websites and
+  DApps, the page's side of Saltix Connect ported from the explorer's tested `explorer/src/connect/`. `createConnect({
+  network, relays, node, name, origin?, genesis? })` runs the session (keys, a link slot through relays the page reaches,
+  the offer as text, link and QR code, `ConnectSeen`), checks the grant (rules 1–5, the account's key event log from the
+  page's node) and keeps the connection 30 days in `localStorage`; events `offer`, `seen`, `checking`, `connected`,
+  `refused`, `failed`, `reconnecting`, `disconnected`. `signInButton(el, { lang, theme, onClick })` and `connect.css`
+  draw the button standard (Saltix's mark, navy or white, at least 44 px, radius a quarter of the height, classes only
+  for a strict CSP); `openConnectDialog` shows the QR code titled "Saltix Connect" ("Scan with Saltix to sign in", on a
+  phone "Open Saltix"); `readSiteProfile` reads a site's `/.well-known/saltix-connect` as a wallet does. Also one
+  self-contained ES module, `dist/saltix-connect.js`, for a site without a bundler.
+- **The Connect profile** (Saltix 19-connect §11, 12-grains §3 and §10; vectors `connect-v1.json` and
+  `connect-profiles-v1.json` synced from corvise/saltix#224): `@saltix/grain-server` reads, writes, signs and checks a
+  service's own signed words about itself (`profile.ts`: `profileProblem` with the node's reasons, `encodeProfile`,
+  `decodeSignedProfile` canonical only, `profileFromJson`/`signedProfileFromJson`/`profileToJson`, `signProfile`,
+  `verifyProfile`, `checkGrainProfile`, `checkSiteProfile`, `checkProfileOwner`, `httpsLinkOk`, `supportOk`), the
+  profile link `salt:grain-profile?p=` (`profileLink`, `readProfileLink`), the owner's `SetGrainProfile` call (tag 38:
+  `GrainCall` `{profile: {slug, profile}}`, `RegisteredGrain.profile`), and key event logs checked offline
+  (`keylog.ts`: `checkLog`, `keySpeaksFor`), a port of the explorer's. `@saltix/grain-server/web` exports what runs in a
+  web page. Ed25519 signatures are now verified strictly, as the node does (`verifyEd25519`; a small-order key or a
+  non-canonical encoding verifies nothing), and a Borsh string keeps a leading U+FEFF, as the node reads it.
 - **The card design standard** (Saltix 22-grain-chats §4, §5a; vectors synced from corvise/saltix#221): `card().code(text)`
   and `card().poll(question, command, options, {chosen, closed, tally})` (blocks 6 and 7, typed by the spec when sent:
   `Card.typedBlocks`), `ask.update(card)` to answer a tap in place of the card tapped (a poll's new counts), the

@@ -112,6 +112,38 @@
     .preview { max-width: 100%; max-height: 240px; overflow: auto; }
     .form { display: flex; flex-direction: column; gap: 6px; }
     label.check { flex-direction: row; align-items: center; }
+    /* A preview of Saltix's Connect sheet (19-connect §12), in the page's frame: below the controls' band. */
+    .connect-scrim { position: absolute; display: flex; align-items: flex-end; justify-content: center; background: rgba(5, 8, 18, .55); z-index: 5; }
+    .connect-scrim.wide { align-items: center; }
+    .connect-sheet { box-sizing: border-box; width: 100%; max-width: 440px; overflow: auto; padding: 16px; border-radius: 22px 22px 0 0; display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; line-height: 1.4; }
+    .connect-scrim.wide .connect-sheet { border-radius: 22px; }
+    .connect-sheet.dark { background: #111a2b; color: #eaf1fa; }
+    .connect-sheet.light { background: #ffffff; color: #0b1220; }
+    .connect-sheet .cs-head { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+    .connect-sheet .cs-mark { width: 24px; height: 24px; border-radius: 7px; background: #5eb8f0; color: #0b1220; display: grid; place-items: center; font-weight: 800; }
+    .connect-sheet .cs-preview { font-size: 11px; color: #e0a14f; }
+    .connect-sheet .cs-who { display: flex; align-items: center; gap: 12px; }
+    .connect-sheet .cs-icon { width: 52px; height: 52px; border-radius: 14px; background: #1e2d5c; color: #eaf1fa; display: grid; place-items: center; font-size: 22px; font-weight: 700; flex: none; }
+    .connect-sheet .cs-titles { display: flex; flex-direction: column; min-width: 0; }
+    .connect-sheet .cs-name { font-size: 17px; }
+    .connect-sheet .cs-meta, .connect-sheet .cs-note, .connect-sheet .cs-label { font-size: 11.5px; opacity: .7; }
+    .connect-sheet .cs-label { text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+    .connect-sheet p { margin: 0; }
+    .connect-sheet .cs-tagline { font-weight: 600; font-size: 15px; }
+    .connect-sheet .cs-about { white-space: pre-wrap; }
+    .connect-sheet .cs-highlights { margin: 6px 0 0; padding-left: 18px; }
+    .connect-sheet .cs-bad { color: #e2929a; font-size: 12px; }
+    .connect-sheet .cs-rows { display: flex; flex-direction: column; gap: 6px; }
+    .connect-sheet .cs-row { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(127, 127, 127, .1); color: inherit; font-size: 13px; }
+    .connect-sheet .cs-row-icon { width: 10px; height: 10px; border-radius: 50%; background: #5eb8f0; flex: none; }
+    .connect-sheet .cs-row-text { display: flex; flex-direction: column; flex: 1; }
+    .connect-sheet .cs-row-text span { opacity: .75; font-size: 12px; }
+    .connect-sheet .cs-switch { width: 20px; height: 20px; padding: 0; }
+    .connect-sheet .cs-privacy { font-style: italic; }
+    .connect-sheet .cs-links { display: flex; flex-direction: column; font-size: 12px; opacity: .8; word-break: break-all; }
+    .connect-sheet .cs-actions { display: flex; flex-direction: column; gap: 8px; }
+    .connect-sheet .cs-continue { min-height: 48px; border: 0; border-radius: 12px; background: linear-gradient(90deg, #94d0f6, #62a9e4); color: #0b1220; font-weight: 700; }
+    .connect-sheet .cs-cancel { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: inherit; }
     @media (max-width: 1100px) { body { grid-template-columns: 1fr; } .device { overflow-x: auto; } }
   </style>
 </head>
@@ -121,6 +153,7 @@
     <p style="font-size:12px;color:#9fb0d8;margin:0">Plays a Saltix wallet's side of the bridge (12-grains §5). Sign-in signatures are real; payments are not made.</p>
     <label>Grain URL <input id="url" value="/examples/hello-grain/index.html"></label>
     <div class="row"><button id="manifest">Load a manifest</button><button id="open">Open</button></div>
+    <div class="row"><label class="check"><input type="checkbox" id="connect-first" checked> The Connect sheet first</label><button id="connect-again" title="As for an account that never opened the app">Show it again</button></div>
     <label>Slug <input id="slug" value="hello-grain"></label>
     <label>Start <input id="start" placeholder="optional"></label>
     <div class="row">

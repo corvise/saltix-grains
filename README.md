@@ -8,6 +8,12 @@ payments, storage and relays, and never holds the wallet's keys. It may be a pag
 
 **[Your first app in ten minutes](docs/first-app.md)**: make it in Saltix, copy its developer key, `npm run example`.
 
+**Every app ships a Connect profile, and asks only for what it uses**: `connect.json`, the app's own words that Saltix's
+Connect sheet shows before anyone signs in (Saltix
+[19-connect §11–§12](https://github.com/corvise/saltix/blob/main/specs/19-connect.md)); `grain lint` fails without it
+([docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson)). Websites and DApps sign their users in with
+the same standard: **[Sign in with Saltix](docs/connect.md)** (`@saltix/connect`).
+
 **Safe by default; full screen only with viewport-fit=cover and the insets**: Saltix lays an app's page inside the safe
 area, below its controls; a page that declares `viewport-fit=cover` is drawn edge to edge and pads by the variables
 Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENTS.md),
@@ -16,21 +22,24 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | Package | What it is |
 |---|---|
 | [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables), `viewportFitCover()`, `frameFor()`, `grain.manage.open()` |
-| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the registry's calls, Address v1, and the grain's chat (`ChatServer`, from a developer key alone) |
-| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key` |
-| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
+| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, and the grain's chat (`ChatServer`, from a developer key alone); `@saltix/grain-server/web` is what runs in a page |
+| [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
+| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key` |
+| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: a preview of Saltix's Connect sheet from `connect.json` before the app opens, the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
 | [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing an app's page |
 | [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's page (safe by default, full screen with `viewport-fit=cover`), and work on this repository; `CLAUDE.md` points to it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 | [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
+| [`docs/connect.md`](docs/connect.md) | Sign in with Saltix on a website or DApp: the site's Connect profile, the button, the QR code or the link, the Connect sheet, the grant checked, the relay path a page needs |
 | [`docs/cards.md`](docs/cards.md) | the card design standard: how every Saltix draws a card (the capsule, the action bar, emphasis, polls, states after a tap), what each block is for, do's and don'ts, and the lint |
 
 The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones included, logins, invoices, notifications,
 the registry transactions of 12-grains and 24-app-studio, deposits, the developer key), the addresses of
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
-chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json` and the usernames bound to
-apps of `vectors/handles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a checkout of
+chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
+apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json` and the
+Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a checkout of
 corvise/saltix) refreshes them.
 
 ## Quick start
@@ -82,9 +91,9 @@ npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/s
 ```
 
 ```sh
-npx grain init dice --name "Dice roll"   # grain.json, owner.key (owner-only), public/ with the bridge, AGENTS.md
+npx grain init dice --name "Dice roll"   # grain.json, connect.json, owner.key (owner-only), public/ with the bridge, AGENTS.md
 cd dice && npx grain dev                  # serves public/, the manifest signed for this computer, and the simulator
-npx grain lint                            # what stops grain.json from being registered; warns of a top bar under ⋯ | ✕
+npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕
 npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
 npx grain sign                            # signed.json: serve it at /.well-known/saltix-grain
 npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
@@ -92,6 +101,10 @@ npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.
 npx grain publish                         # a QR code: the owner's Saltix registers it (the network quotes the deposit)
 npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
 npx grain publish --key owner.key --wait  # or sign with a key file (test networks)
+npx grain profile                         # a QR code: the owner's Saltix sets the Connect profile (connect.json)
+npx grain profile --key owner.key --wait  # or sign it with a key file (test networks); --clear removes it
+npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
+                                          # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
 npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
 npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
@@ -129,6 +142,24 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   unregistered → `RegisterGrain` with the deposit; the owner's with a lower version → `UpdateGrain`;
   anything else is refused before a transaction is made — checks the balance, signs and submits
   through the network's wallet interface (its public relays, `--relay` or `--node`).
+- `grain init` writes `connect.json`, the app's Connect profile (Saltix 19-connect §11): the JSON form's `profile`
+  object without `owner` and `revision`, an example in English and Russian that describes the app it makes. `grain lint`
+  fails without it, and checks every rule of the format with the field and its limit (a tagline of 1–80 characters in
+  one line, about up to 600, up to 4 highlights of 60, a privacy summary of up to 300, required when the manifest asks
+  for `address` or `storage`; `https://` links; support an `https://` link, a `mailto:` address or `@name`; at most
+  8 192 bytes in Borsh), the icon file (`icon.png` or `public/icon.png`: a 256×256 PNG whose hash `grain.json` names),
+  and warns about an empty about, English alone, a link too long for a QR code (2 048 characters: set it in the app
+  studio, or with a key file) and each permission nothing in the app's sources uses (`address` without
+  `requestAddress`, `storage` without `grain.storage`…).
+- `grain profile` without a key file shows `salt:grain-profile?p=…` as a QR code (12-grains §10): the owner's Saltix
+  fills in its account and the registry's revision and one, shows the profile as its Connect sheet will, and sets it
+  (`SetGrainProfile`) after the PIN; the tool waits for the registry. With `owner.key` (test networks) it signs the
+  profile itself at the registry's revision and one, and sends the call; `--clear` removes the profile. `grain show`
+  prints the registry's profile and whether a wallet takes it.
+- `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
+  operator's key file, from the texts and links of `--profile` (`connect.json`), at the next revision of the file it
+  writes (`--out`, `.well-known/saltix-connect`) or `--revision N`: serve it at `/.well-known/saltix-connect` as
+  `application/json`, with no redirect ([docs/connect.md](docs/connect.md)).
 - `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
   owner.key's account or `--address` (`faucet_request`): one every 5 minutes an address; a refusal says when to come
   back. A relay whose node runs no faucet passes the request to the next.

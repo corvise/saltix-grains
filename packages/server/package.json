@@ -1,7 +1,7 @@
 {
   "name": "@saltix/grain-server",
   "version": "0.1.0",
-  "description": "A grain's server side: sign-in checks, invoices, payments on chain and manifests (Saltix specs/12-grains.md)",
+  "description": "A grain's server side: sign-in checks, invoices, payments on chain, manifests and Connect profiles (Saltix specs/12-grains.md, 19-connect.md)",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -18,6 +18,10 @@
     "./dev": {
       "types": "./dist/dev.d.ts",
       "import": "./dist/dev.js"
+    },
+    "./web": {
+      "types": "./dist/web.d.ts",
+      "import": "./dist/web.js"
     }
   },
   "files": [
