@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The grain command line (Saltix 12-grains §10).
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
-import { join, basename, dirname, relative, resolve, sep } from "node:path";
+import { join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { UNOWNED, AppKey, iconHash, verifyManifest, grainQuote, parseHandle, rpc, type GrainCall, type Manifest } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
@@ -15,6 +15,7 @@ import { serve, linkFor } from "./dev.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
+import * as chatTemplate from "./chat-template.js";
 import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
@@ -125,20 +126,6 @@ async function ownerCall(call: GrainCall, keyPath: string, flags: Map<string, st
   return landed === false ? 1 : 0;
 }
 
-/** A grain's slug (12-grains §2). */
-const SLUG = /^[a-z0-9][a-z0-9-]{2,31}$/;
-
-/** How a project in `dir` depends on the server SDK this tool runs with: its version, when the tool came from a
- *  registry's package; else the checkout's package by its path, since the SDK is not on npm yet. */
-function sdkDependency(dir: string): string {
-  const entry = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain-server"));
-  const root = dirname(dirname(entry));
-  if (root.split(sep).includes("node_modules")) {
-    return "^" + (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
-  }
-  return "file:" + relative(dir, root).split(sep).join("/");
-}
-
 /** All of stdin, when it is piped in. */
 async function stdinText(): Promise<string | undefined> {
   if (process.stdin.isTTY) return undefined;
@@ -156,7 +143,7 @@ async function main(argv: string[]): Promise<number> {
       const dir = resolve(positional[0] ?? ".");
       const slug = text(flags, "slug", basename(dir).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+/, "").slice(0, 32));
       const name = text(flags, "name", slug);
-      if (!SLUG.test(slug)) {
+      if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(slug)) {
         throw new Error(`the slug "${slug}" is not one: 3 to 32 of [a-z0-9-], starting with a letter or a digit` +
           (flags.has("slug") ? "" : ` (it comes from the directory's name: pass --slug)`));
       }
@@ -174,8 +161,8 @@ async function main(argv: string[]): Promise<number> {
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
       if (chat) {
         writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
-        writeFileSync(join(dir, "server.mjs"), template.chatServer(slug));
-        writeFileSync(join(dir, "package.json"), template.chatPackageJson(slug, sdkDependency(dir)));
+        writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
+        writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
         console.log(`next: make the app in Saltix (Apps → My apps → New app, slug ${slug}) and put its developer key in app.key ` +

@@ -46,13 +46,14 @@ document.getElementById("count").addEventListener("click", async () => {
 });
 `;
 
-/** Keys first: owner.key, server.key, app.key, sponsor.key and a rater's key are all *.key, and none is ever
- *  committed. Then what the tools make. */
-export const gitignore = `# Keys (owner.key, server.key, app.key, sponsor.key…): whoever holds one speaks for the grain.
-*.key
+export const gitignore = `owner.key
+server.key
+app.key
 signed.json
-bundle.zip
 *.store.json
+# Every other key file too (sponsor.key, a rater's key…): whoever holds one speaks for its account.
+*.key
+bundle.zip
 node_modules/
 `;
 
@@ -87,82 +88,17 @@ export const chatReadme = (slug: string) => `# ${slug}
 
 A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix specs/24-app-studio.md).
 
+- **Run it:** put the developer key in \`app.key\` (\`(umask 077 && pbpaste > app.key)\`; never on the command line,
+  shells keep their history), then \`npm install\` and \`npm start\`: \`server.mjs\` is the server, its log one JSON line
+  per event. It exits with 78 when the key cannot work (replaced, revoked, the app retired, another network's): make a
+  new developer key in Saltix, since restarting does not help.
+- **Add a command:** declare it in \`chat.json\`, add its handler in \`server.mjs\`, and raise \`version\` with every change:
+  a wallet takes only a version above the one it holds, and an app made in Saltix starts at 1.
 - \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
   10 for 8 or more; back 30 days after \`grain retire\`). Or make the app in Saltix: My apps → New app.
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key --node <url>\` names it in the
   registry; \`grain app-key make --slug ${slug} --node <url>\` writes \`app.key\`, the developer key the server runs with.
-- Run the chat: put the developer key in \`app.key\` (\`(umask 077 && pbpaste > app.key)\`; never on the command line,
-  shells keep their history), then \`npm install\` and \`npm start\`. \`server.mjs\` answers \`chat.json\`'s commands; add a
-  handler for each command you add, and raise \`version\` in \`chat.json\` with every change: a wallet takes only a
-  version above the one it holds, and an app made in Saltix starts at 1, so a change under the same version never
-  reaches anyone.
-- Its log is one JSON line per event; it exits with 78 when the key cannot work (replaced, revoked, the app retired,
-  another network's): make a new developer key in Saltix, since restarting does not help.
+- Run the chat: \`ChatServer.start({ appKey, spec })\` with \`chat.json\` (docs/first-app.md).
 
-\`owner.key\`, \`server.key\` and \`app.key\` are secrets: keep them out of git (\`.gitignore\` does).
-`;
-
-/** A chat-only grain's package.json: `npm start` runs its chat; `sdk` is how it depends on @saltix/grain-server. */
-export const chatPackageJson = (slug: string, sdk: string) => JSON.stringify({
-  name: slug,
-  version: "0.1.0",
-  private: true,
-  type: "module",
-  scripts: { start: "node server.mjs" },
-  engines: { node: ">=20" },
-  dependencies: { "@saltix/grain-server": sdk },
-}, null, 2) + "\n";
-
-/** A chat-only grain's server: the developer key is its whole configuration (Saltix 24-app-studio §3). */
-export const chatServer = (slug: string) => `// The chat of ${slug}, run by its developer key (Saltix 24-app-studio §3): the key names the app, its network and
-// the server key the registry trusts; the server finds the network's public relays and answers chat.json's commands.
-//
-//   npm start      the key from app.key (owner-only) or SALTIX_APP_KEY; NODE_RPC: your own node, for a network
-//                  with no public relays
-//
-// The log is one JSON line per event, and never holds a key or what users wrote.
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { AppKey, ChatServer, card, chatSpecFromJson, fileChatStore } from "@saltix/grain-server";
-
-/** The exit code when the key cannot work (EX_CONFIG): a supervisor restarting the server would not help. */
-const DEAD_KEY = 78;
-
-const log = (level, event, meta = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), level, event, ...meta }));
-
-/** The developer key from SALTIX_APP_KEY or app.key: never from the command line, which shells keep. */
-function developerKey() {
-  if (process.env.SALTIX_APP_KEY?.trim()) return AppKey.parse(process.env.SALTIX_APP_KEY);
-  if (!existsSync("app.key")) throw new Error("no developer key: put it in app.key (owner-only) or SALTIX_APP_KEY");
-  if (process.platform !== "win32" && (statSync("app.key").mode & 0o077) !== 0) throw new Error("app.key: readable by others; chmod 600 it");
-  return AppKey.parse(readFileSync("app.key", "utf8"));
-}
-
-let chat;
-try {
-  chat = await ChatServer.start({
-    appKey: developerKey(),
-    spec: chatSpecFromJson(JSON.parse(readFileSync("chat.json", "utf8"))),
-    store: fileChatStore("chat.store.json"),
-    version: process.env.npm_package_version,
-    node: process.env.NODE_RPC,
-    log,
-    onStop: () => process.exit(DEAD_KEY),
-  });
-} catch (e) {
-  log("error", "not_started", { error: e.message });
-  process.exit(["AppKeyError", "ChatKeyNotRegistered"].includes(e.name) ? DEAD_KEY : 1);
-}
-
-// One handler for each command chat.json declares. ask.args holds its arguments, typed by the spec; ask.lang is the
-// user's language ("" when unknown): answer in it when you can, else in English.
-chat.command("hello", (ask) => {
-  const name = ask.args.name || (ask.lang === "ru" ? "друг" : "friend");
-  return card().text(ask.lang === "ru" ? \`Привет, \${name}!\` : \`Hello, \${name}!\`).status("done").run("Again", "hello", {});
-});
-chat.text((ask) => card().text(ask.lang === "ru" ? "Выберите команду ниже." : "Pick a command below.").reply("Hello", "hello"));
-
-log("info", "ready", { slug: chat.slug, address: chat.address, network: chat.chain.network, spec: chat.spec.version });
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => void chat.flushReports().finally(() => { chat.close(); process.exit(0); }));
-}
+\`owner.key\`, \`server.key\` and \`app.key\` are secrets: keep them out of git.
 `;
