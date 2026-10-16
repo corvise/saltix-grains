@@ -67,7 +67,8 @@
   depends on the server SDK the tool runs with (by its path while the SDK is not on npm). `grain init` refuses a slug
   the registry would refuse before making anything (a directory named `t1` made a grain no command could register), and
   every project's `.gitignore` keeps all `*.key` files (`sponsor.key` and a rater's key were not), `node_modules/` and
-  `bundle.zip` out of git.
+  `bundle.zip` out of git. The starting `chat.json` is version 2: an app made in Saltix holds the owner-signed starting
+  spec of version 1, and Saltix takes only a higher version, so the template's commands never reached its owner.
 - **Updates the owner approves in the console** (Saltix 22-grain-chats §4, 12-grains §10; vectors synced from the
   protocol PR): the card action `publish` (`Card.publish(label, manifest | link)`, tag 3) carries the manifest's text
   as a publishing link does, and `ChatServer.proposeUpdate(manifest | link, { text?, label?, roles? })` sends it to the

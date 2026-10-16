@@ -70,10 +70,11 @@ A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
 `;
 
-/** A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. */
+/** A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. Version 2: an app
+ *  made in Saltix starts with a spec of version 1 that its owner key signed, and a wallet takes only a higher one. */
 export const chatJson = (slug: string, name: string) => JSON.stringify({
   slug,
-  version: 1,
+  version: 2,
   intro: { en: `${name}: a chat-only app in Saltix.` },
   commands: [
     { name: "hello", title: { en: "Say hello" }, help: { en: "A greeting" }, params: [{ name: "name", title: { en: "Your name" }, kind: { text: { max: 32 } } }] },
@@ -92,8 +93,9 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
   registry; \`grain app-key make --slug ${slug} --node <url>\` writes \`app.key\`, the developer key the server runs with.
 - Run the chat: put the developer key in \`app.key\` (\`(umask 077 && pbpaste > app.key)\`; never on the command line,
   shells keep their history), then \`npm install\` and \`npm start\`. \`server.mjs\` answers \`chat.json\`'s commands; add a
-  handler for each command you add, and raise \`version\` in \`chat.json\` with every change (a wallet keeps the highest
-  version it has seen).
+  handler for each command you add, and raise \`version\` in \`chat.json\` with every change: a wallet takes only a
+  version above the one it holds, and an app made in Saltix starts at 1, so a change under the same version never
+  reaches anyone.
 - Its log is one JSON line per event; it exits with 78 when the key cannot work (replaced, revoked, the app retired,
   another network's): make a new developer key in Saltix, since restarting does not help.
 

@@ -146,7 +146,8 @@ test("a chat-only grain's server starts from its developer key alone and answers
   const server = start(dir, { NODE_RPC: node.url });
   t.after(() => server.child.kill());
   const ready = await server.until("ready");
-  assert.deepEqual([ready.slug, ready.address, ready.network, ready.spec], ["coach", key.address, "devnet", 1]);
+  // Above the spec of version 1 Saltix signs when it makes an app: a wallet takes only a higher one.
+  assert.deepEqual([ready.slug, ready.address, ready.network, ready.spec], ["coach", key.address, "devnet", 2]);
 
   // A wallet: the user's grain key in the app, a request for hello, the signed card it gets.
   const user = new Uint8Array(32).fill(7);
