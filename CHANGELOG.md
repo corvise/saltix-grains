@@ -57,6 +57,10 @@
   request's new beacon block. Its members still get them in the chat. The nodes refuse a private grain's numbers
   (`private`) anyway.
 - `npm run dev`: `/` redirects to the simulator's own path, so its page finds its script (it was not found at `/`).
+- `npx grain` works after a fresh `npm ci` and `npm run build`: the package's command is `bin/grain.js`, a file in the
+  repository that runs `dist/main.js`, so npm links it at install (it linked no command while `dist/` was missing, and
+  `npx grain` said "could not determine executable to run" until a second `npm install`). Before the build it says to
+  build. A project outside the checkout installs the tool with `npm install --save-dev <checkout>/packages/cli`.
 
 ### Added
 

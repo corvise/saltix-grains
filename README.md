@@ -44,6 +44,13 @@ npm run example        # hello-grain's chat as your app's server, from your deve
 
 ## The command line
 
+In the checkout, `npx grain …` runs it once `npm install` and `npm run build` have run. For a project of your own
+elsewhere, install the tool and the server SDK from the checkout (they are not on npm yet), then `npx grain …` there:
+
+```sh
+npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/server
+```
+
 ```sh
 npx grain init dice --name "Dice roll"   # grain.json, owner.key (owner-only), public/ with the bridge
 cd dice && npx grain dev                  # serves public/ and the manifest signed for this computer

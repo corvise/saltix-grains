@@ -5,9 +5,10 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "grain": "dist/main.js"
+    "grain": "bin/grain.js"
   },
   "files": [
+    "bin",
     "dist"
   ],
   "scripts": {
