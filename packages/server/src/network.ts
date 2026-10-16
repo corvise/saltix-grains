@@ -4,7 +4,7 @@
 // chain the server reads its grain's registry record and its members' keys from, cached per tip.
 import type { NetworkName } from "./address.js";
 import type { Controller } from "./member.js";
-import { NOT_FOLLOWED, RpcError, rpc } from "./node.js";
+import { RpcError, nodeOnly, rpc } from "./node.js";
 import type { RegisteredGrain } from "./registry.js";
 import { type RelayEndpoint, usableEndpoint } from "./relay.js";
 import { relayRequest } from "./upload.js";
@@ -37,17 +37,29 @@ export function nodeInterface(url: string): WalletInterface {
 
 type Request = typeof relayRequest;
 
+/** How `RelayGateways` finds relays besides those it starts from. */
+export interface GatewayOptions {
+  /**
+   * Ask `relay_list` once when the relays known cannot answer a call (none answers, or none's node follows the
+   * account's shard or runs a faucet), then try the relays it names: each pinned by its record's certificate, which
+   * replaces an older pin for the same endpoint. Off by default.
+   */
+  discover?: boolean;
+}
+
 /**
  * The wallet interface through the relays' gateways (09-relay §10.7), over each relay's pinned certificate: a call goes
- * to the relay that answered last, then to the others in turn. A node's answer is final, except that it does not follow
- * the account's shard (another relay's node may); a relay that does not answer, or answers with an HTTP error (`429`,
- * say), is passed over.
+ * to the relay that answered last, then to the others in turn. A node's answer is final, except where it is that node's
+ * alone (it does not follow the account's shard, it runs no faucet: another relay's node may); a relay that does not
+ * answer, shows another certificate than its pin (nothing is sent to it), or answers with an HTTP error (`429`, say), is
+ * passed over.
  */
 export class RelayGateways implements WalletInterface {
   private list: RelayEndpoint[] = [];
   private good = 0;
+  private discovered = false;
 
-  constructor(endpoints: readonly RelayEndpoint[], private readonly request: Request = relayRequest) {
+  constructor(endpoints: readonly RelayEndpoint[], private readonly request: Request = relayRequest, private readonly options: GatewayOptions = {}) {
     this.add(endpoints);
   }
 
@@ -56,20 +68,49 @@ export class RelayGateways implements WalletInterface {
     return [...this.list];
   }
 
-  /** Relays to call besides: `wss://` ones pinned by their record's certificate, each once. */
-  add(endpoints: readonly RelayEndpoint[]): void {
+  /** Relays to call besides: `wss://` ones pinned by their record's certificate, each once (`repin`: a new pin for a
+   *  known endpoint replaces its old one). The endpoints that were new. */
+  add(endpoints: readonly RelayEndpoint[], repin = false): RelayEndpoint[] {
+    const added: RelayEndpoint[] = [];
     for (const e of endpoints) {
       if (!e.url.startsWith("wss://") || e.cert_sha256 === null || !usableEndpoint(e)) continue;
-      if (!this.list.some((x) => x.url === e.url)) this.list.push({ url: e.url, cert_sha256: e.cert_sha256.toLowerCase() });
+      const pinned = { url: e.url, cert_sha256: e.cert_sha256.toLowerCase() };
+      const known = this.list.findIndex((x) => x.url === e.url);
+      if (known < 0) {
+        this.list.push(pinned);
+        added.push(pinned);
+      } else if (repin && this.list[known]!.cert_sha256 !== pinned.cert_sha256) {
+        this.list[known] = pinned;
+        added.push(pinned);
+      }
     }
+    return added;
   }
 
   async call<T>(method: string, params: object = {}): Promise<T> {
     if (this.list.length === 0) throw new Error(`${method}: no relay to ask`);
-    const body = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
     const failures: string[] = [];
-    for (let i = 0; i < this.list.length; i++) {
-      const at = (this.good + i) % this.list.length;
+    const answer = await this.ask<T>(method, params, this.list.map((_, i) => (this.good + i) % this.list.length), failures);
+    if (answer.ok) return answer.value;
+    if (this.options.discover && !this.discovered) {
+      this.discovered = true;
+      let found: RelayEndpoint[] = [];
+      try {
+        found = await relaysOf(this);
+      } catch (e) {
+        failures.push(`relay_list: ${(e as Error).message}`);
+      }
+      const fresh = this.add(found, true).map((e) => this.list.findIndex((x) => x.url === e.url));
+      const again = await this.ask<T>(method, params, fresh, failures);
+      if (again.ok) return again.value;
+    }
+    throw new Error(`${method}: no relay answered (${failures.join("; ")})`);
+  }
+
+  /** `method` at the relays `order` names (indexes into the list), in turn: the first final answer, or none. */
+  private async ask<T>(method: string, params: object, order: number[], failures: string[]): Promise<{ ok: true; value: T } | { ok: false }> {
+    const body = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
+    for (const at of order) {
       const endpoint = this.list[at]!;
       let answer;
       try {
@@ -82,7 +123,7 @@ export class RelayGateways implements WalletInterface {
         failures.push(`${endpoint.url}: HTTP ${answer.status}`);
         continue;
       }
-      let reply: { result?: T; error?: { code: number; message: string } };
+      let reply: { result?: T; error?: { code: number; message: string; data?: unknown } };
       try {
         reply = JSON.parse(new TextDecoder().decode(answer.body)) as typeof reply;
       } catch {
@@ -90,17 +131,27 @@ export class RelayGateways implements WalletInterface {
         continue;
       }
       if (reply.error) {
-        if (reply.error.code === NOT_FOLLOWED) {
+        if (nodeOnly(reply.error.code, reply.error.message)) {
           failures.push(`${endpoint.url}: ${reply.error.message}`);
           continue;
         }
-        throw new RpcError(method, reply.error.code, reply.error.message);
+        throw new RpcError(method, reply.error.code, reply.error.message, reply.error.data ?? null);
       }
       this.good = at;
-      return reply.result as T;
+      return { ok: true, value: reply.result as T };
     }
-    throw new Error(`${method}: no relay answered (${failures.join("; ")})`);
+    return { ok: false };
   }
+}
+
+/**
+ * The wallet interface of `network` through its public relays (`PUBLIC_RELAYS`), and the relays they name when those
+ * cannot answer: what a tool needs with no node of its own. Throws for a network with no public relays known.
+ */
+export function publicGateways(network: NetworkName, request: Request = relayRequest): RelayGateways {
+  const gateways = new RelayGateways(PUBLIC_RELAYS[network], request, { discover: true });
+  if (gateways.endpoints.length === 0) throw new Error(`no public relays are known for ${network}: pass your own node's wallet interface`);
+  return gateways;
 }
 
 /** What `node_status` says, as far as a grain's server reads it. */

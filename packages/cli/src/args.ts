@@ -13,8 +13,10 @@ export class UsageError extends Error {
 /** Flags that take no value: whatever follows one is the next word, never its value. */
 export const SWITCHES: ReadonlySet<string> = new Set(["chat", "wallet", "wait", "revoke-all", "public", "private", "clear", "offline"]);
 
+/** Where a command reaches the network: its public relays (`--network`), relays named (`--relay`), or your node. */
+const NET = ["network", "relay", "node"];
 /** A registry call signed with a key file: where it goes and how it is signed. */
-const SIGNED = ["node", "key", "genesis", "fee", "valid-for"];
+const SIGNED = [...NET, "key", "genesis", "fee", "valid-for"];
 /** An owner's call: signed with a key file, or done in Saltix and waited for. */
 const OWNER = [...SIGNED, "wallet", "wait", "timeout"];
 
@@ -28,15 +30,16 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   bundle: ["sources", "start", "connect", "out", "dir", "manifest"],
   publish: [...OWNER, "manifest", "out"],
   retire: ["slug", ...SIGNED],
-  show: ["slug", "node", "out"],
+  show: ["slug", ...NET, "out"],
   "chat-spec": ["spec", "cert", "out", "manifest", "key"],
   cert: ["server", "server-key", "slug", "days", "out", "manifest", "key"],
   configure: ["slug", "server", "revoke-all", "category", ...OWNER],
   access: ["slug", "public", "private", "member", ...OWNER],
   rate: ["slug", "score", "review", ...SIGNED],
   bind: ["handle", "slug", "clear", ...OWNER],
-  "app-key": ["file", "node", "offline", "slug", "server", "out"],
+  "app-key": ["file", ...NET, "offline", "slug", "server", "out"],
   sponsor: ["exchange", "amount", ...SIGNED],
+  faucet: ["key", "address", "wait", "timeout", ...NET],
 };
 
 export interface Parsed {

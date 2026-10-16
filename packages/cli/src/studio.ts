@@ -4,9 +4,8 @@
 // apps), which the tool then waits for in the registry.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
-  type GrainCall, type Handle, type RegisteredGrain, type NetworkName, AppKey, CATEGORIES, PUBLIC_RELAYS, RelayGateways, type WalletInterface,
-  accountId, categoryOf, decodeAddress, displayHandle, fromHex, grainCallProblem, grainGet, nodeInterface, parseHandle, parseRoles, roleNames,
-  rpc, toHex, serverKeyOk,
+  type GrainCall, type Handle, type RegisteredGrain, type NodeLike, AppKey, CATEGORIES, accountId, categoryOf, decodeAddress, displayHandle,
+  fromHex, grainCallProblem, grainGet, nodeCall, parseHandle, parseRoles, roleNames, toHex, serverKeyOk,
 } from "@saltix/grain-server";
 import { publicKeyOf, readKey } from "./project.js";
 import { type Sent, type Signing, submit } from "./registry.js";
@@ -18,7 +17,7 @@ export const APP_KEY_ENV = "SALTIX_APP_KEY";
 const ownAccount = (secret: Uint8Array) => toHex(accountId(fromHex(publicKeyOf(secret), 32)));
 
 /** A grain the key file's account owns and that is live: what the owner's calls need. */
-async function ownGrain(node: string, slug: string, secret: Uint8Array): Promise<RegisteredGrain> {
+async function ownGrain(node: NodeLike, slug: string, secret: Uint8Array): Promise<RegisteredGrain> {
   const g = await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
   if (g.owner !== ownAccount(secret)) throw new Error(`${slug}: registered by another owner (${g.owner})`);
@@ -44,7 +43,7 @@ export function serverKeyOf(text: string): string {
 }
 
 /** The call that names `servers` and `category` for `slug`. Without a category the registry's stays. */
-export async function configureCall(node: string, slug: string, servers: string[], category: string | undefined, owner?: Uint8Array): Promise<GrainCall> {
+export async function configureCall(node: NodeLike, slug: string, servers: string[], category: string | undefined, owner?: Uint8Array): Promise<GrainCall> {
   const g = owner ? await ownGrain(node, slug, owner) : await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
   const c = category === undefined ? g.category ?? 0 : categoryOf(category);
@@ -68,14 +67,14 @@ export function membersOf(texts: string[]): Array<{ account: string; roles: numb
 }
 
 /** The call that makes `slug` public or private with `members`, the key file's account its owner. */
-export async function accessCall(node: string, slug: string, open: boolean, members: Array<{ account: string; roles: number }>, owner?: Uint8Array): Promise<GrainCall> {
+export async function accessCall(node: NodeLike, slug: string, open: boolean, members: Array<{ account: string; roles: number }>, owner?: Uint8Array): Promise<GrainCall> {
   const g = owner ? await ownGrain(node, slug, owner) : await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
   return checked({ access: { slug, public: open, members } }, g.owner);
 }
 
 /** The call that rates `slug` (1–5, or 0 to withdraw) by the key file's account, which is not its owner. */
-export async function rateCall(node: string, slug: string, score: number, review: string, rater: Uint8Array): Promise<GrainCall> {
+export async function rateCall(node: NodeLike, slug: string, score: number, review: string, rater: Uint8Array): Promise<GrainCall> {
   const g = await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
   if (g.owner === ownAccount(rater)) throw new Error(`${slug}: an owner does not rate its own grain`);
@@ -86,12 +85,12 @@ export async function rateCall(node: string, slug: string, score: number, review
 interface HandleRecord { owner: string; app: string | null; display: string }
 
 /** What the registry holds for a handle: its owner and the app it opens. */
-export async function handleGet(node: string, handle: Handle): Promise<HandleRecord | null> {
-  return (await rpc<{ handle: HandleRecord | null }>(node, "handle_get", handle)).handle;
+export async function handleGet(node: NodeLike, handle: Handle): Promise<HandleRecord | null> {
+  return (await nodeCall<{ handle: HandleRecord | null }>(node, "handle_get", handle)).handle;
 }
 
 /** The call that points `handle` at `slug` (the key file's account holds both), or clears it with null. */
-export async function bindCall(node: string, typed: string, slug: string | null, holder: Uint8Array): Promise<GrainCall> {
+export async function bindCall(node: NodeLike, typed: string, slug: string | null, holder: Uint8Array): Promise<GrainCall> {
   const handle = parseHandle(typed);
   if (handle === null) throw new Error(`${typed}: not a name (@anna) or a number (+0 777 1234)`);
   const record = await handleGet(node, handle);
@@ -111,7 +110,7 @@ export async function sendCall(call: GrainCall, secret: Uint8Array, s: Signing, 
 }
 
 /** Whether the registry's record of `slug` is what `call` makes it. */
-export async function holds(node: string, call: GrainCall): Promise<boolean> {
+export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
   if ("configure" in call) {
     const g = await grainGet(node, call.configure.slug);
     return g !== null && JSON.stringify(g.servers ?? []) === JSON.stringify(call.configure.servers) && g.category === call.configure.category;
@@ -130,7 +129,7 @@ export async function holds(node: string, call: GrainCall): Promise<boolean> {
 
 /** Wait until the registry holds what `call` makes it, at most `ms`: the transaction landed, or the owner did it in
  *  Saltix. */
-export async function waitForRegistry(node: string, call: GrainCall, ms: number, every = 3000): Promise<boolean> {
+export async function waitForRegistry(node: NodeLike, call: GrainCall, ms: number, every = 3000): Promise<boolean> {
   const end = Date.now() + ms;
   for (;;) {
     if (await holds(node, call)) return true;
@@ -170,26 +169,18 @@ export function readAppKey(file: string | undefined, env: NodeJS.ProcessEnv = pr
   return AppKey.parse(text);
 }
 
-/** The wallet interface for a developer key's network: a node given, or the network's public relays. */
-export function walletFor(network: NetworkName, node?: string): WalletInterface {
-  if (node) return nodeInterface(node);
-  const gateways = new RelayGateways(PUBLIC_RELAYS[network]);
-  if (gateways.endpoints.length === 0) throw new Error(`no public relays are known for ${network}: pass --node`);
-  return gateways;
-}
-
 /** What a developer key says, and what the registry says of it: the public parts only. */
-export async function describeAppKey(key: AppKey, wallet: WalletInterface | null): Promise<Record<string, unknown>> {
+export async function describeAppKey(key: AppKey, node: NodeLike | null): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { ...key.describe() };
-  if (!wallet) return out;
-  const status = await wallet.call<{ network: string; genesis: string }>("node_status");
+  if (!node) return out;
+  const status = await nodeCall<{ network: string; genesis: string }>(node, "node_status");
   out.network_answering = `${status.network} ${status.genesis.slice(0, 16)}`;
   if (!key.isFor(status.network, status.genesis)) {
     out.registered = false;
     out.why = "the network answering is another: was it reset? Make a new developer key in Saltix";
     return out;
   }
-  const { grain } = await wallet.call<{ grain: RegisteredGrain | null }>("grain_get", { slug: key.slug });
+  const grain = await grainGet(node, key.slug);
   const servers = grain?.servers ?? [];
   out.registered = grain !== null && grain.retired === null && servers.includes(key.publicKey);
   if (grain === null) out.why = "no such grain in the registry";

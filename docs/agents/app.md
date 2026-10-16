@@ -37,6 +37,11 @@ has its owner on the phone and never uses it.
 
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 
+**No node needed.** Every registry command (`grain show`, `publish`, `configure`, `access`, `bind`, `rate`, `sponsor`,
+`app-key`) and `grain faucet` (test SALT for `owner.key`'s account, once every 5 minutes) reach the test network through
+its public relays, each pinned by its certificate's hash. `--node URL` is for a node of your own and `--relay
+wss://…#<sha256>` for a relay you name, always with its pin.
+
 ## The chat spec: `chat.json`
 
 What users can send, declared ahead; the wallet draws each command's form and checks it before anything leaves the phone
@@ -187,7 +192,7 @@ chat.text((ask) => card().text("Pick Plan below."));
 - **A new name, icon or screen** is a new manifest, which only the owner's phone signs: `await chat.proposeUpdate(next)`
   sends it to the owner's console as **Review and approve**; or the owner scans `grain publish`'s QR code.
 - **Public**: the app starts private (its owner and members). The owner makes it public in Saltix (My apps → the app),
-  or `grain access --public` with a node.
+  or `grain access --public` with `owner.key` on the test network.
 
 ## An error report from the console
 

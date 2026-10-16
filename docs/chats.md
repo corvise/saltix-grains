@@ -53,8 +53,8 @@ in Saltix and waits for the registry):
 
 ```sh
 grain cert init                                              # server.key: a server key of your own
-grain configure --slug S --server server.key --node URL      # the registry names it (--revoke-all names none)
-grain app-key make --slug S --node URL                       # app.key: its developer key, owner-only, never printed
+grain configure --slug S --server server.key                 # the registry names it (--revoke-all names none)
+grain app-key make --slug S                                  # app.key: its developer key, owner-only, never printed
 grain app-key --file app.key                                 # its public parts, and whether the registry names it
 ```
 

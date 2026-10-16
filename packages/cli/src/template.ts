@@ -115,14 +115,20 @@ and the wallet's controls float over it.
 
 const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page full screen as Saltix shows it, with
   the wallet's controls, at a phone's and the Galaxy Z Fold's sizes, light and dark.
-- \`npx grain lint\`: what stops \`grain.json\` from being registered, and warnings about the page.`;
+- \`npx grain lint\`: what stops \`grain.json\` from being registered, and warnings about the page.
+- \`npx grain publish\`: a QR code the owner's Saltix registers the app from (or \`--key owner.key\` on the test network,
+  after \`npx grain faucet --wait\` for test SALT). Registry commands reach the test network through its public relays,
+  each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.`;
 
 const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the developer key (below); its log is one JSON line per
   event, and \`{"event":"ready",…}\` means the app answers.
 - \`npm test\`: \`test/chat.test.mjs\`, the commands end to end with \`testChat\` from \`@saltix/grain-server/testing\` (a
   development relay and registry and a development key, nothing real); add a test for each command you add.
 - \`npx grain lint\`: what stops \`grain.json\` from being registered.
-- \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).`;
+- \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).
+- \`npx grain show --slug <slug>\`, \`npx grain app-key --file app.key\`: what the registry holds, whether it names the key.
+  Every registry command and \`npx grain faucet\` (test SALT) reach the test network through its public relays, each
+  pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.`;
 
 /** Where the SDK's page for a coding agent building an app is: a project has no copy of it. */
 export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
@@ -235,8 +241,9 @@ A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
   read it too; \`CLAUDE.md\` points to it).
 - \`grain lint\` checks \`grain.json\`; set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
 - Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
-- \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
-  10 for 8 or more; back 30 days after \`grain retire\`).
+- \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
+  more; back 30 days after \`grain retire\`), through the test network's public relays (\`--node <url>\` for your own
+  node); on the test network \`grain faucet --wait\` gives \`owner.key\`'s account test SALT first.
 
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
 `;
@@ -266,10 +273,12 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
   \`RestartPreventExitStatus=78\`.
 - **Add a command:** declare it in \`chat.json\`, add its handler in \`server.mjs\`, and raise \`version\` with every change:
   a wallet takes only a version above the one it holds, and an app made in Saltix starts at 1.
-- \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
-  10 for 8 or more; back 30 days after \`grain retire\`). Or make the app in Saltix: My apps → New app.
-- \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key --node <url>\` names it in the
-  registry; \`grain app-key make --slug ${slug} --node <url>\` writes \`app.key\`, the developer key the server runs with.
+- \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
+  more; back 30 days after \`grain retire\`), through the test network's public relays; \`grain faucet --wait\` gives
+  \`owner.key\`'s account test SALT first. Or make the app in Saltix: My apps → New app.
+- \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key\` names it in the registry;
+  \`grain app-key make --slug ${slug}\` writes \`app.key\`, the developer key the server runs with. Each takes \`--node
+  <url>\` for a node of your own.
 - Run the chat: \`ChatServer.start({ appKey, spec })\` with \`chat.json\` (docs/first-app.md).
 - \`AGENTS.md\` is what a coding agent follows here (\`CLAUDE.md\` points to it).
 
