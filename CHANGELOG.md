@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Check first, render after** (Saltix 12-grains §5.1a): a page signs in and learns what the account may do before it
+  shows anything. `grain.signIn({ url })` (`@saltix/grain`) posts to the server's `challenge` and `session` routes and
+  forwards Saltix's login with its `member` as it came (the account's member proof for the app's team and a private
+  app's members, `null` for anyone else, absent from Saltix 0.1.53); `gateOf(signIn, TEAM)` says what to draw: `open`,
+  `refused`, `update`, `declined`, `failed` or `outside`; `Rights`, `TEAM`. The server's side: `SignIns` (challenges
+  spent once, the login, the proof) with `SignIns.of(chat)`, `ChatServer.member(proof, key)` (the proof checked as a
+  request's against the registry and the account's keys; a public grain counts its team alone; a team member's proof
+  says where their chat is; `ChatMemberUnchecked` when the node does not answer), `rightsOf` and `signInAnswer`.
+  `grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything outside its splash
+  (`data-grain-splash`) in its HTML, or marks no splash. `grain init`'s page shows a splash until its gate decides
+  (`SIGN_IN`, `FOR`), then the app or a refusal page. The simulator's sign-ins carry the account's proof by the
+  development registry, and play Saltix 0.1.53 (no `member`). `AGENTS.md`, every project's `AGENTS.md` (a tenth rule)
+  and `docs/agents/app.md` say so.
 - **Every app ships a Connect profile** (Saltix 19-connect §11–§12, 12-grains §10): `grain init` writes `connect.json`
   (every template, chat-only included: the JSON form's `profile` without `owner` and `revision`, in English and Russian,
   describing the app it makes). `grain lint` fails without it and checks every rule of the format with the field and

@@ -27,7 +27,7 @@ import {
 } from "../packages/server/src/chat";
 import { type FileRef, fileRefProblem, openFile, sealFile } from "../packages/server/src/file";
 import { type InvoiceKeyCert, decodeCert, invoiceProblem } from "../packages/server/src/invoice";
-import { MEMBER_PROOF_LIFE_MS, onTeam, signMemberProof } from "../packages/server/src/member";
+import { MEMBER_PROOF_LIFE_MS, encodeSignedMemberProof, onTeam, signMemberProof } from "../packages/server/src/member";
 import { type SignedGrainStats, grainStatsProblem } from "../packages/server/src/stats";
 import type { DeviceKey } from "../packages/server/src/keys";
 import { argOf } from "../packages/server/src/chat-card";
@@ -59,7 +59,7 @@ interface DevInfo {
   access: { owner: string; public: boolean; members: Array<{ account: string; roles: number }> } | null;
 }
 
-export function setupChat(host: ChatHost): { open(cert?: string, spec?: string): Promise<void> } {
+export function setupChat(host: ChatHost): { open(cert?: string, spec?: string): Promise<void>; loginMember(): Promise<string | null> } {
   const pane = $("chat-log");
   let chain: ChainParams | null = null;
   let spec: SignedGrainChatSpec | null = null;
@@ -468,9 +468,27 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     // Joined the team: the wallet introduces itself.
     await sayHello();
   }
+  /**
+   * The member proof a sign-in carries (12-grains §5.1a), hex of its Borsh: where a request carries one (this account
+   * on the app's team, or a member of a private app) by the development registry, else null; null too without a
+   * registry to read (`grain dev` alone: an unlisted grain).
+   */
+  async function loginMember(): Promise<string | null> {
+    try {
+      const dev = await readRegistry();
+      const a = dev.access;
+      const member = a !== null && (onTeam(a, myAccount()) || (!a.public && a.members.some((m) => m.account === myAccount())));
+      if (!member || !chain) return null;
+      host.log("login: this account is on the app's team or a private app's member: the sign-in carries its member proof");
+      return toHex(encodeSignedMemberProof(memberProof(Date.now())));
+    } catch {
+      return null;
+    }
+  }
+
   $<HTMLInputElement>("chat-private").onchange = () => void setAccess();
   $<HTMLInputElement>("chat-member").onchange = () => void setAccess();
   $<HTMLButtonElement>("chat-load").onclick = () => void open();
-  return { open };
+  return { open, loginMember };
 }
 

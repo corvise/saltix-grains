@@ -191,7 +191,8 @@ if (!inWallet()) showLink(walletLink("https://chess.example/.well-known/saltix-g
 const info = await grain.info();               // slug, version, form, listing, language, theme, network, start
 const layout = await grain.layout();           // the frame: { safeArea, controls }, kept current, and CSS variables
 await grain.ready();
-const answer = await grain.login(challenge);   // { key, signature, at, origin }: check it on your server
+const answer = await grain.login(challenge);   // { key, signature, at, origin, member }: check it on your server
+const gate = gateOf(await grain.signIn({ url: "https://api.chess.example/" }), TEAM); // "open", "refused", "update"…
 await grain.storage.set("rating", "1640");     // synced across the user's devices, 1 MiB per grain
 const { id } = await grain.pay({ invoice });   // from a tap; the wallet's own sheet and PIN
 grain.on("theme", ({ theme }) => repaint(theme));
@@ -204,6 +205,13 @@ await grain.manage.open({ section: "members" }); // from a tap: the app's own ma
 ```
 
 Frames without a sponsor use the relay's free share, never the user's own channel.
+
+**Check first, render after** (Saltix 12-grains §5.1a): a page for some people only (its team, a private circle)
+shows a splash (its icon and name, marked `data-grain-splash`) until `grain.signIn({ url })` resolves, then the app or a
+refusal page with none of its UI, as `gateOf(signIn, TEAM)` says. Saltix's login carries the account's member proof
+for the app's team and a private app's members (`member`, `null` for anyone else, absent from Saltix 0.1.53, which
+`gateOf` answers with `update`). The server checks it with `SignIns`. `grain lint` warns about a page that shows
+anything else first ([docs/agents/app.md](docs/agents/app.md#a-page-for-some-people-only-check-first-then-render)).
 
 **The page's frame** (bridge version 3, Saltix 12-grains §5, §7): Saltix opens every app as a full app, with its
 controls `⋯ | ✕` floating in the top right corner, and lays the page out inside the safe area, below the band that holds
@@ -226,10 +234,15 @@ wallet).
 ## The server
 
 ```ts
-import { AppKey, newChallenge, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification, grantFor } from "@saltix/grain-server";
+import { AppKey, SignIns, newChallenge, signInAnswer, verifyLogin, signInvoice, issueInvoiceKeyCert, findPayment, RelayClient, signNotification, grantFor } from "@saltix/grain-server";
 
 // Sign-in: give the page a challenge, check what grain.login returned.
 const ok = verifyLogin(answer, { slug: "chess", origin: "https://chess.example", challenge });
+// Or the whole of it, for grain.signIn's two routes: the login and the team's member proof, checked against the
+// registry through the chat server, with the rights it gives (owner, developer, viewer, user, none).
+const signIns = SignIns.of(chat, { origin: "https://chess.example" });
+//   POST challenge → { challenge: signIns.challenge() }
+//   POST session   → const r = await signIns.check(body); signInAnswer(r.signedIn, admitted, { token })
 
 // Invoices from a developer key (a registered server key): to the grain's owner only (docs/payments.md).
 const invoice = signInvoice({ slug: "chess", to: grain.owner, asset: "SALT", amount: 2_500_000_000n, memo: "Premium",

@@ -28,8 +28,8 @@ import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
 import type { Manifest } from "./manifest.js";
 import {
-  type GrainAccess, type MemberProblem, TEAM_ROLES, admits, holdsButSigner, introductionProblem, needsController, needsTeamController,
-  onTeam, rolesOf, teamMemberOf,
+  type GrainAccess, MEMBER_PROOF_LIFE_MS, type MemberProblem, type Rights, type SignedMemberProof, TEAM_ROLES, admits, holdsButSigner,
+  introductionProblem, memberProofProblem, needsController, needsTeamController, onTeam, rightsOf, rolesOf, teamMemberOf,
 } from "./member.js";
 import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
@@ -344,6 +344,27 @@ export interface ChatMember {
   account: string;
   /** A bit set of `ROLES` (the owner has every role). */
   roles: number;
+}
+
+/** Who a sign-in's member proof shows signs in (12-grains §5.1a): the account and its roles when the proof checks for
+ *  someone the grain counts, with their rights; otherwise no account, `none`, and why. */
+export interface SignInMember {
+  /** The account id, hex; null when no proof checked. */
+  account: string | null;
+  /** A bit set of `ROLES` (the owner has every role); 0 when no proof checked. */
+  roles: number;
+  rights: Rights;
+  /** Why the proof sent was not taken; null when it was, or when none was sent. */
+  problem: MemberProblem | null;
+}
+
+/** The node did not answer while a sign-in's member proof was checked (`ChatServer.member`): nothing is refused for
+ *  good, and the page may try again in a moment. */
+export class ChatMemberUnchecked extends Error {
+  constructor(reason: string) {
+    super(`the member proof could not be checked now: ${reason}`);
+    this.name = "ChatMemberUnchecked";
+  }
 }
 
 /** A request the server took: who asked, what, and how to answer. */
@@ -1052,6 +1073,50 @@ export class ChatServer {
       { account: g.owner, owner: true, roles: ROLES.user | ROLES.developer | ROLES.viewer, address: known[g.owner] ?? null },
       ...members.map((m) => ({ account: m.account, owner: false, roles: m.roles, address: known[m.account] ?? null })),
     ];
+  }
+
+  /**
+   * Who the member proof a sign-in carried (`grain.login`'s `member`, 12-grains §5.1a) shows is behind the grain key
+   * `key` (hex), checked as a request's proof (22-grain-chats §3): for this grain and `key`, unexpired and at most 30
+   * days ahead, signed by a key that speaks for its account now (the node is asked only for an account the grain
+   * counts), and the account's roles in the registry at the beacon tip. A public grain counts its team alone (its
+   * owner, developers and viewers), a private one every member. A team member's proof also says where their chat is,
+   * as a request's does. Anyone else, and no proof, get `none`; `SignIns` calls it for each sign-in. Throws
+   * `ChatMemberUnchecked` when the node did not answer, and `ChatKeyNotRegistered` once the registry stopped naming the
+   * server's key. The log names reasons only, never an account or a key.
+   */
+  async member(proof: SignedMemberProof | null, key: string): Promise<SignInMember> {
+    if (!this.view) throw new Error("members are read from the registry: start the server from a developer key, or pass node");
+    if (!/^[0-9a-f]{64}$/.test(key)) throw new TypeError("key: a grain key, 64 lowercase hex digits");
+    const none = (problem: MemberProblem | null): SignInMember => {
+      if (problem) this.log("info", "chat_signin_member_refused", { reason: problem });
+      return { account: null, roles: 0, rights: "none", problem };
+    };
+    if (proof === null) return none(null);
+    const now = this.now();
+    const p = proof.proof;
+    // What fails whatever the account's keys are costs the node nothing.
+    if (p.slug !== this.slug || p.grain_key !== key) return none("mismatch");
+    if (p.expires_at <= now || p.expires_at > now + MEMBER_PROOF_LIFE_MS) return none("expired");
+    if (!holdsButSigner(proof, { genesis: this.chain.genesis, slug: this.slug, requestKey: key, proof, now })) return none("signature");
+    const g = await this.readRecord();
+    if (!g) return none("not_team");
+    const access = accessOf(g);
+    const roles = rolesOf(access, p.account);
+    if (access.public ? !onTeam(access, p.account) : roles === 0) return none(access.public ? "not_team" : "not_member");
+    let controller;
+    try {
+      controller = await this.view.controller(p.account);
+    } catch (e) {
+      this.log("warn", "chat_signin_member_unchecked", { reason: (e as Error).message });
+      throw new ChatMemberUnchecked((e as Error).message);
+    }
+    const problem = memberProofProblem(proof, { genesis: this.chain.genesis, slug: this.slug, grainKey: key, controller, now });
+    if (problem) return none(problem);
+    if (onTeam(access, p.account)) await this.remember(p.account, key);
+    const rights = rightsOf(access, p.account);
+    this.log("info", "chat_signin_member", { rights });
+    return { account: p.account, roles, rights, problem: null };
   }
 
   /**

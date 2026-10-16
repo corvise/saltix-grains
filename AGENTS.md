@@ -101,6 +101,28 @@ stands (a key of another network or one the registry does not name, such a spec)
 (`@saltix/grain-server/testing`: a development relay, registry and key, every card checked as Saltix checks it), never
 with a real developer key.
 
+## Building an app: check first, then render
+
+A page that is for some people only (its team, a private circle) shows nothing of itself before it knows who signed in
+(Saltix specs/12-grains.md §5.1a). A public app for a limited circle shows strangers a refusal page without any of its
+UI; a private app never loads for them at all, since Saltix reads the registry first.
+
+- On a first open Saltix Connect's sheet comes first; then the page loads. **Until its sign-in resolves it shows only a
+  splash**: the app's icon and name in an element marked `data-grain-splash`, everything else `hidden` or not yet drawn.
+  Never a skeleton of the UI.
+- **`grain.signIn({ url })`** (`@saltix/grain`) signs in through the server's `challenge` and `session` routes. Saltix
+  attaches the account's member proof for the app's team (its owner, developers, viewers) and a private app's members,
+  `null` for anyone else; Saltix 0.1.53 and older attach nothing at all.
+- **The server** answers with `SignIns` and `signInAnswer` (`@saltix/grain-server`): rights `owner`, `developer`,
+  `viewer`, `user` or `none` from the registry, a session only for those the app is for, and every request checked
+  again by them.
+- **`gateOf(signIn, TEAM)`** decides: the app (`open`), a refusal page (`refused`: whom it is for, that its owner can
+  invite them), "update Saltix" (`update`: an older Saltix cannot prove membership, so never say it is not for them),
+  a sign-in button (`declined`), try again (`failed`), open it in Saltix (`outside`).
+- `grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything else in its HTML first, or
+  marks no splash. [docs/agents/app.md](docs/agents/app.md#a-page-for-some-people-only-check-first-then-render) has the
+  steps and the code; `grain init` makes a page that follows them.
+
 ## Working on this repository
 
 [docs/agents/sdk.md](docs/agents/sdk.md) is the whole of it. In short:

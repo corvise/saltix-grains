@@ -1,6 +1,6 @@
 // What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`, drawn edge to edge (it declares
-// viewport-fit=cover and keeps inside the insets, 12-grains §7), and the rules a coding agent follows (AGENTS.md, which
-// CLAUDE.md points to).
+// viewport-fit=cover and keeps inside the insets, 12-grains §7), that checks first and renders after (its splash until
+// its gate decides, 12-grains §5.1a), and the rules a coding agent follows (AGENTS.md, which CLAUDE.md points to).
 import { httpsLinkOk } from "@saltix/grain-server";
 
 /** The one line Saltix ends "Copy for an AI agent" with (24-app-studio §4), word for word. */
@@ -51,21 +51,32 @@ export const indexHtml = (name: string) => `<!doctype html>
     }
     button { font: inherit; padding: 12px; border-radius: 12px; border: none; width: 100%; margin: 6px 0; background: var(--bar); color: #fff; }
     pre { white-space: pre-wrap; font-size: 12px; background: rgba(127,127,127,.12); padding: 10px; border-radius: 10px; }
+    /* Check first, render after (AGENTS.md): the splash, the app's mark and name and nothing of its UI, until app.js's
+       gate decides; then the app, or the refusal. */
+    [hidden] { display: none !important; }
+    .splash, .refused { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+      box-sizing: border-box; padding: calc(24px + var(--saltix-safe-top)) calc(24px + var(--saltix-safe-right)) calc(24px + var(--saltix-safe-bottom)) calc(24px + var(--saltix-safe-left)); text-align: center; }
+    .mark { width: 72px; height: 72px; border-radius: 20px; background: var(--bar); color: #fff; display: grid; place-items: center; font-size: 32px; font-weight: 700; }
+    .refused p { max-width: 320px; margin: 0; opacity: .8; }
   </style>
 </head>
 <body>
-  <header><h1>${name}</h1></header>
-  <main>
-    <button id="count">Count</button>
-    <pre id="out"></pre>
-  </main>
+  <div class="splash" data-grain-splash><div class="mark" aria-hidden="true">${(name.trim()[0] ?? "?").toUpperCase()}</div><strong>${name}</strong></div>
+  <div id="app" hidden>
+    <header><h1>${name}</h1></header>
+    <main>
+      <button id="count">Count</button>
+      <pre id="out"></pre>
+    </main>
+  </div>
+  <div class="refused" id="refused" hidden><div class="mark" aria-hidden="true">${(name.trim()[0] ?? "?").toUpperCase()}</div><h2 id="refused-title"></h2><p id="refused-body"></p></div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
 `;
 
 export const appJs = `// A grain: the wallet's bridge (./grain.js is @saltix/grain), storage synced through the user's vault.
-import { grain, inWallet, walletLink } from "./grain.js";
+import { TEAM, gateOf, grain, inWallet, walletLink } from "./grain.js";
 
 const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
@@ -75,15 +86,42 @@ const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringi
 // and plain browsers.
 grain.layout();
 
-if (!inWallet()) {
-  show("Open this grain in a Saltix wallet:\\n" + walletLink(location.origin + "/.well-known/saltix-grain"));
-} else {
+// Check first, render after (AGENTS.md): index.html shows only its splash until the gate below decides, then the app or
+// the refusal, never the app's UI first. SIGN_IN is your server's sign-in, where SignIns from @saltix/grain-server
+// answers \`challenge\` and \`session\` (empty: an app for everyone, with no server yet). FOR is whom the app is for once
+// it signs in: TEAM (its owner, developers and viewers), [...TEAM, "user"] for a private app's members too.
+const SIGN_IN = "";
+const FOR = TEAM;
+const REFUSED = {
+  refused: ["This app is for its team", "Its owner can invite you."],
+  update: ["Update Saltix", "This version of Saltix cannot confirm that you are on the app's team."],
+  declined: ["Sign in to continue", "The app signs you in under a key of its own, never your address."],
+  failed: ["The app did not open", "Its server did not answer. Try again in a minute."],
+  outside: ["Open it in Saltix", walletLink(location.origin + "/.well-known/saltix-grain")],
+};
+
+async function gate() {
+  if (!inWallet()) return "outside";
+  if (!SIGN_IN) return "open";
+  return grain.signIn({ url: SIGN_IN }).then((s) => gateOf(s, FOR), (e) => gateOf(e, FOR));
+}
+
+const outcome = await gate();
+document.querySelector("[data-grain-splash]").remove();
+if (outcome === "open") {
+  document.getElementById("app").hidden = false;
   grain.info().then((info) => { document.body.dataset.theme = info.theme; show(info); });
   grain.on("theme", ({ theme }) => { document.body.dataset.theme = theme; });
   // The colour at the top of the page: the wallet draws the status bar's icons and its controls to contrast with it.
   grain.setHeader("#2f6bff").catch(() => {});
-  grain.ready();
+} else {
+  // None of the app's UI: whom it is for, and what to do.
+  const [title, body] = REFUSED[outcome];
+  document.getElementById("refused-title").textContent = title;
+  document.getElementById("refused-body").textContent = body;
+  document.getElementById("refused").hidden = false;
 }
+if (inWallet()) grain.ready().catch(() => {});
 
 document.getElementById("count").addEventListener("click", async () => {
   try {
@@ -156,7 +194,8 @@ export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/d
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
  * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, the
- * exit status of a key that cannot work, payments, the card design standard, tests, and the Connect profile.
+ * exit status of a key that cannot work, payments, the card design standard, tests, the Connect profile, and checking
+ * first, then rendering.
  */
 export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
    (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
@@ -195,7 +234,16 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    highlights that are facts (not slogans), and what it keeps about a user and for how long (required when
    \`grain.json\` asks for \`address\` or \`storage\`), in English and Russian. \`grain lint\` checks it, and warns about a
    permission nothing in the app uses: drop it, since the sheet shows every one. \`grain profile\` sets it (a QR code for
-   the owner's Saltix, or \`--key owner.key\` on the test network); the registry takes each change at a higher revision.`;
+   the owner's Saltix, or \`--key owner.key\` on the test network); the registry takes each change at a higher revision.
+10. **Check first, then render.** A page that is for some people only (its team, a private circle) shows nothing of
+   itself before it knows who signed in: a splash (its icon and name, in an element marked \`data-grain-splash\`; the
+   rest \`hidden\`) until \`grain.signIn({ url })\` resolves, then \`gateOf(signIn, TEAM)\` decides: the app, or a refusal
+   page with none of its UI ("this app is for its team; its owner can invite you"), or "update Saltix" for a Saltix that
+   sends no member proof. A public app for a limited circle shows strangers that refusal page; a private app never loads
+   for them at all (Saltix checks the registry first). The server answers the sign-in with \`SignIns\` and
+   \`signInAnswer\` (\`@saltix/grain-server\`) and checks the session's rights again on every request: the page's gate
+   decides what people see, never what they may do. \`grain lint\` warns about a page that shows anything else first
+   (\`render-before-sign-in\`).`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
