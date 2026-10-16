@@ -1,7 +1,10 @@
 // The bridge as a wallet answers it: a fake `window.saltix` records what the SDK sends.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { grain, inWallet, walletLink, slugLink, chatLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset } from "../dist/index.js";
+import {
+  grain, inWallet, walletLink, slugLink, chatLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset, layoutOf, cssVariables, controlsFor,
+  CONTROLS_BOX, LAYOUT_VARIABLES,
+} from "../dist/index.js";
 
 function wallet(answer) {
   const sent = [];
@@ -101,6 +104,20 @@ test("relay frames go out as hex and come back as bytes; notifications are asked
   assert.deepEqual(sent.slice(2).map((r) => r.method), ["grain_notifications_allow", "grain_relay_close"]);
 });
 
+test("the app's own manage page opens from the page, at its members", async () => {
+  const sent = wallet(() => null);
+  await grain.manage.open();
+  await grain.manage.open({ section: "members" });
+  assert.deepEqual(sent, [
+    { method: "grain_manage_open", params: {} },
+    { method: "grain_manage_open", params: { section: "members" } },
+  ]);
+  await assert.rejects(grain.manage.open({ section: "keys" }), (e) => e.code === ErrorCode.InvalidParams);
+  assert.equal(sent.length, 2, "a refused call is not sent");
+  wallet(() => { const e = new Error("not on the app's team"); e.code = 4100; throw e; });
+  await assert.rejects(grain.manage.open({ section: "members" }), (e) => e instanceof GrainError && e.code === ErrorCode.NotPermitted);
+});
+
 test("the chat opens from the page and from a link", async () => {
   const sent = wallet(() => null);
   await grain.chat.open();
@@ -116,4 +133,186 @@ test("the chat opens from the page and from a link", async () => {
   assert.equal(chatLink("access", "fbff00"), "salt:grain/access?chat&cert=-_8A");
   assert.throws(() => chatLink("Access"), GrainError);
   assert.throws(() => chatLink("access", "abc"), GrainError);
+});
+
+/** A document whose `:root` records the CSS variables set, and a window whose resizes the test fires. */
+function screen() {
+  const vars = {};
+  const resize = new Set();
+  globalThis.document = { documentElement: { style: { setProperty: (name, value) => { vars[name] = value; } } } };
+  globalThis.addEventListener = (type, h) => type === "resize" && resize.add(h);
+  globalThis.removeEventListener = (type, h) => type === "resize" && resize.delete(h);
+  return {
+    vars,
+    resize: () => [...resize].forEach((h) => h()),
+    listening: () => resize.size,
+    restore() {
+      delete globalThis.document;
+      delete globalThis.addEventListener;
+      delete globalThis.removeEventListener;
+    },
+  };
+}
+
+/** A Saltix of `bridge` whose `grain_info` answers `info()` (asked each time), whose events the test fires. */
+function saltix(bridge, info = () => ({})) {
+  const handlers = new Map();
+  const asked = [];
+  globalThis.saltix = {
+    isGrain: true,
+    request: async (args) => {
+      asked.push(args.method);
+      if (args.method !== "grain_info") return null;
+      return { slug: "dice", bridge, theme: "dark", safe_area: { top: 0, bottom: 0 }, ...info() };
+    },
+    on: (e, h) => handlers.set(h, e),
+    off: (e, h) => handlers.delete(h),
+  };
+  _reset();
+  return {
+    asked,
+    fire: (event, data) => [...handlers].filter(([, e]) => e === event).forEach(([h]) => h(data)),
+    listening: () => handlers.size,
+  };
+}
+
+const settle = () => new Promise((r) => setTimeout(r, 10));
+const SAFE = { top: 32, bottom: 24, left: 0, right: 0 };
+
+test("the layout's fallbacks are decided in one place", () => {
+  assert.deepEqual(CONTROLS_BOX, { width: 96, height: 48, right: 8, below: 4 }, "12-grains §11");
+  assert.deepEqual(controlsFor(SAFE), { top: 36, right: 8, width: 96, height: 48 });
+  assert.deepEqual(controlsFor({ top: 24, bottom: 0, left: 30, right: 44 }), { top: 28, right: 52, width: 96, height: 48 }, "from the insets");
+  // Saltix with bridge 3: its values, a field it does not give as 0, controls absent as none.
+  assert.deepEqual(layoutOf({ bridge: 3, safe_area: SAFE, controls: controlsFor(SAFE) }), { safeArea: SAFE, controls: { top: 36, right: 8, width: 96, height: 48 }, source: "wallet" });
+  assert.deepEqual(layoutOf({ bridge: 4, safe_area: { top: 24 }, controls: { top: 28, width: 96 } }), {
+    safeArea: { top: 24, bottom: 0, left: 0, right: 0 }, controls: { top: 28, right: 0, width: 96, height: 0 }, source: "wallet",
+  });
+  assert.deepEqual(layoutOf({ bridge: 3, safe_area: { top: -5, bottom: "7", left: NaN, right: Infinity } }), {
+    safeArea: { top: 0, bottom: 0, left: 0, right: 0 }, controls: null, source: "wallet",
+  }, "what is not a length is 0");
+  // Saltix with bridge 1 or 2: its header above the page; nothing of the page is under the bars.
+  for (const bridge of [1, 2, undefined]) {
+    assert.deepEqual(layoutOf({ bridge, safe_area: { top: 24, bottom: 16 }, controls: { top: 1, right: 1, width: 1, height: 1 } }), {
+      safeArea: { top: 0, bottom: 0, left: 0, right: 0 }, controls: null, source: "legacy",
+    }, `bridge ${bridge}`);
+  }
+  // No wallet: the browser's own insets, no controls.
+  assert.deepEqual(layoutOf(null), { safeArea: { top: 0, bottom: 0, left: 0, right: 0 }, controls: null, source: "browser" });
+  assert.deepEqual(layoutOf(null, { top: 47, bottom: 34, left: 0, right: 0 }).safeArea, { top: 47, bottom: 34, left: 0, right: 0 });
+
+  const v = LAYOUT_VARIABLES;
+  assert.deepEqual(cssVariables(layoutOf({ bridge: 3, safe_area: SAFE, controls: controlsFor(SAFE) })), {
+    [v.safeTop]: "32px", [v.safeBottom]: "24px", [v.safeLeft]: "0px", [v.safeRight]: "0px",
+    [v.controlsTop]: "36px", [v.controlsRight]: "8px", [v.controlsWidth]: "96px", [v.controlsHeight]: "48px",
+  });
+  const zero = { [v.controlsTop]: "0px", [v.controlsRight]: "0px", [v.controlsWidth]: "0px", [v.controlsHeight]: "0px" };
+  assert.deepEqual(cssVariables(layoutOf({ bridge: 2 })), { [v.safeTop]: "0px", [v.safeBottom]: "0px", [v.safeLeft]: "0px", [v.safeRight]: "0px", ...zero });
+  assert.deepEqual(cssVariables(layoutOf(null)), {
+    [v.safeTop]: "env(safe-area-inset-top, 0px)", [v.safeBottom]: "env(safe-area-inset-bottom, 0px)",
+    [v.safeLeft]: "env(safe-area-inset-left, 0px)", [v.safeRight]: "env(safe-area-inset-right, 0px)", ...zero,
+  }, "a plain browser follows its own viewport");
+  assert.deepEqual(Object.keys(cssVariables(layoutOf(null))).sort(), [
+    "--saltix-controls-height", "--saltix-controls-right", "--saltix-controls-top", "--saltix-controls-width",
+    "--saltix-safe-bottom", "--saltix-safe-left", "--saltix-safe-right", "--saltix-safe-top",
+  ]);
+});
+
+test("in Saltix bridge 3 the layout is the wallet's, set on :root and kept current", async () => {
+  const s = screen();
+  let insets = SAFE;
+  const wallet = saltix(3, () => ({ safe_area: insets, controls: controlsFor(insets) }));
+  const seen = [];
+  try {
+    const layout = await grain.layout((l) => seen.push(l));
+    assert.deepEqual(layout.safeArea, SAFE);
+    assert.deepEqual(layout.controls, { top: 36, right: 8, width: 96, height: 48 });
+    assert.equal(layout.source, "wallet");
+    assert.equal(s.vars["--saltix-safe-top"], "32px");
+    assert.equal(s.vars["--saltix-safe-bottom"], "24px");
+    assert.equal(s.vars["--saltix-controls-top"], "36px");
+    assert.equal(s.vars["--saltix-controls-right"], "8px");
+    assert.equal(s.vars["--saltix-controls-width"], "96px");
+    assert.equal(s.vars["--saltix-controls-height"], "48px");
+    assert.equal(seen.length, 1);
+
+    // The phone unfolds: the wallet says so, and nothing is asked.
+    const asked = wallet.asked.length;
+    const unfolded = { top: 24, bottom: 16, left: 0, right: 40 };
+    wallet.fire("insets", { safe_area: unfolded, controls: controlsFor(unfolded) });
+    assert.deepEqual(layout.safeArea, unfolded, "the returned layout is current");
+    assert.deepEqual(layout.controls, { top: 28, right: 48, width: 96, height: 48 });
+    assert.equal(s.vars["--saltix-safe-right"], "40px");
+    assert.equal(s.vars["--saltix-controls-right"], "48px");
+    assert.equal(seen.length, 2);
+    assert.equal(wallet.asked.length, asked);
+
+    // A resize asks the wallet again; resizes by the dozen ask once more at most while one is answered.
+    insets = { top: 30, bottom: 20, left: 12, right: 0 };
+    for (let i = 0; i < 12; i++) s.resize();
+    await settle();
+    assert.ok(wallet.asked.length - asked <= 2 && wallet.asked.length > asked, `asked ${wallet.asked.length - asked} times`);
+    assert.deepEqual(layout.safeArea, insets);
+    assert.equal(s.vars["--saltix-safe-left"], "12px");
+    assert.equal(s.vars["--saltix-controls-top"], "34px");
+    // A theme change too.
+    insets = { top: 28, bottom: 0, left: 0, right: 0 };
+    wallet.fire("theme", { theme: "light" });
+    await settle();
+    assert.equal(layout.safeArea.top, 28);
+
+    // An answer that started before a newer insets event does not undo it.
+    insets = { top: 99, bottom: 0, left: 0, right: 0 };
+    s.resize();
+    wallet.fire("insets", { safe_area: { top: 50, bottom: 0, left: 0, right: 0 }, controls: controlsFor({ top: 50, bottom: 0, left: 0, right: 0 }) });
+    await settle();
+    assert.equal(layout.safeArea.top, 50);
+
+    // Stopped: nothing follows any more.
+    layout.stop();
+    assert.equal(wallet.listening(), 0);
+    assert.equal(s.listening(), 0);
+    const n = seen.length;
+    wallet.fire("insets", { safe_area: SAFE, controls: controlsFor(SAFE) });
+    s.resize();
+    await settle();
+    assert.equal(seen.length, n);
+    assert.equal(layout.safeArea.top, 50);
+  } finally {
+    s.restore();
+    delete globalThis.saltix;
+    _reset();
+  }
+});
+
+test("an older Saltix and a plain browser fall back: zeros and no controls, or the browser's own insets", async () => {
+  const s = screen();
+  try {
+    saltix(2, () => ({ safe_area: { top: 24, bottom: 0 } }));
+    const legacy = await grain.layout();
+    assert.deepEqual(legacy.safeArea, { top: 0, bottom: 0, left: 0, right: 0 });
+    assert.equal(legacy.controls, null);
+    assert.equal(legacy.source, "legacy");
+    assert.equal(s.vars["--saltix-safe-top"], "0px");
+    assert.equal(s.vars["--saltix-controls-width"], "0px");
+    legacy.stop();
+
+    delete globalThis.saltix;
+    _reset();
+    const browser = await grain.layout();
+    assert.equal(browser.source, "browser");
+    assert.equal(browser.controls, null);
+    assert.equal(s.vars["--saltix-safe-top"], "env(safe-area-inset-top, 0px)");
+    assert.equal(s.vars["--saltix-safe-left"], "env(safe-area-inset-left, 0px)");
+    assert.equal(s.vars["--saltix-controls-height"], "0px");
+    s.resize();
+    await settle();
+    assert.equal(browser.source, "browser", "a resize measures again, and asks no wallet");
+    browser.stop();
+    assert.equal(s.listening(), 0);
+  } finally {
+    s.restore();
+    delete globalThis.saltix;
+    _reset();
+  }
 });

@@ -6,8 +6,11 @@
  * messages count against 10 a day (100 when the account is on the app's team) and show only while allowed. A private
  * app gets a member proof signed by the simulator's account key with every request, and so does the app whose team the
  * account is on (its console, 24-app-studio §4); every request names the page's language as Saltix names its own;
- * the numbers the app reports are shown as reported, once checked. A developer tool: the alias uses `register` on a
- * connection of its own, and the history lives in this page.
+ * the numbers the app reports are shown as reported, once checked. When the account is on the app's team, the pane says
+ * hello as a team's wallet does (22-grain-chats §3a): on loading the chat and on joining the team, at most one in flight,
+ * again after `HELLO_RETRY_MS` without a welcome; a welcome is checked and logged, never drawn in the chat, and unasked
+ * messages are then allowed. A developer tool: the alias uses `register` on a connection of its own, and the history
+ * lives in this page.
  */
 import { ed25519 } from "@noble/curves/ed25519";
 import { derive, fromHex, toHex } from "../packages/server/src/bytes";
@@ -17,9 +20,9 @@ import {
 } from "../packages/server/src/records";
 import { messagingPublic, openFrame, sealFrame } from "../packages/server/src/seal";
 import {
-  CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, type ChainParams, type ChatArgs, type ChatValue, type SignedChatMessage, type SignedGrainChatSpec,
-  chatCertHolds, chatMessageProblem, commandOf, decodeChatDocument, decodeChatFrame, encodeChatFrame, newChatId, requestFitProblem,
-  signChatRequest, signedChatSpecProblem,
+  CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, HELLO_RETRY_MS, type ChainParams, type ChatArgs, type ChatValue, type SignedChatMessage,
+  type SignedChatWelcome, type SignedGrainChatSpec, chatCertHolds, chatMessageProblem, chatWelcomeProblem, commandOf, decodeChatDocument,
+  decodeChatFrame, encodeChatFrame, newChatId, requestFitProblem, signChatHello, signChatRequest, signedChatSpecProblem,
 } from "../packages/server/src/chat";
 import { type FileRef, fileRefProblem, openFile, sealFile } from "../packages/server/src/file";
 import { type InvoiceKeyCert, decodeCert, invoiceProblem } from "../packages/server/src/invoice";
@@ -74,6 +77,9 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   const sent = new Map<string, number>();
   const drawn = new Map<string, HTMLElement>();
   const unasked: number[] = [];
+  /** The hello in flight (its id and when it went), and the server key that welcomed this wallet. */
+  let hello: { id: string; at: number } | null = null;
+  let welcomedBy: string | null = null;
   let current: ReturnType<typeof renderForm> | null = null;
   let currentCommand = "";
   let via: string | null = null;
@@ -179,6 +185,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
       if (from === serverAddress()) showStats(frame.stats, "in the chat");
       return;
     }
+    if ("welcome" in frame) return welcomed(frame.welcome, from);
     if (!("message" in frame) || !spec || !chain) return host.log("chat: dropped (not a message, or no spec held)");
     show(frame.message, from);
   }
@@ -255,14 +262,48 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     return f;
   }
 
+  /** This account's member proof for the grain key, as a team's or a private app's member's wallet signs it. */
+  function memberProof(now: number) {
+    return signMemberProof({
+      slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS - 60_000,
+    }, host.account(), chain!.genesis);
+  }
+
+  /** Say hello (22-grain-chats §3a) when the account is on the app's team: one in flight, again after `HELLO_RETRY_MS`
+   *  without a welcome, none once welcomed by the key the chat writes to. Nothing of it is drawn in the chat. */
+  async function sayHello(): Promise<void> {
+    if (!teamMember || !spec || !chain || !registered || !serverKey()) return;
+    const now = Date.now();
+    if (welcomedBy === serverKey()) return;
+    if (hello && now - hello.at < HELLO_RETRY_MS) return;
+    const to = serverAddress()!;
+    const key = await keyOf(to);
+    if (!key) return host.log("chat: no hello, the server is not registered at the relay");
+    const signed = signChatHello({ slug: host.slug(), id: newChatId(), at: now, member: memberProof(now), lang: host.language() }, grainKey(), chain.genesis);
+    ws!.send(JSON.stringify({ type: "message", to, payload: toBase64Url(sealFrame(encodeChatFrame({ hello: signed }), key, messagingSecret())), msgId: newChatId() }));
+    hello = { id: signed.hello.id, at: now };
+    host.log("chat: hello sent: this account is on the app's team, so its wallet introduces itself to the app");
+  }
+
+  /** A welcome, taken only from the chat's server key, for the hello in flight, at most 5 minutes ahead and signed. */
+  function welcomed(w: SignedChatWelcome, from: string): void {
+    const problem = hello === null ? "unasked" : chatWelcomeProblem(w, {
+      chain: chain!, slug: host.slug(), hello: hello.id, ownerKey: host.owner()!, servers, spec: spec?.spec ?? null, from, now: Date.now(),
+    });
+    if (problem) return host.log(`chat: a welcome dropped (${problem})`);
+    hello = null;
+    welcomedBy = serverKey();
+    // The team asked to hear from its own app: its unasked messages are allowed by default (22-grain-chats §4).
+    $<HTMLInputElement>("chat-unasked").checked = true;
+    host.log("chat: welcomed: the app's console reaches this account without it writing first");
+  }
+
   async function sendRequest(command: string, args: ChatArgs, text: string, viaId: string | null): Promise<void> {
     if (!spec || !chain || !registered || !serverKey()) return note("Load the chat first.", "bad");
     const now = Date.now();
     // A private app's member proves its account with every request, and so does the app's team to a public app, so that
     // the app reaches it in its console (24-app-studio §2a, §4); a public app's users never send one.
-    const member = (privateApp || teamMember) && $<HTMLInputElement>("chat-proof").checked
-      ? signMemberProof({ slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS - 60_000 }, host.account(), chain.genesis)
-      : null;
+    const member = (privateApp || teamMember) && $<HTMLInputElement>("chat-proof").checked ? memberProof(now) : null;
     // The page's language, as Saltix sends its display language with every request (22-grain-chats §3).
     const request = { slug: host.slug(), id: newChatId(), at: now, expires_at: now + DAY, via: viaId, command, args, text, member, lang: host.language() };
     const problem = requestFitProblem(request, spec.spec);
@@ -336,6 +377,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
       if (doc.stats) showStats(doc.stats, "the well-known document");
       if (!dev.relay) return note("The chat runs on a node's relays (CHAT_NODE): try it in a debug Saltix.", "bad");
       if (!registered) await connect(dev.relay);
+      await sayHello();
     } catch (e) {
       note(`The chat did not load: ${(e as Error).message}`, "bad");
     }
@@ -348,6 +390,8 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     await fetch("/api/dev/access", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ public: open, members }) });
     await readRegistry();
     host.log(`chat: the development registry makes the app ${open ? "public" : `private, ${members.length ? "this account a member" : "this account not a member"}`}`);
+    // Joined the team: the wallet introduces itself.
+    await sayHello();
   }
   $<HTMLInputElement>("chat-private").onchange = () => void setAccess();
   $<HTMLInputElement>("chat-member").onchange = () => void setAccess();

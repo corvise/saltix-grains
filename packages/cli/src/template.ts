@@ -1,4 +1,10 @@
-// What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`.
+// What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`, laid out full screen as Saltix shows
+// every app (12-grains §7), and the rules a coding agent follows (AGENTS.md, which CLAUDE.md points to).
+
+/** The one line Saltix ends "Copy for an AI agent" with (24-app-studio §4), word for word. */
+export const FULL_SCREEN_RULE =
+  "Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).";
+
 export const indexHtml = (name: string) => `<!doctype html>
 <html lang="en">
 <head>
@@ -6,16 +12,50 @@ export const indexHtml = (name: string) => `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>${name}</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #f4f6fb; color: #0b1020; }
+    /* Saltix shows the app full screen, edge to edge (AGENTS.md): the system's bars over the page, and the wallet's
+       controls (⋯ | ✕) floating in its top right corner. grain.layout() in app.js sets these variables; the values
+       here hold until it does, and outside a wallet. */
+    :root {
+      --saltix-safe-top: env(safe-area-inset-top, 0px);
+      --saltix-safe-bottom: env(safe-area-inset-bottom, 0px);
+      --saltix-safe-left: env(safe-area-inset-left, 0px);
+      --saltix-safe-right: env(safe-area-inset-right, 0px);
+      --saltix-controls-top: 0px;
+      --saltix-controls-right: 0px;
+      --saltix-controls-width: 0px;
+      --saltix-controls-height: 0px;
+      --bar: #2f6bff;
+    }
+    html, body { margin: 0; }
+    body { font-family: system-ui, sans-serif; background: #f4f6fb; color: #0b1020; min-height: 100vh; }
     body[data-theme="dark"] { background: #0b1020; color: #e6ecff; }
-    button { font: inherit; padding: 12px; border-radius: 12px; border: none; width: 100%; margin: 6px 0; background: #2f6bff; color: white; }
+    /* The top bar: its colour runs under the status bar, its row starts level with the wallet's controls, and its title
+       stops short of them. */
+    header {
+      position: sticky; top: 0; z-index: 1; background: var(--bar); color: #fff;
+      padding-top: max(var(--saltix-safe-top), var(--saltix-controls-top));
+      padding-left: calc(16px + var(--saltix-safe-left));
+      padding-right: max(calc(16px + var(--saltix-safe-right)), calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px));
+    }
+    header h1 {
+      margin: 0; font-size: 18px; display: flex; align-items: center; min-height: max(48px, var(--saltix-controls-height));
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* The content keeps inside the safe area; on a wide screen (a phone unfolded, or turned) it stays a readable column. */
+    main {
+      box-sizing: border-box; max-width: 720px; margin: 0 auto;
+      padding: 16px calc(16px + var(--saltix-safe-right)) calc(16px + var(--saltix-safe-bottom)) calc(16px + var(--saltix-safe-left));
+    }
+    button { font: inherit; padding: 12px; border-radius: 12px; border: none; width: 100%; margin: 6px 0; background: var(--bar); color: #fff; }
     pre { white-space: pre-wrap; font-size: 12px; background: rgba(127,127,127,.12); padding: 10px; border-radius: 10px; }
   </style>
 </head>
 <body>
-  <h1>${name}</h1>
-  <button id="count">Count</button>
-  <pre id="out"></pre>
+  <header><h1>${name}</h1></header>
+  <main>
+    <button id="count">Count</button>
+    <pre id="out"></pre>
+  </main>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
@@ -27,11 +67,17 @@ import { grain, inWallet, walletLink } from "./grain.js";
 const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 
+// Full screen as Saltix shows it: the safe area and the wallet's controls as CSS variables, kept current when the phone
+// turns or unfolds (index.html lays out by them).
+grain.layout();
+
 if (!inWallet()) {
   show("Open this grain in a Saltix wallet:\\n" + walletLink(location.origin + "/.well-known/saltix-grain"));
 } else {
   grain.info().then((info) => { document.body.dataset.theme = info.theme; show(info); });
   grain.on("theme", ({ theme }) => { document.body.dataset.theme = theme; });
+  // The colour at the top of the page: the wallet draws the status bar's icons and its controls to contrast with it.
+  grain.setHeader("#2f6bff").catch(() => {});
   grain.ready();
 }
 
@@ -44,6 +90,107 @@ document.getElementById("count").addEventListener("click", async () => {
     show(\`\${e.code ?? ""} \${e.message}\`);
   }
 });
+`;
+
+/** The rules of a full-screen app, for AGENTS.md (the project's and saltix-grains'). */
+export const fullScreenRules = `Saltix opens every app full screen, edge to edge: the page is drawn under the status bar and the navigation bar,
+and the wallet's controls float over it.
+
+- **Keep text and controls inside the safe area.** \`grain.layout()\` (from \`@saltix/grain\`) sets, on \`:root\`,
+  \`--saltix-safe-top\`, \`--saltix-safe-bottom\`, \`--saltix-safe-left\` and \`--saltix-safe-right\` in pixels
+  (\`grain_info.safe_area\`) and keeps them current. Pad by them; backgrounds may run under the bars.
+- **The wallet's controls \`⋯ | ✕\` float in the top right corner**: \`grain_info.controls\`, and
+  \`--saltix-controls-top\`, \`--saltix-controls-right\`, \`--saltix-controls-width\`, \`--saltix-controls-height\`
+  (a 96 × 48 box, 8 px from the right inset and 4 px below the top one). Never put anything tappable under them. A top
+  bar's title stops short of them (\`padding-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px)\`),
+  or the bar starts below them (\`top: calc(var(--saltix-controls-top) + var(--saltix-controls-height))\`).
+- **No close button of your own.** ✕ and the system's Back close the app; Back goes through your page's history first.
+- \`grain.setHeader("#rrggbb")\` names the colour at the top of your page: the wallet draws the status bar's icons and its
+  controls to contrast with it.
+- Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2) draws its header above the page, so
+  the safe area and the controls are 0; a plain browser gives its own insets (\`env(safe-area-inset-*)\`).
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes in CSS px, which equal dp) in \`grain dev\`'s
+  simulator, light and dark. \`grain lint\` warns about a fixed or sticky top bar that uses none of the variables.
+`;
+
+const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page full screen as Saltix shows it, with
+  the wallet's controls, at a phone's and the Galaxy Z Fold's sizes, light and dark.
+- \`npx grain lint\`: what stops \`grain.json\` from being registered, and warnings about the page.`;
+
+const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the developer key (below); its log is one JSON line per
+  event, and \`{"event":"ready",…}\` means the app answers.
+- \`npx grain lint\`: what stops \`grain.json\` from being registered.
+- \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).`;
+
+/** Where the SDK's page for a coding agent building an app is: a project has no copy of it. */
+export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
+
+/**
+ * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
+ * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, and the
+ * exit status of a key that cannot work.
+ */
+export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
+   (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
+   commit or report it, nor \`owner.key\`, \`server.key\` or any other key; if it is pasted to you, write it with
+   \`(umask 077 && cat > app.key)\` and never repeat it back.
+2. **Raise \`chat.json\`'s \`version\` with every change of it.** Saltix takes a spec only when its version is higher than
+   the one it holds (an app made in Saltix starts at 1): a spec changed under the same version reaches nobody, and nothing
+   says so.
+3. **Unasked messages have a budget**: \`chat.notify\` and \`chat.notification\` count against 10 per user in any 24
+   hours (100 to a member of the app's team). Past it the SDK throws \`ChatBudgetSpent\` and sends nothing
+   (\`chat.notifyTeam\` skips that member), and a wallet drops whatever goes over. Answer requests; never use the budget
+   for promotion.
+4. **Persistent state goes in \`STATE_DIRECTORY\`**, which systemd sets with \`StateDirectory=\`: \`server.mjs\` keeps its
+   store (\`chat.store.json\`: the requests answered, the budget, the team's consoles) there, and in the directory it
+   was started from without one. \`ChatServer\`'s default store keeps them in memory only, and a restart forgets them.
+5. **Exit with status 78 when the key cannot work**: the registry does not name it (replaced, revoked, the app retired,
+   not registered) or it is not a developer key. \`server.mjs\` does, at start and from \`ChatServer\`'s \`onStop\`, and
+   exits with 1 for anything else; a unit with \`RestartPreventExitStatus=78\` then does not restart a server that
+   restarting cannot help.`;
+
+/** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
+export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
+
+Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (Saltix
+specs/12-grains.md${chat ? ", 22-grain-chats.md and 24-app-studio.md" : ""}). \`CLAUDE.md\` points here. The whole path, from a developer
+key to an app that runs, is tested and ships, and what to do with an error report from Saltix's console:
+[the SDK's page for a coding agent](${APP_GUIDE}).
+
+## The one rule to keep
+
+${FULL_SCREEN_RULE}
+
+## What is here
+
+${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): no page; Saltix draws its home from \`chat.json\`.
+- \`chat.json\`: the chat spec: the commands users run (version 2, above the 1 an app made in Saltix starts with).
+- \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave;
+  one handler for each command. \`package.json\`: \`npm start\` runs it.
+- If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the full-screen rules
+  below apply to it.` : `- \`public/\`: the page. \`public/grain.js\` is \`@saltix/grain\`, the wallet's bridge: do not edit it (\`grain init\` copies it).
+- \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).`}
+- \`owner.key\` (and \`server.key\`, \`app.key\` once made): secrets. Never commit, print, log or paste them.
+
+## Commands
+
+${chat ? CHAT_COMMANDS : PAGE_COMMANDS}
+
+## The rules every app follows
+
+${appRules}
+
+More in [the SDK's page](${APP_GUIDE}#the-rules-every-app-follows).
+
+## A full-screen app
+
+${fullScreenRules}`;
+
+export const claudeMd = `# CLAUDE.md
+
+The rules for this project are in [AGENTS.md](AGENTS.md), shared with every coding agent:
+
+@AGENTS.md
 `;
 
 export const gitignore = `owner.key
@@ -62,7 +209,9 @@ export const readme = (slug: string) => `# ${slug}
 A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
 
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
-  debug Saltix (the emulator reaches this computer at 10.0.2.2).
+  debug Saltix (the emulator reaches this computer at 10.0.2.2), or the simulator it prints in a browser.
+- Saltix shows the app full screen: \`AGENTS.md\` says how the page keeps clear of the wallet's controls (coding agents
+  read it too; \`CLAUDE.md\` points to it).
 - \`grain lint\` checks \`grain.json\`; set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
 - Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
 - \`grain publish --node <url>\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7,
@@ -101,6 +250,7 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key --node <url>\` names it in the
   registry; \`grain app-key make --slug ${slug} --node <url>\` writes \`app.key\`, the developer key the server runs with.
 - Run the chat: \`ChatServer.start({ appKey, spec })\` with \`chat.json\` (docs/first-app.md).
+- \`AGENTS.md\` is what a coding agent follows here (\`CLAUDE.md\` points to it).
 
 \`owner.key\`, \`server.key\` and \`app.key\` are secrets: keep them out of git.
 `;

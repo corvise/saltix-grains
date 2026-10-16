@@ -36,6 +36,76 @@
       "size": 18432
     }
   },
+  "hello": {
+    "access": {
+      "members": [
+        {
+          "account": "668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee4",
+          "roles": 2
+        }
+      ],
+      "owner_hex": "e901e9bd7fa34034cd46f6924fb66532dd5fa826baa32075f8d423e24ea09d29",
+      "public": true
+    },
+    "frame_hex": "5347433104060000006163636573731515151515151515151515151515151500505c18a301000006000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee417cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0018dbb2a301000000eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163cb9a1923a36c223b53be94e5d5849753dacce6cfc9689f95519e3ee8ead8166931f0ed61dcb6d41d6f0f57ef23f2ad3e50c0dee74c8ed5557a992cd1d070260d02000000656e17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080cedcdeb45803b5cc43f8fa7e9821f4ea16fafaad9c55fd23cd615f28bcf39f8b465240617f4aacd5a3fb27dcbaff7a42cfe3eb91e16bdb348d39719450f9cfbd01",
+    "introduces_hex": "668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee4",
+    "life_ms": "604800000",
+    "message_hex": "faccba06795f33cda200f500a942d61311b4e1b86c22d5b314c6c13b77ea5be8",
+    "refused": [
+      {
+        "change": "slug = other",
+        "frame_hex": "5347433104050000006f746865721515151515151515151515151515151500505c18a301000006000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee417cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0018dbb2a301000000eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163cb9a1923a36c223b53be94e5d5849753dacce6cfc9689f95519e3ee8ead8166931f0ed61dcb6d41d6f0f57ef23f2ad3e50c0dee74c8ed5557a992cd1d070260d02000000656e17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080cefd9e1a5a8a6142a0d9cef746937a69fb56b3db867525ab0f50f1895c5cef3555fec467c2965dbd366c0df3df28b19b395a08f83d0da7603739fcabab45418904",
+        "why": "a hello for another grain (Slug)"
+      },
+      {
+        "change": "member signed by the owner key",
+        "frame_hex": "5347433104060000006163636573731515151515151515151515151515151500505c18a301000006000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee417cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0018dbb2a30100000048075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd0e196c4b06cc176b4918b97e9db8a195c4f1c3fb9d76f00e8dd1a42e7404b42050683c13ac4c5ad0885f044cf3b0de4d13feebbc68b7406dd6c100bd7fe9000702000000656e17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce39d6fd59ed787af048196a5241a3c96c92b204d0ab2531c4ff304a517b3a6a817190173f52e19b48848d32eb826dab690a4e563eea403593d01ddf1c875be706",
+        "why": "a bad proof: signed by a key that does not speak for the account (Member Signer)"
+      },
+      {
+        "change": "member.proof.grain_key = the server's key",
+        "frame_hex": "5347433104060000006163636573731515151515151515151515151515151500505c18a301000006000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee45e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a90018dbb2a301000000eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee1634c9305f3b00b9fd38d322c18ec3379220545309a710094c2aee85af9482318d58bf5b3b569e5596c6e743a9031d924bd82732b767729724d70f372f836bcfb0802000000656e17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce21a8175be7406da54d37c2d6225c507fd26a2483fe8aba8b81472f2e9fac124468168dc5d1dfcd2a1ac8eebf76cb869503d9414cf5a4b05b78139caa52cd9b08",
+        "why": "a proof for another grain key (Member Mismatch)"
+      },
+      {
+        "change": "lang = RU",
+        "frame_hex": "5347433104060000006163636573731515151515151515151515151515151500505c18a301000006000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee417cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0018dbb2a301000000eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163cb9a1923a36c223b53be94e5d5849753dacce6cfc9689f95519e3ee8ead8166931f0ed61dcb6d41d6f0f57ef23f2ad3e50c0dee74c8ed5557a992cd1d070260d02000000525517cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080cea7ba53c08ab2446544795e255f51f052dc0abf7ab827fc374f0d329d7d38eda9202a93d1cac7af77a93cd509dfdb52219a408a7cc9a509e09573a03b86b4d60c",
+        "why": "in a language out of form: no reader takes it"
+      },
+      {
+        "change": "access.members roles = 1",
+        "why": "an account off the team: a user only (Member NotTeam)"
+      },
+      {
+        "change": "from = the server's address",
+        "why": "relayed from another address than its key's (Sender)"
+      },
+      {
+        "change": "now = at + 7 days + 1 ms",
+        "why": "older than 7 days (Time)"
+      },
+      {
+        "change": "now = at - 5 minutes - 1 ms",
+        "why": "dated ahead (Time)"
+      },
+      {
+        "change": "a second hello of the same key, id 16…16, within an hour of the welcome",
+        "why": "past the rate: taken, the address kept, no welcome"
+      },
+      {
+        "change": "the wallet's hello in flight is 16…16",
+        "what": "welcome",
+        "why": "a welcome for another hello (Unasked)"
+      }
+    ],
+    "signed_hex": "060000006163636573731515151515151515151515151515151500505c18a301000006000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee417cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0018dbb2a301000000eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163cb9a1923a36c223b53be94e5d5849753dacce6cfc9689f95519e3ee8ead8166931f0ed61dcb6d41d6f0f57ef23f2ad3e50c0dee74c8ed5557a992cd1d070260d02000000656e17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080cedcdeb45803b5cc43f8fa7e9821f4ea16fafaad9c55fd23cd615f28bcf39f8b465240617f4aacd5a3fb27dcbaff7a42cfe3eb91e16bdb348d39719450f9cfbd01",
+    "welcome": {
+      "frame_hex": "53474331050600000061636365737315151515151515151515151515151515f4515c18a3010000015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a93d589aedf841f610fc00214db2c4a3f289531268b9f9311241c536f3ef442152809abf8c21ef2994ecc55be5fdf9afb6c4668102005d9a08da264ff862ca5b08",
+      "message_hex": "36daa79d417b706b86c0d8cbc1a37435fae7355198680968e32bcf96d5662269",
+      "signed_hex": "0600000061636365737315151515151515151515151515151515f4515c18a3010000015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a93d589aedf841f610fc00214db2c4a3f289531268b9f9311241c536f3ef442152809abf8c21ef2994ecc55be5fdf9afb6c4668102005d9a08da264ff862ca5b08"
+    },
+    "welcome_every_ms": "3600000"
+  },
   "keys": {
     "member_account_hex": "668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee4",
     "member_secret_hex": "3434343434343434343434343434343434343434343434343434343434343434",
@@ -210,6 +280,8 @@
     "a request comes from its key's personal address, a message from its cert key's; requests live at most 7 days; messages are shown at most 30 days old and 5 minutes ahead",
     "a request's args are sorted by name, each a parameter of its command, every required one present, each of its kind and among its options",
     "FileRef: Borsh {relay: Option<String>, id, key [32], iv [12], hash [32] SHA-256 of the plaintext, size u64, name, mime}; JSON {cmd: file_ref, id, key and iv in standard base64, hash hex, size, name, mime, relay?}",
+    "ChatHello {slug, id [16], at u64 ms, member: SignedMemberProof, lang} is signed by the user's grain key over derive-domain \"Saltix grain chat hello v1\" of genesis_hash ‖ Borsh(hello); SignedChatHello is Borsh {hello, key [32], signature}; frame tag 4, user to server only (22-grain-chats §3a). A server takes it from its key's personal address, for its slug, dated at most 5 minutes ahead and at most 7 days behind, with a proof that checks as a request's and an account on the grain's team (owner, developer 2 or viewer 4; a user 1 is not); it keeps the address and welcomes a key at most once an hour; anything else gets no answer",
+    "ChatWelcome {slug, hello [16]: the hello's id, at u64 ms} is signed by the server key over derive-domain \"Saltix grain chat welcome v1\" of genesis_hash ‖ Borsh(welcome); SignedChatWelcome is Borsh {welcome, server: ServerKey, signature}; frame tag 5, server to user only; a wallet takes it from the server key's address, for the hello in flight, at most 5 minutes ahead",
     "ActionKind = 0 Run {command, args} | 1 Open {start} | 2 Reply {text} | 3 Publish {manifest: String}: the <manifest> of salt:grain-publish?m=<manifest> (12-grains §10), 1–2 027 characters of canonical base64url without padding of one raw DEFLATE stream (nothing after its last block) inflating to at most 16 384 bytes, the canonical Borsh of a GrainManifest whose owner is 32 zero bytes and owner_key Ed25519 32 zero bytes, its slug the message's; at most one Publish a message; otherwise the message is refused whole (another grain's slug: Slug); a wallet shows it only to an account on the grain's team, the button in its own words; readers that predate tag 3 refuse the frame"
   ],
   "server_spec": {

@@ -6,8 +6,10 @@
 // - `ChatMessage`: what the app answers, in blocks and actions, signed by a server key the owner certified or the
 //   registry names (`ServerKey`, §4); an action may propose the grain's next manifest for its owner to approve
 //   (`publish`);
-// - `ChatFrame`: the plaintext of a sealed frame, "SGC1" ‖ Borsh: a request, a message, a newer spec, or the numbers the
-//   app reports (24-app-studio §6a).
+// - `ChatHello`: an account on the grain's team introducing itself to its own app without the user typing, and the
+//   server's `ChatWelcome` (§3a);
+// - `ChatFrame`: the plaintext of a sealed frame, "SGC1" ‖ Borsh: a request, a message, a newer spec, the numbers the
+//   app reports (24-app-studio §6a), a hello or a welcome.
 // Byte for byte the protocol's (vectors/grain-chats-v1.json), with every check its reference makes.
 //
 // No Node APIs here: the simulator runs it in a browser.
@@ -24,6 +26,8 @@ import { type SignedGrainStats, readSignedGrainStats, writeSignedGrainStats } fr
 export const CHAT_SPEC_DOMAIN = "Saltix grain chat spec v1";
 export const CHAT_REQUEST_DOMAIN = "Saltix grain chat request v1";
 export const CHAT_MESSAGE_DOMAIN = "Saltix grain chat message v1";
+export const CHAT_HELLO_DOMAIN = "Saltix grain chat hello v1";
+export const CHAT_WELCOME_DOMAIN = "Saltix grain chat welcome v1";
 /** What a grain-chat frame's plaintext starts with (§4). */
 export const CHAT_FRAME_MAGIC = new TextEncoder().encode("SGC1");
 /** The longest server-key certificate a wallet takes for chat: 31 days, ms. */
@@ -43,6 +47,12 @@ export const MAX_MESSAGE_AGE_MS = 30 * 86_400_000;
 export const MESSAGE_AHEAD_MS = 5 * 60_000;
 /** Plaintext bytes a frame may have (12-grains §5.4). */
 export const MAX_FRAME_BYTES = 48_000;
+/** How old a hello a server still takes may be: a mailbox's keep, ms (§3a). */
+export const HELLO_LIFE_MS = 7 * 86_400_000;
+/** How long a wallet waits for a welcome before it sends a grain's hello again, ms (§3a). */
+export const HELLO_RETRY_MS = 6 * 3_600_000;
+/** How often a server welcomes one grain key at most, ms (§3a). */
+export const WELCOME_EVERY_MS = 3_600_000;
 
 /** The network a request or message is signed for: its genesis hash (hex) and its kind (for addresses). */
 export interface ChainParams {
@@ -215,19 +225,58 @@ export interface SignedChatMessage {
   signature: string;
 }
 
-/** The plaintext of a grain-chat frame, after "SGC1" (§4). `spec` and `stats` go from the server to users only; a
- *  spec frame carries the server key's certificate when the grain's keys are certified rather than registered. */
+/**
+ * An account on the grain's team introducing itself to its own app (§3a): the account's member proof for this grain and
+ * the hello's key, so that the server learns where that member's chat is without the user typing. Never shown, never a
+ * request, in no budget. Ids are 16 bytes of hex, times Unix ms.
+ */
+export interface ChatHello {
+  slug: string;
+  id: string;
+  at: number;
+  member: SignedMemberProof;
+  /** As a request's (`requestLangOk`): no reader takes another form. */
+  lang: string;
+}
+
+export interface SignedChatHello {
+  hello: ChatHello;
+  /** The user's grain key (hex). */
+  key: string;
+  signature: string;
+}
+
+/** The server's answer to a hello it took (§3a): the hello's id. */
+export interface ChatWelcome {
+  slug: string;
+  /** The id of the hello it answers. */
+  hello: string;
+  at: number;
+}
+
+export interface SignedChatWelcome {
+  welcome: ChatWelcome;
+  server: ServerKey;
+  signature: string;
+}
+
+/** The plaintext of a grain-chat frame, after "SGC1" (§4). `spec`, `stats` and `welcome` go from the server to users
+ *  only, `request` and `hello` from users to the server only; a spec frame carries the server key's certificate when the
+ *  grain's keys are certified rather than registered. */
 export type ChatFrame =
   | { request: SignedChatRequest }
   | { message: SignedChatMessage }
   | { spec: { spec: SignedGrainChatSpec; cert: InvoiceKeyCert | null } }
-  | { stats: SignedGrainStats };
+  | { stats: SignedGrainStats }
+  | { hello: SignedChatHello }
+  | { welcome: SignedChatWelcome };
 
 /**
  * Why a check failed, as the reference names it: `slug`, `version`, `bounds:<what>` (`text`, `languages`, `intro`,
  * `choice`, `parameter kind`, `revoked`, `spec size`, `block`, `blocks and actions`, `action`), `language`, `name`,
  * `price`, `server_price` (a server key signed a spec with a price), `unknown_command`, `argument:<name>`, `time`,
- * `cert` (a key that does not speak for the grain), `signature`, `sender`.
+ * `cert` (a key that does not speak for the grain), `signature`, `sender`, `unasked` (a welcome for a hello that is not
+ * in flight).
  */
 export type ChatProblem = string;
 
@@ -472,11 +521,11 @@ function writeRequest(w: Writer, q: ChatRequest): Writer {
   return writeArgs(w.string(q.command), q.args).string(q.text).option(q.member, writeSignedMemberProof).string(q.lang);
 }
 
-/** A request's language, refused unless `requestLangOk`: no reader takes another, as none takes bytes that are not
- *  canonical. */
+/** A request's or a hello's language, refused unless `requestLangOk`: no reader takes another, as none takes bytes
+ *  that are not canonical. */
 function readRequestLang(r: Reader): string {
   const lang = r.string();
-  if (!requestLangOk(lang)) throw new TypeError("borsh: a request's language: \"\" or 2–8 of [a-z-]");
+  if (!requestLangOk(lang)) throw new TypeError("borsh: a language: \"\" or 2–8 of [a-z-]");
   return lang;
 }
 
@@ -604,6 +653,58 @@ export function decodeSignedChatMessage(bytes: Uint8Array): SignedChatMessage {
   return s;
 }
 
+function writeHello(w: Writer, h: ChatHello): Writer {
+  return writeSignedMemberProof(u64Safe(id16(w.string(h.slug), h.id), h.at), h.member).string(h.lang);
+}
+
+function readHello(r: Reader): ChatHello {
+  return { slug: r.string(), id: toHex(r.fixed(16)), at: r.u64n(), member: readSignedMemberProof(r), lang: readRequestLang(r) };
+}
+
+export const encodeChatHello = (h: ChatHello): Uint8Array => writeHello(new Writer(), h).done();
+
+function writeSignedHello(w: Writer, s: SignedChatHello): Writer {
+  return writeHello(w, s.hello).fixed(fromHex(s.key, 32), 32).fixed(fromHex(s.signature, 64), 64);
+}
+
+function readSignedHello(r: Reader): SignedChatHello {
+  return { hello: readHello(r), key: toHex(r.fixed(32)), signature: toHex(r.fixed(64)) };
+}
+
+export const encodeSignedChatHello = (s: SignedChatHello): Uint8Array => writeSignedHello(new Writer(), s).done();
+
+export function decodeSignedChatHello(bytes: Uint8Array): SignedChatHello {
+  const r = new Reader(bytes);
+  const s = readSignedHello(r);
+  r.end();
+  return s;
+}
+
+function writeWelcome(w: Writer, m: ChatWelcome): Writer {
+  return u64Safe(id16(w.string(m.slug), m.hello), m.at);
+}
+
+const readWelcome = (r: Reader): ChatWelcome => ({ slug: r.string(), hello: toHex(r.fixed(16)), at: r.u64n() });
+
+export const encodeChatWelcome = (m: ChatWelcome): Uint8Array => writeWelcome(new Writer(), m).done();
+
+function writeSignedWelcome(w: Writer, s: SignedChatWelcome): Writer {
+  return writeServerKey(writeWelcome(w, s.welcome), s.server).fixed(fromHex(s.signature, 64), 64);
+}
+
+function readSignedWelcome(r: Reader): SignedChatWelcome {
+  return { welcome: readWelcome(r), server: readServerKey(r), signature: toHex(r.fixed(64)) };
+}
+
+export const encodeSignedChatWelcome = (s: SignedChatWelcome): Uint8Array => writeSignedWelcome(new Writer(), s).done();
+
+export function decodeSignedChatWelcome(bytes: Uint8Array): SignedChatWelcome {
+  const r = new Reader(bytes);
+  const s = readSignedWelcome(r);
+  r.end();
+  return s;
+}
+
 /** The frame's plaintext: "SGC1" then its Borsh. */
 export function encodeChatFrame(frame: ChatFrame): Uint8Array {
   const w = new Writer().raw(CHAT_FRAME_MAGIC);
@@ -611,6 +712,8 @@ export function encodeChatFrame(frame: ChatFrame): Uint8Array {
   else if ("message" in frame) writeSignedMessage(w.u8(1), frame.message);
   else if ("spec" in frame) writeSignedSpec(w.u8(2), frame.spec.spec).option(frame.spec.cert, writeCertBody);
   else if ("stats" in frame) writeSignedGrainStats(w.u8(3), frame.stats);
+  else if ("hello" in frame) writeSignedHello(w.u8(4), frame.hello);
+  else if ("welcome" in frame) writeSignedWelcome(w.u8(5), frame.welcome);
   else throw new TypeError("a frame's kind");
   return w.done();
 }
@@ -628,6 +731,8 @@ export function decodeChatFrame(bytes: Uint8Array): ChatFrame {
     case 1: frame = { message: readSignedMessage(r) }; break;
     case 2: frame = { spec: { spec: readSignedSpec(r), cert: r.option(readCertBody) } }; break;
     case 3: frame = { stats: readSignedGrainStats(r) }; break;
+    case 4: frame = { hello: readSignedHello(r) }; break;
+    case 5: frame = { welcome: readSignedWelcome(r) }; break;
     default: throw new TypeError("not a grain-chat frame");
   }
   r.end();
@@ -704,16 +809,19 @@ export function signedChatSpecProblem(signed: SignedGrainChatSpec, slug: string,
   return ok ? null : "signature";
 }
 
+/** The keys a chat spec revokes: a spec, or `{ revoked: [] }` while a wallet holds none yet. */
+export type Revoking = Pick<GrainChatSpec, "revoked">;
+
 /** Whether `server` may speak in `slug`'s chat at `now` (§1): a certificate that holds (`chatCertHolds`), or a key of
  *  `servers`, the grain's registry record's at the wallet's canonical beacon block; either not revoked by `spec`. */
-export function serverKeyHolds(server: ServerKey, slug: string, ownerKey: DeviceKey, servers: readonly string[], spec: GrainChatSpec, now: number): boolean {
+export function serverKeyHolds(server: ServerKey, slug: string, ownerKey: DeviceKey, servers: readonly string[], spec: Revoking, now: number): boolean {
   if ("certified" in server) return chatCertHolds(server.certified, slug, ownerKey, spec, now);
   return servers.includes(server.registered) && !spec.revoked.includes(server.registered);
 }
 
 /** Whether `cert` lets its key speak in `slug`'s chat at `now` (§1): signed by `ownerKey`, unexpired, ending within
  *  `CHAT_CERT_LIFE_MS`, not revoked by `spec`. */
-export function chatCertHolds(cert: InvoiceKeyCert, slug: string, ownerKey: DeviceKey, spec: GrainChatSpec, now: number): boolean {
+export function chatCertHolds(cert: InvoiceKeyCert, slug: string, ownerKey: DeviceKey, spec: Revoking, now: number): boolean {
   return cert.slug === slug &&
     cert.expires_at > now &&
     cert.expires_at <= now + CHAT_CERT_LIFE_MS &&
@@ -897,7 +1005,70 @@ export function chatMessageProblem(
   return verifies(key, chatMessageToSign(s.message, check.chain.genesis), s.signature) ? null : "signature";
 }
 
-/** 16 random bytes in hex: a request's or a message's id. */
+// ── the hello and the welcome (§3a) ──
+
+/** Whether a server whose clock reads `now` takes `h`: dated at most 5 minutes ahead and at most `HELLO_LIFE_MS`
+ *  behind. */
+export const helloTimely = (h: ChatHello, now: number): boolean => h.at <= now + MESSAGE_AHEAD_MS && now - h.at <= HELLO_LIFE_MS;
+
+/** What the user's grain key signs: the hello on the network of `genesis` (hex). */
+export const chatHelloToSign = (h: ChatHello, genesis: string): Uint8Array =>
+  derive(CHAT_HELLO_DOMAIN, fromHex(genesis, 32), encodeChatHello(h));
+
+/** `h` signed by the user's grain key (`grainSecret`): what the wallet of an account on the grain's team sends. For tests
+ *  and TypeScript clients (the simulator). */
+export function signChatHello(h: ChatHello, grainSecret: Uint8Array, genesis: string): SignedChatHello {
+  if (!requestLangOk(h.lang)) throw new TypeError("hello: lang is \"\" or 2–8 of [a-z-]");
+  return { hello: h, key: toHex(ed25519.getPublicKey(grainSecret)), signature: toHex(ed25519.sign(chatHelloToSign(h, genesis), grainSecret)) };
+}
+
+/**
+ * What a server checks of a hello itself before it reads its proof (§3a), in the reference's order: for its `slug`, it
+ * came from the signing key's personal address `from`, its language is in form, the signature holds on this chain, and
+ * it is timely at `now`. Whose it is (the member proof, against the registry) is `introductionProblem`'s. The problem,
+ * or null.
+ */
+export function chatHelloProblem(s: SignedChatHello, check: { chain: ChainParams; slug: string; from: string; now: number }): ChatProblem | null {
+  if (s.hello.slug !== check.slug) return "slug";
+  if (!isPersonalAddressOf(check.from, s.key, check.chain.network)) return "sender";
+  if (typeof s.hello.lang !== "string" || !requestLangOk(s.hello.lang)) return "language";
+  if (!verifies(s.key, chatHelloToSign(s.hello, check.chain.genesis), s.signature)) return "signature";
+  return helloTimely(s.hello, check.now) ? null : "time";
+}
+
+/** What the server key signs: the welcome on the network of `genesis` (hex). */
+export const chatWelcomeToSign = (m: ChatWelcome, genesis: string): Uint8Array =>
+  derive(CHAT_WELCOME_DOMAIN, fromHex(genesis, 32), encodeChatWelcome(m));
+
+/** `m` signed with the server key `serverSecret`: under the certificate `cert` for that key, or without one as a key the
+ *  grain's registry record names, as messages are signed (`signChatMessage`). */
+export function signChatWelcome(m: ChatWelcome, serverSecret: Uint8Array, genesis: string, cert?: InvoiceKeyCert | null): SignedChatWelcome {
+  const key = toHex(ed25519.getPublicKey(serverSecret));
+  if (cert && key !== cert.key) throw new TypeError("the certificate is not the server key's");
+  const server: ServerKey = cert ? { certified: cert } : { registered: key };
+  return { welcome: m, server, signature: toHex(ed25519.sign(chatWelcomeToSign(m, genesis), serverSecret)) };
+}
+
+/**
+ * What a wallet checks before it takes a welcome (§3a), in the reference's order: for `slug`, naming `hello` (the id of
+ * the hello in flight), from the server key's personal address `from`, a key that speaks for the grain
+ * (`serverKeyHolds`: a certificate of `ownerKey`, or one of `servers`; neither revoked by the spec the wallet holds, or
+ * by none), dated at most 5 minutes ahead of `now`, and signed. The problem, or null.
+ */
+export function chatWelcomeProblem(
+  s: SignedChatWelcome,
+  check: { chain: ChainParams; slug: string; hello: string; ownerKey: DeviceKey; servers?: readonly string[]; spec?: Revoking | null; from: string; now: number },
+): ChatProblem | null {
+  if (s.welcome.slug !== check.slug) return "slug";
+  if (s.welcome.hello !== check.hello) return "unasked";
+  const key = serverKeyOf(s.server);
+  if (!isPersonalAddressOf(check.from, key, check.chain.network)) return "sender";
+  if (!serverKeyHolds(s.server, check.slug, check.ownerKey, check.servers ?? [], check.spec ?? { revoked: [] }, check.now)) return "cert";
+  if (s.welcome.at > check.now + MESSAGE_AHEAD_MS) return "time";
+  return verifies(key, chatWelcomeToSign(s.welcome, check.chain.genesis), s.signature) ? null : "signature";
+}
+
+/** 16 random bytes in hex: a request's, a message's or a hello's id. */
 export function newChatId(): string {
   return toHex((globalThis as { crypto: Crypto }).crypto.getRandomValues(new Uint8Array(16)));
 }

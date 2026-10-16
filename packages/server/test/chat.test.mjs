@@ -1,7 +1,8 @@
 // Grain chats as vectors/grain-chats-v1.json has them (Saltix 22-grain-chats, 24-app-studio, 09-relay §10.5.2): every
 // object the protocol's generator builds, built here and compared byte for byte — specs signed by the owner and by a
 // registered server key, messages under a certificate and under a registered key, a member's proof, the numbers an app
-// reports —; what the file says is refused, refused; and the reference's own negative cases.
+// reports, the team's hello and the server's welcome —; what the file says is refused, refused; and the reference's own
+// negative cases.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -18,7 +19,9 @@ import {
   signChatSpecAsServer, serverKeyHolds, decodeChatDocument, signMemberProof, memberProofToSign, encodeSignedMemberProof,
   decodeSignedMemberProof, admits, signGrainStats, grainStatsToSign, encodeSignedGrainStats, decodeSignedGrainStats, grainStatsProblem,
   STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS, encodeManifest, readPublishText, readPublishLink, publishText, proposedManifest, teamOnly,
-  UNOWNED,
+  UNOWNED, encodeChatHello, encodeSignedChatHello, decodeSignedChatHello, chatHelloToSign, signChatHello, chatHelloProblem, helloTimely,
+  encodeChatWelcome, encodeSignedChatWelcome, decodeSignedChatWelcome, chatWelcomeToSign, signChatWelcome, chatWelcomeProblem,
+  introductionProblem, HELLO_LIFE_MS, HELLO_RETRY_MS, WELCOME_EVERY_MS, ROLES,
 } from "../dist/index.js";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/grain-chats-v1.json", import.meta.url), "utf8"));
@@ -263,6 +266,108 @@ test("an update proposed in the console is the node's, and what the file says is
   }
   // The SDK never signs one of them.
   for (const r of p.refused) assert.throws(() => signChatMessage(decodeChatFrame(fromHex(r.frame_hex)).message.message, SERVER, chain.genesis), /chat message/);
+});
+
+/** The developer's wallet introduces itself to the app: the member's proof for the user's grain key. */
+const hello = () => ({ slug: "access", id: repeat("15", 16), at: NOW, member: signMemberProof(memberProof(), MEMBER, chain.genesis), lang: "en" });
+const welcome = () => ({ slug: "access", hello: repeat("15", 16), at: NOW + 500 });
+
+test("the team's hello and the server's welcome are the node's, and what the file says is refused is refused", () => {
+  const h = v.hello;
+  // The public access grain, with the member as its developer.
+  const team = { owner: h.access.owner_hex, public: h.access.public, members: h.access.members };
+  assert.deepEqual(team.members, [{ account: v.keys.member_account_hex, roles: ROLES.developer }]);
+  assert.equal(Number(h.life_ms), HELLO_LIFE_MS);
+  assert.equal(Number(h.welcome_every_ms), WELCOME_EVERY_MS);
+  assert.equal(HELLO_RETRY_MS, 6 * 3_600_000, "a wallet's retry: 6 hours (22-grain-chats §10)");
+
+  const signed = signChatHello(hello(), USER, chain.genesis);
+  assert.equal(hex(chatHelloToSign(hello(), chain.genesis)), h.message_hex);
+  assert.equal(hex(encodeSignedChatHello(signed)), h.signed_hex);
+  assert.equal(hex(encodeChatFrame({ hello: signed })), h.frame_hex);
+  assert.deepEqual(decodeSignedChatHello(fromHex(h.signed_hex)), signed);
+  assert.deepEqual(decodeChatFrame(fromHex(h.frame_hex)), { hello: signed });
+  assert.equal(hex(encodeChatFrame(decodeChatFrame(fromHex(h.frame_hex)))), h.frame_hex);
+  const read = decodeSignedChatHello(fromHex(h.signed_hex));
+  assert.equal(chatHelloProblem(read, { chain, slug: "access", from: userAddress, now: NOW }), null);
+  const introduce = (s, access = team, now = NOW) =>
+    introductionProblem(access, { genesis: chain.genesis, slug: "access", helloKey: s.key, proof: s.hello.member, controller: null, now });
+  assert.equal(introduce(read), null);
+  assert.equal(read.hello.member.proof.account, h.introduces_hex, "the account it introduces");
+
+  // The welcome, from the registered key, for this hello.
+  const signedWelcome = signChatWelcome(welcome(), SERVER, chain.genesis);
+  assert.deepEqual(signedWelcome.server, { registered: v.keys.server_public_hex });
+  assert.equal(hex(chatWelcomeToSign(welcome(), chain.genesis)), h.welcome.message_hex);
+  assert.equal(hex(encodeSignedChatWelcome(signedWelcome)), h.welcome.signed_hex);
+  assert.equal(hex(encodeChatFrame({ welcome: signedWelcome })), h.welcome.frame_hex);
+  assert.deepEqual(decodeSignedChatWelcome(fromHex(h.welcome.signed_hex)), signedWelcome);
+  assert.deepEqual(decodeChatFrame(fromHex(h.welcome.frame_hex)), { welcome: signedWelcome });
+  const s = decodeSignedChatSpec(v.spec_doc.signed_hex).spec;
+  const taken = (w, over = {}) =>
+    chatWelcomeProblem(w, { chain, slug: "access", hello: read.hello.id, ownerKey, servers, spec: s, from: serverAddress, now: NOW, ...over });
+  assert.equal(taken(decodeSignedChatWelcome(fromHex(h.welcome.signed_hex))), null);
+
+  // Every refusal the file lists, each as it says.
+  const refused = h.refused;
+  assert.equal(refused.length, 10);
+  const handled = new Set();
+  const frameOf = (why) => {
+    const c = refused.find((r) => r.why.startsWith(why));
+    assert.ok(c, why);
+    handled.add(c.why);
+    return c.frame_hex === undefined ? null : fromHex(c.frame_hex);
+  };
+  const helloOf = (why) => decodeChatFrame(frameOf(why)).hello;
+  assert.equal(chatHelloProblem(helloOf("a hello for another grain"), { chain, slug: "access", from: userAddress, now: NOW }), "slug");
+  const bad = helloOf("a bad proof");
+  assert.equal(chatHelloProblem(bad, { chain, slug: "access", from: userAddress, now: NOW }), null, "the hello itself checks");
+  assert.equal(introduce(bad), "signer");
+  const lent = helloOf("a proof for another grain key");
+  assert.equal(chatHelloProblem(lent, { chain, slug: "access", from: userAddress, now: NOW }), null);
+  assert.equal(introduce(lent), "mismatch");
+  assert.throws(() => decodeChatFrame(frameOf("in a language out of form")), TypeError, "no reader takes it");
+  frameOf("an account off the team");
+  assert.equal(introduce(read, { ...team, members: team.members.map((m) => ({ ...m, roles: ROLES.user })) }), "not_team");
+  assert.equal(introduce(read, { ...team, members: [] }), "not_team", "a stranger");
+  assert.equal(introduce(read, { ...team, members: team.members.map((m) => ({ ...m, roles: ROLES.viewer })) }), null, "a viewer is on the team");
+  assert.equal(introduce(read, { ...team, public: false }), null, "public grain or private");
+  assert.equal(introduce(read, { ...team, owner: h.introduces_hex, members: [] }), null, "the owner");
+  frameOf("relayed from another address");
+  assert.equal(chatHelloProblem(read, { chain, slug: "access", from: serverAddress, now: NOW }), "sender");
+  frameOf("older than 7 days");
+  assert.equal(chatHelloProblem(read, { chain, slug: "access", from: userAddress, now: NOW + HELLO_LIFE_MS + 1 }), "time");
+  assert.equal(chatHelloProblem(read, { chain, slug: "access", from: userAddress, now: NOW + HELLO_LIFE_MS }), null, "7 days to the ms");
+  frameOf("dated ahead");
+  assert.equal(chatHelloProblem(read, { chain, slug: "access", from: userAddress, now: NOW - MESSAGE_AHEAD_MS - 1 }), "time");
+  assert.equal(chatHelloProblem(read, { chain, slug: "access", from: userAddress, now: NOW - MESSAGE_AHEAD_MS }), null, "5 minutes to the ms");
+  // Past the rate is the server's to keep (chat-server tests): an hour between welcomes of one key.
+  frameOf("past the rate");
+  frameOf("a welcome for another hello");
+  assert.equal(taken(signedWelcome, { hello: repeat("16", 16) }), "unasked");
+  assert.equal(handled.size, refused.length, "every refusal of the file is checked");
+
+  // The reference's other cases: a hello's signature, its network, the proof's life, a welcome's sender, key, time and
+  // signature, and a certified key's welcome.
+  assert.equal(chatHelloProblem({ ...read, signature: repeat("00", 64) }, { chain, slug: "access", from: userAddress, now: NOW }), "signature");
+  assert.equal(chatHelloProblem(read, { chain: { ...chain, genesis: repeat("6d", 32) }, slug: "access", from: userAddress, now: NOW }), "signature");
+  assert.equal(chatHelloProblem({ ...read, hello: { ...read.hello, lang: "RU" } }, { chain, slug: "access", from: userAddress, now: NOW }), "language");
+  assert.equal(introduce(read, team, PROOF_EXPIRES), "expired");
+  assert.equal(introduce({ ...read, hello: { ...read.hello, member: { ...read.hello.member, signature: repeat("00", 64) } } }), "signature");
+  assert.ok(helloTimely(hello(), NOW) && !helloTimely(hello(), NOW + HELLO_LIFE_MS + 1));
+  assert.equal(taken(signedWelcome, { slug: "other" }), "slug");
+  assert.equal(taken(signedWelcome, { from: userAddress }), "sender");
+  assert.equal(taken(signedWelcome, { servers: [] }), "cert", "a key the registry does not name");
+  assert.equal(taken(signedWelcome, { spec: { revoked: [v.keys.server_public_hex] } }), "cert", "a key the spec revokes");
+  assert.equal(taken(signedWelcome, { now: NOW + 500 - MESSAGE_AHEAD_MS - 1 }), "time");
+  assert.equal(taken({ ...signedWelcome, signature: repeat("00", 64) }), "signature");
+  assert.equal(taken(signedWelcome, { spec: null }), null, "before any spec is held");
+  const certified = signChatWelcome(welcome(), SERVER, chain.genesis, cert());
+  assert.equal(taken(certified, { servers: [] }), null, "under the owner key's certificate");
+  assert.throws(() => signChatWelcome(welcome(), USER, chain.genesis, cert()), /certificate/);
+  assert.throws(() => signChatHello({ ...hello(), lang: "RU" }, USER, chain.genesis), /lang/, "the SDK never signs a hello out of form");
+  assert.equal(hex(encodeChatHello(hello())), h.signed_hex.slice(0, -192), "the hello, then its key and signature");
+  assert.equal(hex(encodeChatWelcome(welcome())), h.welcome.signed_hex.slice(0, -194), "the welcome, then its key and signature");
 });
 
 test("a client checks everything from the file alone", () => {
@@ -675,8 +780,8 @@ test("frames: the magic, the size, and nothing but a frame", () => {
   other[3] = 0x32;
   assert.throws(() => decodeChatFrame(other), /grain-chat frame/, "SGC2");
   const tag = frame.slice();
-  tag[4] = 4;
-  assert.throws(() => decodeChatFrame(tag), /grain-chat frame/, "no such frame");
+  tag[4] = 6;
+  assert.throws(() => decodeChatFrame(tag), /grain-chat frame/, "no such frame: tags 0–5 (a hello is 4, a welcome 5)");
   assert.throws(() => decodeChatFrame(Uint8Array.of(...frame, 0)), /left over/);
   assert.throws(() => decodeChatFrame(frame.subarray(0, frame.length - 1)), /short/);
   const big = new Uint8Array(MAX_FRAME_BYTES + 1);

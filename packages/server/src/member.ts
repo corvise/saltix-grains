@@ -5,7 +5,8 @@
 // Byte for byte vectors/grain-chats-v1.json.
 //
 // The grain's team (its owner, developers and viewers, 24-app-studio §2a, §4) sends its proof to its own grain, public
-// or private, so that the server learns where each member's chat is: `teamMemberOf`.
+// or private, with its requests and in a hello of its own (22-grain-chats §3a), so that the server learns where each
+// member's chat is: `teamMemberOf`, `introductionProblem` (the reference's `grain::member::introduces`).
 //
 // No Node APIs here: the simulator runs it in a browser.
 import { ed25519 } from "@noble/curves/ed25519";
@@ -49,8 +50,9 @@ export interface Controller {
   devices: Array<{ key: DeviceKey; kind: string }>;
 }
 
-/** Why a member proof is refused, as the reference names it (`MemberError`). */
-export type MemberProblem = "missing" | "mismatch" | "expired" | "signer" | "signature" | "not_member";
+/** Why a member proof is refused, as the reference names it (`MemberError`): `not_member` for a private grain's request
+ *  from an account that may not use it, `not_team` for a hello from an account off the grain's team. */
+export type MemberProblem = "missing" | "mismatch" | "expired" | "signer" | "signature" | "not_member" | "not_team";
 
 export function writeMemberProof(w: Writer, p: MemberProof): Writer {
   if (!Number.isSafeInteger(p.expires_at) || p.expires_at < 0) throw new TypeError("expires_at: Unix ms");
@@ -153,9 +155,9 @@ export function admits(
 
 type ProofCheck = { genesis: string; slug: string; requestKey: string; proof: SignedMemberProof | null; now: number };
 
-/** Whether `s` holds but for its signer: for this grain and the request's key, alive for at most 30 days, and its
- *  signature checks. Only then is the account's controller worth asking the node for. */
-function holdsButSigner(s: SignedMemberProof, check: ProofCheck): boolean {
+/** Whether `s` holds but for its signer: for this grain and the request's (or the hello's) key, alive for at most 30
+ *  days, and its signature checks. Only then is the account's controller worth asking the node for. */
+export function holdsButSigner(s: SignedMemberProof, check: ProofCheck): boolean {
   const p = s.proof;
   return p.slug === check.slug && p.grain_key === check.requestKey && p.expires_at > check.now &&
     p.expires_at <= check.now + MEMBER_PROOF_LIFE_MS && verifyByDeviceKey(s.key, memberProofToSign(p, check.genesis), s.signature);
@@ -179,13 +181,29 @@ export function needsTeamController(access: GrainAccess, check: ProofCheck): boo
 }
 
 /**
- * The account on the grain's team that `proof` shows is behind the request's key (24-app-studio §4), or null: a proof
- * that `memberProofProblem` passes, signed by a key that speaks for an account on the team now (`controller`, the
- * account's). What a server learns where its team's chats are from; it admits nobody to a private grain (`admits`).
+ * Why `proof` does not introduce an account on the grain's team as the one behind `helloKey` (22-grain-chats §3a), or
+ * null (the reference's `member::introduces`, in its order): `memberProofProblem` passes it for this grain and key, and
+ * the account is the owner, a developer or a viewer (`not_team` otherwise; a user alone is not on the team). Public
+ * grain or private alike.
+ */
+export function introductionProblem(
+  access: GrainAccess,
+  check: { genesis: string; slug: string; helloKey: string; proof: SignedMemberProof; controller: Controller | null; now: number },
+): MemberProblem | null {
+  const problem = memberProofProblem(check.proof, { genesis: check.genesis, slug: check.slug, grainKey: check.helloKey, controller: check.controller, now: check.now });
+  if (problem) return problem;
+  return onTeam(access, check.proof.proof.account) ? null : "not_team";
+}
+
+/**
+ * The account on the grain's team that `proof` shows is behind the request's (or the hello's) key (24-app-studio §4),
+ * or null: a proof that `introductionProblem` passes, signed by a key that speaks for an account on the team now
+ * (`controller`, the account's). What a server learns where its team's chats are from; it admits nobody to a private
+ * grain (`admits`).
  */
 export function teamMemberOf(access: GrainAccess, check: ProofCheck & { controller: Controller | null }): string | null {
   const s = check.proof;
-  if (!s || !onTeam(access, s.proof.account)) return null;
-  const problem = memberProofProblem(s, { genesis: check.genesis, slug: check.slug, grainKey: check.requestKey, controller: check.controller, now: check.now });
+  if (!s) return null;
+  const problem = introductionProblem(access, { genesis: check.genesis, slug: check.slug, helloKey: check.requestKey, proof: s, controller: check.controller, now: check.now });
   return problem === null ? s.proof.account : null;
 }

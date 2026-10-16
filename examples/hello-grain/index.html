@@ -5,24 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Hello, grain</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #f4f6fb; color: #0b1020; }
+    /* Full screen, as Saltix shows every app (AGENTS.md): grain.layout() in app.js sets these variables; the values here
+       hold until it does, and outside a wallet. */
+    :root {
+      --saltix-safe-top: env(safe-area-inset-top, 0px);
+      --saltix-safe-bottom: env(safe-area-inset-bottom, 0px);
+      --saltix-safe-left: env(safe-area-inset-left, 0px);
+      --saltix-safe-right: env(safe-area-inset-right, 0px);
+      --saltix-controls-top: 0px;
+      --saltix-controls-right: 0px;
+      --saltix-controls-width: 0px;
+      --saltix-controls-height: 0px;
+    }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6fb; color: #0b1020; }
     body[data-theme="dark"] { background: #0b1020; color: #e6ecff; }
-    h1 { font-size: 20px; }
+    /* The top bar runs under the status bar; its title sits level with the wallet's ⋯ | ✕ and stops short of them. */
+    header {
+      position: sticky; top: 0; z-index: 1; background: #2f6bff; color: white;
+      padding-top: max(var(--saltix-safe-top), var(--saltix-controls-top));
+      padding-left: calc(16px + var(--saltix-safe-left));
+      padding-right: max(calc(16px + var(--saltix-safe-right)), calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px));
+    }
+    h1 { font-size: 20px; margin: 0; display: flex; align-items: center; min-height: max(48px, var(--saltix-controls-height)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    main {
+      box-sizing: border-box; max-width: 720px; margin: 0 auto;
+      padding: 16px calc(16px + var(--saltix-safe-right)) calc(16px + var(--saltix-safe-bottom)) calc(16px + var(--saltix-safe-left));
+    }
     button, input { font: inherit; padding: 12px; border-radius: 12px; border: 1px solid #8aa0d8; width: 100%; margin: 6px 0; box-sizing: border-box; }
     button { background: #2f6bff; color: white; border: none; }
     pre { white-space: pre-wrap; font-size: 12px; background: rgba(127,127,127,.12); padding: 10px; border-radius: 10px; }
   </style>
 </head>
 <body>
-  <h1>Hello, grain</h1>
-  <button id="login">Sign in with the wallet</button>
-  <input id="note" placeholder="A note, kept in your vault">
-  <button id="save">Save the note</button>
-  <button id="read">Read the note</button>
-  <button id="address">Show my address</button>
-  <button id="pay">Pay 0.001 SALT by invoice</button>
-  <button id="chat">Open the chat</button>
-  <pre id="out"></pre>
+  <header><h1>Hello, grain</h1></header>
+  <main>
+    <button id="login">Sign in with the wallet</button>
+    <input id="note" placeholder="A note, kept in your vault">
+    <button id="save">Save the note</button>
+    <button id="read">Read the note</button>
+    <button id="address">Show my address</button>
+    <button id="pay">Pay 0.001 SALT by invoice</button>
+    <button id="chat">Open the chat</button>
+    <pre id="out"></pre>
+  </main>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -1,9 +1,12 @@
 // `grain dev`: serve a grain's `public/` on this computer with its manifest signed for the origin each request came
 // to — localhost for a browser, 10.0.2.2 for a debug Saltix in the Android emulator (developer origins, 12-grains §10).
-// A sealed grain's bundle is made from `public/` for every manifest asked for and served at `/_bundle.zip`.
+// A sealed grain's bundle is made from `public/` for every manifest asked for and served at `/_bundle.zip`. The
+// simulator (saltix-grains' `simulator/`, built into this package) is at `/_simulator/`: the page full screen as Saltix
+// shows it, with the wallet's controls, at a phone's and the Galaxy Z Fold's sizes, and the bridge answered.
 import { createServer, type Server } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, normalize, extname, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Manifest } from "@saltix/grain-server";
 import { forOrigin, sign, originOf } from "./project.js";
 import { makeBundle, sealed } from "./bundle.js";
@@ -16,6 +19,17 @@ const TYPES: Record<string, string> = {
 
 export const WELL_KNOWN = "/.well-known/saltix-grain";
 export const DEV_BUNDLE = "/_bundle.zip";
+/** Where the simulator is served; it loads the manifest and opens the page. */
+export const SIMULATOR = "/_simulator/";
+/** The simulator's files, built next to this module. */
+const SIMULATOR_DIR = fileURLToPath(new URL("./simulator/", import.meta.url));
+
+/** The file of `dir` that `path` (below it, already decoded) names, or null when it would leave `dir` or is none. */
+function fileIn(dir: string, path: string): string | null {
+  const root = dir.endsWith(sep) ? dir.slice(0, -1) : dir;
+  const file = normalize(join(root, path.endsWith("/") ? path + "index.html" : path));
+  return file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile() ? file : null;
+}
 
 /** The server; `manifest` is read again for every request, so edits show without a restart. */
 export function serve(root: string, manifest: () => Manifest, secret: Uint8Array, port: number, host = "0.0.0.0"): Promise<Server> {
@@ -24,6 +38,16 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
   let bundle: Uint8Array | null = null;
   const server = createServer((req, res) => {
     const path = decodeURIComponent((req.url ?? "/").split("?")[0]!);
+    if (path === SIMULATOR.slice(0, -1)) {
+      res.writeHead(302, { location: SIMULATOR }).end();
+      return;
+    }
+    if (path.startsWith(SIMULATOR)) {
+      const file = fileIn(SIMULATOR_DIR, path.slice(SIMULATOR.length - 1));
+      if (file === null) res.writeHead(404).end("not found");
+      else res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" }).end(readFileSync(file));
+      return;
+    }
     if (path === DEV_BUNDLE) {
       if (bundle === null) res.writeHead(404).end("ask for the manifest first");
       else res.writeHead(200, { "content-type": "application/zip", "cache-control": "no-store" }).end(bundle);
@@ -52,8 +76,8 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
       }
       return;
     }
-    const file = normalize(join(publicDir, path.endsWith("/") ? path + "index.html" : path));
-    if (!file.startsWith(publicDir + sep) || !existsSync(file) || !statSync(file).isFile()) {
+    const file = fileIn(publicDir, path);
+    if (file === null) {
       res.writeHead(404).end("not found");
       return;
     }
@@ -71,3 +95,6 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
 
 /** The link that opens the grain served at `origin`. */
 export const linkFor = (origin: string) => "salt:grain?manifest=" + encodeURIComponent(origin + WELL_KNOWN);
+
+/** The simulator's page for the grain served at `origin`. */
+export const simulatorFor = (origin: string) => `${origin}${SIMULATOR}?manifest=${encodeURIComponent(WELL_KNOWN)}`;

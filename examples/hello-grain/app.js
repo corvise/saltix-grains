@@ -6,11 +6,17 @@ const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 const run = (id, fn) => document.getElementById(id).addEventListener("click", () => fn().catch((e) => show(`${e.code ?? ""} ${e.message}`)));
 
+// Full screen as Saltix shows it: the safe area and the wallet's controls as CSS variables, kept current when the phone
+// turns or unfolds (index.html lays out by them).
+grain.layout();
+
 if (!inWallet()) {
   show("Open this grain in a Saltix wallet:\n" + walletLink(`${location.origin}/.well-known/saltix-grain`));
 } else {
   grain.info().then((info) => { document.body.dataset.theme = info.theme; show(info); });
   grain.on("theme", ({ theme }) => { document.body.dataset.theme = theme; });
+  // The colour at the top of the page: the wallet draws the status bar's icons and its controls to contrast with it.
+  grain.setHeader("#2f6bff").catch(() => {});
   grain.ready();
 }
 

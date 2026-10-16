@@ -2,7 +2,8 @@
 // server key, takes their requests as the spec says (§3) — a private grain's from its owner and members only —, routes
 // each to a handler by command, and answers with cards it signs (§4). Requests are answered once each; the app writes
 // unasked within the daily budget; a newer spec reaches users; the numbers it reports are signed hourly. The grain's
-// team (24-app-studio §4) is known from the registry and reached in its console, where errors are reported.
+// team (24-app-studio §4) is known from the registry and reached in its console, where errors are reported; its wallets
+// introduce themselves with a hello (22-grain-chats §3a), which the server welcomes, so nobody has to write first.
 //
 // Its key speaks for the grain in either of two ways: registered (the grain's registry record names it; a developer
 // key carries it, and is the server's whole configuration), or certified by the owner key for at most 31 days.
@@ -12,10 +13,11 @@ import { accountId, decodeAddress, encodeAddress } from "./address.js";
 import { AppKey } from "./app-key.js";
 import { fromHex, toBase64, toHex } from "./bytes.js";
 import {
-  CHAT_CERT_LIFE_MS, CHAT_FRAME_MAGIC, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, MAX_FRAME_BYTES, type ChainParams,
-  type ChatDocument, type ChatMessage, type ChatRequest, type GrainChatSpec, type SignedChatRequest, type SignedGrainChatSpec,
-  chatCertHolds, chatDocumentOf, chatMessageBoundsProblem, chatRequestProblem, chatSpecProblem, commandOf, decodeChatFrame,
-  decodeSignedChatSpec, encodeChatFrame, newChatId, signChatMessage, signChatSpecAsServer, signedChatSpecProblem,
+  CHAT_CERT_LIFE_MS, CHAT_FRAME_MAGIC, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, MAX_FRAME_BYTES, WELCOME_EVERY_MS,
+  type ChainParams, type ChatDocument, type ChatMessage, type ChatRequest, type GrainChatSpec, type SignedChatHello,
+  type SignedChatRequest, type SignedGrainChatSpec, chatCertHolds, chatDocumentOf, chatHelloProblem, chatMessageBoundsProblem,
+  chatRequestProblem, chatSpecProblem, commandOf, decodeChatFrame, decodeSignedChatSpec, encodeChatFrame, newChatId,
+  signChatMessage, signChatSpecAsServer, signChatWelcome, signedChatSpecProblem,
 } from "./chat.js";
 import { type Args, Card, argOf } from "./chat-card.js";
 import { type ChatStore, type ChatUsage, UsageWindow, memoryChatStore } from "./chat-store.js";
@@ -24,7 +26,8 @@ import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
 import type { Manifest } from "./manifest.js";
 import {
-  type GrainAccess, type MemberProblem, TEAM_ROLES, admits, needsController, needsTeamController, onTeam, rolesOf, teamMemberOf,
+  type GrainAccess, type MemberProblem, TEAM_ROLES, admits, holdsButSigner, introductionProblem, needsController, needsTeamController,
+  onTeam, rolesOf, teamMemberOf,
 } from "./member.js";
 import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
@@ -43,6 +46,16 @@ export type ChatLog = (level: "info" | "warn" | "error", event: string, meta?: R
 
 /** How often the server asks the registry whether it still names its key, by default: 5 minutes. */
 export const REGISTRY_CHECK_MS = 5 * 60_000;
+/**
+ * How many hellos a minute the server checks against the registry and the node, by default (22-grain-chats §3a): those
+ * that pass every check needing neither, so a flood of hellos never makes the server hammer its node. A team is a few
+ * dozen accounts whose wallets say hello once per launch at most, and only until welcomed; past the cap a hello is
+ * dropped and its wallet tries again within `HELLO_RETRY_MS`.
+ */
+export const HELLO_CHECKS_PER_MINUTE = 30;
+const MINUTE_MS = 60_000;
+/** Keys welcomed within the hour that the server remembers at most: they are its team's devices. */
+const MAX_WELCOMED = 4_096;
 const SWEEP_MS = 10 * 60_000;
 const UNASKED = { answers: null, expiresAt: null, replaces: null } as const;
 const DAY_MS = 86_400_000;
@@ -101,6 +114,8 @@ export interface ChatServerOptions {
   /** What error reports and logs must never carry besides developer keys and long hex: your own tokens, as text (8
    *  characters or more) or patterns. */
   redact?: ReadonlyArray<string | RegExp>;
+  /** How many hellos a minute are checked against the registry and the node (default `HELLO_CHECKS_PER_MINUTE`). */
+  helloChecksPerMinute?: number;
 }
 
 /** Why a server with a registered key stopped: the registry dropped the key from the grain's record (`revoked`: no key
@@ -184,13 +199,13 @@ export interface TeamMember {
   owner: boolean;
   /** A bit set of `ROLES`. */
   roles: number;
-  /** Their address in the grain, from the proof their wallet sent with a request; null until they have written to the
-   *  app once, and the app cannot reach them before. */
+  /** Their address in the grain, from the proof their wallet sent in its hello (22-grain-chats §3a) or with a request;
+   *  null until it has, and the app cannot reach them before. */
   address: string | null;
 }
 
-/** What `notifyTeam` did: messages sent, members it cannot reach yet (they have not written to the app), members whose
- *  day's budget is spent, and sends that failed. */
+/** What `notifyTeam` did: messages sent, members it cannot reach yet (their wallet has not said hello nor written to the
+ *  app), members whose day's budget is spent, and sends that failed. */
 export interface TeamDelivery {
   sent: number;
   unreachable: number;
@@ -333,6 +348,8 @@ const MEMBER_REFUSALS: Record<MemberProblem, string> = {
   expired: "Your membership proof has expired. Open the app again.",
   signer: "Your membership proof is signed by a key that no longer speaks for your account.",
   signature: "Your membership proof does not check.",
+  // A request never meets this one (a hello does, and gets no answer): it is here for the type.
+  not_team: "This app is private: only its owner and members can use it.",
 };
 
 /**
@@ -363,9 +380,13 @@ const MEMBER_REFUSALS: Record<MemberProblem, string> = {
  * - With a registered key, the server asks the registry every few minutes, and at every new beacon block a request
  *   comes in, whether it still names the key; once it does not, the server stops answering and says so in its log.
  * - The grain's team (its owner, developers and viewers, 24-app-studio §4) is read from the registry (`team`). A member's
- *   wallet proves itself with every request to its own app, so the server learns where their chat (the app's console)
- *   is. `notifyTeam` writes to them, within 100 unasked messages a day each, and `report` sends an error as a card for
- *   an AI agent; handlers' errors are reported by default (`reportErrors`).
+ *   wallet introduces itself to its own app with a hello (22-grain-chats §3a) and proves itself with every request, so
+ *   the server learns where their chat (the app's console) is without anyone writing first. `notifyTeam` writes to
+ *   them, within 100 unasked messages a day each, and `report` sends an error as a card for an AI agent; handlers'
+ *   errors are reported by default (`reportErrors`).
+ * - A hello is taken only from the team, with a proof that checks as a request's; the server keeps the address and
+ *   answers with a welcome, at most once an hour per key, and nothing at all to anything else. It runs no handler, and
+ *   counts in no number, budget or request memory. At most `helloChecksPerMinute` hellos a minute reach the node.
  */
 export class ChatServer {
   /** The server's address at the relays: users' wallets write to it. */
@@ -405,6 +426,11 @@ export class ChatServer {
   private readonly folding = new Map<string, Folding>();
   /** What reports and logs never carry: the options' `redact`, and the server secret's base64 forms (hex goes anyway). */
   private readonly redactions: ReadonlyArray<string | RegExp>;
+  /** When each team key was last welcomed, for an hour (`WELCOME_EVERY_MS`). */
+  private readonly welcomed = new Map<string, number>();
+  /** The hellos checked against the node in the current minute, and how many were dropped past the cap. */
+  private readonly helloWindow = { start: 0, checks: 0, dropped: 0 };
+  private readonly helloCap: number;
 
   private constructor(private readonly options: ChatServerOptions, setup: Setup, relay: RelayClient, signed: SignedGrainChatSpec) {
     this.relay = relay;
@@ -421,6 +447,7 @@ export class ChatServer {
     this.log = options.log ?? (() => {});
     this.now = options.now ?? Date.now;
     this.redactions = [...(options.redact ?? []), toBase64(setup.secret), toBase64(setup.secret, true)];
+    this.helloCap = options.helloChecksPerMinute ?? HELLO_CHECKS_PER_MINUTE;
     this.address = encodeAddress(setup.chain.network, accountId(fromHex(setup.key, 32)));
     this.onFrameListener = (frame: RelayFrame) => {
       this.onFrame(frame).catch((e: Error) => this.log("error", "chat_frame_failed", { reason: e.message }));
@@ -440,6 +467,8 @@ export class ChatServer {
     if (appKey && options.secret) throw new Error("pass the developer key or a secret, not both");
     if (appKey && options.cert) throw new Error("a developer key is a registered server key: it takes no certificate");
     if (appKey && options.slug !== undefined && options.slug !== appKey.slug) throw new Error(`the developer key is ${appKey.slug}'s, not ${options.slug}'s`);
+    const cap = options.helloChecksPerMinute;
+    if (cap !== undefined && (!Number.isSafeInteger(cap) || cap < 1)) throw new Error("helloChecksPerMinute: a whole number, 1 or more");
     const secret = appKey ? appKey.secret() : options.secret;
     const slug = appKey ? appKey.slug : options.slug;
     if (!secret || secret.length !== 32) throw new Error("the server key: a developer key (appKey), or a 32-byte secret");
@@ -838,9 +867,10 @@ export class ChatServer {
 
   /**
    * Write `card` unasked to each member of the team who plays one of `roles` (by default the owner and the
-   * developers): in the app's console, within `CHAT_UNASKED_TEAM_PER_DAY` messages a day each. A member who has not
-   * written to the app yet cannot be reached and is skipped, as is one whose day's budget is spent; a send that fails
-   * is counted and the others still go. The log says how many, never to whom. Throws for a card out of bounds.
+   * developers): in the app's console, within `CHAT_UNASKED_TEAM_PER_DAY` messages a day each. A member whose wallet has
+   * not said hello nor written to the app yet cannot be reached and is skipped, as is one whose day's budget is spent; a
+   * send that fails is counted and the others still go. The log says how many, never to whom. Throws for a card out of
+   * bounds.
    */
   async notifyTeam(card: Card, options: { roles?: readonly TeamRole[] } = {}): Promise<TeamDelivery> {
     return (await this.toTeam(card, options.roles ?? DEFAULT_TEAM_ROLES)).delivery;
@@ -862,8 +892,8 @@ export class ChatServer {
    *
    * `update` is the manifest (this grain's, a version above the registry's: owner and owner key are the wallet's to
    * fill in), or its publishing link. It goes as `notifyTeam` sends, within the team's unasked budget; `owner` says
-   * whether the owner's console got it. Until it has (the owner has not written to the app yet, or their day's budget
-   * is spent), propose again later. Throws for another grain's manifest, one the registry already holds or passed, a
+   * whether the owner's console got it. Until it has (the owner's wallet has not said hello nor written to the app yet,
+   * or their day's budget is spent), propose again later. Throws for another grain's manifest, one the registry already holds or passed, a
    * card out of bounds, or roles without the owner. Saltix 0.1.51 and older drop such a card.
    */
   async proposeUpdate(
@@ -887,7 +917,7 @@ export class ChatServer {
     const { delivery, owner } = await this.toTeam(card, roles);
     this.log(owner ? "info" : "warn", "chat_update_proposed", {
       version: manifest.version, ...delivery, owner,
-      ...(owner ? {} : { hint: "the owner's console did not get it (not written to the app yet, or the day's budget spent): propose it again later" }),
+      ...(owner ? {} : { hint: "the owner's console did not get it (the owner's wallet has not reached the app yet, or the day's budget is spent): propose it again later" }),
     });
     return { ...delivery, version: manifest.version, owner };
   }
@@ -922,7 +952,9 @@ export class ChatServer {
       }
     }
     this.log(result.failed > 0 || (result.sent === 0 && result.unreachable > 0) ? "warn" : "info", "chat_team_notified", {
-      ...result, ...(result.sent === 0 && result.unreachable > 0 ? { hint: "no one on the team has written to the app yet: it reaches each member once they have" } : {}),
+      ...result, ...(result.sent === 0 && result.unreachable > 0
+        ? { hint: "no one on the team has reached the app yet: it reaches each member once their wallet says hello or they write to it" }
+        : {}),
     });
     return { delivery: result, owner };
   }
@@ -1056,6 +1088,7 @@ export class ChatServer {
   private async sweep(): Promise<void> {
     const now = this.now();
     for (const [user, at] of this.statsSent) if (now - at >= DAY_MS || at > now) this.statsSent.delete(user);
+    for (const [key, at] of this.welcomed) if (now - at >= WELCOME_EVERY_MS || at > now) this.welcomed.delete(key);
     try {
       await this.publishStats();
     } catch (e) {
@@ -1072,10 +1105,7 @@ export class ChatServer {
    */
   private async admit(signed: SignedChatRequest, now: number): Promise<{ member: ChatMember | null } | { refused: MemberProblem }> {
     if (!this.view) return { member: null };
-    this.record = await this.view.grain(this.slug);
-    if (this.judgeKey()) throw new ChatKeyNotRegistered(this.stopReason!, this.slug);
-    this.judgeAccess();
-    const g = this.record;
+    const g = await this.readRecord();
     if (!g) return { member: null };
     const access = accessOf(g);
     const check = { genesis: this.chain.genesis, slug: this.slug, requestKey: signed.key, proof: signed.request.member, now };
@@ -1095,6 +1125,105 @@ export class ChatServer {
     return { member: { account, roles: rolesOf(access, account) } };
   }
 
+  /** The grain's registry record at the beacon tip (cached per tip), judged: once it no longer names the key the server
+   *  stops (and this throws `ChatKeyNotRegistered`), and whether the numbers are published follows the grain's access. */
+  private async readRecord(): Promise<RegisteredGrain | null> {
+    this.record = await this.view!.grain(this.slug);
+    if (this.judgeKey()) throw new ChatKeyNotRegistered(this.stopReason!, this.slug);
+    this.judgeAccess();
+    return this.record;
+  }
+
+  /** Whether one more hello may be checked against the registry and the node this minute (`helloChecksPerMinute`). The
+   *  first one past the cap in a minute is logged, not each. */
+  private helloCheck(now: number): boolean {
+    const w = this.helloWindow;
+    if (now - w.start >= MINUTE_MS || now < w.start) {
+      w.start = now;
+      w.checks = 0;
+      w.dropped = 0;
+    }
+    if (w.checks < this.helloCap) {
+      w.checks++;
+      return true;
+    }
+    if (w.dropped++ === 0) {
+      this.log("warn", "chat_hello_busy", {
+        limit: this.helloCap, hint: "more hellos this minute than the server checks against its node: the rest are dropped, and their wallets try again later",
+      });
+    }
+    return false;
+  }
+
+  /**
+   * A hello (22-grain-chats §3a): an account on the grain's team introduces itself to its own app. It is taken only if it
+   * is for this grain, came from its key's address, is signed, timely (5 minutes ahead, 7 days behind) and carries a
+   * proof for this grain and its key, signed by a key that speaks for the account now, from the owner, a developer or a
+   * viewer, by the registry at the beacon tip. Then the member's address is kept, as a request's proof keeps it, and a
+   * welcome names the hello, at most once an hour per key (a hello within the hour is taken and not answered). Anything
+   * else gets no answer at all, and its frame is acked. A hello runs no handler and is not a request: it counts in no
+   * number, budget or request memory. The log names reasons only, never an account, a key or an address.
+   */
+  private async onHello(signed: SignedChatHello, f: RelayFrame): Promise<void> {
+    const now = this.now();
+    const drop = (reason: string): void => {
+      this.log("info", "chat_hello_dropped", { reason });
+      f.ack();
+    };
+    const problem = chatHelloProblem(signed, { chain: this.chain, slug: this.slug, from: f.from, now });
+    if (problem) return drop(problem);
+    if (!this.view) return drop("no_registry");
+    const proof = signed.hello.member;
+    // A proof that does not hold for this grain and the hello's key, or whose signature fails, is refused whatever the
+    // registry says: it costs the node nothing, and neither does anything past the minute's cap.
+    if (!holdsButSigner(proof, { genesis: this.chain.genesis, slug: this.slug, requestKey: signed.key, proof, now })) return drop("proof");
+    if (!this.helloCheck(now)) return f.ack();
+    const account = proof.proof.account;
+    let access: GrainAccess;
+    let controller;
+    try {
+      const g = await this.readRecord();
+      if (!g) return drop("unregistered");
+      access = accessOf(g);
+      if (!onTeam(access, account)) return drop("not_team");
+      controller = await this.view.controller(account);
+    } catch (e) {
+      // Stopped: the frame stays in the mailbox, unanswered by this key.
+      if (e instanceof ChatKeyNotRegistered) return;
+      this.log("warn", "chat_hello_unchecked", { reason: (e as Error).message });
+      f.ack();
+      return;
+    }
+    const refused = introductionProblem(access, { genesis: this.chain.genesis, slug: this.slug, helloKey: signed.key, proof, controller, now });
+    if (refused) return drop(`member:${refused}`);
+    await this.remember(account, signed.key);
+    // A welcome under an expired certificate is one no wallet takes: the address is kept, and nothing is sent.
+    if (this.certificate && this.certificate.expires_at <= now) {
+      this.log("warn", "chat_hello_unwelcomed", { reason: "cert_expired", hint: "issue a new certificate (grain cert) and pass it to setCert" });
+      f.ack();
+      return;
+    }
+    const last = this.welcomed.get(signed.key);
+    if (last !== undefined && now >= last && now - last < WELCOME_EVERY_MS) {
+      this.log("info", "chat_hello_repeated", {});
+      f.ack();
+      return;
+    }
+    // Reserved before it goes, so that a copy of the hello meanwhile is within the hour.
+    if (this.welcomed.size >= MAX_WELCOMED) this.welcomed.delete(this.welcomed.keys().next().value!);
+    this.welcomed.set(signed.key, now);
+    try {
+      const welcome = signChatWelcome({ slug: this.slug, hello: signed.hello.id, at: now }, this.secret, this.chain.genesis, this.certificate);
+      await this.deliver(f.from, encodeChatFrame({ welcome }));
+    } catch (e) {
+      // Not welcomed: the frame stays in the mailbox and comes again.
+      if (this.welcomed.get(signed.key) === now) this.welcomed.delete(signed.key);
+      throw e;
+    }
+    this.log("info", "chat_hello_welcomed", {});
+    f.ack();
+  }
+
   private async onFrame(f: RelayFrame): Promise<void> {
     if (this.stopReason) return;
     let frame;
@@ -1106,6 +1235,8 @@ export class ChatServer {
       f.ack();
       return;
     }
+    // A hello is no request: it is taken (or not) on its own, and never reaches a handler, the numbers or a budget.
+    if ("hello" in frame) return this.onHello(frame.hello, f);
     if (!("request" in frame)) {
       this.log("warn", "chat_frame_dropped", { kind: Object.keys(frame)[0] });
       f.ack();
