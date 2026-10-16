@@ -12,7 +12,7 @@ payments, storage and relays, and never holds the wallet's keys. It may be a pag
 |---|---|
 | [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the registry's calls, Address v1, and the grain's chat (`ChatServer`, from a developer key alone) |
-| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key` |
+| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor` (`grain help <command>`) |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development, with a chat pane |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
 | [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public |
@@ -39,8 +39,22 @@ npm run example        # hello-grain's chat as your app's server, from your deve
 - **In a debug Saltix in the Android emulator:** open the link the server prints,
   `salt:grain?manifest=http%3A%2F%2F10.0.2.2%3A8090%2F.well-known%2Fsaltix-grain`. Debug builds take
   developer origins (`localhost`, `127.0.0.1`, `10.0.2.2`); release builds never do.
-- `NODE_RPC` (default `http://127.0.0.1:30734`) is a node of the wallet's network: the server reads
-  its genesis for invoices and finds payments there.
+- `NODE_RPC` (default `http://127.0.0.1:30334`, a node's own default) is a node of the wallet's network: the server
+  reads its genesis for invoices and finds payments there.
+
+### Networks, and where `--node` comes from
+
+Saltix's **test network** is of the devnet kind: addresses `dsalt1…`, developer keys `saltix-app:1:dsalt:…`, and
+`network: "devnet"` wherever the SDK asks (`testnet` is a kind no public network runs yet). It is reset now and then;
+a developer key names the genesis it was made on, and the SDK refuses a key of a network that was reset.
+
+- **The chat server and `grain app-key`** need no node: they reach the test network through its public relays
+  (`PUBLIC_RELAYS`, pinned by their certificates).
+- **The other commands' `--node`** is a node's wallet interface over plain HTTP: a test-network node of your own
+  (`https://download.saltix.io/node/install.sh`, Linux x86-64; its wallet interface listens on
+  `http://127.0.0.1:30334`), or one reached through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`. Without
+  one, do the owner's calls in Saltix (My apps). `grain publish` needs a node even for its QR code: it quotes the
+  deposit and watches the registry.
 
 ## The command line
 
@@ -139,7 +153,7 @@ const invoice = signInvoice({ slug: "chess", to, asset: "SALT", amount: 2_500_00
 const payment = await findPayment(nodeUrl, myAddress, reference);
 
 // Users through the relays, under the server key: frames both ways and notifications.
-const relay = await RelayClient.connect({ node: nodeUrl, secret: serverSecret, network: "testnet" });
+const relay = await RelayClient.connect({ node: nodeUrl, secret: serverSecret, network: "devnet" });   // the test network's kind
 await relay.notify(userGrainAddress, signNotification(
   { slug: "chess", title: "Your move", body: "Bob played e4", start: "game-7", at: Date.now() }, serverSecret, genesisHash, cert));
 await relay.send(userGrainAddress, bytes);                       // live; { keep: true } for the mailbox

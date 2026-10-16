@@ -22,6 +22,11 @@
   characters, 30 for 6–7, 10 for 8 or more), or 100 SALT to a node from before; `grain publish` and `grain show` say it.
 - The chat's well-known document is `{spec, cert?, stats?}` (`chatDocumentOf(spec, cert?, stats?)`, `decodeChatDocument`).
 - `rpc` throws an `RpcError` with the node's error code.
+- `npm run dev` reads a node at `http://127.0.0.1:30334`, where a node's wallet interface listens by default (it read
+  30734, where none does, so invoices and payments in the example failed with a local node). The README says which kind
+  of network Saltix's test network is (devnet: `dsalt1…`, `network: "devnet"`; its examples said `testnet`), and where
+  `--node` comes from: a node of your own or a tunnel to one, while the chat server and `grain app-key` need none. Its
+  table names every command; tests hold the README to the help and to the port.
 
 - `decodeInvoice` and the certificates in notifications refuse an asset tag other than 0 or 1 and a time beyond 2^53
   ms instead of reading them loosely; relay records' base64url no longer needs Node's `Buffer`, so the formats run in a

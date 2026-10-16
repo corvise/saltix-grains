@@ -8,7 +8,7 @@
 // spec and the numbers it reports at /.well-known/saltix-grain-chat.
 //
 //   PORT       where to listen (8090)
-//   NODE_RPC   a node's wallet interface (http://127.0.0.1:30734), for the genesis and payments
+//   NODE_RPC   a node's wallet interface (http://127.0.0.1:30334, a node's default), for the genesis and payments
 //   CHAT_NODE  a devnet node's wallet interface: the chat uses its relays and genesis instead of the
 //              development relay, under a certificate (that devnet's registry does not name its key), so
 //              a debug Saltix on that devnet can talk to it
@@ -27,7 +27,7 @@ import { startChat } from "../examples/hello-grain/chat.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT ?? 8090);
-const NODE_RPC = process.env.NODE_RPC ?? "http://127.0.0.1:30734";
+const NODE_RPC = process.env.NODE_RPC ?? "http://127.0.0.1:30334";
 const SLUG = "hello-grain";
 const DEV_HOSTS = new Set(["localhost", "127.0.0.1", "10.0.2.2"]);
 
