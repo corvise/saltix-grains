@@ -1,9 +1,10 @@
-// What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`, laid out full screen as Saltix shows
-// every app (12-grains §7), and the rules a coding agent follows (AGENTS.md, which CLAUDE.md points to).
+// What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`, drawn edge to edge (it declares
+// viewport-fit=cover and keeps inside the insets, 12-grains §7), and the rules a coding agent follows (AGENTS.md, which
+// CLAUDE.md points to).
 
 /** The one line Saltix ends "Copy for an AI agent" with (24-app-studio §4), word for word. */
 export const FULL_SCREEN_RULE =
-  "Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).";
+  "Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).";
 
 export const indexHtml = (name: string) => `<!doctype html>
 <html lang="en">
@@ -12,9 +13,10 @@ export const indexHtml = (name: string) => `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>${name}</title>
   <style>
-    /* Saltix shows the app full screen, edge to edge (AGENTS.md): the system's bars over the page, and the wallet's
-       controls (⋯ | ✕) floating in its top right corner. grain.layout() in app.js sets these variables; the values
-       here hold until it does, and outside a wallet. */
+    /* Edge to edge (viewport-fit=cover above; AGENTS.md): the system's bars over the page, and the wallet's controls
+       (⋯ | ✕) floating in its top right corner. Saltix sets these variables itself, and grain.layout() in app.js where
+       it does not; the values here are a plain browser's. Without viewport-fit=cover Saltix would lay the page out
+       inside the safe area, below its controls, and every variable would be 0. */
     :root {
       --saltix-safe-top: env(safe-area-inset-top, 0px);
       --saltix-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -67,8 +69,9 @@ import { grain, inWallet, walletLink } from "./grain.js";
 const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 
-// Full screen as Saltix shows it: the safe area and the wallet's controls as CSS variables, kept current when the phone
-// turns or unfolds (index.html lays out by them).
+// Edge to edge (index.html declares viewport-fit=cover): the safe area and the wallet's controls as CSS variables, kept
+// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too; this is for older ones
+// and plain browsers.
 grain.layout();
 
 if (!inWallet()) {
@@ -92,29 +95,40 @@ document.getElementById("count").addEventListener("click", async () => {
 });
 `;
 
-/** The rules of a full-screen app, for AGENTS.md (the project's and saltix-grains'). */
-export const fullScreenRules = `Saltix opens every app full screen, edge to edge: the page is drawn under the status bar and the navigation bar,
-and the wallet's controls float over it.
+/** The rules of an app's page, for AGENTS.md (the project's and saltix-grains'): safe by default, full screen only with
+ *  viewport-fit=cover and the insets. */
+export const fullScreenRules = `**Safe by default; full screen only with viewport-fit=cover and the insets.** Saltix opens every app as a full app, its
+controls \`⋯ | ✕\` floating in the top right corner, and lays the page out as browsers do (Saltix 12-grains §7):
 
-- **Keep text and controls inside the safe area.** \`grain.layout()\` (from \`@saltix/grain\`) sets, on \`:root\`,
-  \`--saltix-safe-top\`, \`--saltix-safe-bottom\`, \`--saltix-safe-left\` and \`--saltix-safe-right\` in pixels
-  (\`grain_info.safe_area\`) and keeps them current. Pad by them; backgrounds may run under the bars.
-- **The wallet's controls \`⋯ | ✕\` float in the top right corner**: \`grain_info.controls\`, and
-  \`--saltix-controls-top\`, \`--saltix-controls-right\`, \`--saltix-controls-width\`, \`--saltix-controls-height\`
-  (a 96 × 48 box, 8 px from the right inset and 4 px below the top one). Never put anything tappable under them. A top
-  bar's title stops short of them (\`padding-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px)\`),
-  or the bar starts below them (\`top: calc(var(--saltix-controls-top) + var(--saltix-controls-height))\`).
+- **Inside the safe area, by default.** A page that says nothing is drawn below the status bar, the cutout and a band
+  that holds the controls, above the navigation bar or gesture area and the keyboard. Nothing of the system or the
+  wallet is ever over it; the band takes the page's colour (\`grain.setHeader\`, else \`<meta name="theme-color">\`,
+  else its background). Such a page needs nothing else.
+- **Edge to edge only with \`viewport-fit=cover\`**: \`<meta name="viewport" content="width=device-width,
+  initial-scale=1, viewport-fit=cover">\`. The page is then drawn under the status bar and the navigation bar, and must
+  keep its text and controls inside the safe area itself: Saltix sets, on \`:root\`, \`--saltix-safe-top\`,
+  \`--saltix-safe-bottom\`, \`--saltix-safe-left\` and \`--saltix-safe-right\` in pixels (\`grain_info.safe_area\`) and keeps
+  them current when the phone turns, unfolds or folds, and when a keyboard opens. Pad by them; backgrounds may run
+  under the bars. \`grain.layout()\` (from \`@saltix/grain\`) sets the same values where Saltix does not.
+- **The wallet's controls \`⋯ | ✕\` float in the top right corner**, over an edge-to-edge page: \`grain_info.controls\`,
+  and \`--saltix-controls-top\`, \`--saltix-controls-right\`, \`--saltix-controls-width\`, \`--saltix-controls-height\`
+  (a 96 × 48 box, 8 px from the right inset and 4 px below the top one; 0 inside the safe area, where they sit in the
+  band). Never put anything tappable under them. A top bar's title stops short of them
+  (\`padding-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px)\`), or the bar starts below
+  them (\`top: calc(var(--saltix-controls-top) + var(--saltix-controls-height))\`).
 - **No close button of your own.** ✕ and the system's Back close the app; Back goes through your page's history first.
-- \`grain.setHeader("#rrggbb")\` names the colour at the top of your page: the wallet draws the status bar's icons and its
-  controls to contrast with it.
+- \`grain.setHeader("#rrggbb")\` names the colour at the top of your page: the wallet draws the band, the status bar's
+  icons and its controls to contrast with it.
 - Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2) draws its header above the page, so
   the safe area and the controls are 0; a plain browser gives its own insets (\`env(safe-area-inset-*)\`).
-- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes in CSS px, which equal dp) in \`grain dev\`'s
-  simulator, light and dark. \`grain lint\` warns about a fixed or sticky top bar that uses none of the variables.
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes in CSS px, which equal dp) and on the iPhone-like
+  screen in \`grain dev\`'s simulator, light and dark: it frames the page as Saltix does, in both ways. \`grain lint\`
+  warns about a page that declares \`viewport-fit=cover\` and reads no inset (\`cover-without-insets\`), and about a bar
+  pinned to the top of such a page that keeps clear of nothing (\`full-screen-top-bar\`).
 `;
 
-const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page full screen as Saltix shows it, with
-  the wallet's controls, at a phone's and the Galaxy Z Fold's sizes, light and dark.
+const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
+  the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
 - \`npx grain lint\`: what stops \`grain.json\` from being registered, and warnings about the page.
 - \`npx grain publish\`: a QR code the owner's Saltix registers the app from (or \`--key owner.key\` on the test network,
   after \`npx grain faucet --wait\` for test SALT). Registry commands reach the test network through its public relays,
@@ -192,7 +206,7 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 - \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave.
   \`package.json\`: \`npm start\` runs it.
 - \`chat.mjs\`: the handlers, one for each command, which \`server.mjs\` and the tests (\`test/\`, \`npm test\`) both run.
-- If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the full-screen rules
+- If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the frame's rules
   below apply to it.` : `- \`public/\`: the page. \`public/grain.js\` is \`@saltix/grain\`, the wallet's bridge: do not edit it (\`grain init\` copies it).
 - \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).
 - \`bundle.zip\`, once the app is sealed (\`npx grain bundle\`): the same bytes from the same files on any computer (files
@@ -209,7 +223,7 @@ ${appRules}
 
 More in [the SDK's page](${APP_GUIDE}#the-rules-every-app-follows).
 
-## A full-screen app
+## The page's frame
 
 ${fullScreenRules}`;
 
@@ -237,8 +251,9 @@ A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
 
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
   debug Saltix (the emulator reaches this computer at 10.0.2.2), or the simulator it prints in a browser.
-- Saltix shows the app full screen: \`AGENTS.md\` says how the page keeps clear of the wallet's controls (coding agents
-  read it too; \`CLAUDE.md\` points to it).
+- Saltix lays the page inside the safe area unless it declares \`viewport-fit=cover\` (this one does): \`AGENTS.md\` says
+  how the page keeps clear of the system's bars and the wallet's controls (coding agents read it too; \`CLAUDE.md\`
+  points to it).
 - \`grain lint\` checks \`grain.json\`; set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
 - Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
 - \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or

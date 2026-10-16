@@ -29,7 +29,7 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            a new grain: grain.json, owner.key, public/; --chat a chat-only one
                                            (no page: grain.json and chat.json)
   grain dev [--port 8090]                  serve public/ with the manifest signed for this computer, and the
-                                           simulator: your page full screen as Saltix shows it, with the wallet's
+                                           simulator: your page framed as Saltix frames it, with the wallet's
                                            controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704
   grain lint [--manifest grain.json]       what stops the manifest from being registered, and warnings about
                                            public/ (a top bar under the wallet's controls)
@@ -159,7 +159,8 @@ async function main(argv: string[]): Promise<number> {
       if (!manifest.description.en) delete (manifest.description as Record<string, string>).en;
       writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
-      // The rules a coding agent follows (Saltix shows apps full screen), for every agent and for Claude Code.
+      // The rules a coding agent follows (an app's page: safe by default, full screen with viewport-fit=cover), for every
+      // agent and for Claude Code.
       writeFileSync(join(dir, "AGENTS.md"), template.agentsMd(slug, chat));
       writeFileSync(join(dir, "CLAUDE.md"), template.claudeMd);
       if (chat) {
@@ -196,7 +197,7 @@ async function main(argv: string[]): Promise<number> {
       console.log(`serving ${resolve("public")} on port ${port}`);
       console.log(`  a debug Saltix in the emulator: ${linkFor(`http://10.0.2.2:${port}`)}`);
       console.log(`  this computer:                  ${linkFor(`http://localhost:${port}`)}`);
-      console.log(`  the simulator (full screen, the wallet's controls, the Galaxy Z Fold's sizes): ${simulatorFor(`http://localhost:${port}`)}`);
+      console.log(`  the simulator (your page framed as in Saltix, the wallet's controls, the Fold's sizes): ${simulatorFor(`http://localhost:${port}`)}`);
       return await new Promise<number>(() => {});
     }
     case "lint": {
@@ -204,7 +205,8 @@ async function main(argv: string[]): Promise<number> {
       const owner = existsSync(keyPath) ? publicKeyOf(readKey(keyPath)) : undefined;
       const { errors, warnings } = lint(manifest, owner);
       if (signed && !verifyManifest(signed)) errors.push("signature: does not check against owner_key");
-      // A page's layout: Saltix shows it full screen (12-grains §7). A chat-only grain has none.
+      // A page's frame: inside the safe area, or edge to edge with viewport-fit=cover (12-grains §7). A chat-only grain has
+      // none.
       if (!("chat" in manifest.entry)) warnings.push(...lintPages(join(dirname(resolve(manifestPath)), "public")));
       for (const w of warnings) console.log(`warning: ${w}`);
       for (const e of errors) console.error(`error: ${e}`);

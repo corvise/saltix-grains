@@ -12,7 +12,7 @@ import { UNOWNED, accountId, toHex, fromHex, verifyManifest } from "@saltix/grai
 import { lint, sign, forOrigin, readKey, signedFor } from "../dist/project.js";
 import { publish, retire, walletLink, waitForPublished } from "../dist/registry.js";
 import { serve, simulatorFor } from "../dist/dev.js";
-import { lintPages, TOP_BAR_RULE } from "../dist/pages.js";
+import { lintPages, TOP_BAR_RULE, COVER_RULE } from "../dist/pages.js";
 import { FULL_SCREEN_RULE } from "../dist/template.js";
 import { publishLink, publishLinkManifest } from "../dist/publish.js";
 import { encodeManifest } from "@saltix/grain-server";
@@ -169,38 +169,68 @@ function pages(files) {
   return dir;
 }
 
-test("lint warns about a top bar that ignores the safe area and the wallet's controls", () => {
+test("lint: a page inside the safe area needs nothing; one that declares viewport-fit=cover must read the insets", () => {
   const warned = (files) => lintPages(pages(files));
+  const meta = '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">';
   const bar = "<style>header { position: sticky; top: 0; background: #2f6bff }</style><header>Dice</header>";
-  const [warning] = warned({ "index.html": bar });
-  assert.ok(warning.startsWith(`${TOP_BAR_RULE}: `), warning);
-  assert.match(warning, /index\.html \(header\)/);
-  assert.match(warning, /--saltix-safe-/);
-  assert.match(warning, /heuristic/);
-  // Kept clear: by the variables, the browser's inset, or a script that reads the layout.
-  assert.deepEqual(warned({ "index.html": bar.replace("top: 0;", "top: 0; padding-top: var(--saltix-safe-top);") }), []);
-  assert.deepEqual(warned({ "index.html": bar.replace("top: 0;", "top: 0; padding-top: env(safe-area-inset-top);") }), []);
-  assert.deepEqual(warned({ "index.html": bar, "app.js": "const { safeArea } = await grain.layout(); bar.style.paddingTop = safeArea.top + 'px';" }), []);
-  assert.deepEqual(warned({ "index.html": bar, "css/app.css": ".title { margin-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width)) }" }), []);
+  // No viewport-fit=cover: Saltix lays the page out inside the safe area, a bar at its top included.
+  assert.deepEqual(warned({ "index.html": bar }), []);
+  assert.deepEqual(warned({ "index.html": '<meta name="viewport" content="width=device-width, viewport-fit=auto">' + bar }), []);
+  assert.deepEqual(warned({ "index.html": `<!-- ${meta} -->` + bar }), [], "a comment declares nothing");
+  // Declared, and nothing reads the insets: both warnings, each with its fix.
+  const [cover, top] = warned({ "index.html": meta + bar });
+  assert.ok(cover.startsWith(`${COVER_RULE}: index.html declares viewport-fit=cover`), cover);
+  assert.match(cover, /--saltix-safe-/);
+  assert.match(cover, /drop viewport-fit=cover/);
+  assert.ok(top.startsWith(`${TOP_BAR_RULE}: `), top);
+  assert.match(top, /index\.html \(header\)/);
+  assert.match(top, /heuristic/);
+  // Read the insets anywhere, and the bar keeps clear in its own rule: nothing to say.
+  assert.deepEqual(warned({ "index.html": meta + bar.replace("top: 0;", "top: 0; padding-top: var(--saltix-safe-top);") }), []);
+  assert.deepEqual(warned({ "index.html": meta + bar.replace("top: 0;", "top: 0; padding-top: env(safe-area-inset-top);") }), []);
+  // A script that lays out by the safe area places the bar itself.
+  assert.deepEqual(warned({ "index.html": meta + bar, "app.js": "const { safeArea } = await grain.layout(); bar.style.paddingTop = safeArea.top + 'px';" }), []);
+  // The insets read elsewhere, but the bar's own rule ignores them: the bar is warned about, not the page.
+  const elsewhere = warned({ "index.html": meta + bar, "css/app.css": "main { padding-bottom: var(--saltix-safe-bottom) }" });
+  assert.equal(elsewhere.length, 1);
+  assert.ok(elsewhere[0].startsWith(`${TOP_BAR_RULE}: `));
+  // Keeping clear of the controls alone keeps a bar clear, not the page: the status bar is still over it.
+  const controls = warned({ "index.html": meta + bar.replace("top: 0;", "top: 0; padding-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width));") });
+  assert.deepEqual(controls.map((w) => w.split(":")[0]), [COVER_RULE]);
   // The bridge names the variables itself (and so does a bundle of it): that is not the page using them.
   const bridge = readFileSync(fileURLToPath(import.meta.resolve("@saltix/grain")), "utf8");
-  assert.equal(warned({ "index.html": bar, "grain.js": bridge }).length, 1);
-  assert.equal(warned({ "index.html": bar, "assets/app-1f2e.js": `const x = 1;\n${bridge}` }).length, 1);
-  // Found wherever it is: a stylesheet, inside @media, a style attribute, utility classes, `inset`, a few pixels down.
-  assert.equal(warned({ "css/bar.css": "@media (min-width: 1px) { .bar { position: fixed !important; top: 0px } }" }).length, 1);
-  assert.match(warned({ "css/bar.css": ".bar { position:fixed;top:0 }" })[0], /css\/bar\.css \(\.bar\)/);
-  assert.match(warned({ "index.html": '<div style="position: fixed; top: 0">x</div>' })[0], /<div style>/);
-  assert.match(warned({ "index.html": '<nav class="sticky top-0 bg-white">x</nav>' })[0], /class="sticky top-0"/);
-  assert.equal(warned({ "index.html": "<style>.sheet { position: fixed; inset: 0 }</style>" }).length, 1);
-  assert.equal(warned({ "index.html": "<style>.bar { position: fixed; top: 8px }</style>" }).length, 1);
+  assert.equal(warned({ "index.html": meta + bar, "grain.js": bridge }).length, 2);
+  assert.equal(warned({ "index.html": meta + bar, "assets/app-1f2e.js": `const x = 1;\n${bridge}` }).length, 2);
+  // The meta as pages write it: any order and case of attributes, single quotes, none; the last one decides.
+  for (const m of ["<meta content='viewport-fit=cover' name='viewport'>", "<META NAME=viewport CONTENT=viewport-fit=cover>",
+    '<meta name="viewport" content="width=device-width"><meta name="viewport" content="viewport-fit=cover">']) {
+    assert.equal(warned({ "index.html": m + bar }).length, 2, m);
+  }
+  assert.deepEqual(warned({ "index.html": '<meta name="viewport" content="viewport-fit=cover"><meta name="viewport" content="width=device-width">' + bar }), []);
+  // Found wherever it is, in an app that declared it: a stylesheet, inside @media, a style attribute, utility classes,
+  // `inset`, a few pixels down.
+  const bars = (files) => warned({ "index.html": meta + "<p>x</p>", "x.js": "safeArea", ...files });
+  assert.equal(bars({ "css/bar.css": "@media (min-width: 1px) { .bar { position: fixed !important; top: 0px } }" }).length, 0, "a script lays out");
+  const top1 = (files) => warned({ "index.html": meta, "css/pad.css": "main { padding: var(--saltix-safe-top) }", ...files });
+  assert.equal(top1({ "css/bar.css": "@media (min-width: 1px) { .bar { position: fixed !important; top: 0px } }" }).length, 1);
+  assert.match(top1({ "css/bar.css": ".bar { position:fixed;top:0 }" })[0], /css\/bar\.css \(\.bar\)/);
+  assert.match(top1({ "index.html": meta + '<div style="position: fixed; top: 0">x</div>' })[0], /<div style>/);
+  assert.match(top1({ "index.html": meta + '<nav class="sticky top-0 bg-white">x</nav>' })[0], /class="sticky top-0"/);
+  assert.deepEqual(top1({ "index.html": meta + '<nav class="sticky top-0 pt-[var(--saltix-safe-top)]">x</nav>' }), []);
+  assert.equal(top1({ "index.html": meta + "<style>.sheet { position: fixed; inset: 0 }</style>" }).length, 1);
+  assert.equal(top1({ "index.html": meta + "<style>.bar { position: fixed; top: 8px }</style>" }).length, 1);
+  // A page that does not declare it is not read for bars; a stylesheet always is.
+  assert.deepEqual(top1({ "other.html": '<div style="position: fixed; top: 0">x</div>' }), []);
   // Not a top bar: in the flow, at the bottom, or placed by the variables.
-  assert.deepEqual(warned({ "index.html": "<style>header { position: relative; top: 0 }</style>" }), []);
-  assert.deepEqual(warned({ "index.html": "<style>footer { position: fixed; bottom: 0 }</style>" }), []);
-  assert.deepEqual(warned({ "index.html": "<style>.fab { position: fixed; top: 120px }</style>" }), []);
-  assert.deepEqual(warned({ "index.html": "<style>/* header { position: fixed; top: 0 } */</style>" }), [], "a comment is not CSS");
+  assert.deepEqual(top1({ "index.html": meta + "<style>header { position: relative; top: 0 }</style>" }), []);
+  assert.deepEqual(top1({ "index.html": meta + "<style>footer { position: fixed; bottom: 0 }</style>" }), []);
+  assert.deepEqual(top1({ "index.html": meta + "<style>.fab { position: fixed; top: 120px }</style>" }), []);
+  assert.deepEqual(top1({ "index.html": meta + "<style>/* header { position: fixed; top: 0 } */</style>" }), [], "a comment is not CSS");
   assert.deepEqual(lintPages(join(tmpdir(), "no-such-public-dir")), []);
-  const many = warned(Object.fromEntries(["a", "b", "c", "d", "e"].map((n) => [`${n}.css`, `.${n} { position: fixed; top: 0 }`])));
+  const many = top1(Object.fromEntries(["a", "b", "c", "d", "e"].map((n) => [`${n}.css`, `.${n} { position: fixed; top: 0 }`])));
   assert.match(many[0], /and 2 more/);
+  // Two pages that declare it are named.
+  assert.match(warned({ "index.html": meta, "b.html": meta })[0], /^cover-without-insets: b\.html, index\.html declare viewport-fit=cover/);
 });
 
 test("init makes a project the owner alone can sign for", () => {
@@ -210,7 +240,9 @@ test("init makes a project the owner alone can sign for", () => {
   for (const f of ["grain.json", "owner.key", "public/index.html", "public/app.js", "public/grain.js", ".gitignore", "AGENTS.md", "CLAUDE.md"]) {
     assert.ok(existsSync(join(dir, "dice", f)), f);
   }
-  // Laid out full screen, by the variables grain.layout() sets, and nothing lint warns about.
+  // Edge to edge (it declares viewport-fit=cover), laid out by the variables Saltix and grain.layout() set, and nothing
+  // lint warns about.
+  assert.match(readFileSync(join(dir, "dice", "public", "index.html"), "utf8"), /viewport-fit=cover/);
   const html = readFileSync(join(dir, "dice", "public", "index.html"), "utf8");
   for (const v of ["--saltix-safe-top", "--saltix-safe-bottom", "--saltix-safe-left", "--saltix-safe-right", "--saltix-controls-right", "--saltix-controls-width"]) {
     assert.ok(html.includes(`var(${v})`), v);
@@ -226,13 +258,15 @@ test("init makes a project the owner alone can sign for", () => {
   // The rules a coding agent follows; Claude Code reads them through CLAUDE.md.
   const agents = readFileSync(join(dir, "dice", "AGENTS.md"), "utf8");
   assert.ok(agents.includes(FULL_SCREEN_RULE));
-  assert.equal(FULL_SCREEN_RULE, "Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).");
-  for (const words of ["--saltix-controls-top", "No close button of your own", "475×751", "light and dark"]) assert.ok(agents.includes(words), words);
+  assert.equal(FULL_SCREEN_RULE, "Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).");
+  for (const words of ["--saltix-controls-top", "No close button of your own", "475×751", "light and dark", "viewport-fit=cover", "Safe by default"]) assert.ok(agents.includes(words), words);
   assert.match(readFileSync(join(dir, "dice", "CLAUDE.md"), "utf8"), /^@AGENTS\.md$/m);
   // A bar that ignores them is warned about, and lint still passes.
-  writeFileSync(join(dir, "dice", "public", "index.html"), "<style>header { position: fixed; top: 0 }</style><header>Dice</header>");
+  writeFileSync(join(dir, "dice", "public", "index.html"),
+    '<meta name="viewport" content="width=device-width, viewport-fit=cover"><style>header { position: fixed; top: 0 }</style><header>Dice</header>');
   writeFileSync(join(dir, "dice", "public", "app.js"), "");
   const warned = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
+  assert.match(warned, new RegExp(`^warning: ${COVER_RULE}: `, "m"));
   assert.match(warned, new RegExp(`^warning: ${TOP_BAR_RULE}: `, "m"));
   assert.match(warned, /ready to register/);
   assert.equal(statSync(join(dir, "dice", "owner.key")).mode & 0o777, 0o600);

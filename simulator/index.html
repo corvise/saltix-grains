@@ -12,24 +12,31 @@
     input, select, button { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid #2a3560; background: #121a33; color: inherit; }
     button { cursor: pointer; background: #1e2d5c; }
     .device { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-    /* The phone: the page edge to edge, the system's bars and the wallet's controls over it (12-grains §7). */
-    .phone { position: relative; width: 390px; height: 844px; border: 1px solid #2a3560; border-radius: 28px; overflow: hidden; background: #fff; flex: none; }
-    .phone iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-    .phone .bar { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font-size: 12px; font-weight: 600; pointer-events: none; }
-    .phone .bar.status { top: 0; }
-    .phone .bar.nav { bottom: 0; justify-content: center; }
-    .phone .bar.nav span { width: 108px; height: 4px; border-radius: 2px; background: currentColor; opacity: .7; }
-    .phone[data-glyphs="light"] .bar { color: #fff; }
-    .phone[data-glyphs="dark"] .bar { color: #0b1020; }
-    .capsule { position: absolute; display: flex; }
-    .capsule::before { content: ""; position: absolute; inset: 8px 4px; border-radius: 16px; backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5); }
-    .phone[data-glyphs="light"] .capsule::before { background: rgba(14, 18, 32, .42); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .22); }
-    .phone[data-glyphs="dark"] .capsule::before { background: rgba(255, 255, 255, .62); box-shadow: inset 0 0 0 .5px rgba(11, 16, 32, .16); }
-    .capsule button { position: relative; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 17px; line-height: 1; cursor: pointer; }
-    .phone[data-glyphs="light"] .capsule button { color: #fff; }
-    .phone[data-glyphs="dark"] .capsule button { color: #0b1020; }
-    .capsule button + button::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: currentColor; opacity: .3; }
-    .capsule.outlined { outline: 1px dashed #ff4fd8; outline-offset: 0; }
+    /* The phone: the page inside the safe area below the band, or edge to edge when it declares viewport-fit=cover; the
+       system's bars, the cutout and the wallet's controls over it (12-grains §7). */
+    .phone { position: relative; width: 360px; height: 780px; border: 1px solid #2a3560; border-radius: 30px; overflow: hidden; background: #fff; flex: none; box-sizing: content-box; }
+    /* The phone's own chrome is named sys-* so the chat's card classes (.bar, .status, .capsule) never restyle it. */
+    .phone iframe { position: absolute; border: 0; background: transparent; }
+    .phone .sys-band { position: absolute; top: 0; left: 0; right: 0; }
+    .phone .sys-cutout { position: absolute; background: #000; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); pointer-events: none; }
+    .phone .sys-bar { position: absolute; left: 0; right: 0; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 0; padding: 0 18px; font-size: 12px; font-weight: 600; pointer-events: none; box-sizing: border-box; }
+    .phone .sys-status { top: 0; }
+    .phone .sys-nav { bottom: 0; justify-content: center; }
+    .phone .sys-nav span { width: 108px; height: 4px; border-radius: 2px; background: currentColor; opacity: .7; }
+    .phone .sys-nav[data-kind="taskbar"] span { width: auto; height: auto; background: none; opacity: .8; letter-spacing: 18px; }
+    .phone .sys-nav[data-kind="taskbar"] span::before { content: "▦ ◉ ◈ ◆"; font-size: 14px; }
+    .phone[data-glyphs="light"] .sys-bar { color: #fff; }
+    .phone[data-glyphs="dark"] .sys-bar { color: #0b1020; }
+    .phone .sys-controls { position: absolute; display: flex; flex-direction: row; padding: 0; border: 0; background: none; gap: 0; box-sizing: border-box; }
+    .phone .sys-controls::before { content: ""; position: absolute; inset: 8px 4px; border-radius: 16px; backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5); }
+    .phone[data-glyphs="light"] .sys-controls::before { background: rgba(14, 18, 32, .42); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .22); }
+    .phone[data-glyphs="dark"] .sys-controls::before { background: rgba(255, 255, 255, .62); box-shadow: inset 0 0 0 .5px rgba(11, 16, 32, .16); }
+    .phone .sys-controls button { position: relative; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 17px; line-height: 1; cursor: pointer; }
+    .phone[data-glyphs="light"] .sys-controls button { color: #fff; }
+    .phone[data-glyphs="dark"] .sys-controls button { color: #0b1020; }
+    .phone .sys-controls button + button::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: currentColor; opacity: .3; }
+    .phone .sys-controls.outlined { outline: 1px dashed #ff4fd8; outline-offset: 0; }
+    .frame-mode { font-size: 12px; color: #9fe0b8; margin: 0; max-width: 360px; }
     .splash { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #0b1020; color: #e6ecff; }
     .splash .progress { position: absolute; top: 0; left: 0; height: 2px; width: 40%; background: #4f8bff; animation: progress 1.2s ease-in-out infinite; }
     @keyframes progress { from { left: -40%; } to { left: 100%; } }
@@ -129,16 +136,19 @@
   </section>
   <div class="device">
     <div class="row" style="align-items:center;flex-wrap:wrap">
-      <label>Size <select id="size"></select></label>
+      <label>Device <select id="size"></select></label>
       <button id="back" title="The system's Back: the page's own history first, then it closes the app">Back</button>
       <label class="check"><input type="checkbox" id="box"> The controls' box</label>
     </div>
-    <p style="font-size:12px;color:#9fb0d8;margin:0;max-width:390px">Full screen, as Saltix opens every app: a status bar of 32 and a navigation bar of 24 CSS px over the page (<code>safe_area</code>), the wallet's ⋯ | ✕ at <code>controls</code>. Keep tappable things out of that box; test at the Galaxy Z Fold sizes, light and dark (AGENTS.md).</p>
+    <p style="font-size:12px;color:#9fb0d8;margin:0;max-width:390px">As Saltix frames every app: inside the safe area, below the status bar and a band that holds the wallet's ⋯ | ✕, unless the page declares <code>viewport-fit=cover</code>; then edge to edge, told <code>safe_area</code> and <code>controls</code> (and <code>--saltix-safe-*</code>, <code>--saltix-controls-*</code>). Keep tappable things out of that box; test at the Galaxy Z Fold's sizes and the iPhone-like screen, light and dark (AGENTS.md).</p>
+    <p class="frame-mode" id="frame-mode"></p>
     <div class="phone" id="phone" data-glyphs="light">
+      <div class="sys-band" id="band"></div>
       <iframe id="grain" name="saltix-simulator" title="grain"></iframe>
-      <div class="bar status" id="status-bar"><span>9:41</span><span>▂▄▆ ▮</span></div>
-      <div class="bar nav" id="nav-bar"><span></span></div>
-      <div class="capsule" id="capsule" role="group" aria-label="The wallet's controls">
+      <div class="sys-cutout" id="cutout" hidden></div>
+      <div class="sys-bar sys-status" id="status-bar"><span>9:41</span><span>▂▄▆ ▮</span></div>
+      <div class="sys-bar sys-nav" id="nav-bar"><span></span></div>
+      <div class="sys-controls" id="capsule" role="group" aria-label="The wallet's controls">
         <button id="more" aria-label="More: the app's sheet">⋯</button><button id="close" aria-label="Close the app">✕</button>
       </div>
       <div class="splash" id="splash" hidden><div class="progress"></div><div class="icon" id="splash-icon"></div><div id="splash-name"></div></div>

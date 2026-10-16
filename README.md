@@ -8,18 +8,20 @@ payments, storage and relays, and never holds the wallet's keys. It may be a pag
 
 **[Your first app in ten minutes](docs/first-app.md)**: make it in Saltix, copy its developer key, `npm run example`.
 
-**Saltix shows apps full screen**: keep tappable content clear of the wallet's controls, pad by the safe area, and test
-at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENTS.md), [Designing for Saltix](docs/first-app.md#designing-for-saltix)).
+**Safe by default; full screen only with viewport-fit=cover and the insets**: Saltix lays an app's page inside the safe
+area, below its controls; a page that declares `viewport-fit=cover` is drawn edge to edge and pads by the variables
+Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENTS.md),
+[Designing for Saltix](docs/first-app.md#designing-for-saltix)).
 
 | Package | What it is |
 |---|---|
-| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the full-screen page's safe area and the wallet's controls, as CSS variables), `grain.manage.open()` |
+| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables), `viewportFitCover()`, `frameFor()`, `grain.manage.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest, the registry's calls, Address v1, and the grain's chat (`ChatServer`, from a developer key alone) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `publish`, `retire`, `show`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key` |
-| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: the page full screen with the wallet's controls at a phone's and the Galaxy Z Fold's sizes, and a chat pane |
+| [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
-| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing for a full-screen app |
-| [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's full-screen layout, and work on this repository; `CLAUDE.md` points to it |
+| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing an app's page |
+| [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's page (safe by default, full screen with `viewport-fit=cover`), and work on this repository; `CLAUDE.md` points to it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 | [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
 | [`docs/cards.md`](docs/cards.md) | the card design standard: how every Saltix draws a card (the capsule, the action bar, emphasis, polls, states after a tap), what each block is for, do's and don'ts, and the lint |
@@ -40,8 +42,9 @@ npm run example        # hello-grain's chat as your app's server, from your deve
 ```
 
 - **In a desktop browser:** open `http://localhost:8090/` (the simulator), press *Load a manifest*,
-  then *Open*. The page is shown full screen as Saltix shows it: under a status bar and a navigation bar, with the
-  wallet's ⋯ | ✕ in its corner; *Size* switches to the Galaxy Z Fold's 475×751, 704×932 and 932×704. Sign-in signatures
+  then *Open*. The page is framed as Saltix frames it: edge to edge under a status bar and a navigation bar (the
+  example declares `viewport-fit=cover`), with the wallet's ⋯ | ✕ in its corner; *Device* switches to a phone on its
+  side, the Galaxy Z Fold's 475×751, 704×932 and 932×704, and an iPhone-like screen. Sign-in signatures
   are real; payments are not made. *Load the chat* talks to the example's chat through
   a development relay, as a wallet would ([docs/chats.md](docs/chats.md)).
 - **In a debug Saltix in the Android emulator:** open the link the server prints,
@@ -109,11 +112,14 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never ignored.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
-  address (`/_simulator/`): the page full screen with the wallet's controls, at a phone's and the Galaxy Z Fold's sizes.
-- `grain init` lays its page out full screen by the variables `grain.layout()` sets, and writes `AGENTS.md` (the rules a
-  coding agent follows) and `CLAUDE.md` (which points to it). `grain lint` warns (`full-screen-top-bar`) when a page in
-  `public/` has a fixed or sticky top bar but uses none of `--saltix-safe-*`, `--saltix-controls-*` or
-  `env(safe-area-inset-top)`: a heuristic, never an error.
+  address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, on a phone, the Galaxy Z
+  Fold's sizes and an iPhone-like screen.
+- `grain init`'s page declares `viewport-fit=cover` and lays itself out edge to edge by the variables Saltix (and
+  `grain.layout()`) sets, and `grain init` writes `AGENTS.md` (the rules a coding agent follows) and `CLAUDE.md` (which
+  points to it). `grain lint` warns when a page in `public/` declares `viewport-fit=cover` and nothing reads the safe
+  area (`cover-without-insets`), or such an app pins a fixed or sticky bar to the top whose rule uses none of
+  `--saltix-safe-top`, `--saltix-controls-*` or `env(safe-area-inset-top)` (`full-screen-top-bar`): heuristics, never
+  errors. A page without `viewport-fit=cover` needs neither: Saltix keeps it inside the safe area.
 - `publish` without a key file shows `salt:grain-publish?m=…` as a QR code (Saltix 12-grains §10):
   scan it with the owner's Saltix, which fills in its account's key, checks the manifest and the
   registry, shows the grain and the deposit and, after the PIN, signs and registers it (or records
@@ -152,7 +158,7 @@ import { grain, inWallet, walletLink } from "@saltix/grain";
 if (!inWallet()) showLink(walletLink("https://chess.example/.well-known/saltix-grain"));
 
 const info = await grain.info();               // slug, version, form, listing, language, theme, network, start
-const layout = await grain.layout();           // full screen: { safeArea, controls }, kept current, and CSS variables
+const layout = await grain.layout();           // the frame: { safeArea, controls }, kept current, and CSS variables
 await grain.ready();
 const answer = await grain.login(challenge);   // { key, signature, at, origin }: check it on your server
 await grain.storage.set("rating", "1640");     // synced across the user's devices, 1 MiB per grain
@@ -168,14 +174,18 @@ await grain.manage.open({ section: "members" }); // from a tap: the app's own ma
 
 Frames without a sponsor use the relay's free share, never the user's own channel.
 
-**Full screen** (bridge version 3, Saltix 12-grains §5, §7): Saltix opens every app edge to edge, with its controls
-`⋯ | ✕` floating in the top right corner. `grain.layout(onChange?)` reads `safe_area {top, bottom, left, right}` and
-`controls {top, right, width, height}` from `grain_info`, follows the `insets` event, window resizes and theme changes,
-and sets `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left`, `--saltix-safe-right`,
-`--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width` and `--saltix-controls-height` on `:root`.
-An older Saltix (bridge 1–2) gives 0 and no controls; a plain browser its own `env(safe-area-inset-*)` and no controls
-(`layoutOf` decides it, in one place). Keep text inside the safe area and every tappable element out of the controls'
-box; no close button of your own (✕ and Back close the app). [Designing for Saltix](docs/first-app.md#designing-for-saltix).
+**The page's frame** (bridge version 3, Saltix 12-grains §5, §7): Saltix opens every app as a full app, with its
+controls `⋯ | ✕` floating in the top right corner, and lays the page out inside the safe area, below the band that holds
+them, unless the page declares `viewport-fit=cover` (`viewportFitCover` reads it as Saltix does); then edge to edge.
+Saltix sets `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left`, `--saltix-safe-right`,
+`--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width` and `--saltix-controls-height` on `:root`
+itself (0 inside the safe area). `grain.layout(onChange?)` reads `safe_area {top, bottom, left, right}` and `controls
+{top, right, width, height}` (null inside the safe area) from `grain_info`, follows the `insets` event, window resizes
+and theme changes, and sets the same variables where Saltix does not. An older Saltix (bridge 1–2) gives 0 and no
+controls; a plain browser its own `env(safe-area-inset-*)` and no controls (`layoutOf` decides it, in one place).
+`frameFor` is the frame itself, for tools that play the wallet. Keep text inside the safe area and every tappable
+element out of the controls' box; no close button of your own (✕ and Back close the app).
+[Designing for Saltix](docs/first-app.md#designing-for-saltix).
 
 Every method rejects with a `GrainError` whose `code` is `4001` (the user refused), `4100` (not
 permitted: the manifest does not ask for it, or no tap before a payment), `4200` (unsupported),

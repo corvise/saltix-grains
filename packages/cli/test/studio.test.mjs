@@ -232,7 +232,7 @@ test("init --chat makes a chat-only grain with a spec to build on", async () => 
   assert.ok(readFileSync(join(dir, ".gitignore"), "utf8").includes("app.key"));
   // The rules a coding agent follows, for a chat-only app too: Claude Code reads them through CLAUDE.md.
   const agents = readFileSync(join(dir, "AGENTS.md"), "utf8");
-  assert.ok(agents.includes("Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md)."));
+  assert.ok(agents.includes("Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md)."));
   assert.match(agents, /chat-only app/);
   assert.match(agents, /grain chat-spec/);
   assert.ok(!agents.includes("grain dev`: serves"), "no page to serve");

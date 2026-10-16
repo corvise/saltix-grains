@@ -124,9 +124,11 @@ chat.text((ask) => card().text("Pick Plan below."));
 - **One spec a version**: the server keeps the spec it served in its store and refuses to start (78,
   `chat_spec_changed_under_version`) on a `chat.json` changed under that version; never delete `chat.store.json` to get
   past it, raise `version`.
-- **Pages**: an app with a screen is shown full screen, with the wallet's controls (⋯ | ✕, the capsule) floating in its
-  top right corner. Follow the full-screen rules in `AGENTS.md`: nothing tappable under the controls, text inside the
-  safe area.
+- **Pages: safe by default; full screen only with viewport-fit=cover and the insets.** Saltix lays a page out inside the
+  safe area, below the band that holds its controls (⋯ | ✕, the capsule): a page that says nothing needs nothing.
+  Draw edge to edge only by declaring `viewport-fit=cover` in the viewport meta, and then keep text inside
+  `--saltix-safe-*` and nothing tappable under `--saltix-controls-*` (Saltix sets them on `:root`). The rules in full
+  are in `AGENTS.md`; `grain lint` warns about a page that declares it and reads no inset.
 - **Cards** follow the card design standard ([cards.md](cards.md)): a status first, at most 6 actions, labels of at
   most 18 characters, the first `run` primary, destructive commands named so. Check each with `assertCardStandard(card,
   spec)` in the tests.

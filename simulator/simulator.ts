@@ -1,9 +1,9 @@
 /**
  * The wallet's side of the bridge on a computer (Saltix 12-grains §10): it opens a grain in an
  * iframe named `saltix-simulator`, and `@saltix/grain` in the page sends its requests here. The
- * page is shown full screen as Saltix shows it (bridge version 3, `./phone.ts`): under the system's
- * bars, with the wallet's ⋯ | ✕ over its top right corner, at a phone's and the Galaxy Z Fold's
- * sizes. `npm run dev` serves it with the example grain, `grain dev` with yours
+ * page is framed as Saltix frames it (bridge version 3, `./phone.ts`): inside the safe area below
+ * the band that holds the wallet's ⋯ | ✕, or edge to edge when it declares `viewport-fit=cover`, at a
+ * phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes. `npm run dev` serves it with the example grain, `grain dev` with yours
  * (`?manifest=<url>` loads a manifest and opens its page).
  * Sign-in uses a test grain secret kept in this browser (real signatures, checkable by
  * `@saltix/grain-server`); invoices are checked like a wallet checks them; payments are not made
@@ -85,8 +85,8 @@ async function handle(origin: string, method: string, params: Record<string, unk
   const storageKey = (k: unknown) => `sim.storage.${s.slug}.${String(k)}`;
   switch (method) {
     case "grain_info":
-      // Bridge version 3: the page is full screen, under the bars `safe_area` says, with the wallet's controls at
-      // `controls` (12-grains §5).
+      // Bridge version 3: the page's frame (12-grains §5, §7): zeros and no controls inside the safe area, the bars'
+      // reach and the controls' box edge to edge.
       return {
         slug: s.slug, version: 1, form: "hosted", listing: "unlisted", host: "simulator", host_version: "0.1.0",
         bridge: 3, language: s.language, theme: s.theme, ...phone.insets(), network: "devnet", start: s.start,
@@ -191,7 +191,7 @@ async function handle(origin: string, method: string, params: Record<string, unk
       phone.setHeader(color);
       return null;
     }
-    // A grain is always full screen (bridge 3): expanding changes nothing.
+    // A grain always opens as a full app (bridge 3): expanding changes nothing.
     case "grain_expand": case "grain_haptic": case "grain_share":
       return null;
     default:

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Hello, grain</title>
   <style>
-    /* Full screen, as Saltix shows every app (AGENTS.md): grain.layout() in app.js sets these variables; the values here
-       hold until it does, and outside a wallet. */
+    /* Edge to edge (viewport-fit=cover above; AGENTS.md): Saltix sets these variables itself, and grain.layout() in
+       app.js where it does not; the values here are a plain browser's. */
     :root {
       --saltix-safe-top: env(safe-area-inset-top, 0px);
       --saltix-safe-bottom: env(safe-area-inset-bottom, 0px);

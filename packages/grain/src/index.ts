@@ -1,6 +1,6 @@
 /**
  * `@saltix/grain`: the bridge between a grain and the Saltix wallet it runs in
- * (Saltix specs/12-grains.md §5, bridge version 1; the chat, 22-grain-chats §5, version 2; the full-screen page, its
+ * (Saltix specs/12-grains.md §5, bridge version 1; the chat, 22-grain-chats §5, version 2; the page's frame, its
  * insets and the wallet's controls, and the app's own manage page, version 3: `grain.layout()`, `grain.manage.open()`).
  *
  * In a wallet the page has `window.saltix`, defined before its scripts run; in the simulator
@@ -22,12 +22,15 @@ export const ErrorCode = {
   NoWallet: 4900,
 } as const;
 
-// ── the full-screen page (12-grains §5, §7; bridge version 3) ──
+// ── the page's frame (12-grains §5, §7; bridge version 3) ──
 //
-// Saltix opens every grain edge to edge, under the status bar and the navigation bar, with its own controls (`⋯ | ✕`)
-// floating in the top right corner. The page keeps its text and controls inside the safe area, and every tappable
-// element out of the controls' box. What the page reads, and every fallback, is decided in one place (`layoutOf`):
-// - Saltix with bridge 3 or newer: the wallet's `safe_area` and `controls`;
+// Saltix opens every grain as a full app, its own controls (`⋯ | ✕`) floating in the top right corner, and lays the page
+// out as browsers do: inside the safe area by default (below the status bar, a cutout and a band that holds the
+// controls; above the navigation bar or gesture area and the keyboard), edge to edge only for a page that declares
+// `viewport-fit=cover` in its viewport meta (`viewportFitCover`). Such a page keeps its text and controls inside the safe
+// area, and every tappable element out of the controls' box. Saltix sets the CSS variables (`LAYOUT_VARIABLES`) on the
+// page's `:root` itself; what the page reads, and every fallback, is decided in one place (`layoutOf`):
+// - Saltix with bridge 3 or newer: the wallet's `safe_area` and `controls` (0 and none inside the safe area);
 // - Saltix with bridge 1 or 2: its header sits above the page, so nothing of the page is under the system's bars: a
 //   safe area of 0 and no controls;
 // - a plain browser (no wallet): the browser's own insets (`env(safe-area-inset-*)`) and no controls.
@@ -53,7 +56,8 @@ export interface Controls {
 /** Where the page is drawn, and what is over it. */
 export interface Layout {
   safeArea: SafeArea;
-  /** The wallet's controls over the page, or null where there are none (Saltix bridge 1–2, a plain browser). */
+  /** The wallet's controls over the page, or null where there are none (a page inside the safe area, Saltix bridge 1–2,
+   *  a plain browser). */
   controls: Controls | null;
   /** Where the values come from: Saltix with bridge 3 or newer (`wallet`), an older Saltix (`legacy`), or no wallet
    *  (`browser`). */
@@ -73,8 +77,84 @@ export interface LayoutInfo {
  */
 export const CONTROLS_BOX = { width: 96, height: 48, right: 8, below: 4 } as const;
 
-/** The first bridge version whose page is full screen (`safe_area` with its four sides, `controls`, `insets`). */
+/** The first bridge version that tells the page its frame (`safe_area` with its four sides, `controls`, `insets`). */
 export const FULL_SCREEN_BRIDGE = 3;
+
+/** The band above a page inside the safe area (12-grains §7, §11): the controls' box and 4 px above and below it. */
+export const BAND = CONTROLS_BOX.below + CONTROLS_BOX.height + CONTROLS_BOX.below;
+
+/** ASCII letters in lower case, nothing else changed: the viewport meta's keys and values compare so (12-grains §7). */
+const asciiLower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+
+/**
+ * Whether a viewport meta's `content` asks Saltix to draw the page edge to edge (12-grains §7), as Saltix reads it: split
+ * at commas, semicolons and whitespace into `key=value` pairs (whitespace allowed around `=`), keys and values ASCII
+ * case-insensitive, the last `viewport-fit` deciding; only `cover` is edge to edge. No meta (`null`) is not.
+ */
+export function viewportFitCover(content: string | null | undefined): boolean {
+  if (content == null) return false;
+  let fit: string | null = null;
+  for (const m of content.matchAll(/([^\s,;=]+)\s*=\s*([^\s,;=]*)/g)) {
+    if (asciiLower(m[1]!) === "viewport-fit") fit = m[2]!;
+  }
+  return fit !== null && asciiLower(fit) === "cover";
+}
+
+/** The content of a document's last viewport meta, or null when it has none. */
+export function viewportOf(doc: { querySelectorAll?(selector: string): ArrayLike<{ getAttribute(name: string): string | null }> } | undefined): string | null {
+  const metas = doc?.querySelectorAll?.('meta[name="viewport" i]');
+  if (!metas || metas.length === 0) return null;
+  return metas[metas.length - 1]!.getAttribute("content") ?? "";
+}
+
+/** The system's UI over a window, CSS px: `bars` from each edge (status and navigation bars, a cutout, the gesture
+ *  area), an open `keyboard` from the bottom, the largest radius of the screen's corners on its top and bottom edges. */
+export interface SystemInsets {
+  bars: SafeArea;
+  keyboard?: number;
+  cornerTop?: number;
+  cornerBottom?: number;
+}
+
+/** A page's frame as Saltix lays it out: `view`, how far the page's viewport is inset in the window; `safe_area` and
+ *  `controls`, what the page is told; `capsule`, where the controls are drawn, from the window's top and right edges. */
+export interface Frame {
+  cover: boolean;
+  view: SafeArea;
+  safe_area: SafeArea;
+  controls: Controls | null;
+  capsule: Controls;
+}
+
+/** ⌈r · (1 − 1/√2)⌉: how deep a rounded corner of radius `r` reaches in at its arc's 45° point (12-grains §11). */
+export const cornerDepth = (r: number): number => (r > 0 ? Math.ceil(r * (1 - Math.SQRT1_2) - 1e-9) : 0);
+
+/**
+ * The frame Saltix gives a page under `system`: edge to edge when it declared `viewport-fit=cover` (`cover`), inside the
+ * safe area and below the band otherwise. The controls sit at one place in the window in both. For tools that play the
+ * wallet (the simulator, `grain dev`): the same rule as Saltix's.
+ */
+export function frameFor(system: SystemInsets, cover: boolean): Frame {
+  const b = system.bars;
+  const s: SafeArea = {
+    top: Math.max(length(b.top), cornerDepth(length(system.cornerTop))),
+    bottom: Math.max(length(b.bottom), cornerDepth(length(system.cornerBottom))),
+    left: length(b.left),
+    right: length(b.right),
+  };
+  const keyboard = length(system.keyboard);
+  const capsule = controlsFor(s);
+  if (cover) {
+    return {
+      cover: true, view: { top: 0, bottom: keyboard, left: 0, right: 0 },
+      safe_area: { ...s, bottom: Math.max(0, s.bottom - keyboard) }, controls: capsule, capsule,
+    };
+  }
+  return {
+    cover: false, view: { top: s.top + BAND, bottom: Math.max(s.bottom, keyboard), left: s.left, right: s.right },
+    safe_area: { ...ZERO }, controls: null, capsule,
+  };
+}
 
 /** The CSS custom properties `grain.layout()` sets on `:root`, in pixels. */
 export const LAYOUT_VARIABLES = {
@@ -182,11 +262,13 @@ export interface GrainInfo {
   bridge: number;
   language: string;
   theme: Theme;
-  /** How far the system's bars reach into the page (bridge 3; `left` and `right` from bridge 3, and 0 in bridge 1–2,
-   *  whose header sits above the page). Read it through `grain.layout()`, which takes a missing field as 0. */
+  /** How far the system's UI reaches into the page (bridge 3; `left` and `right` from bridge 3): 0 inside the safe area,
+   *  the real reach for a page that declared `viewport-fit=cover`, and 0 in bridge 1–2, whose header sits above the
+   *  page. Read it through `grain.layout()`, which takes a missing field as 0. */
   safe_area: SafeArea;
-  /** The wallet's controls over the page (bridge 3): keep every tappable element out of this box. Absent before. */
-  controls?: Controls;
+  /** The wallet's controls over the page (bridge 3): keep every tappable element out of this box. Null inside the safe
+   *  area (they sit in the band above the page), absent before bridge 3. */
+  controls?: Controls | null;
   network: Network;
   start: string | null;
 }
@@ -216,8 +298,8 @@ export interface Events {
   theme: { theme: Theme };
   visibility: { visible: boolean };
   /** The page's insets or the wallet's controls changed (bridge 3): the phone turned, unfolded or folded, the window
-   *  resized. `grain.layout()` follows it. */
-  insets: { safe_area: SafeArea; controls: Controls };
+   *  resized, a keyboard opened or closed, the page's frame changed. `grain.layout()` follows it. */
+  insets: { safe_area: SafeArea; controls: Controls | null };
   /** A frame to the grain's alias at the relay (`relay.open`), opened by the wallet: `payload` is hex. */
   relay: { from: string; payload: string };
 }
@@ -284,9 +366,10 @@ function provider(): Provider | null {
   return cached;
 }
 
-/** For tests: forget the provider found. */
+/** For tests: forget the provider found, and the guidance given. */
 export function _reset(): void {
   cached = undefined;
+  guided = false;
 }
 
 /** Whether the page runs in a wallet (or the simulator) that speaks the grain bridge. */
@@ -356,19 +439,22 @@ export const grain = {
   /** The grain is drawn: the wallet hides its splash. */
   ready: () => call<null>("grain_ready"),
   close: () => call<null>("grain_close"),
-  /** Changes nothing since bridge 3: a grain is always full screen. */
+  /** Changes nothing since bridge 3: a grain always opens as a full app. */
   expand: () => call<null>("grain_expand"),
   /** The colour at the top of the page (`#rrggbb`): the wallet draws the status bar's icons and its controls to contrast
    *  with it (bridge 3; before, the colour of its header above the grain). */
   setHeader: (color: string) => call<null>("grain_setHeader", { color }),
   /**
-   * Lay the page out as Saltix shows it (12-grains §5, §7): full screen, edge to edge, with the wallet's controls
-   * `⋯ | ✕` floating in the top right corner. Resolves with the safe area and the controls' box, and keeps both current
-   * (the `insets` event, window resizes and theme changes), calling `onChange` with each new layout. It sets, on
-   * `:root`, `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left`, `--saltix-safe-right`,
-   * `--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width` and `--saltix-controls-height`, so
-   * CSS alone can keep text inside the safe area and a top bar clear of the controls. The returned object's fields are
-   * the current layout (a destructured copy is not); `stop()` stops following.
+   * The page's frame as Saltix lays it out (12-grains §5, §7): inside the safe area by default, edge to edge with the
+   * wallet's controls `⋯ | ✕` floating in the top right corner for a page that declares `viewport-fit=cover`. Resolves
+   * with the safe area and the controls' box, and keeps both current (the `insets` event, window resizes and theme
+   * changes), calling `onChange` with each new layout. It sets, on `:root`, `--saltix-safe-top`, `--saltix-safe-bottom`,
+   * `--saltix-safe-left`, `--saltix-safe-right`, `--saltix-controls-top`, `--saltix-controls-right`,
+   * `--saltix-controls-width` and `--saltix-controls-height`, so CSS alone can keep text inside the safe area and a top
+   * bar clear of the controls: the same values Saltix sets itself, which matter where it does not (an older Saltix, a
+   * plain browser). The returned object's fields are the current layout (a destructured copy is not); `stop()` stops
+   * following. In a wallet, a page that has not declared `viewport-fit=cover` is told so on the console: it stays inside
+   * the safe area, where everything is 0.
    *
    * Outside Saltix bridge 3 it falls back (`layoutOf`): an older Saltix draws its header above the page, so the safe area
    * is 0 and there are no controls; a plain browser gives its own insets (`env(safe-area-inset-*)`) and no controls.
@@ -497,9 +583,27 @@ interface WindowEvents {
   removeEventListener?(type: string, handler: () => void): void;
 }
 
+/** The console's word, once per page, to a page in a wallet that asks for its layout without declaring
+ *  `viewport-fit=cover`: Saltix keeps it inside the safe area, where every value is 0. */
+let guided = false;
+export const COVER_GUIDANCE =
+  "grain.layout(): this page does not declare viewport-fit=cover, so Saltix lays it out inside the safe area, below " +
+  "its controls: the safe area is 0 and no controls are over it. To draw it edge to edge, add " +
+  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"> and keep its content ' +
+  "inside --saltix-safe-* and clear of --saltix-controls-* (AGENTS.md).";
+
+function guide(): void {
+  const g = globalThis as unknown as { document?: Parameters<typeof viewportOf>[0]; console?: { warn(m: string): void } };
+  if (guided || !g.document?.querySelectorAll) return;
+  if (viewportFitCover(viewportOf(g.document))) return;
+  guided = true;
+  g.console?.warn(COVER_GUIDANCE);
+}
+
 async function watchLayout(onChange?: (layout: Layout) => void): Promise<LayoutWatch> {
   const p = provider();
   const w = globalThis as unknown as WindowEvents;
+  if (p) guide();
   let current: Layout = layoutOf(p ? { bridge: 1 } : null, p ? undefined : browserInsets());
   let bridge = 1;
   let stopped = false;

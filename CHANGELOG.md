@@ -27,6 +27,26 @@
 
 ### Changed
 
+- **A page's frame: safe by default, full screen only with `viewport-fit=cover`** (Saltix 12-grains §5, §7, §11, the
+  owner's report of 2026-10-16: a page that knows nothing of insets went under Android's status bar). Saltix lays a page
+  out inside the safe area, below the band that holds its controls, unless the page declares `viewport-fit=cover`; then
+  edge to edge, and Saltix sets `--saltix-safe-*` and `--saltix-controls-*` on `:root` itself.
+  - `@saltix/grain`: `viewportFitCover` (the declaration read as Saltix reads it: the last `viewport-fit`, ASCII
+    case-insensitive, `,` `;` and whitespace between pairs), `viewportOf`, `frameFor` and `cornerDepth` (the frame a
+    wallet gives, for tools that play one), `BAND`; `controls` may be `null` (inside the safe area) in `GrainInfo` and
+    the `insets` event; `grain.layout()` warns once on the console (`COVER_GUIDANCE`) when a page in a wallet asks for its
+    layout without declaring `viewport-fit=cover`.
+  - The simulator frames the page as Saltix does, by its meta, and sets the variables on it (same origin): a phone of
+    360 × 780 with a punch-hole, one on its side with the cutout on the left, the Galaxy Z Fold's three windows (the
+    inner one with its taskbar) and an iPhone-like 393 × 852 with a Dynamic Island, the band in the page's colour and a
+    line saying which frame it is. Its chrome's classes are its own (`sys-*`): the chat cards' `.bar`, `.status` and
+    `.capsule` no longer restyle the status bar and the controls.
+  - `grain lint`: nothing for a page without `viewport-fit=cover`; `cover-without-insets` for a page that declares it
+    while nothing reads the safe area; `full-screen-top-bar` only in such an app, for a bar pinned to the top whose own
+    rule keeps clear of nothing.
+  - The rule line every report for an AI agent ends with, `AGENTS.md`, `grain init`'s `AGENTS.md`, `docs/agents/app.md`
+    and `docs/first-app.md`: one rule set, "safe by default; full screen only with viewport-fit=cover and the insets".
+
 - **Breaking for chat clients**: the grain chat frames gain the team's hello and the server's welcome (Saltix
   22-grain-chats §3a; vectors synced from Saltix 2d0c4c9, a `hello` section). `ChatFrame` tag 4 is `hello`
   (`SignedChatHello`: `ChatHello {slug, id, at, member: SignedMemberProof, lang}`, signed by the user's grain key over

@@ -172,26 +172,37 @@ proof. The same error is reported once an hour, with a count; the team gets at m
 
 ## Designing for Saltix
 
-An app with a screen of its own (a page: `grain init`, then `grain dev`) is shown **full screen**, edge to edge, as
-Saltix shows every app (Saltix 12-grains §7). One line says it, the one Saltix ends **Copy for an AI agent** with:
+An app with a screen of its own (a page: `grain init`, then `grain dev`) opens as a full app, with Saltix's controls
+`⋯ | ✕` floating in its top right corner, and its page laid out as browsers lay out a web page (Saltix 12-grains §7):
+**safe by default; full screen only with viewport-fit=cover and the insets.** One line says it, the one Saltix ends
+**Copy for an AI agent** with:
 
-> Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
+> Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
 
-- **The page runs under the system's bars.** Keep text and controls inside the safe area: `grain.layout()` (from
-  `@saltix/grain`) sets `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left` and `--saltix-safe-right` on
-  `:root` in pixels and keeps them current as the phone turns or unfolds. Backgrounds may run under the bars.
-- **The wallet's controls `⋯ | ✕` float in the top right corner**: a 96 × 48 box, 8 px from the right inset and 4 px below
-  the top one, which `grain_info.controls` and `--saltix-controls-top`, `-right`, `-width` and `-height` give. Never put
-  anything tappable under it. A top bar's title stops short of it, or the bar starts below it.
+- **Inside the safe area, by default.** A page that says nothing about insets is drawn below the status bar, the cutout
+  and a band that holds the controls, above the navigation bar or gesture area and the keyboard. Nothing is ever over
+  it; the band takes your page's colour. Such a page needs no work at all.
+- **Edge to edge, when you ask**: `<meta name="viewport" content="width=device-width, initial-scale=1,
+  viewport-fit=cover">` (`grain init`'s page does). The page then runs under the system's bars: keep text and controls
+  inside the safe area by `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left` and `--saltix-safe-right`,
+  which Saltix sets on `:root` in pixels and keeps current as the phone turns or unfolds (`grain.layout()`, from
+  `@saltix/grain`, sets them where Saltix does not). Backgrounds may run under the bars.
+- **The wallet's controls `⋯ | ✕` float in the top right corner**: over an edge-to-edge page, a 96 × 48 box, 8 px from
+  the right inset and 4 px below the top one, which `grain_info.controls` and `--saltix-controls-top`, `-right`,
+  `-width` and `-height` give. Never put anything tappable under it. A top bar's title stops short of it, or the bar
+  starts below it.
 - **No close button of your own.** ✕ closes the app, and the system's Back goes through your page's history first, then
   closes it. ⋯ opens the wallet's own sheet for the app (its chat, manage, share, reload, permissions).
-- **Name the colour at the top of your page** with `grain.setHeader("#rrggbb")`: the wallet draws the status bar's icons
-  and its controls to contrast with it.
-- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes; CSS px equal dp) in the simulator `grain dev`
-  prints, light and dark: it draws the bars and the controls where Saltix does, and its ✕ and **Back** close the app as
-  the phone's do. `grain lint` warns (`full-screen-top-bar`) about a fixed or sticky top bar that uses none of the variables.
+- **Name the colour at the top of your page** with `grain.setHeader("#rrggbb")`: the wallet draws its band, the status
+  bar's icons and its controls to contrast with it.
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes; CSS px equal dp) and on the iPhone-like screen in
+  the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, inside the safe area or edge to
+  edge by your meta, draws the bars, the cutout and the controls where a phone and Saltix do, and its ✕ and **Back**
+  close the app as the phone's do. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
+  (`cover-without-insets`), and about a bar pinned to the top of such a page that keeps clear of nothing
+  (`full-screen-top-bar`).
 
-A top bar that keeps clear, as `grain init`'s page has it:
+A top bar that keeps clear on an edge-to-edge page, as `grain init`'s page has it:
 
 ```css
 header {
