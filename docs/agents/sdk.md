@@ -13,6 +13,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `chat.ts`, `chat-card.ts` | the chat's formats (specs, requests, messages, member proofs) and the card builder |
 | `card-standard.ts`, `card-lint.ts` | the card standard (22-grain-chats §5a: the action bar's rows and emphasis, polls' looks and shares; it reproduces the vectors' `cards`), and the lint against the guide's numbers ([cards.md](cards.md)) |
 | `chat-server.ts`, `chat-store.ts`, `report.ts`, `stats.ts`, `member.ts` | `ChatServer`: requests, budget, console, error reports, numbers, private apps |
+| `testing.ts`, `dev.ts` | `@saltix/grain-server/testing` (`testChat`: an app's chat under test, wallets that check every card) and `/dev` (`createDevRelay`, `createDevRegistry`): subpaths, not in `index.ts` |
 | `app-key.ts`, `network.ts` | the developer key; the public relays and the chain view a server reads |
 | `relay.ts`, `records.ts`, `seal.ts`, `upload.ts`, `file.ts` | `RelayClient`, relay records, sealed frames, files next to the relay |
 | `login.ts`, `invoice.ts`, `notification.ts`, `sponsor.ts`, `node.ts` | sign-ins, invoices, notifications, sponsors, a node's wallet interface |
@@ -20,7 +21,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `packages/cli/src/main.ts` | `grain`: the help and every command's dispatch |
 | `packages/cli/src/` others | `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `bundle.ts`, `registry.ts` (publish, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `chat.ts` (chat-spec, cert), `sponsor.ts` |
 | `simulator/` | the wallet's side in a desktop browser (`simulator/phone.ts`: the page full screen with the wallet's controls, at a phone's and the Galaxy Z Fold's sizes); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
-| `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay and registry |
+| `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
 | `scripts/sync-vectors.sh` | copies the protocol's golden vectors from a Saltix checkout; `vectors/SOURCE` names its commit |
 | `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key) |
 | `docs/` | `first-app.md`, `chats.md`, and these pages |

@@ -155,6 +155,9 @@ async function main(argv: string[]): Promise<number> {
       if (chat) {
         writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
         writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
+        writeFileSync(join(dir, "chat.mjs"), chatTemplate.chatHandlers(slug));
+        mkdirSync(join(dir, "test"), { recursive: true });
+        writeFileSync(join(dir, "test", "chat.test.mjs"), chatTemplate.chatTest(slug));
         writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);

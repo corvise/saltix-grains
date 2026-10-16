@@ -21,7 +21,7 @@ export const chatPackageJson = (slug: string, sdk: string) => JSON.stringify({
   version: "0.1.0",
   private: true,
   type: "module",
-  scripts: { start: "node server.mjs" },
+  scripts: { start: "node server.mjs", test: "node --test --test-force-exit \"test/*.test.mjs\"" },
   engines: { node: ">=20" },
   dependencies: { "@saltix/grain-server": sdk },
 }, null, 2) + "\n";
@@ -39,7 +39,8 @@ export const chatServer = (slug: string) => `// The chat of ${slug}, run by its 
 // The log is one JSON line per event, and never holds a key or what users wrote.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { AppKey, ChatServer, card, chatSpecFromJson, fileChatStore, setupCannotWork } from "@saltix/grain-server";
+import { AppKey, ChatServer, chatSpecFromJson, fileChatStore, setupCannotWork } from "@saltix/grain-server";
+import { handlers } from "./chat.mjs";
 
 /** The exit code when the setup cannot work as it stands (EX_CONFIG, the SDK's EXIT_CONFIG): the key is not one or the
  *  registry does not name it, or chat.json changed under a version this server served. Restarting would not help. */
@@ -75,16 +76,54 @@ try {
   process.exit(setupCannotWork(e) ? DEAD_KEY : 1);
 }
 
-// One handler for each command chat.json declares. ask.args holds its arguments, typed by the spec; ask.lang is the
-// user's language ("" when unknown): answer in it when you can, else in English.
-chat.command("hello", (ask) => {
-  const name = ask.args.name || (ask.lang === "ru" ? "друг" : "friend");
-  return card().text(ask.lang === "ru" ? \`Привет, \${name}!\` : \`Hello, \${name}!\`).status("done").run("Again", "hello", {});
-});
-chat.text((ask) => card().text(ask.lang === "ru" ? "Выберите команду ниже." : "Pick a command below.").reply("Hello", "hello"));
+// The app's handlers, in chat.mjs: test/chat.test.mjs runs them the same way (npm test).
+handlers(chat);
 
 log("info", "ready", { slug: chat.slug, address: chat.address, network: chat.chain.network, spec: chat.spec.version });
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => void chat.flushReports().finally(() => { chat.close(); process.exit(0); }));
 }
+`;
+
+/** A chat-only grain's handlers (\`chat.mjs\`): what the app does, apart from how it starts, so tests run it too. */
+export const chatHandlers = (slug: string) => `// What ${slug} answers: one handler for each command chat.json declares. server.mjs runs them with the developer key;
+// test/chat.test.mjs runs them on a development network (npm test). ask.args holds a command's arguments, typed by the
+// spec (a number is a bigint); ask.lang is the user's language ("" when unknown): answer in it when you can, else in
+// English.
+import { card } from "@saltix/grain-server";
+
+/** Register the app's handlers on chat, its ChatServer. */
+export function handlers(chat) {
+  chat.command("hello", (ask) => {
+    const name = ask.args.name || (ask.lang === "ru" ? "друг" : "friend");
+    return card().status("done").text(ask.lang === "ru" ? \`Привет, \${name}!\` : \`Hello, \${name}!\`).run("Again", "hello", {});
+  });
+  chat.text((ask) => card().text(ask.lang === "ru" ? "Выберите команду ниже." : "Pick a command below.").reply("Hello", "hello"));
+}
+`;
+
+/** A chat-only grain's first test (\`test/chat.test.mjs\`): its commands end to end, as a wallet sends them. */
+export const chatTest = (slug: string) => `// ${slug}'s chat end to end (npm test): chat.json and the handlers of chat.mjs on a development relay and registry,
+// with a development key (never a real one), asked as Saltix asks and every card checked as Saltix checks it.
+import test from "node:test";
+import assert from "node:assert/strict";
+import { assertCardStandard } from "@saltix/grain-server";
+import { testChat } from "@saltix/grain-server/testing";
+import { handlers } from "../chat.mjs";
+
+test("hello greets by name, in the user's language", async (t) => {
+  const chat = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers });
+  t.after(() => chat.close());
+  const reply = await chat.ask("hello", { name: "Ann" });
+  assert.equal(reply.text, "Hello, Ann!");
+  assert.equal(reply.status?.state, "done");
+  assertCardStandard(reply.message, chat.chat.spec);   // the card design standard (AGENTS.md)
+  assert.equal((await chat.ask("hello", {}, { lang: "ru" })).text, "Привет, друг!");
+});
+
+test("text alone points at the commands", async (t) => {
+  const chat = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers });
+  t.after(() => chat.close());
+  assert.equal((await chat.say("hi")).text, "Pick a command below.");
+});
 `;

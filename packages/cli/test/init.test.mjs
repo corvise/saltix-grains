@@ -108,10 +108,13 @@ test("a chat-only grain's server starts from its developer key alone and answers
   const dir = join(mkdtempSync(join(tmpdir(), "grain-chat-")), "coach");
   const made = grain(["init", dir, "--chat", "--name", "Coach"], tmpdir());
   assert.equal(made.status, 0, made.stderr);
-  for (const f of ["grain.json", "chat.json", "server.mjs", "package.json", "README.md", ".gitignore", "owner.key"]) assert.ok(existsSync(join(dir, f)), f);
+  for (const f of ["grain.json", "chat.json", "server.mjs", "chat.mjs", "test/chat.test.mjs", "package.json", "README.md", ".gitignore", "owner.key"]) {
+    assert.ok(existsSync(join(dir, f)), f);
+  }
   assert.match(made.stdout, /My apps → New app, slug coach.*app\.key.*npm install && npm start/s);
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
   assert.equal(pkg.scripts.start, "node server.mjs");
+  assert.equal(pkg.scripts.test, 'node --test --test-force-exit "test/*.test.mjs"');
   assert.equal(pkg.type, "module");
   // The SDK this tool runs with, by its path while it is not on npm.
   const dep = pkg.dependencies["@saltix/grain-server"];
@@ -120,6 +123,23 @@ test("a chat-only grain's server starts from its developer key alone and answers
   // What npm install makes of it, without the network.
   mkdirSync(join(dir, "node_modules", "@saltix"), { recursive: true });
   symlinkSync(sdk, join(dir, "node_modules", "@saltix", "grain-server"));
+
+  // npm test: the project's own test, through @saltix/grain-server/testing, passes as made; a handler that answers
+  // otherwise fails it. (A test runner of its own: without this runner's context, which would take its results.)
+  const { NODE_TEST_CONTEXT: _, ...env } = process.env;
+  const npmTest = () => spawnSync("node", ["--test", "--test-force-exit", "test/chat.test.mjs"], { cwd: dir, env, encoding: "utf8", timeout: 60_000 });
+  const tested = npmTest();
+  assert.equal(tested.status, 0, tested.stdout + tested.stderr);
+  const handlers = readFileSync(join(dir, "chat.mjs"), "utf8");
+  writeFileSync(join(dir, "chat.mjs"), handlers.replace("`Hello, ${name}!`", "`Hi, ${name}!`"));
+  const broken = npmTest();
+  assert.notEqual(broken.status, 0, "the test catches a changed answer");
+  assert.match(broken.stdout, /Hi, Ann!/);
+  writeFileSync(join(dir, "chat.mjs"), handlers.replace('card().status("done").text(', 'card().text(').replace(").run(\"Again\"", ").status(\"done\").run(\"Again\""));
+  const unstandard = npmTest();
+  assert.notEqual(unstandard.status, 0, "the test catches a card that breaks the standard");
+  assert.match(unstandard.stdout, /status-first/);
+  writeFileSync(join(dir, "chat.mjs"), handlers);
 
   const relay = await createDevRelay();
   const secret = new Uint8Array(32).fill(0x5e);
@@ -172,7 +192,8 @@ test("a chat-only grain's server starts from its developer key alone and answers
   }, user, GENESIS);
   await wallet.send(key.address, encodeChatFrame({ request }), { keep: true });
   const message = await answered;
-  assert.deepEqual(message.message.blocks[0], { text: { text: "Hello, Ann!" } });
+  assert.deepEqual(message.message.blocks, [{ status: { state: 1, text: "" } }, { text: { text: "Hello, Ann!" } }], "the status first, as the card standard has it");
+  assert.ok(!server.lines.some((l) => l.event === "card_standard"), "the template's cards follow the standard");
   assert.equal(message.message.answers, request.request.id);
   const spec = chatSpecFromJson(JSON.parse(readFileSync(join(dir, "chat.json"), "utf8")));
   const ownerKey = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).owner_key;
