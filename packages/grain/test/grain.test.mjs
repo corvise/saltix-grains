@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   grain, inWallet, walletLink, slugLink, chatLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset, layoutOf, cssVariables, controlsFor,
-  CONTROLS_BOX, LAYOUT_VARIABLES,
+  CONTROLS_BOX, LAYOUT_VARIABLES, BAND, viewportFitCover, viewportOf, frameFor, cornerDepth, COVER_GUIDANCE,
 } from "../dist/index.js";
 
 function wallet(answer) {
@@ -312,6 +312,103 @@ test("an older Saltix and a plain browser fall back: zeros and no controls, or t
     assert.equal(s.listening(), 0);
   } finally {
     s.restore();
+    delete globalThis.saltix;
+    _reset();
+  }
+});
+
+// ── the page's frame (12-grains §7): safe by default, edge to edge with viewport-fit=cover ──
+
+// The same cases as Saltix's own reading (saltix-wallet PageFrameTest): a page declares edge to edge, or it does not.
+const COVER = [
+  "width=device-width, initial-scale=1, viewport-fit=cover", "viewport-fit=cover", "width=device-width,viewport-fit=cover",
+  "width=device-width; initial-scale=1; viewport-fit=cover;", "width=device-width initial-scale=1 viewport-fit=cover",
+  "viewport-fit = cover", "VIEWPORT-FIT=COVER", "Viewport-Fit=Cover, width=device-width", "\tviewport-fit=cover\n",
+  "viewport-fit=auto, viewport-fit=cover",
+];
+const SAFE_AREA_ONLY = [
+  null, undefined, "", "width=device-width, initial-scale=1", "viewport-fit=auto", "viewport-fit=contain", "viewport-fit=",
+  "viewport-fit", "viewport-fit=cover, viewport-fit=auto", "xviewport-fit=cover", "viewport-fit=covered", "viewport-fit=cove",
+  "viewport-fit:cover", "viewport-fitcover", 'viewport-fit="cover"', "viewport_fit=cover", "fit=cover", "width=cover",
+  "vıewport-fıt=cover", "VıEWPORT-FıT=COVER",
+];
+
+test("only viewport-fit=cover draws a page edge to edge, read as Saltix reads it", () => {
+  for (const c of COVER) assert.equal(viewportFitCover(c), true, JSON.stringify(c));
+  for (const c of SAFE_AREA_ONLY) assert.equal(viewportFitCover(c), false, JSON.stringify(c));
+  // The document's last viewport meta is the one; none is null.
+  const doc = (...contents) => ({ querySelectorAll: () => contents.map((c) => ({ getAttribute: () => c })) });
+  assert.equal(viewportOf(doc("width=device-width", "viewport-fit=cover")), "viewport-fit=cover");
+  assert.equal(viewportOf(doc()), null);
+  assert.equal(viewportOf(doc(null)), "");
+  assert.equal(viewportOf(undefined), null);
+});
+
+test("the frame a wallet gives a page: inside the safe area below the band, or edge to edge with the insets", () => {
+  assert.equal(BAND, 56);
+  const bars = { top: 32, bottom: 24, left: 0, right: 0 };
+  const safe = frameFor({ bars }, false);
+  assert.deepEqual(safe, {
+    cover: false, view: { top: 88, bottom: 24, left: 0, right: 0 }, safe_area: { top: 0, bottom: 0, left: 0, right: 0 },
+    controls: null, capsule: { top: 36, right: 8, width: 96, height: 48 },
+  });
+  const cover = frameFor({ bars }, true);
+  assert.deepEqual(cover, {
+    cover: true, view: { top: 0, bottom: 0, left: 0, right: 0 }, safe_area: bars,
+    controls: { top: 36, right: 8, width: 96, height: 48 }, capsule: { top: 36, right: 8, width: 96, height: 48 },
+  });
+  // The controls at one place in both, clear of a cutout on the left and buttons on the right.
+  const side = { bars: { top: 24, bottom: 0, left: 32, right: 48 } };
+  assert.deepEqual(frameFor(side, false).capsule, frameFor(side, true).controls);
+  assert.deepEqual(frameFor(side, false).view, { top: 80, bottom: 0, left: 32, right: 48 });
+  // A keyboard: the view ends above it; what the bar reaches beyond it is all the page is told.
+  assert.equal(frameFor({ bars, keyboard: 300 }, false).view.bottom, 300);
+  assert.equal(frameFor({ bars, keyboard: 300 }, true).view.bottom, 300);
+  assert.equal(frameFor({ bars, keyboard: 300 }, true).safe_area.bottom, 0);
+  assert.equal(frameFor({ bars, keyboard: 10 }, true).safe_area.bottom, 14);
+  // Rounded corners: no deeper than their arcs at 45°; the bars win when deeper; garbage is none.
+  assert.deepEqual([cornerDepth(0), cornerDepth(10), cornerDepth(45), cornerDepth(55), cornerDepth(-1)], [0, 3, 14, 17, 0]);
+  const iphone = frameFor({ bars: { top: 59, bottom: 0, left: 0, right: 0 }, cornerTop: 55, cornerBottom: 55 }, true);
+  assert.deepEqual(iphone.safe_area, { top: 59, bottom: 17, left: 0, right: 0 });
+  assert.deepEqual(frameFor({ bars: { top: NaN, bottom: -3, left: "x", right: Infinity }, keyboard: -9 }, true).safe_area,
+    { top: 0, bottom: 0, left: 0, right: 0 });
+  // What a page inside the safe area is told is what layoutOf reads: zeros and no controls.
+  assert.deepEqual(layoutOf({ bridge: 3, safe_area: safe.safe_area, controls: safe.controls }),
+    { safeArea: { top: 0, bottom: 0, left: 0, right: 0 }, controls: null, source: "wallet" });
+});
+
+test("grain.layout() in a wallet tells a page without viewport-fit=cover, once, on the console", async () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (m) => warned.push(m);
+  const page = (content) => {
+    globalThis.document = {
+      documentElement: { style: { setProperty: () => {} } },
+      querySelectorAll: () => (content === null ? [] : [{ getAttribute: () => content }]),
+    };
+  };
+  try {
+    page("width=device-width, initial-scale=1");
+    saltix(3, () => ({ safe_area: { top: 0, bottom: 0, left: 0, right: 0 }, controls: null }));
+    (await grain.layout()).stop();
+    (await grain.layout()).stop();
+    assert.deepEqual(warned, [COVER_GUIDANCE], "once");
+    assert.match(COVER_GUIDANCE, /viewport-fit=cover/);
+    // A page that declared it hears nothing.
+    warned.length = 0;
+    page("width=device-width, viewport-fit=cover");
+    saltix(3, () => ({}));
+    (await grain.layout()).stop();
+    assert.deepEqual(warned, []);
+    // Outside a wallet there is no frame to speak of.
+    page(null);
+    delete globalThis.saltix;
+    _reset();
+    (await grain.layout()).stop();
+    assert.deepEqual(warned, []);
+  } finally {
+    console.warn = warn;
+    delete globalThis.document;
     delete globalThis.saltix;
     _reset();
   }

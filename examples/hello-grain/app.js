@@ -6,8 +6,9 @@ const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 const run = (id, fn) => document.getElementById(id).addEventListener("click", () => fn().catch((e) => show(`${e.code ?? ""} ${e.message}`)));
 
-// Full screen as Saltix shows it: the safe area and the wallet's controls as CSS variables, kept current when the phone
-// turns or unfolds (index.html lays out by them).
+// Edge to edge (index.html declares viewport-fit=cover): the safe area and the wallet's controls as CSS variables, kept
+// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too; this is for older ones
+// and plain browsers.
 grain.layout();
 
 if (!inWallet()) {

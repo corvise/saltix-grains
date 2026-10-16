@@ -12,36 +12,50 @@ Three pages go on from it:
   first, at most 6 actions, short labels, destructive names, choices and polls, answering every tap), checked with
   `assertCardStandard`.
 
-## Building an app: Saltix shows apps full screen
+## Building an app: safe by default, full screen only with viewport-fit=cover
 
-Saltix shows apps full screen: keep tappable content clear of grain_info.controls, pad by grain_info.safe_area, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
+Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
 
 That line closes every report Saltix copies for an AI agent. In full (Saltix specs/12-grains.md §5, §7, bridge version 3):
 
-- **Saltix opens every app full screen, edge to edge.** The page is drawn under the status bar and the navigation bar.
-- **Keep text and controls inside the safe area.** `grain.layout()` (from `@saltix/grain`) sets, on `:root`,
-  `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left` and `--saltix-safe-right` in pixels
-  (`grain_info.safe_area`) and keeps them current when the phone turns, unfolds or folds. Pad by them; backgrounds may
-  run under the bars.
-- **The wallet's controls `⋯ | ✕` float in the top right corner**: `grain_info.controls`, and `--saltix-controls-top`,
-  `--saltix-controls-right`, `--saltix-controls-width`, `--saltix-controls-height` (a box of 96 × 48, 8 px from the right
-  inset and 4 px below the top one; CSS px equal dp). **Never put anything tappable under them.** A top bar's title stops
+- **Saltix opens every app as a full app**, its controls `⋯ | ✕` floating in the top right corner, and lays the page out
+  as browsers do.
+- **Inside the safe area, by default.** A page that says nothing about insets is drawn below the status bar, the
+  cutout and a 56 px band that holds the controls, above the navigation bar or gesture area and the keyboard, clear of
+  rounded corners. Nothing of the system or the wallet is ever over it, so it needs nothing else; the band takes the
+  page's colour (`grain.setHeader`, else `<meta name="theme-color">`, else its background).
+- **Edge to edge only with `viewport-fit=cover`**: `<meta name="viewport" content="width=device-width,
+  initial-scale=1, viewport-fit=cover">`, the web's own declaration (Safari on iOS reads it too). The page is then
+  drawn under the status bar and the navigation bar (never under the keyboard), and keeps its text and controls inside
+  the safe area itself. **Saltix sets the CSS variables on `:root`**: `--saltix-safe-top`, `--saltix-safe-bottom`,
+  `--saltix-safe-left` and `--saltix-safe-right` in pixels (`grain_info.safe_area`), kept current when the phone turns,
+  unfolds or folds and when a keyboard opens. Pad by them; backgrounds may run under the bars. `grain.layout()` (from
+  `@saltix/grain`) sets the same values where Saltix does not, and says on the console when a page asks for them
+  without declaring `viewport-fit=cover`.
+- **The wallet's controls `⋯ | ✕` float in the top right corner**: over an edge-to-edge page, `grain_info.controls`
+  and `--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width`, `--saltix-controls-height` (a box
+  of 96 × 48, 8 px from the right inset and 4 px below the top one; CSS px equal dp); inside the safe area they sit in
+  the band, `controls` is null and the variables 0. **Never put anything tappable under them.** A top bar's title stops
   short of them (`padding-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px)`), or the bar
   starts below them (`top: calc(var(--saltix-controls-top) + var(--saltix-controls-height))`).
+- **`env(safe-area-inset-*)` is not the contract** in a wallet: Android's WebView reports at most a cutout. Read the
+  variables (or `max()` of a variable and its `env()`).
 - **No close button of your own.** ✕ and the system's Back close the app; Back goes through your page's own history
   first. ⋯ opens the wallet's sheet for the app, never inside your page.
-- **`grain.setHeader("#rrggbb")`** names the colour at the top of your page: the wallet draws the status bar's icons and
-  its controls to contrast with it.
+- **`grain.setHeader("#rrggbb")`** names the colour at the top of your page: the wallet draws its band, the status
+  bar's icons and its controls to contrast with it.
 - **Outside Saltix the variables fall back by themselves**: an older Saltix (bridge 1–2) draws its header above the page,
   so the safe area and the controls are 0; a plain browser gives its own insets (`env(safe-area-inset-*)`).
-- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes) in the simulator `grain dev` prints, light and
-  dark. `grain lint` warns (`full-screen-top-bar`) about a fixed or sticky top bar that uses none of the variables.
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes) and on the iPhone-like screen in the simulator
+  `grain dev` prints, light and dark: it frames the page as Saltix does, in both ways, and says which. `grain lint`
+  warns about a page that declares `viewport-fit=cover` and reads no inset (`cover-without-insets`), and about a bar
+  pinned to the top of such a page whose rule keeps clear of nothing (`full-screen-top-bar`).
 
 A sealed app's bundle (`grain bundle`) is the same bytes from the same files on any computer and any Node (files
 stored, never deflated, at most 20 MiB): rebuild it in CI and fail when `grain.json` changes; never edit
 `entry.sealed` by hand.
 
-A top bar that keeps clear, as the page `grain init` makes has it:
+A top bar that keeps clear on an edge-to-edge page, as the page `grain init` makes has it:
 
 ```css
 header {

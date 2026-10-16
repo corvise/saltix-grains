@@ -1,8 +1,9 @@
 // `grain dev`: serve a grain's `public/` on this computer with its manifest signed for the origin each request came
 // to — localhost for a browser, 10.0.2.2 for a debug Saltix in the Android emulator (developer origins, 12-grains §10).
 // A sealed grain's bundle is made from `public/` for every manifest asked for and served at `/_bundle.zip`. The
-// simulator (saltix-grains' `simulator/`, built into this package) is at `/_simulator/`: the page full screen as Saltix
-// shows it, with the wallet's controls, at a phone's and the Galaxy Z Fold's sizes, and the bridge answered.
+// simulator (saltix-grains' `simulator/`, built into this package) is at `/_simulator/`: the page framed as Saltix
+// frames it, with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and the bridge
+// answered.
 import { createServer, type Server } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, normalize, extname, sep } from "node:path";
