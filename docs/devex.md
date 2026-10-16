@@ -90,6 +90,10 @@ await t.close();
 - Exports what `packages/server/test/chat-helpers.mjs` already has (the fake chain, the wallet), with arguments typed by
   the spec, the card checked by `chatMessageProblem`, and helpers for members, the team, `working` and files.
 - `grain init --chat` then writes a test of its `hello` command.
+- **Built** (2026-10-16): `testChat` (`@saltix/grain-server/testing`) with strangers, the owner and named members
+  (proofs), `say`, `hello`, `unasked`, replies read and checked as a wallet checks them; the development relay and a
+  registry of one grain moved into the SDK (`@saltix/grain-server/dev`); `grain init --chat` writes `chat.mjs` (the
+  handlers) and `test/chat.test.mjs`, run by `npm test`.
 - **Effort** S–M.
 
 ### 3. The SDK as versioned packages

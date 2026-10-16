@@ -119,6 +119,8 @@ const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the si
 
 const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the developer key (below); its log is one JSON line per
   event, and \`{"event":"ready",…}\` means the app answers.
+- \`npm test\`: \`test/chat.test.mjs\`, the commands end to end with \`testChat\` from \`@saltix/grain-server/testing\` (a
+  development relay and registry and a development key, nothing real); add a test for each command you add.
 - \`npx grain lint\`: what stops \`grain.json\` from being registered.
 - \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).`;
 
@@ -160,7 +162,10 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    invoice: say in the card what to do if the payment sheet does not open (update Saltix).
 7. **Cards follow the card design standard** ([its rules](${CARDS_GUIDE})), as every Saltix draws them: a status first,
    at most 6 actions, labels of at most 18 characters, the first \`run\` primary, destructive commands named so
-   (\`revoke_key\`, \`delete…\`). Check each card a handler returns with \`assertCardStandard(card, spec)\` in the tests.`;
+   (\`revoke_key\`, \`delete…\`). Check each card a handler returns with \`assertCardStandard(card, spec)\` in the tests.
+8. **Test every command end to end** with \`testChat\` (\`@saltix/grain-server/testing\`): it runs the handlers on a
+   development relay and registry with a development key, asks as a stranger, the owner or a member, and checks every
+   card as Saltix does. Never a real developer key in a test, and never a test against the live network.`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
@@ -178,8 +183,9 @@ ${FULL_SCREEN_RULE}
 
 ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): no page; Saltix draws its home from \`chat.json\`.
 - \`chat.json\`: the chat spec: the commands users run (version 2, above the 1 an app made in Saltix starts with).
-- \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave;
-  one handler for each command. \`package.json\`: \`npm start\` runs it.
+- \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave.
+  \`package.json\`: \`npm start\` runs it.
+- \`chat.mjs\`: the handlers, one for each command, which \`server.mjs\` and the tests (\`test/\`, \`npm test\`) both run.
 - If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the full-screen rules
   below apply to it.` : `- \`public/\`: the page. \`public/grain.js\` is \`@saltix/grain\`, the wallet's bridge: do not edit it (\`grain init\` copies it).
 - \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).`}

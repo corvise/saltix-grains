@@ -155,11 +155,14 @@ async function main(argv: string[]): Promise<number> {
       if (chat) {
         writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
         writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
+        writeFileSync(join(dir, "chat.mjs"), chatTemplate.chatHandlers(slug));
+        mkdirSync(join(dir, "test"), { recursive: true });
+        writeFileSync(join(dir, "test", "chat.test.mjs"), chatTemplate.chatTest(slug));
         writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
         console.log(`next: make the app in Saltix (Apps → My apps → New app, slug ${slug}) and put its developer key in app.key ` +
-          `(owner-only, never on the command line); then npm install && npm start in ${dir}`);
+          `(owner-only, never on the command line); then npm install && npm start in ${dir} (npm test runs its tests)`);
         console.log(`  or on a test network, with owner.key: grain publish --node URL, grain cert init, ` +
           `grain configure --slug ${slug} --server server.key --node URL, grain app-key make --slug ${slug} --node URL`);
         return 0;

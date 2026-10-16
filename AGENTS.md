@@ -66,7 +66,9 @@ status of a dead key, payments) are in [docs/agents/app.md](docs/agents/app.md#t
 raise `chat.json`'s `version` with every change of it (the server refuses to start on a spec changed under a version it
 served, and the store that remembers it is never deleted to get past it); and a server whose setup cannot work as it
 stands (a key of another network or one the registry does not name, such a spec) exits with 78 (`setupCannotWork`,
-`ChatSetupError`), which its supervisor must not restart.
+`ChatSetupError`), which its supervisor must not restart. Test every command end to end with `testChat`
+(`@saltix/grain-server/testing`: a development relay, registry and key, every card checked as Saltix checks it), never
+with a real developer key.
 
 ## Working on this repository
 

@@ -192,6 +192,18 @@
   init`, a chat, tests, a screen, a bundle, publishing, the server, its numbers, errors, payments, updates, logs), what
   was fixed on the way, and a roadmap of 18 items in order with why, effort and dependencies, and what needs the
   protocol or Saltix.
+- **A test harness for an app's chat** (`@saltix/grain-server/testing`; `docs/devex.md` item 2): `testChat({ spec,
+  setup | start, access, members, options, timeoutMs })` starts the app's handlers on a development relay and registry
+  of its own with a development key, and gives wallets that ask as Saltix does — `t.ask(command, args, { lang })` with
+  arguments typed by the spec (a request the spec does not allow is a `TypeError`, never sent), `t.say(text)`,
+  `t.as("owner" | a member's name | anyone)` with the account's member proof for the owner and members, `hello()`,
+  `unasked()`, `connect()` — and check every spec, card and welcome as Saltix does (a frame a wallet would refuse fails
+  the test). Replies are read for tests: `text`, `fields`, `status`, `secrets`, `actions`, the `working` statuses they
+  replaced. `t.registry` changes the registry at a new block (`setAccess`, `setServers`, `retire`), `t.logs` holds the
+  server's log. The development relay moved from `scripts/dev-relay.mjs` (now a re-export) into the SDK with a registry
+  of one grain: `@saltix/grain-server/dev` (`createDevRelay`, `createDevRegistry`). `grain init --chat` writes the
+  handlers in `chat.mjs` (which `server.mjs` runs), `test/chat.test.mjs` and `npm test`; the template's `AGENTS.md` gains
+  rule 8 (test every command end to end, never with a real key), as do `AGENTS.md` and `docs/agents/app.md`.
 - **An app's numbers reach every node through its relay** (Saltix 22-grain-chats §4, 09-relay §3): `RelayClient.reportStats(signed)`
   sends the newest `SignedGrainStats` in a `grain_stats` frame and again whenever the client registers; the `stats`
   event carries the relay's answer (`{taken, slug, at}` or `{taken: false, reason}`), logged as `relay_stats_taken` or

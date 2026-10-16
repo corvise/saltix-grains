@@ -114,6 +114,8 @@ chat.text((ask) => card().text("Pick Plan below."));
   `ChatStore`): the default keeps answered requests and your team's consoles in memory only.
 - **Versions**: raise `chat.json`'s `version` with every change of it, and the program's own version (`version`, which
   `server.mjs` takes from `package.json`) with every release, so error reports name it.
+- **Tests**: test every command end to end with `testChat` (`@saltix/grain-server/testing`), never with a real
+  developer key and never against the live network; a new command comes with its test.
 - **One spec a version**: the server keeps the spec it served in its store and refuses to start (78,
   `chat_spec_changed_under_version`) on a `chat.json` changed under that version; never delete `chat.store.json` to get
   past it, raise `version`.
@@ -133,11 +135,27 @@ chat.text((ask) => card().text("Pick Plan below."));
 
 - **A handler** is a function that returns a card: call it with an `ask`-shaped object and read `card.blocks` (and
   `card.actions(commandOf)`). Fast, and enough for most logic. `assertCardStandard(card, spec)` there too.
-- **End to end**: a development relay (`scripts/dev-relay.mjs` in the SDK's checkout), a fake node answering
-  `node_status`, `grain_get`, `account_get` and `relay_list`, your server started from a development key
-  (`AppKey.of("devnet", genesis, slug, secret)`, never a real key), a wallet as a `RelayClient` sending a signed request.
-  `packages/cli/test/init.test.mjs` does exactly this for the template's `hello`; copy its shape until the SDK has a
-  harness of its own.
+- **End to end** (`npm test`; `grain init --chat` writes `test/chat.test.mjs`): `testChat` from
+  `@saltix/grain-server/testing` starts your handlers (`chat.mjs`) on a development relay and registry with a
+  development key, nothing real, and asks as a wallet does: arguments typed by the spec, the reply checked as Saltix
+  checks a card and read for you (`text`, `fields`, `status`, `secrets`, `actions`, the `working` statuses it
+  replaced).
+
+  ```js
+  import { testChat } from "@saltix/grain-server/testing";
+  import { handlers } from "../chat.mjs";
+  const t = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers, access: "private", members: { ann: ["user"] } });
+  const reply = await t.as("ann").ask("plan", { minutes: 30n, level: "hard" }, { lang: "ru" });
+  assert.deepEqual(reply.fields, { Minutes: "30", Sets: "6" });
+  assert.equal((await t.ask("plan", { minutes: 30n, level: "hard" })).status.state, "refused");  // a stranger
+  await t.as("owner").hello();                         // the owner's console, before anyone writes
+  await t.close();
+  ```
+
+  `t.as("owner")` and the `members` you name carry their accounts' proofs; any other name is a user with none.
+  `t.chat` is the `ChatServer`, `t.registry` the development registry (`setAccess`, `setServers`, `retire`, then
+  `await t.chat.checkRegistry()`), `user.unasked()` waits for `notify` and the team's cards, `t.logs` holds the server's
+  log. A request the spec does not allow is refused in the test itself; a card a wallet would not show fails it.
 - **In Saltix**: run the server with the real developer key and use the app from the owner's phone: its chat is the
   app's console. Your own chat does not run in the simulator yet (it runs `examples/hello-grain`).
 

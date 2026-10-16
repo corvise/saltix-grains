@@ -59,7 +59,7 @@ relay) and **Fail on purpose** (below).
 Make a project of your own beside the checkout, named by your app's slug (in the checkout):
 
 ```sh
-npx grain init ../your-app --chat --slug your-app   # chat.json, server.mjs, package.json, .gitignore, README.md
+npx grain init ../your-app --chat --slug your-app   # chat.json, chat.mjs, server.mjs, test/, package.json, README.md
 cd ../your-app && npm install                        # the SDK, from the checkout (it is not on npm yet)
 mv ../saltix-grains/app.key .                        # .gitignore keeps every *.key out of git
 npm start                                            # the starting chat: one command, hello
@@ -92,7 +92,7 @@ the wallet draws the form and checks it before anything leaves the phone ([docs/
 }
 ```
 
-`server.mjs` has a handler for each command of the spec: replace `hello`'s with `roll`'s.
+`chat.mjs` has a handler for each command of the spec (`server.mjs` runs them): replace `hello`'s with `roll`'s.
 
 ```js
 chat.command("roll", (ask) => {
@@ -102,8 +102,19 @@ chat.command("roll", (ask) => {
 chat.text(() => card().text("Pick Roll below."));
 ```
 
+And its test, in `test/chat.test.mjs` (`npm test` runs it on a development relay and registry, with no key of yours):
+
+```js
+test("roll answers a number of the dice asked", async (t) => {
+  const chat = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers });
+  t.after(() => chat.close());
+  const rolled = Number((await chat.ask("roll", { sides: "d20" })).fields.Rolled);
+  assert.ok(rolled >= 1 && rolled <= 20);
+});
+```
+
 ```sh
-npm start
+npm test && npm start
 ```
 
 Every request names the user's language (`ask.lang`: `en`, `ru`, …, or `""` when the app does not say): answer in it

@@ -481,7 +481,7 @@ else, each value of its kind and within its bounds), signed by the grain key for
 
 ## Trying it
 
-`npm run dev` runs a development relay at `/relay` (`scripts/dev-relay.mjs`: records checked, kept frames held until a
+`npm run dev` runs a development relay at `/relay` (`createDevRelay` of `@saltix/grain-server/dev`: records checked, kept frames held until a
 signed ack, files), a development registry that names the example's server key, and the example's chat on both, from its
 developer key (`examples/hello-grain/chat.json`, `chat.mjs`). In the simulator, load the manifest, then **Load the chat**
 (or **Open the chat** in the grain): it plays the wallet's side exactly, checks every card against the registered keys,
@@ -493,6 +493,34 @@ purpose**: the answer says "failed", and the error report arrives as a message t
 wallet interface>` runs the chat on that node's relays under a certificate instead, for a debug Saltix on that devnet.
 
 `npm run example` runs the same chat as your app's server from your developer key (`SALTIX_APP_KEY`, or `app.key`).
+
+## Testing a chat
+
+`@saltix/grain-server/testing` runs an app's chat end to end in a test, on a development relay and registry of its own
+(`@saltix/grain-server/dev`: `createDevRelay`, `createDevRegistry`) with a development key: nothing real, nothing on the
+network. `grain init --chat` writes `test/chat.test.mjs` with it, run by `npm test`.
+
+```js
+import { testChat } from "@saltix/grain-server/testing";
+const t = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers, members: { dev: ["developer"] } });
+const reply = await t.ask("plan", { minutes: 30n, level: "hard" }, { lang: "ru" });   // a stranger, no proof
+reply.text; reply.fields; reply.status; reply.secrets; reply.actions; reply.working;  // read for you
+await t.as("dev").ask("stats");                                                       // a member's proof
+await t.as("owner").hello();                                                          // the console, before anyone writes
+await t.chat.notify(t.as("bob").address, card().text("Ready"));                       // after t.as("bob").connect()
+await t.close();
+```
+
+- `spec`: a path or file URL of `chat.json`, its JSON, or a spec; `setup(chat)` registers the handlers, or `start(options)`
+  starts the server itself from the options given (a developer key, the relay, the registry). `access: "private"`,
+  `members` by name with roles (`user`, `developer`, `viewer`), `options` for `ChatServer.start` (`store`, `version`…).
+- Arguments are typed by the spec (`argsFor`): a request the spec does not allow is a `TypeError` in the test, never sent.
+- Every frame a wallet gets is checked as Saltix checks it: a spec signed by a key the registry names and not lower than
+  the one held, a card from the app's address that `chatMessageProblem` passes, a welcome `chatWelcomeProblem` passes.
+  Anything else fails the test, as does an answer that does not come within `timeoutMs` (5 s; the message names the
+  server's log events).
+- `t.registry` changes the registry at a new block (`setAccess`, `setServers`, `retire`); `await t.chat.checkRegistry()`
+  makes the server read it now. `t.logs` holds what the server logged.
 
 ## The formats
 

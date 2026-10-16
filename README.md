@@ -226,6 +226,16 @@ await chat.notifyTeam(card().text("A player reported a bug in game 7"));   // th
 await chat.report(error, { context: { command: "/rating" } });              // a card for an AI agent to read
 ```
 
+**Tests** run the chat end to end with `testChat` (`@saltix/grain-server/testing`, [docs/chats.md](docs/chats.md#testing-a-chat)):
+a development relay and registry (`@saltix/grain-server/dev`) and a development key, wallets that ask as Saltix does
+(strangers, the owner, members with proofs) and check every card as Saltix does. `grain init --chat` writes one.
+
+```ts
+const t = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers });
+assert.equal((await t.ask("rating", {}, { lang: "ru" })).status?.state, "done");
+await t.close();
+```
+
 A **sponsor** pays the relays for your users' grain frames when the free share is busy (Saltix 11-access, 12-grains §5.4):
 
 ```sh
