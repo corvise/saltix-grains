@@ -1,8 +1,10 @@
 // `grain bundle`: a sealed grain's files as one ZIP (Saltix 12-grains §8), the same bytes for the same files — sorted
-// names, no times, no extra fields — so its hash names exactly what the owner signed.
+// names, no times, no extra fields, every file stored as it is — so its hash names exactly what the owner signed, on
+// any computer and any Node. Nothing is compressed: a deflater's output is its own (Node's zlib changes between
+// releases), so two builds of the same files could name two hashes. Wallets download a bundle once; the host may
+// compress it on the wire (HTTP gzip) without touching its bytes.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { deflateRawSync } from "node:zlib";
 import { bundleHash, type Manifest } from "@saltix/grain-server";
 
 /** A bundle is at most this large (12-grains §11), and unpacks to at most MAX_UNPACKED (§8: what every wallet takes). */
@@ -51,7 +53,10 @@ function filesUnder(dir: string): string[] {
   return out.sort();
 }
 
-/** The ZIP of `dir` (a grain's `public/`): deterministic, deflated where that is smaller. */
+/** What every entry of a bundle is: stored (ZIP method 0), never deflated. */
+export const STORED = 0;
+
+/** The ZIP of `dir` (a grain's `public/`): deterministic, every file stored as it is. */
 export function makeBundle(dir: string): Bundle {
   const files = filesUnder(dir);
   if (files.length === 0) throw new Error(`${dir}: no files to bundle`);
@@ -67,8 +72,9 @@ export function makeBundle(dir: string): Bundle {
     const data = new Uint8Array(readFileSync(join(dir, ...name.split("/"))));
     unpacked += data.length;
     if (unpacked > MAX_UNPACKED) throw new Error(`the files come to more than ${MAX_UNPACKED} bytes; a bundle unpacks to at most that`);
-    const deflated = new Uint8Array(deflateRawSync(data, { level: 9 }));
-    const [method, body] = deflated.length < data.length ? [8, deflated] : [0, data];
+    if (unpacked > MAX_BUNDLE) {
+      throw new Error(`the files come to more than ${MAX_BUNDLE} bytes; a bundle stores them as they are and holds at most that (20 MiB)`);
+    }
     const nameBytes = new TextEncoder().encode(name);
     const crc = crc32(data);
     // Version 2.0, UTF-8 names (bit 11), no time (1980-01-01 00:00).
@@ -79,11 +85,11 @@ export function makeBundle(dir: string): Bundle {
       if (central) { b.writeUInt16LE(20, at); at += 2; }
       b.writeUInt16LE(20, at); at += 2;
       b.writeUInt16LE(0x0800, at); at += 2;
-      b.writeUInt16LE(method, at); at += 2;
+      b.writeUInt16LE(STORED, at); at += 2;
       b.writeUInt16LE(0, at); at += 2;
       b.writeUInt16LE(0x0021, at); at += 2;
       b.writeUInt32LE(crc, at); at += 4;
-      b.writeUInt32LE(body.length, at); at += 4;
+      b.writeUInt32LE(data.length, at); at += 4; // compressed size: stored, the same
       b.writeUInt32LE(data.length, at); at += 4;
       b.writeUInt16LE(nameBytes.length, at); at += 2;
       b.writeUInt16LE(0, at); at += 2;
@@ -96,7 +102,7 @@ export function makeBundle(dir: string): Bundle {
       }
       return new Uint8Array(b);
     };
-    const local = Buffer.concat([head(0x04034b50, false), nameBytes, body]);
+    const local = Buffer.concat([head(0x04034b50, false), nameBytes, data]);
     centrals.push(new Uint8Array(Buffer.concat([head(0x02014b50, true), nameBytes])));
     locals.push(new Uint8Array(local));
     offset += local.length;

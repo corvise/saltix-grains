@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, bundleHash, fromHex, toHex, verifyManifest } from "@saltix/grain-server";
-import { makeBundle, sealed } from "../dist/bundle.js";
+import { STORED, makeBundle, sealed } from "../dist/bundle.js";
 import { serve, DEV_BUNDLE } from "../dist/dev.js";
 
 function grainDir() {
@@ -43,13 +43,86 @@ test("the same files make the same bundle, whatever their times", () => {
   assert.match(listing, /index\.html/);
   assert.match(listing, /js\/app\.js/);
   assert.equal(execFileSync("unzip", ["-p", join(dir, "b.zip"), "index.html"]).toString(), "<h1>notes</h1>".repeat(50));
-  // Compressible past what wallets unpack: refused though the ZIP would be small.
+  // Past what wallets unpack: refused before anything is built.
   writeFileSync(join(dir, "public", "zeros.bin"), Buffer.alloc(64 * 1024 * 1024 + 1));
   assert.throws(() => makeBundle(join(dir, "public")), /unpacks to at most/);
   writeFileSync(join(dir, "public", "zeros.bin"), Buffer.alloc(1));
   mkdirSync(join(dir, "public", "bad"), { recursive: true });
   writeFileSync(join(dir, "public", "bad", "a\tb.js"), "");
   assert.throws(() => makeBundle(join(dir, "public")), /names use/);
+});
+
+/** A fixed tree: a page, a script in a folder, every byte value, a name with a space, and a hidden file left out. */
+function fixedTree() {
+  const dir = mkdtempSync(join(tmpdir(), "grain-fixed-"));
+  mkdirSync(join(dir, "js"));
+  mkdirSync(join(dir, "img"));
+  writeFileSync(join(dir, "index.html"), "<!doctype html>\n<h1>Notes</h1>\n".repeat(40));
+  writeFileSync(join(dir, "js", "app.js"), 'console.log("notes");\n');
+  writeFileSync(join(dir, "img", "bytes.bin"), Uint8Array.from({ length: 256 }, (_, i) => i));
+  writeFileSync(join(dir, "a b.txt"), "a name with a space\n");
+  writeFileSync(join(dir, ".hidden"), "left out");
+  return dir;
+}
+
+/** The ZIP's entries as its central directory names them: method, sizes, CRC, and the local header's agreeing. */
+function entries(zip) {
+  const b = Buffer.from(zip);
+  const end = b.length - 22;
+  assert.equal(b.readUInt32LE(end), 0x06054b50, "the end record, no comment");
+  const count = b.readUInt16LE(end + 10);
+  let at = b.readUInt32LE(end + 16);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    assert.equal(b.readUInt32LE(at), 0x02014b50);
+    const method = b.readUInt16LE(at + 10);
+    const crc = b.readUInt32LE(at + 16);
+    const packed = b.readUInt32LE(at + 20);
+    const size = b.readUInt32LE(at + 24);
+    const nameLength = b.readUInt16LE(at + 28);
+    const local = b.readUInt32LE(at + 42);
+    const name = b.subarray(at + 46, at + 46 + nameLength).toString("utf8");
+    assert.equal(b.readUInt32LE(local), 0x04034b50);
+    assert.equal(b.readUInt16LE(local + 8), method, `${name}: the local header's method`);
+    assert.equal(b.readUInt32LE(local + 18), packed, `${name}: the local header's size`);
+    out.push({ name, method, crc, packed, size });
+    at += 46 + nameLength;
+  }
+  return out;
+}
+
+// The bytes of a bundle are a constant of its files: this hash names the ZIP built on Node 22 and 24 and, byte for byte,
+// one built by hand from the format with another language's CRC; CI builds it again on Node 20 and 24
+// (.github/workflows/ci.yml). A change here changes the next hash of every published grain.
+const FIXED_HASH = "9a2d268c1857a1fd9bd39338d65a7370d476b46c19849f608638d9917627d589";
+
+test("a bundle's bytes depend on its files only: every entry stored, the same hash on any Node", () => {
+  const dir = fixedTree();
+  const a = makeBundle(dir);
+  const b = makeBundle(dir);
+  assert.deepEqual(b.zip, a.zip, "built twice, the same bytes");
+  assert.deepEqual(a.files, ["a b.txt", "img/bytes.bin", "index.html", "js/app.js"]);
+  const listed = entries(a.zip);
+  assert.deepEqual(listed.map((e) => e.name), a.files);
+  for (const e of listed) {
+    assert.equal(e.method, STORED, `${e.name}: stored, not deflated (a deflater's output is its own)`);
+    assert.equal(e.packed, e.size, `${e.name}: stored as it is`);
+  }
+  assert.ok(listed.find((e) => e.name === "index.html").size > 1000, "compressible, and still stored");
+  const bytes = (name) => Buffer.byteLength(name);
+  assert.equal(a.size, listed.reduce((n, e) => n + 30 + 46 + 2 * bytes(e.name) + e.size, 22), "headers, names and files: nothing else");
+  assert.equal(a.hash, FIXED_HASH, `on ${process.version}`);
+  writeFileSync(join(dir, "bundle.zip"), a.zip);
+  assert.match(execFileSync("unzip", ["-t", join(dir, "bundle.zip")]).toString(), /No errors detected/);
+  assert.deepEqual(execFileSync("unzip", ["-p", join(dir, "bundle.zip"), "img/bytes.bin"]), Buffer.from(Uint8Array.from({ length: 256 }, (_, i) => i)));
+});
+
+test("files past 20 MiB are refused, however well they would compress", () => {
+  const dir = mkdtempSync(join(tmpdir(), "grain-large-"));
+  writeFileSync(join(dir, "zeros.bin"), Buffer.alloc(20 * 1024 * 1024 + 1));
+  assert.throws(() => makeBundle(dir), /holds at most that \(20 MiB\)/);
+  writeFileSync(join(dir, "zeros.bin"), Buffer.alloc(20 * 1024 * 1024 - 200));
+  assert.ok(makeBundle(dir).size <= 20 * 1024 * 1024, "just under it fits, headers and all");
 });
 
 test("the manifest names the bundle, its sources, start and connect", () => {
@@ -86,5 +159,15 @@ test("grain dev serves a sealed grain's bundle where its manifest says", async (
     assert.equal(bundleHash(new Uint8Array(zip)), e.bundle);
   } finally {
     server.close();
+  }
+});
+
+test("the agents' rules say how a bundle is checked: rebuilt in CI, grain.json unchanged", async () => {
+  const { agentsMd } = await import("../dist/template.js");
+  const root = readFileSync(new URL("../../../AGENTS.md", import.meta.url), "utf8");
+  const guide = readFileSync(new URL("../../../docs/agents/app.md", import.meta.url), "utf8");
+  for (const text of [agentsMd("notes", false), root, guide]) {
+    assert.match(text, /rebuild it in CI and fail when `grain\.json` changes/i);
+    assert.match(text, /never edit\s+`entry\.sealed` by hand/);
   }
 });

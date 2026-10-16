@@ -11,3 +11,11 @@ jobs:
         with: { node-version: 22 }
       - run: npm ci
       - run: npm test
+      # A bundle's bytes are a constant of its files, whatever Node makes them (docs/devex.md, 7): the same build, run
+      # again on the newest and the oldest Node the SDK supports.
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: node --test --test-force-exit --test-name-pattern "any Node" packages/cli/test/bundle.test.mjs
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node --test --test-force-exit --test-name-pattern "any Node" packages/cli/test/bundle.test.mjs
