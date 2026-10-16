@@ -11,7 +11,7 @@ const read = (path) => readFileSync(new URL(path, root), "utf8");
 const help = spawnSync("node", [fileURLToPath(new URL("../dist/main.js", import.meta.url)), "help"], { encoding: "utf8" }).stdout;
 
 test("the README shows every command the help lists", () => {
-  const commands = [...new Set([...help.matchAll(/^ {2}grain ([a-z-]+)/gm)].map((m) => m[1]))].filter((c) => c !== "help");
+  const commands = [...new Set([...help.matchAll(/^ {2}grain ([a-z][a-z-]*)/gm)].map((m) => m[1]))].filter((c) => c !== "help");
   assert.ok(commands.length >= 15, commands.join(" "));
   const readme = read("README.md");
   for (const c of commands) assert.ok(readme.includes(`grain ${c} `), `the README never shows grain ${c}`);
