@@ -72,6 +72,10 @@
   moved here from the command line. The simulator says what the owner's Saltix offers. Breaking for chat clients that
   refuse unknown action tags: Saltix 0.1.51 and older drop such a card.
 
+- `docs/devex.md`: what building an app is like today, from a walk through the whole journey (developer key, `grain
+  init`, a chat, tests, a screen, a bundle, publishing, the server, its numbers, errors, payments, updates, logs), what
+  was fixed on the way, and a roadmap of 18 items in order with why, effort and dependencies, and what needs the
+  protocol or Saltix.
 - **An app's numbers reach every node through its relay** (Saltix 22-grain-chats §4, 09-relay §3): `RelayClient.reportStats(signed)`
   sends the newest `SignedGrainStats` in a `grain_stats` frame and again whenever the client registers; the `stats`
   event carries the relay's answer (`{taken, slug, at}` or `{taken: false, reason}`), logged as `relay_stats_taken` or
