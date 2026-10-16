@@ -270,7 +270,7 @@ hash compared with `grain.json`'s.
 - **Long-lived public files for bundles** (6): a file class on relays or the durable tier kept while a live manifest
   names it (09-relay §10.5, 10-storage, 12-grains §8).
 - **Node builds for macOS** (12): a local devnet on a developer's own computer.
-- **Saltix's developer pages** (saltix.io/developers, in saltix-wallet's `site/`): they still say the app studio and the
-  developer key are "being built", that a handler's error goes "to your log only" (it reaches the console), and that the
-  kit is shared on request.
+- **Saltix's developer pages** (saltix.io/developers, in saltix-wallet's `site/`): rewritten to what exists (the studio
+  and the developer key, the console, the home and the capsule rule, payments with a developer key) in
+  corvise/saltix-wallet#276. The kit stays private, shared through support, until Distribution (3) is decided.
 - **Distribution** (3): whether the SDK and its docs may be public.
