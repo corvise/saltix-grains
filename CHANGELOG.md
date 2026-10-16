@@ -56,6 +56,9 @@
   public again, handing the newest numbers over at once. The registry is read as before: every few minutes and at a
   request's new beacon block. Its members still get them in the chat. The nodes refuse a private grain's numbers
   (`private`) anyway.
+- `grain dev` says a taken port in words (`port 8090 is taken …: pass --port`, exit 1) instead of dying with an
+  unhandled `EADDRINUSE` and a stack (`npm run dev` takes 8090 too), and refuses a chat-only grain at once, instead of
+  printing that it serves a `public/` that does not exist and answering every request with an error, forever.
 - `npm run dev`: `/` redirects to the simulator's own path, so its page finds its script (it was not found at `/`).
 
 ### Added

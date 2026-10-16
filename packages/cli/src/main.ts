@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UNOWNED, AppKey, iconHash, verifyManifest, grainQuote, parseHandle, rpc, type GrainCall, type Manifest } from "@saltix/grain-server";
+import { UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, rpc, type GrainCall, type Manifest } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, salt, type Signing } from "./registry.js";
@@ -172,6 +172,9 @@ async function main(argv: string[]): Promise<number> {
     }
     case "dev": {
       const port = Number(text(flags, "port", "8090"));
+      if (isChatOnly(readManifest(manifestPath).manifest)) {
+        throw new Error("a chat-only grain has no page to serve: run its chat server (npm start; docs/first-app.md)");
+      }
       const secret = readKey(keyPath);
       await serve(process.cwd(), () => readManifest(manifestPath).manifest, secret, port);
       console.log(`serving ${resolve("public")} on port ${port}`);
