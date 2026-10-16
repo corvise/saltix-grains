@@ -60,6 +60,14 @@
 
 ### Added
 
+- `grain init --chat` makes a server to run: `server.mjs` starts the chat from the developer key (`app.key`, owner-only,
+  or `SALTIX_APP_KEY`; `NODE_RPC` for a network with no public relays), answers the starting spec's `hello` in the
+  user's language, logs one JSON line per event, flushes error reports on `SIGINT`/`SIGTERM`, and exits with 78
+  (EX_CONFIG) when the key cannot work, so a supervisor does not restart it; `package.json` runs it with `npm start` and
+  depends on the server SDK the tool runs with (by its path while the SDK is not on npm). `grain init` refuses a slug
+  the registry would refuse before making anything (a directory named `t1` made a grain no command could register), and
+  every project's `.gitignore` keeps all `*.key` files (`sponsor.key` and a rater's key were not), `node_modules/` and
+  `bundle.zip` out of git.
 - **Updates the owner approves in the console** (Saltix 22-grain-chats §4, 12-grains §10; vectors synced from the
   protocol PR): the card action `publish` (`Card.publish(label, manifest | link)`, tag 3) carries the manifest's text
   as a publishing link does, and `ChatServer.proposeUpdate(manifest | link, { text?, label?, roles? })` sends it to the

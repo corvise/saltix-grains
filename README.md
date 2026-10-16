@@ -57,7 +57,7 @@ npx grain publish --node … --key owner.key --wait # or sign with a key file (t
 npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
 npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
-npx grain init coach --chat               # a chat-only grain: grain.json and chat.json, no page
+npx grain init coach --chat               # a chat-only grain: grain.json, chat.json, server.mjs (npm start), no page
 npx grain configure --slug dice --server server.key --category games --node …   # the registry names the server key
 npx grain app-key make --slug dice --node …     # app.key: its developer key, owner-only, never printed
 npx grain app-key --file app.key          # a developer key's public parts, and whether the registry names it
