@@ -25,8 +25,8 @@
 - `npm run dev` reads a node at `http://127.0.0.1:30334`, where a node's wallet interface listens by default (it read
   30734, where none does, so invoices and payments in the example failed with a local node). The README says which kind
   of network Saltix's test network is (devnet: `dsalt1…`, `network: "devnet"`; its examples said `testnet`), and where
-  `--node` comes from: a node of your own or a tunnel to one, while the chat server and `grain app-key` need none. Its
-  table names every command; tests hold the README to the help and to the port.
+  `--node` comes from: a node of your own or a tunnel to one, while the chat server and `grain app-key` need none.
+  Tests hold the README to the help (every command shown), to the port and to the network's kind.
 
 - `decodeInvoice` and the certificates in notifications refuse an asset tag other than 0 or 1 and a time beyond 2^53
   ms instead of reading them loosely; relay records' base64url no longer needs Node's `Buffer`, so the formats run in a

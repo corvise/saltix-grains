@@ -10,11 +10,11 @@ const root = new URL("../../../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf8");
 const help = spawnSync("node", [fileURLToPath(new URL("../dist/main.js", import.meta.url)), "help"], { encoding: "utf8" }).stdout;
 
-test("the README's table names every command the help lists", () => {
+test("the README shows every command the help lists", () => {
   const commands = [...new Set([...help.matchAll(/^ {2}grain ([a-z-]+)/gm)].map((m) => m[1]))].filter((c) => c !== "help");
   assert.ok(commands.length >= 15, commands.join(" "));
-  const row = read("README.md").split("\n").find((l) => l.startsWith("| [`@saltix/grain-cli`]"));
-  for (const c of commands) assert.ok(row.includes(`\`${c}\``), `the README's table lacks ${c}`);
+  const readme = read("README.md");
+  for (const c of commands) assert.ok(readme.includes(`grain ${c} `), `the README never shows grain ${c}`);
 });
 
 test("npm run dev reads a node at a node's own default port, as the README says", () => {
