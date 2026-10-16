@@ -23,8 +23,10 @@ A server key speaks for the grain in either of two ways (22-grain-chats §1):
 - **Registered**: the grain's registry record names it (`ConfigureGrain`, at most 4 keys). No certificate and no expiry:
   the owner replaces or revokes it, and wallets refuse it from the block that does. It also signs the chat spec while
   every command is free, so a developer changes commands without the owner's phone, and the numbers the app reports.
-- **Certified**: the owner key certifies it for at most 31 days (`InvoiceKeyCert`). Invoices still need this, or the
-  owner key.
+- **Certified**: the owner key certifies it for at most 31 days (`InvoiceKeyCert`).
+
+Both sign invoices. A registered key's invoice pays the grain's owner only, which wallets check against the registry
+([payments.md](payments.md); Saltix 0.1.53 and older refuse it). A certified key's invoice may pay any account.
 
 ### From a developer key (registered)
 
@@ -181,8 +183,8 @@ http.createServer((req, res) => chat.serveDocument(req, res) || app(req, res));
 
 **Cards.** `card()` builds a message of 1–16 blocks and 0–8 actions: `text` (1–4 000 characters, line breaks kept, no
 markup), `fields` (1–16 rows of a label up to 40 and a value up to 200 characters), `secret` (label, value up to 256,
-`expiresAt`), `file` (a `FileRef` from `chat.upload`, a title, a format such as `csv`), `invoice` (`signInvoice`'s hex,
-for this grain), `status` (`working`, `done`, `refused`, `failed`, up to 200 characters); actions `run` (a command and
+`expiresAt`), `file` (a `FileRef` from `chat.upload`, a title, a format such as `csv`), `invoice` (`chat.invoice`'s
+result or `signInvoice`'s hex, for this grain: [payments.md](payments.md)), `status` (`working`, `done`, `refused`, `failed`, up to 200 characters); actions `run` (a command and
 arguments, typed by the spec), `open` (the grain's screen with `start`), `reply` (a text up to 200 characters) and
 `publish` (an update of the app for its owner to approve, [below](#updates-the-owner-approves-in-the-console)). The
 server signs it with the server key, as a registered key (`ServerKey::Registered`) or under its certificate; a frame

@@ -38,6 +38,8 @@ import { RelayClient, type RelayEndpoint, type RelayFrame } from "./relay.js";
 import { type ErrorFacts, REPORT_FOLD_MS, type ReportContext, errorFacts, errorFingerprint, reportCard, scrubSecrets } from "./report.js";
 import { STATS_EVERY_MS, type SignedGrainStats, signGrainStats } from "./stats.js";
 import { uploadFile } from "./upload.js";
+import { type Asset, type Invoice, signInvoice, unitsOf } from "./invoice.js";
+import { type Payment, findPayment } from "./node.js";
 
 /** Where a grain serves its chat spec, the server key's certificate and the numbers it reports (§2). */
 export const CHAT_DOCUMENT_PATH = "/.well-known/saltix-grain-chat";
@@ -155,6 +157,32 @@ export class ChatKeyNotRegistered extends Error {
     super(`the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ${REMEDY[reason](slug)}`);
     this.name = "ChatKeyNotRegistered";
   }
+}
+
+/** How long `ChatServer.invoice` keeps an invoice payable unless told: 30 minutes. */
+export const INVOICE_LIFE_MS = 30 * 60_000;
+
+/** What `ChatServer.invoice` asks for. */
+export interface InvoiceRequest {
+  /** Base units (a bigint), or a decimal string in whole units: `"2.5"` SALT. */
+  amount: bigint | string;
+  /** SALT by default. */
+  asset?: Asset;
+  /** What the payment sheet shows, and the transfer's public memo after the reference: at most 200 bytes. */
+  memo?: string;
+  /** 16 bytes in hex that you find the payment by; random by default. */
+  reference?: string;
+  /** How long the invoice can be paid (default `INVOICE_LIFE_MS`). */
+  expiresInMs?: number;
+  /** Who is paid, an account id in hex: the grain's owner by default, and the only payee of a registered key's invoice. */
+  to?: string;
+}
+
+/** An invoice `ChatServer.invoice` signed: `hex` goes in a card (`card().invoice(hex)`), `payee` is the address paid. */
+export interface SignedAppInvoice {
+  invoice: Invoice;
+  hex: string;
+  payee: string;
 }
 
 /** A message the server sent: what `replace` updates. */
@@ -683,6 +711,51 @@ export class ChatServer {
     await this.spend(address);
     const signed = signNotification({ ...n, slug: this.slug, at: this.now() }, this.secret, this.chain.genesis, this.certificate ?? undefined);
     await this.deliver(address, signed);
+  }
+
+  /**
+   * An invoice for this grain (12-grains §5.2), signed by the server key: put `hex` in a card (`card().invoice(hex)`),
+   * and the user's wallet opens its own payment sheet from it; `paymentOf` finds the payment. A registered key (a
+   * developer key's) invoices the grain's owner only, so `to` is the owner the registry names: wallets check it, and a
+   * leaked key cannot redirect a payment. A certified key may name another `to`. Saltix 0.1.53 and older refuse a
+   * registered key's invoice.
+   */
+  invoice(request: InvoiceRequest): SignedAppInvoice {
+    this.running();
+    const owner = this.record?.owner ?? null;
+    if (!this.certificate) {
+      if (!this.record || owner === null) throw new Error("invoice: the grain's registry record is unknown (pass node, or start from a developer key)");
+      if (this.record.retired !== null) throw new Error("invoice: the grain is retired, it takes no payment");
+      if (request.to !== undefined && request.to !== owner) {
+        throw new Error("invoice: a registered server key's invoice pays the grain's owner only (12-grains §5.2)");
+      }
+    }
+    const to = request.to ?? owner;
+    if (to === null) throw new Error("invoice: to, the account id that is paid");
+    const asset = request.asset ?? "SALT";
+    const amount = unitsOf(request.amount, asset);
+    if (amount <= 0n) throw new Error("invoice: a positive amount");
+    const invoice: Invoice = {
+      slug: this.slug, to, asset, amount, memo: request.memo ?? "", reference: request.reference ?? newChatId(),
+      expires_at: this.now() + (request.expiresInMs ?? INVOICE_LIFE_MS),
+    };
+    const hex = signInvoice(invoice, this.secret, this.chain.genesis, this.certificate ?? undefined);
+    this.log("info", "invoice_signed", { asset, registered: !this.certificate });
+    return { invoice, hex, payee: encodeAddress(this.chain.network, fromHex(to, 32)) };
+  }
+
+  /**
+   * The payment of `invoice` on the canonical chain, found by its reference among the payee's latest `limit` transfers
+   * (`findPayment`) through the server's node or relays; null until it is there. Only a payment of the invoice's asset
+   * and at least its amount counts. Wait for the `confirmations` you need before you deliver.
+   */
+  async paymentOf(invoice: Invoice | SignedAppInvoice, limit = 200): Promise<Payment | null> {
+    const inv = "invoice" in invoice ? invoice.invoice : invoice;
+    if (!this.view) throw new Error("paymentOf: no node to read the chain from (pass node, or start from a developer key)");
+    const payee = encodeAddress(this.chain.network, fromHex(inv.to, 32));
+    const payment = await findPayment(this.view.node, payee, inv.reference, limit);
+    if (!payment || payment.asset !== inv.asset.toLowerCase() || BigInt(payment.amount) < inv.amount) return null;
+    return payment;
   }
 
   /** Send `user` the current spec, with the certificate when the key has one (`ChatFrame::Spec`). */

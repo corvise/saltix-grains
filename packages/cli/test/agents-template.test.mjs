@@ -1,5 +1,5 @@
 // The AGENTS.md every `grain init` project gets says what the SDK and its guide for agents say: the full-screen rule,
-// a link to docs/agents/app.md, and the five rules every app follows, each as the server `grain init --chat` makes and
+// a link to docs/agents/app.md, and the six rules every app follows, each as the server `grain init --chat` makes and
 // the SDK's guide have it, so the three never drift apart.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -18,13 +18,13 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
     assert.ok(text.includes(FULL_SCREEN_RULE), "the full-screen rule, word for word");
     assert.ok(text.includes(`](${APP_GUIDE})`), "the guide, by its address: a project has no copy");
     assert.ok(text.includes(`](${APP_GUIDE}#the-rules-every-app-follows)`));
-    assert.ok(text.includes(appRules), "the five rules");
+    assert.ok(text.includes(appRules), "the six rules");
     assert.ok(text.includes("--saltix-controls-width"), "and the full-screen ones");
   }
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
-  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 5);
+  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 6);
 });
 
 test("the anchor the rules link to is the guide's heading", () => {
@@ -73,4 +73,16 @@ test("(e) a key that cannot work exits with 78, anything else with 1", () => {
   assert.match(appRules, /Exit with status 78 when the key cannot work/);
   assert.match(appRules, /`RestartPreventExitStatus=78`/);
   assert.match(guide, /RestartPreventExitStatus=78/);
+});
+
+test("(f) payments: the SDK's calls, to the owner only, delivered on the chain's word, as the guide says", () => {
+  for (const call of ["`chat.invoice`", "`chat.paymentOf`"]) {
+    assert.ok(appRules.includes(call), call);
+    assert.ok(guide.includes(call), `the guide: ${call}`);
+  }
+  assert.match(appRules, /pays the app's\s+owner and nobody else/);
+  assert.match(guide, /a developer key's invoice pays the owner/);
+  assert.match(appRules, /never on the page's or the user's word/);
+  assert.match(guide, /never deliver on the page's or the user's word/i);
+  assert.match(appRules, /Saltix 0\.1\.53 and older/);
 });

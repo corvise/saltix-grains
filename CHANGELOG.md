@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Payments from a developer key** (Saltix 12-grains §5.2, vectors synced from Saltix #223): a registered server key
+  signs invoices whose `to` is the grain's owner, which wallets check against the registry. `ChatServer.invoice`
+  signs one to the owner the registry names and refuses any other payee, a retired grain or an unknown record, before
+  anything is signed; a card's `invoice` block takes its result. `ChatServer.paymentOf` finds the payment through the
+  server's relays or node (only the invoice's asset and at least its amount). `signInvoice` takes an `AppKey` (its own
+  grain and network, no certificate). `invoiceProblem` takes the grain's record and says `retired` and `payee` as
+  wallets do. `findPayment` takes any wallet interface, `unitsOf` reads `"2.5"` SALT. Docs: `docs/payments.md`.
+  Saltix 0.1.53 and older refuse such an invoice. `AGENTS.md`, every project's `AGENTS.md` (`grain init`: a sixth rule,
+  money moves only in the wallet and only to the owner) and `docs/agents/app.md` say so.
+
 ### Changed
 
 - **Breaking for chat clients**: the grain chat frames gain the team's hello and the server's welcome (Saltix

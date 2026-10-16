@@ -32,7 +32,7 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | `--node` | every registry command needs a node's plain-HTTP interface; the node is published for Linux x86-64 only; the test network's nodes are not reachable that way | roadmap 4 |
 | Spec changes | a `chat.json` changed under the same version starts fine and reaches nobody | roadmap 5 |
 | Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | roadmap 6, 7 |
-| Payments | a server running from a developer key cannot sign invoices, and Saltix offers no way to certify it | roadmap 9 |
+| Payments | a server running from a developer key could not sign invoices | done: it signs invoices to the owner (`chat.invoice`, [payments.md](payments.md)) |
 | Logs | `ChatServer` logs nothing unless given `log`, and keeps its state in memory unless given a store | roadmap 13 |
 
 ## The roadmap
@@ -47,7 +47,7 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | 6 | **Bundles hosted without your own server** | A sealed screen needs an https host today | M (interim) / L | protocol: long-lived public files |
 | 7 | **Bundle bytes independent of zlib** | The same files may make another hash on another Node | S | a version bump for published bundles |
 | 8 | **One command to deploy the server** | Every app rebuilds the systemd unit, credentials and restart rules | M | 3 |
-| 9 | **Payments for apps made in Saltix** | A developer key cannot sign invoices, and nothing certifies it | S (SDK) + M (Saltix) | the owner: protocol or Saltix |
+| 9 | **Payments for apps made in Saltix** (done) | A developer key could not sign invoices | S (SDK) + M (Saltix) | decided: invoices to the owner |
 | 10 | **An app doctor** | "Why does my app not answer?" has eight possible answers today | M | 4 |
 | 11 | **Typed handlers from the spec** | A number argument is a `bigint`, a flag may be missing: found at run time | S–M | — |
 | 12 | **A payments sandbox and a funded key** | Invoices and `findPayment` need a node and test SALT | M | 4; macOS nodes for a local devnet |
@@ -177,10 +177,11 @@ or a key it certified. An app made in Saltix has its owner key on the phone (a m
 and Saltix has no way to certify the server key, while `grain cert` needs the owner key as a file. So an app made in
 Saltix cannot take a payment through an invoice at all.
 
-- Either the protocol lets a registered key sign invoices to the owner's account (the invoice's `to` fixed to the
-  grain's owner, so a stolen developer key cannot redirect money), or Saltix adds **Certify for payments** in My apps
-  (an `InvoiceKeyCert` signed on the phone for N days, renewed from the console) and the SDK takes it (`chat.setCert`).
-- **Effort** S in the SDK, M in Saltix. **Depends on** the owner's decision.
+- **Decided and built (2026-10-16)**: a registered key signs invoices whose `to` is the grain's owner, as the registry
+  has it when the wallet checks (12-grains §5.2), so a stolen developer key cannot redirect money. Saltix's
+  **Certify for payments** was rejected: one more owner action for no added safety. The SDK has `chat.invoice`,
+  `chat.paymentOf` and `signInvoice` with an `AppKey` ([payments.md](payments.md)); Saltix takes such invoices from its
+  release after 0.1.53.
 
 ### 10. An app doctor
 
@@ -263,15 +264,13 @@ hash compared with `grain.json`'s.
 
 ## For the owner: what needs the protocol or Saltix
 
-- **Invoices from a developer key** (9): a registered key signing invoices to the owner's account (12-grains §5.2), or
-  certifying the server key from Saltix.
 - **The spec's version rule**: 22-grain-chats §2 says a wallet takes a spec whose version is at least the one it holds;
   Saltix takes only a higher one. Either the spec says "higher", or Saltix takes an equal one (which lets a changed spec
   under the same version through: the stricter rule with the SDK's guard of 5 is safer).
 - **Long-lived public files for bundles** (6): a file class on relays or the durable tier kept while a live manifest
   names it (09-relay §10.5, 10-storage, 12-grains §8).
 - **Node builds for macOS** (12): a local devnet on a developer's own computer.
-- **Saltix's developer pages** (saltix.io/developers, in saltix-wallet's `site/`): they still say the app studio and the
-  developer key are "being built", that a handler's error goes "to your log only" (it reaches the console), and that the
-  kit is shared on request.
+- **Saltix's developer pages** (saltix.io/developers, in saltix-wallet's `site/`): rewritten to what exists (the studio
+  and the developer key, the console, the home and the capsule rule, payments with a developer key) in
+  corvise/saltix-wallet#276. The kit stays private, shared through support, until Distribution (3) is decided.
 - **Distribution** (3): whether the SDK and its docs may be public.

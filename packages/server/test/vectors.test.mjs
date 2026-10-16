@@ -6,7 +6,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import {
   encodeManifest, manifestId, manifestMessage, verifyManifest, signManifest, iconHash, bundleHash, manifestProblem,
   loginMessage, verifyLogin, decodeInvoice, invoiceMessage, invoiceProblem, signInvoice, issueInvoiceKeyCert, memoText,
-  referenceInMemo, toHex, fromHex, isChatOnly,
+  referenceInMemo, toHex, fromHex, isChatOnly, AppKey,
 } from "../dist/index.js";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
@@ -77,6 +77,52 @@ test("invoices by the owner and by a certified key", () => {
   assert.deepEqual(cert, inv.cert);
   assert.equal(toHex(ed25519.getPublicKey(fromHex(inv.server_secret, 32))), inv.cert.key);
   assert.equal(referenceInMemo("for lunch"), null);
+});
+
+test("a registered server key's invoices: to the grain's owner only, judged against the registry's record", () => {
+  const inv = v.invoices;
+  const r = inv.registered;
+  const owner = { ed25519: r.owner_key };
+  const appKey = AppKey.of("testnet", inv.genesis_hash, r.slug, fromHex(inv.server_secret, 32));
+  const decided = [];
+  for (const c of r.cases) {
+    const { invoice, cert } = decodeInvoice(c.signed_borsh);
+    assert.equal(cert, null, "a registered key signs without a certificate");
+    assert.equal(toHex(invoiceMessage(invoice, inv.genesis_hash)), c.message, c.name);
+    assert.equal(memoText(invoice), c.memo_text);
+    const problem = invoiceProblem(c.signed_borsh, r.slug, owner, inv.genesis_hash, inv.now, c.record);
+    assert.equal(problem ?? "ok", c.result, c.name);
+    decided.push([c.name, problem ?? "ok"]);
+    // A wallet that knows no registered key (Saltix 0.1.53 and older), or a grain the registry does not hold.
+    assert.equal(invoiceProblem(c.signed_borsh, r.slug, owner, inv.genesis_hash, inv.now), "signature");
+    // The record as `grain_get` writes it: retired is a slot.
+    if (c.record.retired) {
+      assert.equal(invoiceProblem(c.signed_borsh, r.slug, owner, inv.genesis_hash, inv.now, { ...c.record, retired: 1234 }), "retired");
+    }
+  }
+  assert.deepEqual(decided, [
+    ["to-the-owner", "ok"],
+    ["a-key-the-registry-does-not-name", "signature"],
+    ["to-another-account", "payee"],
+    ["a-key-removed-since", "signature"],
+    ["a-retired-grain", "retired"],
+  ]);
+  // The same bytes from a developer key, and from its secret.
+  const taken = r.cases.find((c) => c.name === "to-the-owner");
+  const { invoice } = decodeInvoice(taken.signed_borsh);
+  assert.equal(signInvoice(invoice, appKey, inv.genesis_hash), taken.signed_borsh);
+  assert.equal(signInvoice(invoice, fromHex(inv.server_secret, 32), inv.genesis_hash), taken.signed_borsh);
+  // A developer key signs for its own grain and network only, and takes no certificate.
+  assert.throws(() => signInvoice({ ...invoice, slug: "go-game" }, appKey, inv.genesis_hash), /chess's, not go-game's/);
+  assert.throws(() => signInvoice(invoice, appKey, "00".repeat(32)), /network/);
+  assert.throws(() => signInvoice(invoice, appKey, inv.genesis_hash, inv.cert), /no certificate/);
+  // The owner key and a certified key keep any payee, the record or not.
+  const live = taken.record;
+  for (const c of inv.cases) assert.equal(invoiceProblem(c.signed_borsh, "chess", { ed25519: inv.owner_key }, inv.genesis_hash, inv.now, live), null, c.name);
+  // A retired grain takes none of them.
+  for (const c of inv.cases) {
+    assert.equal(invoiceProblem(c.signed_borsh, "chess", { ed25519: inv.owner_key }, inv.genesis_hash, inv.now, { ...live, retired: true }), "retired");
+  }
 });
 
 test("a managed owner's phone certifies the server key with P-256", () => {

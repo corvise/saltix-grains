@@ -1,4 +1,5 @@
 import { ed25519 } from "@noble/curves/ed25519";
+import { AppKey } from "./app-key.js";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
 
@@ -37,6 +38,19 @@ export function encodeInvoice(inv: Invoice): Uint8Array {
     .fixed(fromHex(inv.reference, 16), 16)
     .u64(inv.expires_at)
     .done();
+}
+
+/** An asset's decimals: SALT counts in 10^-9, WORK in µWORK (10^-6). */
+export const ASSET_DECIMALS: Readonly<Record<Asset, number>> = { SALT: 9, WORK: 6 };
+
+/** `amount` in base units: a bigint as it is, or a decimal string in whole units ("2.5" SALT is 2 500 000 000). Throws
+ *  for anything else, more decimals than the asset has included. */
+export function unitsOf(amount: bigint | string, asset: Asset): bigint {
+  if (typeof amount === "bigint") return amount;
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(amount);
+  const decimals = ASSET_DECIMALS[asset];
+  if (!m || (m[2]?.length ?? 0) > decimals) throw new TypeError(`amount: a decimal string of ${asset} with at most ${decimals} decimals`);
+  return BigInt(m[1]! + (m[2] ?? "").padEnd(decimals, "0"));
 }
 
 /** What the signer signs: the invoice on the network of `genesisHash` (hex). */
@@ -100,13 +114,43 @@ export function issueInvoiceKeyCert(ownerSecret: Uint8Array, slug: string, key: 
 }
 
 /**
- * Sign `inv` with `secret` — the owner's, or the certified key's with its `cert` — for the network
- * of `genesisHash`: the hex `grain.pay({ invoice })` takes.
+ * Sign `inv` for the network of `genesisHash`: the hex `grain.pay({ invoice })` takes and a card's `invoice` block
+ * carries. `key` is one of:
+ * - the owner key's Ed25519 secret;
+ * - a server key's secret with the `cert` the owner key gave it (`issueInvoiceKeyCert`): any payee;
+ * - a developer key (`AppKey`, or its secret without a `cert`): a server key the grain's registry record names. Its
+ *   invoice pays the grain's owner only (12-grains §5.2): `inv.to` must be the owner's account id, which a wallet
+ *   checks against the registry when it checks the invoice. `ChatServer.invoice` fills it in. Saltix 0.1.53 and
+ *   older refuse such an invoice.
+ *
+ * With an `AppKey`, the invoice must be for its grain and its network, and takes no certificate.
  */
-export function signInvoice(inv: Invoice, secret: Uint8Array, genesisHash: string, cert?: InvoiceKeyCert): string {
+export function signInvoice(inv: Invoice, key: Uint8Array | AppKey, genesisHash: string, cert?: InvoiceKeyCert): string {
+  let secret: Uint8Array;
+  if (key instanceof AppKey) {
+    if (cert) throw new TypeError("a developer key is a registered server key: it takes no certificate");
+    if (inv.slug !== key.slug) throw new TypeError(`the developer key is ${key.slug}'s, not ${inv.slug}'s`);
+    if (!genesisHash.startsWith(key.genesis)) throw new TypeError("genesisHash: not the developer key's network");
+    secret = key.secret();
+  } else {
+    secret = key;
+  }
   const signature = ed25519.sign(invoiceMessage(inv, genesisHash), secret);
   return toHex(writeCert(new Writer().raw(encodeInvoice(inv)), cert).raw(signature).done());
 }
+
+/**
+ * What a wallet reads of the grain's registry record when it checks an invoice (12-grains §5.2): the owner's account
+ * id, the server keys it names (hex) and whether the grain is retired (a slot, or true). A `RegisteredGrain` from
+ * `grainGet` or `ChatServer.grain` is one.
+ */
+export interface InvoiceRecord {
+  owner: string;
+  servers?: readonly string[];
+  retired?: number | boolean | null;
+}
+
+const isRetired = (r: InvoiceRecord): boolean => r.retired === true || typeof r.retired === "number";
 
 /** A signed invoice read from `r`: what a chat's `Invoice` block carries. */
 export function readSignedInvoice(r: Reader): { invoice: Invoice; cert: InvoiceKeyCert | null; signature: string } {
@@ -136,16 +180,29 @@ export function decodeInvoice(hex: string): { invoice: Invoice; cert: InvoiceKey
   return signed;
 }
 
-/** What a wallet checks (12-grains §5.2): why it would refuse `hex`, or null. */
-export function invoiceProblem(hex: string, slug: string, ownerKey: DeviceKey, genesisHash: string, now = Date.now()): string | null {
+/**
+ * What a wallet checks (12-grains §5.2): why it would refuse `hex`, or null. `record` is the grain's registry record
+ * (`grainGet`), null for a grain the registry does not hold: then only the owner key and certified keys sign. With a
+ * record, a retired grain takes no invoice (`retired`), and an invoice without a certificate that the owner key did not
+ * sign must be signed by a key the record names (`signature`) and pay the record's owner (`payee`).
+ */
+export function invoiceProblem(
+  hex: string, slug: string, ownerKey: DeviceKey, genesisHash: string, now = Date.now(), record: InvoiceRecord | null = null,
+): string | null {
   try {
     const { invoice, cert, signature } = decodeInvoice(hex);
     if (invoice.slug !== slug) return "grain";
+    if (record && isRetired(record)) return "retired";
     if (invoice.expires_at <= now) return "expired";
     if (invoice.amount === 0n) return "amount";
     const signer = signerOf(cert, slug, ownerKey, now);
     if (!signer) return "cert";
-    return verifyByDeviceKey(signer, invoiceMessage(invoice, genesisHash), signature) ? null : "signature";
+    const message = invoiceMessage(invoice, genesisHash);
+    if (verifyByDeviceKey(signer, message, signature)) return null;
+    // Without a certificate, a key the registry names for the grain signs too, and pays only the owner.
+    if (cert || !record) return "signature";
+    if (!(record.servers ?? []).some((key) => verifyByDeviceKey({ ed25519: key }, message, signature))) return "signature";
+    return invoice.to === record.owner ? null : "payee";
   } catch (e) {
     return "malformed";
   }
