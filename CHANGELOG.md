@@ -104,6 +104,10 @@
   event carries the relay's answer (`{taken, slug, at}` or `{taken: false, reason}`), logged as `relay_stats_taken` or
   `relay_stats_refused`. The chat server reports each signing (at most hourly). The development relay keeps the newest
   numbers of each grain (`relay.stats`) and answers as a relay does.
+- `docs/agents/`: pages for coding agents beside `AGENTS.md`: building an app from a developer key (set up, the chat
+  spec, handlers and cards, the rules every app follows, testing, shipping under systemd, acting on an error report
+  pasted from the console, what each start-up error means) and working on the SDK (its map, commands, rules and how a
+  change lands). A test holds them to the files, commands and scripts they name.
 - **The app's console** (Saltix 24-app-studio §4, 22-grain-chats §3–§4): the team's chat with its own app is where the
   app talks to the people who build it.
   - `chat.team()`: the owner and the members with the developer or viewer role, from the registry (cached per beacon
