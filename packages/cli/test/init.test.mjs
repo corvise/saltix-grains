@@ -204,7 +204,11 @@ test("a chat-only grain's server starts from its developer key alone and answers
   const dead = start(dir, { NODE_RPC: node.url });
   assert.equal(await dead.exited, 78);
   assert.match((await dead.until("not_started")).error, /does not name this server key/);
-  const everything = JSON.stringify([none.lines, viaEnv.lines, open.lines, server.lines, unraised.lines, raised.lines, dead.lines]) +
-    [none, viaEnv, open, server, unraised, raised, dead].map((p) => p.stderr()).join("");
+  // A key of another network (the test network was reset): 78 too, not 1, or a supervisor restarts it forever.
+  const reset = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: AppKey.of("devnet", "77".repeat(32), "coach", secret).reveal() });
+  assert.equal(await reset.exited, 78);
+  assert.match((await reset.until("not_started")).error, /the developer key is for devnet 7777777777777777…, but the network answering is devnet .*reset/);
+  const everything = JSON.stringify([none.lines, viaEnv.lines, open.lines, server.lines, unraised.lines, raised.lines, dead.lines, reset.lines]) +
+    [none, viaEnv, open, server, unraised, raised, dead, reset].map((p) => p.stderr()).join("");
   assert.ok(!everything.includes(toHex(secret)), "no secret in the log");
 });

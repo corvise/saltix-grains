@@ -119,9 +119,15 @@
   `memoryChatStore` keep it) and refuses to start on a spec changed under that version or below it
   (`ChatSpecVersionError`, `code` `chat_spec_changed_under_version` or `chat_spec_version_lowered`, logged with the
   version served and `raise "version" above N`); `setSpec` is held to it, and takes the same spec again. Before, such a
-  server started, answered, and its spec reached nobody who held that version. `setupCannotWork(e)` and `EXIT_CONFIG`
-  (78): the template's server and the example exit with 78 for it as for a key that cannot work. Saltix's access
-  grain's own guard (`checkServed`) can move to it.
+  server started, answered, and its spec reached nobody who held that version. Saltix's access grain's own guard
+  (`checkServed`) can move to it.
+- **A developer key of another network exits with 78, not 1** (the test network was reset): systemd restarted such a
+  server forever, though the docs promised 78. Every configuration refusal of `ChatServer.start` is now a
+  `ChatSetupError` with a `code` and `exitCode` 78: `chat_wrong_network` (the key's network, or `chain`, against the
+  node's), `chat_key_not_registered` (`ChatKeyNotRegistered` is one), `chat_spec_changed_under_version` and
+  `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_no_relays`. `setupCannotWork(e)` (these and
+  `AppKeyError`) and `EXIT_CONFIG`: the template's `server.mjs` and the example exit with 78 through it, 1 for anything
+  else. The template's `AGENTS.md` rules say which setups exit with 78.
 
 ### Added
 

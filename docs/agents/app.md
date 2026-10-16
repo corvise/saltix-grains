@@ -31,8 +31,9 @@ npm start
 `npm start` logs one JSON line per event. `{"event":"ready","slug":…,"address":…,"network":"devnet","spec":2}` means
 the app answers. It exits with **1** for a fault of the setup (no key, `app.key` readable by others) and with **78** when
 the key cannot work (another network's, replaced, revoked, the app retired) or `chat.json` changed under a version it
-served: restarting does not help, the log says what does. `owner.key`, which `grain init` also makes, is for registering from a computer on a test network; an app made in
-Saltix has its owner on the phone and never uses it.
+served (`setupCannotWork`: an `AppKeyError` or a `ChatSetupError`): restarting does not help, the log says what does.
+`owner.key`, which `grain init` also makes, is for registering from a computer on a test network; an app made in Saltix
+has its owner on the phone and never uses it.
 
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 

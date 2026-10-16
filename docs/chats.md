@@ -126,8 +126,15 @@ server key never signs a price (`server_price`). A wallet replaces the spec it h
 spec's SHA-256, `chatSpecHash`) and refuses to start on a spec changed under that version (`ChatSpecVersionError`,
 `chat_spec_changed_under_version`) or below it (`chat_spec_version_lowered`), logging the event: such a spec would reach
 no wallet that holds the version served, and nothing else would say so. `setSpec` is held to the same rule. Raise
-`version` and start again. `setupCannotWork(e)` is true for this error, a developer key that is not one and a key the
-registry does not name: exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on. A store without
+`version` and start again.
+
+**Setups that cannot work.** Every configuration refusal of `ChatServer.start` is a `ChatSetupError` (`code`, and
+`exitCode` 78): `chat_wrong_network` (a developer key of another network: the test network was reset, or `chain`
+contradicts the node), `chat_key_not_registered` (`ChatKeyNotRegistered`: replaced, revoked, retired, not registered),
+`chat_spec_changed_under_version` and `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_no_relays` (a network
+with no public relays and no node given). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
+developer key): exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on; anything else (a network
+that is down) exits with 1 and may pass on a restart. A store without
 `served` and `setServed` (your own `ChatStore`) checks nothing across restarts; `fileChatStore` keeps it.
 
 | Kind | JSON | A handler reads | Bounds |

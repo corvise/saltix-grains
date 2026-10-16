@@ -48,6 +48,8 @@ test("(b) the spec's version: raised with every change, as the guide says", () =
   assert.match(guide, /\*\*Raise `version` with every change\.\*\* Saltix takes a spec only when its version is higher/);
   assert.match(guide, /A spec changed under the same version reaches nobody, and nothing says so/);
   assert.match(appRules, /a spec changed under the same version reaches nobody, and nothing\s+says so/);
+  assert.match(appRules, /refuses to start on one changed under the same\s+version \(exit 78/);
+  assert.match(guide, /refuses to start \(78,\s+`chat_spec_changed_under_version`\)/);
 });
 
 test("(c) the unasked budget: the SDK's numbers", () => {
@@ -69,8 +71,9 @@ test("(d) state: STATE_DIRECTORY, where server.mjs keeps its store", () => {
 test("(e) a key that cannot work exits with 78, anything else with 1", () => {
   assert.match(server, /const DEAD_KEY = 78;/);
   assert.match(server, /onStop: \(\) => process\.exit\(DEAD_KEY\)/);
-  assert.match(server, /\["AppKeyError", "ChatKeyNotRegistered"\]\.includes\(e\.name\) \? DEAD_KEY : 1/);
+  assert.match(server, /process\.exit\(setupCannotWork\(e\) \? DEAD_KEY : 1\)/);
   assert.match(appRules, /Exit with status 78 when the key cannot work/);
+  for (const why of ["another network's", "`chat.json` changed under a version served", "`ChatSetupError`"]) assert.ok(appRules.includes(why), why);
   assert.match(appRules, /`RestartPreventExitStatus=78`/);
   assert.match(guide, /RestartPreventExitStatus=78/);
 });

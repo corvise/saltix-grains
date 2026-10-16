@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  ChatServer, ChatKeyNotRegistered, AppKey, AppKeyError, card, toHex, fromHex, accountId, decodeChatDocument, grainStatsProblem,
+  ChatServer, ChatKeyNotRegistered, ChatSetupError, EXIT_CONFIG, setupCannotWork, AppKey, AppKeyError, card, toHex, fromHex, accountId, decodeChatDocument, grainStatsProblem,
   signedChatSpecProblem, signMemberProof, signChatSpecAsServer, registeredKeyStatus, memoryChatStore, ROLES, STATS_EVERY_MS,
   decodeNotification, notificationProblem, decodeSignedGrainStats, fromBase64Url,
 } from "../dist/index.js";
@@ -104,12 +104,22 @@ test("a server starts only while the registry names its key, on the key's networ
       else fake.state.grain = null;
       await assert.rejects(start(fake), (e) => !/Developer key/.test(e.message), `${reason}: a new developer key would not help`);
     }
+    // A configuration refusal is a ChatSetupError with exit code 78: restarting cannot help (a reset network above all,
+    // which a supervisor would otherwise restart forever).
+    const setup = (code, pattern) => (e) => e instanceof ChatSetupError && e.code === code && e.exitCode === EXIT_CONFIG &&
+      setupCannotWork(e) && pattern.test(e.message);
     const elsewhere = fakeChain();
     elsewhere.state.status.genesis = "6d".repeat(32);
-    await assert.rejects(start(elsewhere), /reset/, "a key of another genesis");
+    await assert.rejects(start(elsewhere), setup("chat_wrong_network", /reset/), "a key of another genesis");
     const kind = fakeChain();
     kind.state.status.network = "testnet";
-    await assert.rejects(start(kind), /reset|testnet/, "a key of another kind of network");
+    await assert.rejects(start(kind), setup("chat_wrong_network", /testnet/), "a key of another kind of network");
+    const unnamed = fakeChain();
+    unnamed.state.grain.servers = ["77".repeat(32)];
+    await assert.rejects(start(unnamed), (e) => e instanceof ChatKeyNotRegistered && setup("chat_key_not_registered", /replaced/)(e));
+    const down = fakeChain();
+    down.state.down = true;
+    await assert.rejects(start(down), (e) => !(e instanceof ChatSetupError) && !setupCannotWork(e), "a network that is down may come back");
     await assert.rejects(start(fakeChain(), { cert: cert() }), /no certificate/);
     await assert.rejects(start(fakeChain(), { secret: SERVER }), /not both/);
     await assert.rejects(start(fakeChain(), { slug: "other" }), /access's, not other's/);
@@ -134,7 +144,11 @@ test("a server starts only while the registry names its key, on the key's networ
     assert.ok(events.includes("chat_not_first_key"));
     s2.close();
     // No public relays for a network that has none, and no node given.
-    await assert.rejects(ChatServer.start({ appKey: AppKey.of("mainnet", chain.genesis, "access", SERVER), spec: spec(), log: quiet }), /no public relays/);
+    await assert.rejects(ChatServer.start({ appKey: AppKey.of("mainnet", chain.genesis, "access", SERVER), spec: spec(), log: quiet }),
+      setup("chat_no_relays", /no public relays/));
+    // Without a developer key, a chain given that the node contradicts.
+    await assert.rejects(ChatServer.start({ slug: "access", secret: SERVER, spec: spec(), wallet: fakeChain().wallet, chain: { ...chain, genesis: "6d".repeat(32) }, log: quiet }),
+      setup("chat_wrong_network", /chain: the node is on devnet/));
     assert.equal(registeredKeyStatus(second.state.grain, serverKey), null);
   } finally {
     await relay.close();

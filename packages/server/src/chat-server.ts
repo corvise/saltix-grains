@@ -154,10 +154,33 @@ const REMEDY: Record<ChatStopReason, (slug: string) => string> = {
     `and start again; otherwise make it in Saltix (Apps → My apps → New app) or register it (grain publish).`,
 };
 
+/** The exit code of a server whose setup cannot work as it stands (EX_CONFIG): restarting it would not help, so a
+ *  supervisor should not (systemd: `RestartPreventExitStatus=78`). */
+export const EXIT_CONFIG = 78;
+
+/** Why a server's setup cannot work as it stands: the key is another network's (`chat_wrong_network`: the network was
+ *  reset, or another answers), the registry does not name it (`chat_key_not_registered`), the spec changed under the
+ *  version served or went below it, or no relay is known for the key's network (`chat_no_relays`). */
+export type ChatSetupCode =
+  | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version" | "chat_spec_version_lowered" | "chat_no_relays";
+
+/**
+ * A setup the server refuses to run as it stands (the configuration refusals of `ChatServer.start`): restarting it
+ * does not help, its message says what does. Exit with `exitCode` (`EXIT_CONFIG`, 78), which a supervisor should not
+ * restart on. `ChatKeyNotRegistered` and `ChatSpecVersionError` are kinds of it.
+ */
+export class ChatSetupError extends Error {
+  readonly exitCode = EXIT_CONFIG;
+  constructor(readonly code: ChatSetupCode, message: string) {
+    super(message);
+    this.name = "ChatSetupError";
+  }
+}
+
 /** The server key is not one the registry names for the grain (at start), or stopped being one. */
-export class ChatKeyNotRegistered extends Error {
+export class ChatKeyNotRegistered extends ChatSetupError {
   constructor(public readonly reason: ChatStopReason, slug: string) {
-    super(`the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ${REMEDY[reason](slug)}`);
+    super("chat_key_not_registered", `the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ${REMEDY[reason](slug)}`);
     this.name = "ChatKeyNotRegistered";
   }
 }
@@ -193,16 +216,15 @@ export interface SignedAppInvoice {
  * changed under the version it served, which reaches no wallet that holds that version; `lowered`, a version below the
  * one it served, which wallets that hold the higher one refuse. Raise `version` above `served`.
  */
-export class ChatSpecVersionError extends Error {
-  readonly code: "chat_spec_changed_under_version" | "chat_spec_version_lowered";
+export class ChatSpecVersionError extends ChatSetupError {
+  declare readonly code: "chat_spec_changed_under_version" | "chat_spec_version_lowered";
   constructor(readonly version: number, readonly served: number) {
-    super(version === served
+    super(version === served ? "chat_spec_changed_under_version" : "chat_spec_version_lowered", version === served
       ? `chat.json changed but keeps version ${version}: raise "version" above ${served}. A wallet replaces the spec it ` +
         `holds only with a higher version, so this one would reach nobody who has version ${served}, and nothing would say so`
       : `chat.json is version ${version}, below version ${served} this server already served: raise "version" above ` +
         `${served}. A wallet that holds version ${served} refuses a lower one`);
     this.name = "ChatSpecVersionError";
-    this.code = version === served ? "chat_spec_changed_under_version" : "chat_spec_version_lowered";
   }
 }
 
@@ -217,15 +239,11 @@ export function servedSpecProblem(spec: GrainChatSpec, served: ServedSpec | null
   return new ChatSpecVersionError(spec.version, served.version);
 }
 
-/** The exit code of a server whose setup cannot work as it stands (EX_CONFIG): restarting it would not help, so a
- *  supervisor should not (systemd: `RestartPreventExitStatus=78`). */
-export const EXIT_CONFIG = 78;
-
-/** Whether `error`, thrown by `ChatServer.start` (or passed to `onStop`'s caller), means the setup cannot work as it
- *  stands: not a developer key, a key the registry does not name, a spec changed under a version it served. Exit with
- *  `EXIT_CONFIG` then; anything else may pass on a restart. */
+/** Whether `error`, thrown by `ChatServer.start` or `AppKey.parse`, means the setup cannot work as it stands: not a
+ *  developer key (`AppKeyError`), or any `ChatSetupError` — another network's key, one the registry does not name, a spec
+ *  changed under a version served. Exit with `EXIT_CONFIG` then; anything else (a network down) may pass on a restart. */
 export function setupCannotWork(error: unknown): boolean {
-  return error instanceof AppKeyError || error instanceof ChatKeyNotRegistered || error instanceof ChatSpecVersionError;
+  return error instanceof AppKeyError || error instanceof ChatSetupError;
 }
 
 /** A message the server sent: what `replace` updates. */
@@ -573,7 +591,9 @@ export class ChatServer {
     if (!wallet) {
       gateways = new RelayGateways([...(options.endpoints ?? []), ...(appKey && !options.endpoints ? PUBLIC_RELAYS[appKey.network] : [])]);
       if (gateways.endpoints.length > 0) wallet = gateways;
-      else if (appKey) throw new Error(`no public relays are known for ${appKey.network}: pass node (your node's wallet interface) or endpoints`);
+      else if (appKey) {
+        throw new ChatSetupError("chat_no_relays", `no public relays are known for ${appKey.network}: pass node (your node's wallet interface) or endpoints`);
+      }
     }
     if (!cert && !wallet) throw new Error("a server key without a certificate must be one the registry names: pass a developer key, or node");
     const view = wallet ? new ChainView(wallet, options.now) : null;
@@ -583,11 +603,11 @@ export class ChatServer {
     if (view) {
       const status = await view.nodeStatus(true);
       if (appKey && !appKey.isFor(status.network, status.genesis)) {
-        throw new Error(`the developer key is for ${appKey.network} ${appKey.genesis}…, but the network answering is ${status.network} ` +
+        throw new ChatSetupError("chat_wrong_network", `the developer key is for ${appKey.network} ${appKey.genesis}…, but the network answering is ${status.network} ` +
           `${status.genesis.slice(0, 16)}…: was the network reset? Make a new developer key in Saltix, or pass node for your own network`);
       }
       if (chain && (chain.genesis !== status.genesis || chain.network !== status.network)) {
-        throw new Error(`chain: the node is on ${status.network} ${status.genesis}, not ${chain.network} ${chain.genesis}`);
+        throw new ChatSetupError("chat_wrong_network", `chain: the node is on ${status.network} ${status.genesis}, not ${chain.network} ${chain.genesis}`);
       }
       chain = { genesis: status.genesis, network: status.network as ChainParams["network"] };
       grain = await view.grain(slug, true);
