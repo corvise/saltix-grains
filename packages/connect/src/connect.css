@@ -1,0 +1,87 @@
+/*
+ * "Sign in with Saltix" (Saltix 19-connect §13) and the Saltix Connect dialog: classes only, so a page under a strict
+ * Content Security Policy (no inline styles) draws them. The button's look is fixed so that users recognise it
+ * everywhere: Saltix's mark at its left, navy (#0B1220) with white text or white with navy text, at least 44 px tall,
+ * its corners rounded by a quarter of its height. A page may make it taller (--saltix-signin-height) and place it;
+ * it does not restyle it.
+ */
+
+.saltix-signin {
+  --saltix-signin-height: 44px;
+  --saltix-signin-h: max(44px, var(--saltix-signin-height));
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--saltix-signin-h) / 4);
+  height: var(--saltix-signin-h);
+  min-height: 44px;
+  padding: 0 calc(var(--saltix-signin-h) / 2) 0 calc(var(--saltix-signin-h) / 4);
+  border: 1px solid transparent;
+  border-radius: calc(var(--saltix-signin-h) / 4);
+  font: 600 16px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.saltix-signin--navy { background: #0b1220; color: #ffffff; border-color: #0b1220; }
+.saltix-signin--white { background: #ffffff; color: #0b1220; border-color: #ffffff; }
+.saltix-signin--navy:hover { background: #16213a; }
+.saltix-signin--white:hover { background: #eef4fb; }
+.saltix-signin:focus-visible { outline: 3px solid #5eb8f0; outline-offset: 2px; }
+.saltix-signin:disabled { opacity: .6; cursor: default; }
+.saltix-signin__mark { width: calc(var(--saltix-signin-h) * .55); height: calc(var(--saltix-signin-h) * .55); flex: none; }
+.saltix-signin__label { display: block; }
+
+/* Saltix's mark: an S on a sky-blue tile, the same on navy and on white. */
+.saltix-mark__tile { fill: #5eb8f0; }
+.saltix-mark__s { fill: none; stroke: #0b1220; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The dialog: light by default, --dark on a dark page. The QR code stays dark on white in both, so every scanner
+   reads it. */
+.saltix-connect-dialog {
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 20px;
+  border: 0;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #0b1220;
+  box-shadow: 0 20px 60px rgba(11, 18, 32, .35);
+  font: 400 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-align: center;
+}
+.saltix-connect-dialog::backdrop { background: rgba(11, 18, 32, .55); }
+.saltix-connect-dialog--dark { background: #111a2b; color: #eaf1fa; }
+.saltix-connect-dialog__head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.saltix-connect-dialog__mark { width: 28px; height: 28px; flex: none; }
+.saltix-connect-dialog__title { flex: 1; margin: 0; font-size: 18px; font-weight: 700; text-align: left; }
+.saltix-connect-dialog__close {
+  width: 44px; height: 44px; margin: -8px -8px -8px 0; padding: 0; border: 0; border-radius: 11px;
+  background: transparent; color: inherit; font-size: 24px; line-height: 1; cursor: pointer;
+}
+.saltix-connect-dialog__close:focus-visible, .saltix-connect-dialog__action:focus-visible, .saltix-connect-dialog__open:focus-visible {
+  outline: 3px solid #5eb8f0; outline-offset: 2px;
+}
+.saltix-connect-dialog__scan { margin: 4px 0 12px; font-weight: 600; }
+.saltix-connect-dialog__code { display: flex; justify-content: center; }
+.saltix-connect-dialog__qr { display: block; width: min(280px, 100%); height: auto; border-radius: 12px; }
+.saltix-qr__light { fill: #ffffff; }
+.saltix-qr__dark { fill: #0b1220; }
+.saltix-connect-dialog__open {
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 44px; margin-top: 12px;
+  border-radius: 11px; background: #0b1220; color: #ffffff; font-weight: 600; text-decoration: none;
+}
+.saltix-connect-dialog--dark .saltix-connect-dialog__open { background: #ffffff; color: #0b1220; }
+.saltix-connect-dialog__open[hidden], .saltix-connect-dialog__status[hidden] { display: none; }
+.saltix-connect-dialog__status { margin: 12px 0 0; font-weight: 600; }
+.saltix-connect-dialog__actions { display: flex; justify-content: center; margin-top: 8px; }
+.saltix-connect-dialog__action {
+  min-height: 44px; padding: 0 16px; border: 1px solid currentColor; border-radius: 11px; background: transparent;
+  color: inherit; font: inherit; cursor: pointer; opacity: .85;
+}
+.saltix-connect-dialog__note { margin: 12px 0 0; font-size: 12.5px; opacity: .7; }

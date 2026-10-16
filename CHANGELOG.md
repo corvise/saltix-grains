@@ -4,6 +4,16 @@
 
 ### Added
 
+- **`@saltix/connect`** (packages/connect, Saltix 19-connect §2–§5, §13): "Sign in with Saltix" for websites and
+  DApps, the page's side of Saltix Connect ported from the explorer's tested `explorer/src/connect/`. `createConnect({
+  network, relays, node, name, origin?, genesis? })` runs the session (keys, a link slot through relays the page reaches,
+  the offer as text, link and QR code, `ConnectSeen`), checks the grant (rules 1–5, the account's key event log from the
+  page's node) and keeps the connection 30 days in `localStorage`; events `offer`, `seen`, `checking`, `connected`,
+  `refused`, `failed`, `reconnecting`, `disconnected`. `signInButton(el, { lang, theme, onClick })` and `connect.css`
+  draw the button standard (Saltix's mark, navy or white, at least 44 px, radius a quarter of the height, classes only
+  for a strict CSP); `openConnectDialog` shows the QR code titled "Saltix Connect" ("Scan with Saltix to sign in", on a
+  phone "Open Saltix"); `readSiteProfile` reads a site's `/.well-known/saltix-connect` as a wallet does. Also one
+  self-contained ES module, `dist/saltix-connect.js`, for a site without a bundler.
 - **The Connect profile** (Saltix 19-connect §11, 12-grains §3 and §10; vectors `connect-v1.json` and
   `connect-profiles-v1.json` synced from corvise/saltix#224): `@saltix/grain-server` reads, writes, signs and checks a
   service's own signed words about itself (`profile.ts`: `profileProblem` with the node's reasons, `encodeProfile`,
