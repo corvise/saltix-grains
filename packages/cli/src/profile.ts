@@ -2,7 +2,7 @@
 // the registry — the owner's wallet signs it from a QR code, or a key file on test networks — and a website's signed by
 // its operator's key and written where the site serves it.
 import {
-  type ConnectProfile, type GrainCall, type NodeLike, type SignedConnectProfile, CATEGORIES, CONNECT_PROFILE_PATH, categoryOf, checkSiteProfile,
+  type ConnectProfile, type GrainCall, type NodeLike, type RegisteredGrain, type SignedConnectProfile, CATEGORIES, CONNECT_PROFILE_PATH, categoryOf, checkSiteProfile,
   decodeAddress, encodeProfile, grainGet, plainOwnerOf, profileLink, profileProblem, signProfile, signedProfileFromJson, toHex, unownedProfile,
 } from "@saltix/grain-server";
 import { existsSync, readFileSync } from "node:fs";
@@ -17,14 +17,15 @@ function checkedProfile(value: unknown, owner: string, revision: number): Connec
   return profile;
 }
 
-/** The revision a new profile of `slug` takes: one above the registry's. */
-const nextRevision = (profile: SignedConnectProfile | null | undefined): number => (profile?.profile.revision ?? 0) + 1;
+/** The revision a new profile takes: one above the highest the registry took (`profile_revision`, which outlives a
+ *  cleared profile), or above the profile it holds on a node that does not say. */
+const nextRevision = (g: RegisteredGrain): number => Math.max(g.profile_revision ?? 0, g.profile?.profile.revision ?? 0) + 1;
 
 /** The owner's call that sets the project's profile for `slug`, signed with the key file's `secret`: its account the
  *  owner, the registry's revision and one. */
 export async function profileCall(node: NodeLike, slug: string, value: unknown, secret: Uint8Array): Promise<GrainCall> {
   const g = await ownGrain(node, slug, secret);
-  const profile = checkedProfile(value, plainOwnerOf(secret), nextRevision(g.profile));
+  const profile = checkedProfile(value, plainOwnerOf(secret), nextRevision(g));
   return { profile: { slug, profile: signProfile(profile, secret) } };
 }
 
@@ -43,9 +44,9 @@ export async function profileLinkFor(node: NodeLike, slug: string, value: unknow
   if (g === null) throw new Error(`${slug}: not registered yet: grain publish first`);
   if (g.retired !== null) throw new Error(`${slug}: retired at slot ${g.retired}`);
   // Checked as the wallet will check it once it fills in the owner and the revision.
-  const profile = checkedProfile(value, g.owner, nextRevision(g.profile));
+  const profile = checkedProfile(value, g.owner, nextRevision(g));
   try {
-    return { link: profileLink(profile), profile, before: g.profile?.profile.revision ?? 0 };
+    return { link: profileLink(profile), profile, before: nextRevision(g) - 1 };
   } catch {
     throw new Error(`${CONNECT_FILE}: too long for a QR code: set it in Saltix's app studio (My apps → ${slug} → Connect profile), or with --key on a test network`);
   }

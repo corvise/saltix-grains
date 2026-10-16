@@ -280,6 +280,12 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   node.state.profile = null;
   const none = await run(["profile", "--clear", "--node", node.url], dir);
   assert.match(none.stderr, /has no Connect profile to clear/);
+  // Cleared at revision 5: the next is 6, never an older one the registry would refuse.
+  writeConnect(dir, { ...connectOf(dir), website: "https://dice.example/" });
+  node.state.grain = { profile_revision: 5 };
+  const again = await run(["profile", "--node", node.url], dir);
+  assert.equal(again.code, 0, again.stderr);
+  assert.equal(profileOf(node.submitted[2]).profile.revision, 6);
   node.close();
 });
 

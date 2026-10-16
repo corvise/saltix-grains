@@ -245,6 +245,9 @@ export interface RegisteredGrain {
   /** Its Connect profile (19-connect §11) in its signed JSON form, or null; absent on a node from before it. Check it
    *  with `checkGrainProfile` against this record's slug and owner before showing it. */
   profile?: SignedConnectProfile | null;
+  /** The highest revision of a profile the grain took, 0 for none: a new one must be higher, a cleared one's included
+   *  (`grain_get`'s `profile_revision`); absent on a node from before it. */
+  profile_revision?: number;
 }
 
 /** What the registry holds under `slug`; null when nobody registered it. */
