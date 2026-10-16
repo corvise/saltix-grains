@@ -92,7 +92,7 @@ chat.text((ask) => card().text("Pick Plan below."));
   `.file(ref, {format})`). Slow work: `await ask.working("…")` first; the answer replaces it.
 - **Refuse** with `throw new ChatRefusal(text)` (a `refused` status, in the user's language). Any other error answers
   `failed` and is reported to your team's console.
-- **Payments**: `const inv = chat.invoice({ amount: "2.5", memo: "Premium, 1 month" })`, then
+- **Payments** (`chat.invoice`, `chat.paymentOf`): `const inv = chat.invoice({ amount: "2.5", memo: "Premium, 1 month" })`, then
   `card().text(…).invoice(inv)`. The developer key's invoice pays the app's owner only. Keep `inv.invoice` with what
   the user asked for, and deliver once `await chat.paymentOf(inv.invoice)` has the confirmations you need
   ([../payments.md](../payments.md)).

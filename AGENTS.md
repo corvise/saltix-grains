@@ -50,9 +50,16 @@ main { padding-bottom: calc(16px + var(--saltix-safe-bottom)); }
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
 
+**Payments** go through the wallet's own sheet, and a developer key's invoice pays the app's owner only (Saltix
+specs/12-grains.md §5.2): `chat.invoice({ amount: "2.5", memo })` signs one to the owner the registry names, a card's
+`invoice` block carries it (a page hands it to `grain.pay`), and `chat.paymentOf` finds the payment on chain. Never
+deliver on the page's or the user's word, and never put another payee in an invoice: wallets refuse it (`payee`).
+Saltix 0.1.53 and older cannot pay a developer key's invoice, so say in the card what to do if the sheet does not open
+([docs/payments.md](docs/payments.md)).
+
 Secrets (`owner.key`, `server.key`, `app.key`, a developer key `saltix-app:1:…`) are never committed, printed, logged or
 pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
-status of a dead key) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows).
+status of a dead key, payments) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows).
 
 ## Working on this repository
 

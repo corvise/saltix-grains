@@ -127,8 +127,8 @@ export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/doc
 
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
- * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, and the
- * exit status of a key that cannot work.
+ * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, the
+ * exit status of a key that cannot work, and payments.
  */
 export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
    (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
@@ -147,7 +147,12 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
 5. **Exit with status 78 when the key cannot work**: the registry does not name it (replaced, revoked, the app retired,
    not registered) or it is not a developer key. \`server.mjs\` does, at start and from \`ChatServer\`'s \`onStop\`, and
    exits with 1 for anything else; a unit with \`RestartPreventExitStatus=78\` then does not restart a server that
-   restarting cannot help.`;
+   restarting cannot help.
+6. **Money moves only in the wallet, and only to the app's owner.** Ask for a payment with \`chat.invoice\` and a card's
+   \`invoice\` block (a page: \`grain.pay\` with the invoice your server signed). A developer key's invoice pays the app's
+   owner and nobody else; wallets refuse any other payee. Deliver only once \`chat.paymentOf\` finds the payment on chain
+   with the confirmations you need, never on the page's or the user's word. Saltix 0.1.53 and older cannot pay such an
+   invoice: say in the card what to do if the payment sheet does not open (update Saltix).`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md

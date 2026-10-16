@@ -11,7 +11,8 @@
   server's relays or node (only the invoice's asset and at least its amount). `signInvoice` takes an `AppKey` (its own
   grain and network, no certificate). `invoiceProblem` takes the grain's record and says `retired` and `payee` as
   wallets do. `findPayment` takes any wallet interface, `unitsOf` reads `"2.5"` SALT. Docs: `docs/payments.md`.
-  Saltix 0.1.53 and older refuse such an invoice.
+  Saltix 0.1.53 and older refuse such an invoice. `AGENTS.md`, every project's `AGENTS.md` (`grain init`: a sixth rule,
+  money moves only in the wallet and only to the owner) and `docs/agents/app.md` say so.
 
 ### Changed
 
