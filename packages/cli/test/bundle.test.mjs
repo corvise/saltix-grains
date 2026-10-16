@@ -161,3 +161,13 @@ test("grain dev serves a sealed grain's bundle where its manifest says", async (
     server.close();
   }
 });
+
+test("the agents' rules say how a bundle is checked: rebuilt in CI, grain.json unchanged", async () => {
+  const { agentsMd } = await import("../dist/template.js");
+  const root = readFileSync(new URL("../../../AGENTS.md", import.meta.url), "utf8");
+  const guide = readFileSync(new URL("../../../docs/agents/app.md", import.meta.url), "utf8");
+  for (const text of [agentsMd("notes", false), root, guide]) {
+    assert.match(text, /rebuild it in CI and fail when `grain\.json` changes/i);
+    assert.match(text, /never edit\s+`entry\.sealed` by hand/);
+  }
+});

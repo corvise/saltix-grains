@@ -37,6 +37,10 @@ That line closes every report Saltix copies for an AI agent. In full (Saltix spe
 - **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes) in the simulator `grain dev` prints, light and
   dark. `grain lint` warns (`full-screen-top-bar`) about a fixed or sticky top bar that uses none of the variables.
 
+A sealed app's bundle (`grain bundle`) is the same bytes from the same files on any computer and any Node (files
+stored, never deflated, at most 20 MiB): rebuild it in CI and fail when `grain.json` changes; never edit
+`entry.sealed` by hand.
+
 A top bar that keeps clear, as the page `grain init` makes has it:
 
 ```css
