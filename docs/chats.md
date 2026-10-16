@@ -148,7 +148,7 @@ const certified = await ChatServer.start({
   spec: doc.spec,                       // chat.signed.json's hex, or a SignedGrainChatSpec
   secret: serverSecret,                 // server.key
   cert,                                 // cert.json
-  chain: { genesis, network: "testnet" },
+  chain: { genesis, network: "devnet" }, // Saltix's test network is of the devnet kind (dsalt1…)
   ownerKey: manifest.owner_key,         // optional: checks the spec and certificate as a wallet does, at start
   node: "http://127.0.0.1:30334",       // relays from its relay_list, pinned by their certificates; and the registry
   store: fileChatStore("chat.store.json"),

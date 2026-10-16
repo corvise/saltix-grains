@@ -121,7 +121,10 @@ When it is ready: **My apps → your app → Make public**. A public app is in t
 and it never learns who its users are: each user is a key of their own in your app.
 
 The same from the command line in the checkout (`npx grain …`): signed with the owner's key file on test networks, or,
-without one, done in Saltix while the tool waits for the registry:
+without one, done in Saltix while the tool waits for the registry. `--node URL` is a test-network node's wallet
+interface over plain HTTP: one you run, or a tunnel to one (`ssh -N -L 30334:127.0.0.1:30334 you@server`, then
+`--node http://127.0.0.1:30334`; [README](../README.md#networks-and-where---node-comes-from)). Without a node, do these
+in Saltix; `grain app-key` needs none:
 
 ```sh
 grain access --slug your-app --private --member dsalt1q…:user --node URL   # members, while private
