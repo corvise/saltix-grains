@@ -61,7 +61,12 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
     res.end(readFileSync(file));
   });
   const secretOf = () => secret;
-  return new Promise((resolve) => server.listen(port, host, () => resolve(server)));
+  return new Promise((resolve, reject) => {
+    server.once("error", (e: NodeJS.ErrnoException) => {
+      reject(e.code === "EADDRINUSE" ? new Error(`port ${port} is taken (by npm run dev, or another grain dev?): pass --port`) : e);
+    });
+    server.listen(port, host, () => resolve(server));
+  });
 }
 
 /** The link that opens the grain served at `origin`. */
