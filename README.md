@@ -135,7 +135,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   members. A rating names its account and is signed by the rater's key (`--key`), or given in Saltix.
 - `grain app-key` reads a developer key from `SALTIX_APP_KEY`, `--file` or stdin, never from the command line (shells
   keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
-  (through the key's network's public relays, `--relay` or `--node`).
+  (through the network's public relays, or `--node`).
 - `grain bundle` seals `public/` (Saltix 12-grains §8): one ZIP of its files — sorted, no times, so
   the same files make the same bytes — at most 20 MiB, and `grain.json` names its hash, size,
   `sources` (where you upload `bundle.zip`), `start` and the `connect` origins the grain may reach.
