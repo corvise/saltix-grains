@@ -16,9 +16,11 @@ import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.j
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
 import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
+import { UsageError, helpFor, parse } from "./args.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
+  grain help [command]                     this, or one command's part of it (also: grain <command> --help)
   grain init [dir] [--slug S] [--name N] [--chat]
                                            a new grain: grain.json, owner.key, public/; --chat a chat-only one
                                            (no page: grain.json and chat.json)
@@ -26,10 +28,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain lint [--manifest grain.json]       what stops the manifest from being registered
   grain icon <png>                         the hash a manifest names its 256x256 icon by
   grain sign [--out signed.json]           the signed manifest, for /.well-known/saltix-grain
-  grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip]
+  grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
                                            seal public/ into one ZIP; grain.json names its hash and size
                                            (upload bundle.zip to the sources; grain dev serves it itself)
-  grain publish --node URL [--wallet]      register the slug or record a newer version: signed in the owner's
+  grain publish --node URL [--wallet] [--wait] [--out signed.json]
+                                           register the slug or record a newer version: signed in the owner's
                                            wallet by a QR code, or with --key (a key file, for test networks)
                                            when owner.key is there. The deposit is the node's quote for the
                                            slug's length: 100 SALT for 3-5 characters, 30 for 6-7, 10 for 8+
@@ -71,26 +74,9 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   --manifest F   the manifest (grain.json); --key F   the owner's key file (owner.key)
   --node URL     a node's wallet interface (plain HTTP: a local node or a tunnel)
   --genesis H    refuse a node of another network; --fee N   base units of SALT; --valid-for N   slots (600)
+  A flag's value is the word after it, or comes after = in the same word; a flag a command does not take is refused.
+  grain --version says which version of the tool this is.
 `;
-
-function parse(argv: string[]): { command: string; positional: string[]; flags: Map<string, string | true>; all: (name: string) => string[] } {
-  const [command = "help", ...rest] = argv;
-  const positional: string[] = [];
-  const flags = new Map<string, string | true>();
-  const repeated = new Map<string, string[]>();
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i]!;
-    if (!a.startsWith("--")) { positional.push(a); continue; }
-    const next = rest[i + 1];
-    const name = a.slice(2);
-    if (next !== undefined && !next.startsWith("--")) {
-      flags.set(name, next);
-      repeated.set(name, [...(repeated.get(name) ?? []), next]);
-      i++;
-    } else flags.set(name, true);
-  }
-  return { command, positional, flags, all: (name) => repeated.get(name) ?? [] };
-}
 
 function text(flags: Map<string, string | true>, name: string, fallback?: string): string {
   const v = flags.get(name);
@@ -134,7 +120,7 @@ async function stdinText(): Promise<string | undefined> {
 }
 
 async function main(argv: string[]): Promise<number> {
-  const { command, positional, flags, all } = parse(argv);
+  const { command, topic, positional, flags, all } = parse(argv);
   const manifestPath = text(flags, "manifest", MANIFEST_FILE);
   const keyPath = text(flags, "key", KEY_FILE);
   switch (command) {
@@ -398,18 +384,28 @@ async function main(argv: string[]): Promise<number> {
       console.log(`${sub} the channel with ${exchange}: transaction ${sent.id} (fee ${sent.fee})`);
       return 0;
     }
-    case "help":
-    case "--help":
-      console.log(HELP);
+    case "help": {
+      if (topic === undefined) {
+        console.log(HELP);
+        return 0;
+      }
+      const part = helpFor(HELP, topic);
+      if (part === null) throw new UsageError(`no command "${topic}" (grain help lists them)`);
+      console.log(part);
       return 0;
+    }
+    case "version": {
+      const { name, version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { name: string; version: string };
+      console.log(`grain ${version} (${name})`);
+      return 0;
+    }
     default:
-      console.error(HELP);
-      return 2;
+      throw new UsageError(`no command "${command}" (grain help lists them)`);
   }
 }
 
 main(process.argv.slice(2)).then((code) => { if (code !== 0) process.exitCode = code; }, (e) => {
   console.error(`error: ${(e as Error).message}`);
-  process.exitCode = 1;
+  process.exitCode = e instanceof UsageError ? 2 : 1;
 });
 

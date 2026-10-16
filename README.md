@@ -67,6 +67,10 @@ npx grain bind --handle @dice --slug dice --node …   # a username you hold ope
 npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …   # rate someone else's app
 ```
 
+- `grain help <command>` (or `grain <command> --help`, `-h`) prints that command's part of the help and runs nothing;
+  `grain --version` names the tool's version. A flag's value is the next word or comes after `=` (`--node=URL`); a
+  switch (`--chat`, `--wallet`, `--wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`) takes none, so
+  `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never ignored.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix.
 - `publish` without a key file shows `salt:grain-publish?m=…` as a QR code (Saltix 12-grains §10):
