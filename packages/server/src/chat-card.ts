@@ -76,19 +76,36 @@ interface PendingPublish {
   update: Manifest;
 }
 
+/** A poll's option as `Card.poll` takes it: its label (1–60 characters), the command's arguments for it, its votes. */
+export interface PollChoice {
+  label: string;
+  args?: Args;
+  votes?: number;
+}
+
+/** A poll before the spec types its options' arguments. */
+interface PendingPoll {
+  command: string;
+  options: PollChoice[];
+}
+
 /**
  * A card: the blocks (1–16) and actions (0–8) of a message, in order. `ChatServer` signs it with the server key and
- * sends it. Each method checks nothing beyond its own shape; the message's bounds are checked when it is signed.
+ * sends it. Each method checks nothing beyond its own shape; the message's bounds are checked when it is signed, and
+ * `lintCard` checks it against the card standard (docs/cards.md): how every Saltix draws it.
  *
  * ```ts
- * card().secret("Key", "7KQ2-M9XA-4F", { expiresAt }).fields({ Site: "saltix.io" }).status("done", "Opens the site once")
- *   .run("Revoke", "revoke", { id: "k-0042" }).open("All keys", "keys")
+ * card().status("done", "Your key is ready").secret("Key", "7KQ2-M9XA-4F", { expiresAt }).fields({ Site: "saltix.io" })
+ *   .run("Renew", "renew", { id: "k-0042" }).run("Revoke", "revoke", { id: "k-0042" }).open("All keys", "keys")
+ * card().poll("Lunch on Friday?", "vote", [{ label: "Pizza", args: { pick: "pizza" } }, { label: "Sushi", args: { pick: "sushi" } }])
  * card().text("Notes has a new version: its own screen. The owner approves it here.").publish("Review", nextManifest)
  * ```
  */
 export class Card {
+  /** The blocks as built; a poll's options get their arguments typed when the card is sent (`typedBlocks`). */
   readonly blocks: Block[] = [];
   private readonly items: Array<Action | PendingRun | PendingPublish> = [];
+  private readonly polls = new Map<number, PendingPoll>();
 
   /** Text, line breaks kept, no markup: 1–4 000 characters. */
   text(text: string): this {
@@ -121,7 +138,57 @@ export class Card {
     this.blocks.push({ status: { state: STATUS[state], text } });
     return this;
   }
-  /** A button that opens `command`'s form filled with `args`, which the user may edit before sending. */
+  /**
+   * Text drawn as it is, in monospace with Copy: a command to paste, a log, a configuration (1–4 000 characters, line
+   * breaks kept, tabs become 4 spaces). Never run. Saltix 0.1.53 and older drop a message with a code block.
+   */
+  code(text: string): this {
+    this.blocks.push({ code: { text: text.replace(/\t/g, "    ") } });
+    return this;
+  }
+  /**
+   * A poll, or a choice without `tally` (22-grain-chats §4, §5a): `question` (1–200 characters) and 2–10 options, each
+   * running `command` with its `args` (typed by the spec's parameters, as `run`'s) when tapped. Count the votes yourself
+   * and answer a vote with `ask.update(card)`: this card again with the new `votes` and the user's `chosen` (an index).
+   * `closed` takes no more votes. Saltix 0.1.53 and older drop a message with a poll.
+   */
+  poll(question: string, command: string, options: PollChoice[], settings: { chosen?: number | null; closed?: boolean; tally?: boolean } = {}): this {
+    this.polls.set(this.blocks.length, { command, options });
+    this.blocks.push({
+      poll: {
+        question, command, options: options.map((o) => ({ label: o.label, args: [], votes: o.votes ?? 0 })),
+        chosen: settings.chosen ?? null, closed: settings.closed ?? false, tally: settings.tally ?? options.some((o) => o.votes !== undefined),
+      },
+    });
+    return this;
+  }
+  /** The blocks, a poll's options' arguments typed by `commandOf` (the spec's commands), as `actions` types `run`'s. */
+  typedBlocks(commandOf: (name: string) => Command | undefined): Block[] {
+    return this.blocks.map((b, i) => {
+      const pending = this.polls.get(i);
+      if (!pending || !("poll" in b)) return b;
+      const command = commandOf(pending.command);
+      if (!command) throw new TypeError(`poll: the spec has no command ${pending.command}`);
+      return { poll: { ...b.poll, options: b.poll.options.map((o, j) => ({ ...o, args: argsFor(command, pending.options[j]!.args ?? {}) })) } };
+    });
+  }
+  /** The card's blocks and actions as the card standard reads them (`lintCard`, `cardLayout`): `run` arguments and a
+   *  proposed manifest are left out. */
+  shape(): { blocks: Block[]; actions: Action[] } {
+    return {
+      blocks: this.blocks,
+      actions: this.items.map((item): Action => {
+        if ("kind" in item) return item;
+        if ("update" in item) return { label: item.label, kind: { publish: { manifest: "" } } };
+        return { label: item.label, kind: { run: { command: item.command, args: [] } } };
+      }),
+    };
+  }
+  /**
+   * A button that sends `command` with `args` at once when they fill its form (after "Send?" when the command is
+   * `confirm` or destructive by name), and otherwise opens the form filled with them; a long press always opens the form.
+   * The first `run` is the card's primary button; one whose command is named `delete`, `revoke`, `remove`… is red.
+   */
   run(label: string, command: string, args: Args = {}): this {
     this.items.push({ label, command, args });
     return this;

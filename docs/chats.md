@@ -450,11 +450,14 @@ It refuses:
   welcome in the chat;
 - **a frame** that is not a grain chat's: dropped and taken off the mailbox.
 
-It draws messages natively, never as web content: text without markup; fields as a table; secrets masked until tapped,
-never in notifications or chat previews, copied on request, hidden after they expire; files downloaded on request and
-checked against the card's hash, `txt`, `md`, `csv`, `json` and images previewed, anything else offered to the system's
-viewers, nothing opened as code; invoices on the wallet's own payment sheet; `run` opening the command's form filled
-in, which the user may edit; `replaces` updating a message of the same chat in place. A forwarded card keeps its
+It draws messages natively, never as web content, by the card standard ([docs/cards.md](cards.md)): the blocks in a
+capsule and the actions in a bar under it; text without markup; fields in two columns; secrets masked until tapped,
+never in notifications or chat previews, copied on request, hidden after they expire; code in monospace with Copy;
+files downloaded on request and checked against the card's hash, `txt`, `md`, `csv`, `json` and images previewed,
+anything else offered to the system's viewers, nothing opened as code; invoices on the wallet's own payment sheet;
+polls as a segmented control or a list with shares; a `run` sending at once when its arguments fill the form (after
+"Send?" when `confirm` or destructive), opening the form filled in otherwise or on a long press; `replaces` updating a
+message of the same chat in place. A forwarded card keeps its
 server key and signature, and is marked verified or not wherever it goes.
 
 The wallet sends a request only when it fits the spec it holds (a command it has, every required argument and nothing

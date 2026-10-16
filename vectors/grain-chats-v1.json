@@ -14,6 +14,923 @@
     "message_hex": "fc1bd6e322dbbaa0c2474a7d32b532d8a7f38f76b666f96a97a9153619f0f53c",
     "signed_hex": "0600000061636365737322222222222222222222222222222222e8535c18a30100000111111111111111111111111111111111000300000002030000004b65790c000000374b51322d4d3958412d344600ac821da3010000010200000004000000536974650900000073616c7469782e696f0600000041636365737316000000312064617920616674657220697420697320757365640501130000004f70656e73207468652073697465206f6e636502000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d3030343208000000416c6c206b65797301040000006b65797300060000006163636573735e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a90018dbb2a3010000d2e3d96848d08d08441adf3d64be3a9d00db59a27fc32d73bf7a36bc9d455262a5190ce0f66800ac905cfd5e77803f7c07d122f7c209521a9c1f02e996ca5c0d8ef571213ce46f58b77a485f68b9579b64474c39ae03d8cc660ea30b2ec47e4cd3055b7d771380758658c6e899ec2cb4c0af604f7642ca022a9161c47d69770b"
   },
+  "cards": {
+    "constants": {
+      "code_lines": 12,
+      "destructive": [
+        "delete",
+        "remove",
+        "revoke",
+        "cancel",
+        "reset",
+        "wipe",
+        "erase",
+        "destroy",
+        "purge",
+        "ban",
+        "block",
+        "kick",
+        "reject",
+        "deny",
+        "disable",
+        "unsubscribe",
+        "unpublish",
+        "leave"
+      ],
+      "image_formats": [
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp"
+      ],
+      "max_choices": 3,
+      "medium_label": 18,
+      "segmented_label": 12,
+      "segmented_options": 3,
+      "short_label": 10,
+      "text_lines": 8,
+      "three_from_dp": 320,
+      "token_chars": 20,
+      "two_from_dp": 220
+    },
+    "destructive": {
+      "block": true,
+      "blocked": false,
+      "delete": true,
+      "deletion": false,
+      "key": false,
+      "key_revoke": false,
+      "leave_team": true,
+      "list": false,
+      "remove_member": true,
+      "revoke": true,
+      "revoke_key": true,
+      "revokes": false,
+      "unblock": false,
+      "unsubscribe": true
+    },
+    "layouts": [
+      {
+        "actions": [
+          {
+            "command": "renew",
+            "kind": "run",
+            "label": "Renew"
+          }
+        ],
+        "emphasis": [
+          "primary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0
+            ]
+          }
+        ],
+        "why": "one primary"
+      },
+      {
+        "actions": [
+          {
+            "command": "renew",
+            "kind": "run",
+            "label": "Renew"
+          },
+          {
+            "kind": "reply",
+            "label": "Thanks"
+          },
+          {
+            "kind": "reply",
+            "label": "Later"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "why": "three short labels share a row"
+      },
+      {
+        "actions": [
+          {
+            "command": "renew",
+            "kind": "run",
+            "label": "Renew"
+          },
+          {
+            "command": "keys",
+            "kind": "run",
+            "label": "Show all my keys"
+          },
+          {
+            "kind": "reply",
+            "label": "Later"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1
+            ]
+          },
+          {
+            "buttons": [
+              2
+            ]
+          }
+        ],
+        "why": "a label of 11–18 characters lets the row hold two"
+      },
+      {
+        "actions": [
+          {
+            "command": "keys",
+            "kind": "run",
+            "label": "Show all my keys"
+          },
+          {
+            "kind": "reply",
+            "label": "Renew"
+          },
+          {
+            "kind": "reply",
+            "label": "Later"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1
+            ]
+          },
+          {
+            "buttons": [
+              2
+            ]
+          }
+        ],
+        "why": "a medium label first keeps the row to two for the short ones after it"
+      },
+      {
+        "actions": [
+          {
+            "command": "renew",
+            "kind": "run",
+            "label": "Renew"
+          },
+          {
+            "command": "report",
+            "kind": "run",
+            "label": "Send me the whole report"
+          },
+          {
+            "kind": "reply",
+            "label": "Later"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0
+            ]
+          },
+          {
+            "buttons": [
+              1
+            ]
+          },
+          {
+            "buttons": [
+              2
+            ]
+          }
+        ],
+        "why": "a label of 19 characters or more has a row of its own"
+      },
+      {
+        "actions": [
+          {
+            "kind": "reply",
+            "label": "1234567890"
+          },
+          {
+            "kind": "reply",
+            "label": "abcdefghij"
+          },
+          {
+            "kind": "reply",
+            "label": "Отозвать"
+          }
+        ],
+        "emphasis": [
+          "secondary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "why": "ten characters still share three"
+      },
+      {
+        "actions": [
+          {
+            "kind": "reply",
+            "label": "A"
+          },
+          {
+            "kind": "reply",
+            "label": "B"
+          },
+          {
+            "kind": "reply",
+            "label": "C"
+          },
+          {
+            "kind": "reply",
+            "label": "D"
+          }
+        ],
+        "emphasis": [
+          "secondary",
+          "secondary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "buttons": [
+              3
+            ]
+          }
+        ],
+        "why": "four short ones wrap"
+      },
+      {
+        "actions": [
+          {
+            "kind": "reply",
+            "label": "A"
+          },
+          {
+            "kind": "reply",
+            "label": "B"
+          },
+          {
+            "kind": "reply",
+            "label": "C"
+          },
+          {
+            "kind": "reply",
+            "label": "D"
+          }
+        ],
+        "emphasis": [
+          "secondary",
+          "secondary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 2,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1
+            ]
+          },
+          {
+            "buttons": [
+              2,
+              3
+            ]
+          }
+        ],
+        "why": "a narrower card, two a row"
+      },
+      {
+        "actions": [
+          {
+            "kind": "reply",
+            "label": "A"
+          },
+          {
+            "kind": "reply",
+            "label": "B"
+          }
+        ],
+        "emphasis": [
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 1,
+        "rows": [
+          {
+            "buttons": [
+              0
+            ]
+          },
+          {
+            "buttons": [
+              1
+            ]
+          }
+        ],
+        "why": "the narrowest, one a row"
+      },
+      {
+        "actions": [
+          {
+            "command": "revoke",
+            "kind": "run",
+            "label": "Revoke"
+          },
+          {
+            "command": "renew",
+            "kind": "run",
+            "label": "Renew"
+          },
+          {
+            "command": "details",
+            "kind": "run",
+            "label": "Details"
+          },
+          {
+            "kind": "reply",
+            "label": "Thanks"
+          },
+          {
+            "kind": "open",
+            "label": "All keys"
+          }
+        ],
+        "emphasis": [
+          "danger",
+          "primary",
+          "secondary",
+          "secondary",
+          "app"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "buttons": [
+              3
+            ]
+          },
+          {
+            "app": 4
+          }
+        ],
+        "why": "a destructive command is danger, the first other run the primary, an Open a row of its own"
+      },
+      {
+        "actions": [
+          {
+            "kind": "reply",
+            "label": "Yes"
+          },
+          {
+            "kind": "reply",
+            "label": "No"
+          }
+        ],
+        "emphasis": [
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1
+            ]
+          }
+        ],
+        "why": "replies alone have no primary"
+      },
+      {
+        "actions": [
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "1 day"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "7 days"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "30 days"
+          },
+          {
+            "command": "help",
+            "kind": "run",
+            "label": "Help"
+          }
+        ],
+        "emphasis": [
+          "choice",
+          "choice",
+          "choice",
+          "primary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "choices": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "buttons": [
+              3
+            ]
+          }
+        ],
+        "why": "runs of one command side by side are a choice"
+      },
+      {
+        "actions": [
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "1"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "2"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "3"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "4"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "buttons": [
+              3
+            ]
+          }
+        ],
+        "why": "four runs of one command are buttons"
+      },
+      {
+        "actions": [
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "Ten minutes only"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "A whole day"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "A month"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1
+            ]
+          },
+          {
+            "buttons": [
+              2
+            ]
+          }
+        ],
+        "why": "a choice must fit one row"
+      },
+      {
+        "actions": [
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "1 day"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "7 days"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "30 days"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "secondary",
+          "secondary"
+        ],
+        "per_row": 2,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1
+            ]
+          },
+          {
+            "buttons": [
+              2
+            ]
+          }
+        ],
+        "why": "a narrower card takes a choice of two, not of three"
+      },
+      {
+        "actions": [
+          {
+            "command": "revoke",
+            "kind": "run",
+            "label": "One"
+          },
+          {
+            "command": "revoke_all",
+            "kind": "run",
+            "label": "Two"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "Three"
+          }
+        ],
+        "emphasis": [
+          "danger",
+          "danger",
+          "primary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "why": "a destructive command is never a choice"
+      },
+      {
+        "actions": [
+          {
+            "command": "renew",
+            "kind": "run",
+            "label": "Renew"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "Day"
+          },
+          {
+            "command": "key",
+            "kind": "run",
+            "label": "Week"
+          },
+          {
+            "kind": "reply",
+            "label": "Thanks"
+          }
+        ],
+        "emphasis": [
+          "primary",
+          "choice",
+          "choice",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              0
+            ]
+          },
+          {
+            "choices": [
+              1,
+              2
+            ]
+          },
+          {
+            "buttons": [
+              3
+            ]
+          }
+        ],
+        "why": "a choice between buttons"
+      },
+      {
+        "actions": [
+          {
+            "kind": "publish",
+            "label": "Review"
+          },
+          {
+            "kind": "reply",
+            "label": "Thanks"
+          }
+        ],
+        "emphasis": [
+          "owner",
+          "secondary"
+        ],
+        "per_row": 3,
+        "rows": [
+          {
+            "buttons": [
+              1
+            ]
+          }
+        ],
+        "why": "a Publish is the owner's panel, in no row"
+      }
+    ],
+    "per_row": [
+      {
+        "per_row": 3,
+        "width_dp": 336
+      },
+      {
+        "per_row": 3,
+        "width_dp": 320
+      },
+      {
+        "per_row": 2,
+        "width_dp": 319
+      },
+      {
+        "per_row": 2,
+        "width_dp": 220
+      },
+      {
+        "per_row": 1,
+        "width_dp": 219
+      },
+      {
+        "per_row": 3,
+        "width_dp": 400
+      }
+    ],
+    "polls": [
+      {
+        "closed": false,
+        "labels": [
+          "Yes",
+          "No",
+          "Later"
+        ],
+        "look": "segmented",
+        "tally": false
+      },
+      {
+        "closed": false,
+        "labels": [
+          "Yes",
+          "No",
+          "Later"
+        ],
+        "look": "list",
+        "tally": true
+      },
+      {
+        "closed": true,
+        "labels": [
+          "Yes",
+          "No",
+          "Later"
+        ],
+        "look": "list",
+        "tally": false
+      },
+      {
+        "closed": false,
+        "labels": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "look": "list",
+        "tally": false
+      },
+      {
+        "closed": false,
+        "labels": [
+          "Thirteen chars",
+          "No"
+        ],
+        "look": "list",
+        "tally": false
+      },
+      {
+        "closed": false,
+        "labels": [
+          "Twelve chars",
+          "No"
+        ],
+        "look": "segmented",
+        "tally": false
+      }
+    ],
+    "rules": [
+      "22-grain-chats §5a; the reference is saltix_types::grain::chat::card",
+      "a label's length is its count of Unicode scalar values: at most 10 lets three share a row, at most 18 two, longer one",
+      "a row takes the next button while its length + 1 is within every label's allowance in it and per_row; a choice and an Open each take a row; a Publish takes none",
+      "per_row: 3 for a card at least 320 dp wide, 2 at least 220 dp, else 1",
+      "emphasis: a Run whose command (or its part before the first _) is destructive is danger; a whole run of 2–3 consecutive Runs of one non-destructive command whose labels all allow that many in a row and per_row allows is a choice; the first other Run is the primary; other Runs and Replies secondary; Open app; Publish owner",
+      "a poll is segmented when open, without a tally, at most 3 options of at most 12 characters; else a list",
+      "shares: floors of votes × 100 / total, the points left to the largest remainders (an earlier option first among equal ones); all 0 without votes",
+      "a field's value is a token (monospace with Copy) when it has at least 20 characters and no whitespace",
+      "a File whose format is png, jpg, jpeg, gif or webp previews as an image"
+    ],
+    "shares": [
+      {
+        "shares": [
+          34,
+          33,
+          33
+        ],
+        "votes": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "shares": [
+          67,
+          33
+        ],
+        "votes": [
+          2,
+          1
+        ]
+      },
+      {
+        "shares": [
+          0,
+          0
+        ],
+        "votes": [
+          0,
+          0
+        ]
+      },
+      {
+        "shares": [
+          0,
+          100
+        ],
+        "votes": [
+          0,
+          5
+        ]
+      },
+      {
+        "shares": [
+          10,
+          20,
+          70
+        ],
+        "votes": [
+          1,
+          2,
+          7
+        ]
+      },
+      {
+        "shares": [
+          15,
+          60,
+          25
+        ],
+        "votes": [
+          3,
+          12,
+          5
+        ]
+      },
+      {
+        "shares": [
+          50,
+          50
+        ],
+        "votes": [
+          4294967295,
+          4294967295
+        ]
+      }
+    ],
+    "tokens": {
+      "1 day after it is used, at most": false,
+      "1234567890123456789": false,
+      "12345678901234567890": true,
+      "7KQ2-M9XA-4F": false,
+      "dsalt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh": true
+    }
+  },
   "cert": {
     "borsh_hex": "060000006163636573735e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a90018dbb2a3010000d2e3d96848d08d08441adf3d64be3a9d00db59a27fc32d73bf7a36bc9d455262a5190ce0f66800ac905cfd5e77803f7c07d122f7c209521a9c1f02e996ca5c0d",
     "expires_at_ms": "1802592000000"
@@ -131,6 +1048,38 @@
     "signed_hex": "060000006163636573731313131313131313131313131313131300505c18a301000000ac821da301000000030000006b657903000000080000006475726174696f6e038051010000000000040000006e6f7465000e000000666f7220746865207465737465720400000073697465020900000073616c7469782d696f000000000106000000616363657373668ed031e7b81dbe796f2d05520e4edb56eec144d6b6ca6c053af56a7b787ee417cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0018dbb2a301000000eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163cb9a1923a36c223b53be94e5d5849753dacce6cfc9689f95519e3ee8ead8166931f0ed61dcb6d41d6f0f57ef23f2ad3e50c0dee74c8ed5557a992cd1d070260d02000000727517cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080cecb139e64e2adaf6de4cae07829db171cf6cc8609d60c0ff4f5aa62a2d384d65e47e91982e1645fe96b1fb84e6d4876645e57b3eb655356b35d9efbce51cf7f0c"
   },
   "now_ms": "1800000000000",
+  "poll": {
+    "frame_hex": "53474331010600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000006b6579030000000a0000003130206d696e7574657302000000080000006475726174696f6e0358020000000000000400000073697465020900000073616c7469782d696f0300000005000000312064617902000000080000006475726174696f6e0380510100000000000400000073697465020900000073616c7469782d696f0c000000070000003330206461797302000000080000006475726174696f6e03008d2700000000000400000073697465020900000073616c7469782d696f0500000001010001063b0000006375726c202d482027582d53616c7469782d4b65793a20374b51322d4d3958412d344627205c0a202068747470733a2f2f73616c7469782e696f2f01000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9ad89255cbb2b4c094917bd3d16c319053ff6e5f5ec0308df72d44108c1dab20f90b9a49ed02151b8e7f5b53c495b2892594938d82bfaaeabd551e58ab388a401",
+    "message_hex": "27b85e2ab741c66f5c75d81d8aa73e62a9e9778d182a9ba21812aae2af730677",
+    "refused": [
+      {
+        "change": "options = [10 minutes]",
+        "frame_hex": "53474331010600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000006b6579010000000a0000003130206d696e7574657302000000080000006475726174696f6e0358020000000000000400000073697465020900000073616c7469782d696f03000000000001063b0000006375726c202d482027582d53616c7469782d4b65793a20374b51322d4d3958412d344627205c0a202068747470733a2f2f73616c7469782e696f2f01000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a961cd18ebd85ebee11f6eb2e24610f66fd8c3880142d0e19d184e2e659856589021ffbd64ca5a51efad0f15b92b1aacb2461cd9c611ccc3c3e9db6e76278c4503",
+        "why": "one option"
+      },
+      {
+        "change": "chosen = 3",
+        "frame_hex": "53474331010600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000006b6579030000000a0000003130206d696e7574657302000000080000006475726174696f6e0358020000000000000400000073697465020900000073616c7469782d696f0300000005000000312064617902000000080000006475726174696f6e0380510100000000000400000073697465020900000073616c7469782d696f0c000000070000003330206461797302000000080000006475726174696f6e03008d2700000000000400000073697465020900000073616c7469782d696f0500000001030001063b0000006375726c202d482027582d53616c7469782d4b65793a20374b51322d4d3958412d344627205c0a202068747470733a2f2f73616c7469782e696f2f01000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9f68f18d9fd93a7ded218b537332e69e568edf878df867c60f947595746750b355c75ebf6c26fae9ad45573a1d710b9b2a709054a0ec74a84fb49c1a52590e509",
+        "why": "chosen past the options"
+      },
+      {
+        "change": "options[0].args = [site, duration]",
+        "frame_hex": "53474331010600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000006b6579030000000a0000003130206d696e75746573020000000400000073697465020900000073616c7469782d696f080000006475726174696f6e0358020000000000000300000005000000312064617902000000080000006475726174696f6e0380510100000000000400000073697465020900000073616c7469782d696f0c000000070000003330206461797302000000080000006475726174696f6e03008d2700000000000400000073697465020900000073616c7469782d696f0500000001010001063b0000006375726c202d482027582d53616c7469782d4b65793a20374b51322d4d3958412d344627205c0a202068747470733a2f2f73616c7469782e696f2f01000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a96907b3f32eb2b0ad772187f942d9eca2f69dbc80b5372bc4b6682ad8ab54666f4ca6fa7f193ce19a0dbbcbdeed153a6ec5ece4433455c6e10521cc1e10e76b03",
+        "why": "an option's arguments out of order"
+      },
+      {
+        "change": "command = Key",
+        "frame_hex": "53474331010600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000004b6579030000000a0000003130206d696e7574657302000000080000006475726174696f6e0358020000000000000400000073697465020900000073616c7469782d696f0300000005000000312064617902000000080000006475726174696f6e0380510100000000000400000073697465020900000073616c7469782d696f0c000000070000003330206461797302000000080000006475726174696f6e03008d2700000000000400000073697465020900000073616c7469782d696f0500000001010001063b0000006375726c202d482027582d53616c7469782d4b65793a20374b51322d4d3958412d344627205c0a202068747470733a2f2f73616c7469782e696f2f01000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a98b6fddda06c47b099ab4ce3a2dfaf64b1d1f2c58ce85870507b243dbde18e9c5da1ba7ca89deaf1d17dc81587acfc20b9ba80b3cbca9cf8780e9ea18c24dcb0c",
+        "why": "a command that is no name"
+      },
+      {
+        "change": "code.text = \"\"",
+        "frame_hex": "53474331010600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000006b6579030000000a0000003130206d696e7574657302000000080000006475726174696f6e0358020000000000000400000073697465020900000073616c7469782d696f0300000005000000312064617902000000080000006475726174696f6e0380510100000000000400000073697465020900000073616c7469782d696f0c000000070000003330206461797302000000080000006475726174696f6e03008d2700000000000400000073697465020900000073616c7469782d696f0500000001010001060000000001000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a93fc36a2a34ecc62a5dd0190af4575a03ca3f28e7e07c304e4c8555b02a8e8c3d093a622c1c5d6e9e0818963b51701a148c0fb33baaa536a0317220f96f58310d",
+        "why": "an empty code block"
+      }
+    ],
+    "signed_hex": "0600000061636365737336363636363636363636363636363636a05f5c18a30100000000020000000729000000486f77206c6f6e672073686f756c642061206e6577206b6579206f70656e2073616c7469782e696f3f030000006b6579030000000a0000003130206d696e7574657302000000080000006475726174696f6e0358020000000000000400000073697465020900000073616c7469782d696f0300000005000000312064617902000000080000006475726174696f6e0380510100000000000400000073697465020900000073616c7469782d696f0c000000070000003330206461797302000000080000006475726174696f6e03008d2700000000000400000073697465020900000073616c7469782d696f0500000001010001063b0000006375726c202d482027582d53616c7469782d4b65793a20374b51322d4d3958412d344627205c0a202068747470733a2f2f73616c7469782e696f2f01000000060000005265766f6b6500060000007265766f6b650100000002000000696400060000006b2d30303432015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9ad89255cbb2b4c094917bd3d16c319053ff6e5f5ec0308df72d44108c1dab20f90b9a49ed02151b8e7f5b53c495b2892594938d82bfaaeabd551e58ab388a401"
+  },
   "publish": {
     "frame_hex": "53474331010600000061636365737335353535353535353535353535353535b85b5c18a30100000000010000000045000000416363657373206861732061206e65772076657273696f6e3a20697473206f776e2073637265656e2e20546865206f776e657220617070726f76657320697420686572652e010000000600000052657669657703eb000000725938394473497744495862446830514b33746d4a4a4956735845436472596f4d5770456d6b523155417354507773483444787768665a4770477056324472414a5f6c4e6c745f6e4e496f694c6751674a74456653506f426b345a634434654c777a526b5f6169667a6157354e72663646512d6238354162417775766369436443396e4445636e4f4673526e51495332434a4b67386f43304843472d6a33446564702d32416a704d35723344465750536c6b5a624c696c79375656466c5758634f57516f4367434462506b6a394b54634a505170493647696d633931617a44374d75424f66637037787a63015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a93c41f2e9a627c5f4de83524e8ec822dbb0bc24253d9583387af18fda198328b2a8331c01a17a62cfa35fae68a91ce92584c554fafcf6b278559626873e7d9802",
     "link": "salt:grain-publish?m=rY89DsIwDIXbDh0QK3tmJJIVsXECdrYoMWpEmkR1UAsTPwsH4DxwhfZGpGpV2DrAJ_lNlt_nNIoiLgQgJtEfSPoBk4ZcD4eLwzRk_aifzaW5Nrf6FQ-b85AbAwuvciCdC9nDEcnOFsRnQIS2CJKg8oC0HCG-j3Dedp-2AjpM5r3DFWPSlkZbLily7VVFlWXcOWQoCgCDbPkj9KTcJPQpI6Gimc91azD7MuBOfcp7xzc",
@@ -282,7 +1231,8 @@
     "FileRef: Borsh {relay: Option<String>, id, key [32], iv [12], hash [32] SHA-256 of the plaintext, size u64, name, mime}; JSON {cmd: file_ref, id, key and iv in standard base64, hash hex, size, name, mime, relay?}",
     "ChatHello {slug, id [16], at u64 ms, member: SignedMemberProof, lang} is signed by the user's grain key over derive-domain \"Saltix grain chat hello v1\" of genesis_hash ‖ Borsh(hello); SignedChatHello is Borsh {hello, key [32], signature}; frame tag 4, user to server only (22-grain-chats §3a). A server takes it from its key's personal address, for its slug, dated at most 5 minutes ahead and at most 7 days behind, with a proof that checks as a request's and an account on the grain's team (owner, developer 2 or viewer 4; a user 1 is not); it keeps the address and welcomes a key at most once an hour; anything else gets no answer",
     "ChatWelcome {slug, hello [16]: the hello's id, at u64 ms} is signed by the server key over derive-domain \"Saltix grain chat welcome v1\" of genesis_hash ‖ Borsh(welcome); SignedChatWelcome is Borsh {welcome, server: ServerKey, signature}; frame tag 5, server to user only; a wallet takes it from the server key's address, for the hello in flight, at most 5 minutes ahead",
-    "ActionKind = 0 Run {command, args} | 1 Open {start} | 2 Reply {text} | 3 Publish {manifest: String}: the <manifest> of salt:grain-publish?m=<manifest> (12-grains §10), 1–2 027 characters of canonical base64url without padding of one raw DEFLATE stream (nothing after its last block) inflating to at most 16 384 bytes, the canonical Borsh of a GrainManifest whose owner is 32 zero bytes and owner_key Ed25519 32 zero bytes, its slug the message's; at most one Publish a message; otherwise the message is refused whole (another grain's slug: Slug); a wallet shows it only to an account on the grain's team, the button in its own words; readers that predate tag 3 refuse the frame"
+    "ActionKind = 0 Run {command, args} | 1 Open {start} | 2 Reply {text} | 3 Publish {manifest: String}: the <manifest> of salt:grain-publish?m=<manifest> (12-grains §10), 1–2 027 characters of canonical base64url without padding of one raw DEFLATE stream (nothing after its last block) inflating to at most 16 384 bytes, the canonical Borsh of a GrainManifest whose owner is 32 zero bytes and owner_key Ed25519 32 zero bytes, its slug the message's; at most one Publish a message; otherwise the message is refused whole (another grain's slug: Slug); a wallet shows it only to an account on the grain's team, the button in its own words; readers that predate tag 3 refuse the frame",
+    "Block = 0 Text {text} | 1 Fields {rows} | 2 Secret {label, value, expires_at} | 3 File {file, title, format} | 4 Invoice {invoice} | 5 Status {state, text} | 6 Code {text: 1–4 000 characters, line breaks kept} | 7 Poll {question: 1–200 characters, command: a command's name, options: Vec<PollOption {label: 1–60 characters, args: sorted by name, votes: u32}> (2–10), chosen: Option<u8> below the options' count, closed: bool, tally: bool}; a tap on an option sends command with its args via the message, as a Run; readers that predate tags 6 and 7 refuse the frame (Saltix 0.1.53 and older)"
   ],
   "server_spec": {
     "frame_hex": "534743310206000000616363657373030000000200000002000000656e2a0000004f6e652d74696d6520616363657373206b65797320666f722074686520636c6f7365642073697465732e02000000727552000000d09ed0b4d0bdd0bed180d0b0d0b7d0bed0b2d18bd0b520d0bad0bbd18ed187d0b820d0b4d0bed181d182d183d0bfd0b020d0ba20d0b7d0b0d0bad180d18bd182d18bd0bc20d181d0b0d0b9d182d0b0d0bc2e03000000030000006b65790200000002000000656e070000004e6577206b657902000000727513000000d09dd0bed0b2d18bd0b920d0bad0bbd18ed1870100000002000000656e1c00000041206b65792074686174206f70656e7320612073697465206f6e636503000000080000006475726174696f6e0100000002000000656e0a00000041636365737320666f72030300000058020000000000008051010000000000008d27000000000001040000006e6f74650100000002000000656e040000004e6f74650028000004000000736974650100000002000000656e040000005369746502020000000900000073616c7469782d696f0100000002000000656e0900000073616c7469782e696f030000007765620100000002000000656e0300000057656201000000000000000000060000007265766f6b650100000002000000656e0c0000005265766f6b652061206b657900000000010000000200000069640100000002000000656e030000004b657900100001010000000000000000060000007265706f72740100000002000000656e0c0000004461696c79207265706f72740000000003000000030000006461790100000002000000656e0300000044617904000b0000006572726f72735f6f6e6c790100000002000000656e0b0000004572726f7273206f6e6c79060003000000746f700100000002000000656e03000000546f700101000000000000006400000000000000000000000000000000000001000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee1e0000015e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9e34ef2d928e81ca7632ebb6bb7252d5651e2eea366cbb1854405e767477e60651a9ee967e18e09e0df5c9fdb60bf10db5dbe054c6e64d959074fd08ce344e50d00",

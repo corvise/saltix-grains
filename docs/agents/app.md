@@ -87,8 +87,11 @@ chat.text((ask) => card().text("Pick Plan below."));
 - **The asker**: `ask.lang` (answer in it when you can, else English), `ask.key` (the user's key in your app, the same
   as the page's `grain.login`), `ask.member` and `ask.fromTeam` (only for a private app's members and your own team:
   a public app never learns who its users are), `ask.request.id`.
-- **Cards**: 1–16 blocks (`text`, `fields`, `secret`, `file`, `invoice`, `status`) and 0–8 actions (`run`, `open`,
-  `reply`, `publish`). A frame holds 48 000 bytes: send more as a file (`await chat.upload(bytes, {name, mime})`, then
+- **Cards**: 1–16 blocks (`text`, `fields`, `secret`, `file`, `invoice`, `status`, `code`, `poll`) and 0–8 actions
+  (`run`, `open`, `reply`, `publish`), designed by the card standard: [cards.md](cards.md) (a status first, at most 6
+  actions, labels of at most 18 characters, the first `run` primary, destructive commands named so). Check each card
+  with `assertCardStandard(card, spec)` in the tests. A poll's vote and a card whose buttons change are answered with
+  `ask.update(card)`, in place of the card tapped. A frame holds 48 000 bytes: send more as a file (`await chat.upload(bytes, {name, mime})`, then
   `.file(ref, {format})`). Slow work: `await ask.working("…")` first; the answer replaces it.
 - **Refuse** with `throw new ChatRefusal(text)` (a `refused` status, in the user's language). Any other error answers
   `failed` and is reported to your team's console.
@@ -122,7 +125,7 @@ chat.text((ask) => card().text("Pick Plan below."));
 ## Test
 
 - **A handler** is a function that returns a card: call it with an `ask`-shaped object and read `card.blocks` (and
-  `card.actions(commandOf)`). Fast, and enough for most logic.
+  `card.actions(commandOf)`). Fast, and enough for most logic. `assertCardStandard(card, spec)` there too.
 - **End to end**: a development relay (`scripts/dev-relay.mjs` in the SDK's checkout), a fake node answering
   `node_status`, `grain_get`, `account_get` and `relay_list`, your server started from a development key
   (`AppKey.of("devnet", genesis, slug, secret)`, never a real key), a wallet as a `RelayClient` sending a signed request.

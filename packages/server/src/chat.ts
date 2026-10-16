@@ -178,7 +178,21 @@ export type Block =
   | { file: { file: FileRef; title: string; format: string } }
   /** `invoice`: the hex of a signed invoice (`signInvoice`), 12-grains §5.2. */
   | { invoice: { invoice: string } }
-  | { status: { state: number; text: string } };
+  | { status: { state: number; text: string } }
+  /** Text drawn as it is, in monospace with Copy: a command, a log, a configuration; never run (2026-10-16). */
+  | { code: { text: string } }
+  /** A choice or a poll (2026-10-16): a tap on an option sends `command` with the option's `args`, as a `run` does;
+   *  count it and `replaces` the message with the new `votes` and `chosen`. `chosen`: the option this user's vote
+   *  counts for (an index), null for none; `tally`: the votes are shown (without them it is a choice). */
+  | { poll: { question: string; command: string; options: PollOption[]; chosen: number | null; closed: boolean; tally: boolean } };
+
+/** An option of a poll: its label (1–60 characters), the poll's command's arguments for it (sorted by name) and its
+ *  votes. */
+export interface PollOption {
+  label: string;
+  args: ChatArgs;
+  votes: number;
+}
 
 export type ActionKind =
   /** A request the user may edit and send. */
@@ -564,7 +578,13 @@ function writeBlock(w: Writer, b: Block): void {
   else if ("file" in b) writeFileRef(w.u8(3), b.file.file).string(b.file.title).string(b.file.format);
   else if ("invoice" in b) w.u8(4).raw(fromHex(b.invoice.invoice));
   else if ("status" in b) w.u8(5).u8(uint(b.status.state, 8, "state")).string(b.status.text);
-  else throw new TypeError("a block's kind");
+  else if ("code" in b) w.u8(6).string(b.code.text);
+  else if ("poll" in b) {
+    const p = b.poll;
+    w.u8(7).string(p.question).string(p.command).u32(p.options.length);
+    for (const o of p.options) writeArgs(w.string(o.label), o.args).u32(uint(o.votes, 32, "votes"));
+    w.option(p.chosen, (w, c) => w.u8(uint(c, 8, "chosen"))).bool(p.closed).bool(p.tally);
+  } else throw new TypeError("a block's kind");
 }
 
 function readBlock(r: Reader): Block {
@@ -579,6 +599,13 @@ function readBlock(r: Reader): Block {
       return { invoice: { invoice: toHex(r.since(start)) } };
     }
     case 5: return { status: { state: r.u8(), text: r.string() } };
+    case 6: return { code: { text: r.string() } };
+    case 7: return {
+      poll: {
+        question: r.string(), command: r.string(), options: r.vec((r) => ({ label: r.string(), args: readArgs(r), votes: r.u32() })),
+        chosen: r.option((r) => r.u8()), closed: r.bool(), tally: r.bool(),
+      },
+    };
     default: throw new TypeError("borsh: a block's tag");
   }
 }
@@ -919,6 +946,13 @@ function blockOk(b: Block, slug: string): boolean {
     }
   }
   if ("status" in b) return b.status.state <= STATUS.failed && textOk(b.status.text, 0, 200);
+  if ("code" in b) return longTextOk(b.code.text, 1, 4_000);
+  if ("poll" in b) {
+    const p = b.poll;
+    return textOk(p.question, 1, 200) && nameOk(p.command, true) && p.options.length >= 2 && p.options.length <= 10 &&
+      (p.chosen === null || (Number.isInteger(p.chosen) && p.chosen >= 0 && p.chosen < p.options.length)) &&
+      p.options.every((o) => textOk(o.label, 1, 60) && ascending(o.args) && Number.isInteger(o.votes) && o.votes >= 0 && o.votes < 2 ** 32);
+  }
   return false;
 }
 

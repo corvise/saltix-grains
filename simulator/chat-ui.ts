@@ -1,12 +1,14 @@
 /**
  * How the simulator draws a grain's chat (Saltix 22-grain-chats §4–5), as a wallet does: natively, never as web
- * content. Text is text (no markup), secrets are masked until tapped and hidden after they expire, files are checked
- * against the card's hash before they are shown and nothing is opened as code; forms come from the spec.
+ * content, by the card standard (§5a) that every Saltix follows. Text is text (no markup), secrets are masked until
+ * tapped and hidden after they expire, files are checked against the card's hash before they are shown and nothing is
+ * opened as code; forms come from the spec.
  */
 import { valueOf } from "../packages/server/src/chat-card";
+import { CODE_LINES, TEXT_LINES, cardLayout, isImage, isToken, isWide, perRow, pollLook, shares } from "../packages/server/src/card-standard";
 import {
-  type Action, type Block, type ChatArgs, type ChatValue, type Command, type GrainChatSpec, type ParamKind, type Texts, dayToIso,
-  takesValue,
+  type ActionKind, type Block, type ChatArgs, type ChatMessage, type ChatValue, type Command, type GrainChatSpec, type ParamKind, type Texts,
+  dayToIso, takesValue,
 } from "../packages/server/src/chat";
 import { decodeInvoice } from "../packages/server/src/invoice";
 import { readPublishText } from "../packages/server/src/publish";
@@ -31,92 +33,207 @@ export interface Handlers {
   download(file: FileRef): Promise<Uint8Array>;
   /** An invoice's problem as a wallet checks it, or null. */
   invoiceProblem(hex: string): string | null;
-  run(command: string, args: ChatArgs, via: string): void;
+  /** A tap on an action or a poll's option (`key`: `a<index>` or `p<block>:<option>`): sent at once when it fills the
+   *  command's form, else (or with `edit`, the long press) the form opens. */
+  tap(key: string, kind: ActionKind, via: string, edit: boolean): void;
   open(start: string): void;
-  reply(text: string, via: string): void;
+}
+
+/** Where a tap on a card stands (22-grain-chats §5a): the tapped control's key, waiting for the answer (the card's
+ *  controls wait too), answered, refused, or a minute without an answer (the card takes taps again). */
+export interface TapState {
+  key: string;
+  phase: "waiting" | "done" | "refused" | "late";
+}
+
+const STATE_ICONS = ["◌", "✓", "⊘", "!"];
+
+/** A long text or code collapsed past `lines` lines, with More / Less. */
+function collapsible(node: HTMLElement, text: string, lines: number): HTMLElement {
+  if (text.split("\n").length <= lines && text.length <= lines * 60) return node;
+  node.classList.add("clamped");
+  node.style.setProperty("--lines", String(lines));
+  const more = el("button", { className: "link", textContent: "More" });
+  more.onclick = () => {
+    const open = node.classList.toggle("clamped");
+    more.textContent = open ? "More" : "Less";
+  };
+  return el("div", {}, node, more);
+}
+
+function copyButton(text: () => string, label = "Copy"): HTMLButtonElement {
+  const b = el("button", { className: "icon", textContent: "⧉", title: label, ariaLabel: label });
+  b.onclick = () => void navigator.clipboard?.writeText(text());
+  return b;
 }
 
 function secretBlock(b: Extract<Block, { secret: unknown }>["secret"]): HTMLElement {
-  const value = el("span", { className: "secret", textContent: "••••••••", title: "Tap to show" });
+  const value = el("span", { className: "mono secret-value", textContent: "•••• •••• ••••" });
   let shown = false;
-  value.onclick = () => {
-    shown = !shown && (b.expires_at === 0 || Date.now() < b.expires_at);
-    value.textContent = shown ? b.value : b.expires_at !== 0 && Date.now() >= b.expires_at ? "expired" : "••••••••";
+  const expired = () => b.expires_at !== 0 && Date.now() >= b.expires_at;
+  const show = el("button", { className: "icon", textContent: "👁", title: "Show", ariaLabel: "Show" });
+  show.onclick = () => {
+    shown = !shown && !expired();
+    value.textContent = shown ? b.value : expired() ? "expired" : "•••• •••• ••••";
   };
-  const copy = el("button", { textContent: "Copy", className: "small" });
-  copy.onclick = () => {
-    if (b.expires_at === 0 || Date.now() < b.expires_at) void navigator.clipboard?.writeText(b.value);
-  };
+  const copy = copyButton(() => (expired() ? "" : b.value));
   if (b.expires_at !== 0) {
     const hide = () => {
       value.textContent = "expired";
-      copy.disabled = true;
+      copy.disabled = show.disabled = true;
     };
-    if (Date.now() >= b.expires_at) hide();
+    if (expired()) hide();
     else setTimeout(hide, Math.min(b.expires_at - Date.now(), 2 ** 31 - 1));
   }
-  const until = b.expires_at ? el("small", { textContent: ` until ${new Date(b.expires_at).toLocaleString()}` }) : "";
-  return el("div", { className: "block" }, el("b", { textContent: b.label || "Secret" }), " ", value, " ", copy, until);
+  const until = b.expires_at ? el("small", { className: "muted", textContent: `until ${new Date(b.expires_at).toLocaleString()}` }) : "";
+  return el("div", { className: "block secret" }, el("small", { className: "muted", textContent: b.label || "Secret" }),
+    el("div", { className: "line" }, value, show, copy), until);
 }
 
 function fileBlock(b: Extract<Block, { file: unknown }>["file"], h: Handlers): HTMLElement {
   const preview = el("div");
-  const button = el("button", { textContent: "Download", className: "small" });
-  button.onclick = async () => {
-    button.disabled = true;
+  const image = isImage(b.format) && /^image\/(png|jpeg|gif|webp)$/.test(b.file.mime);
+  const save = el("button", { className: "icon", textContent: "⤓", title: image ? "Show" : "Save", ariaLabel: image ? "Show" : "Save" });
+  const status = el("small", { className: "muted" });
+  save.onclick = async () => {
+    save.disabled = true;
+    status.textContent = "downloading…";
     try {
       const bytes = await h.download(b.file);
       preview.replaceChildren();
       const textual = ["txt", "md", "csv", "json"].includes(b.format) || /^text\/|\/json$/.test(b.file.mime);
       if (textual) preview.append(el("pre", { className: "preview", textContent: new TextDecoder().decode(bytes.subarray(0, 64 * 1024)) }));
-      else if (/^image\/(png|jpeg|gif|webp)$/.test(b.file.mime)) preview.append(el("img", { src: URL.createObjectURL(new Blob([bytes as BlobPart], { type: b.file.mime })), className: "preview" }));
+      else if (image) preview.append(el("img", { src: URL.createObjectURL(new Blob([bytes as BlobPart], { type: b.file.mime })), className: "image" }));
       // Anything else is offered to save, never opened.
-      const save = el("a", { textContent: "Save", download: b.file.name, href: URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/octet-stream" })) });
-      preview.append(el("small", { textContent: "hash checked · " }), save);
+      const link = el("a", { textContent: "Save", download: b.file.name, href: URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/octet-stream" })) });
+      status.replaceChildren("hash checked · ", link);
     } catch (e) {
-      preview.replaceChildren(el("small", { className: "bad", textContent: (e as Error).message }));
-      button.disabled = false;
+      status.replaceChildren(el("span", { className: "bad", textContent: (e as Error).message }));
+      save.disabled = false;
     }
   };
-  return el("div", { className: "block" }, el("b", { textContent: b.title || b.file.name }), ` ${b.file.name} · ${b.format} · ${size(b.file.size)} `, button, preview);
+  const badge = el("span", { className: "badge", textContent: b.format.toUpperCase() });
+  const tile = el("div", { className: "tile" }, badge,
+    el("div", { className: "grow" }, el("div", { className: "title", textContent: b.title || b.file.name }),
+      el("small", { className: "muted", textContent: `${b.format.toUpperCase()} · ${size(b.file.size)}` }), status), save);
+  return el("div", { className: "block" }, tile, preview);
 }
 
 function invoiceBlock(hex: string, h: Handlers): HTMLElement {
   const problem = h.invoiceProblem(hex);
   const { invoice } = decodeInvoice(hex);
-  const pay = el("button", { textContent: "Pay", className: "small", disabled: problem !== null });
+  const pay = el("button", { className: "btn primary", textContent: "Pay", disabled: problem !== null });
   pay.onclick = () => confirm(`Invoice from ${invoice.slug}: ${invoice.amount} base units of ${invoice.asset}\n${invoice.memo}\n\nThe simulator makes no payment.`);
-  return el("div", { className: "block" }, el("b", { textContent: "Invoice" }), ` ${invoice.amount} base units of ${invoice.asset} · ${invoice.memo} `,
-    problem ? el("span", { className: "bad", textContent: `refused: ${problem}` }) : pay);
+  return el("div", { className: "block invoice" }, el("small", { className: "muted", textContent: "Invoice" }),
+    el("div", { className: "amount", textContent: `${invoice.amount} base units of ${invoice.asset}` }), invoice.memo,
+    problem ? el("div", { className: "bad", textContent: `refused: ${problem}` }) : pay);
 }
 
-export function renderBlock(b: Block, h: Handlers): HTMLElement {
-  if ("text" in b) return el("div", { className: "block text", textContent: b.text.text });
-  if ("fields" in b) return el("table", { className: "block" }, ...b.fields.rows.map(([k, v]) => el("tr", {}, el("th", { textContent: k }), el("td", { textContent: v }))));
+/** A poll (22-grain-chats §5a): segmented when short, open and without a tally, else a list; shares as bars. */
+function pollBlock(b: Extract<Block, { poll: unknown }>["poll"], index: number, via: string, h: Handlers, tap: TapState | null): HTMLElement {
+  const look = pollLook(b.options, b.closed, b.tally);
+  const percent = shares(b.options.map((o) => o.votes));
+  const total = b.options.reduce((a, o) => a + o.votes, 0);
+  const busy = tap?.phase === "waiting";
+  const options = b.options.map((o, j) => {
+    const key = `p${index}:${j}`;
+    const mark = tap?.key === key ? phaseMark(tap.phase) : b.chosen === j ? "✓ " : "";
+    const button = el("button", {
+      className: `option${b.chosen === j ? " chosen" : ""}`, disabled: b.closed || busy,
+      ariaLabel: `${o.label}${b.tally ? `, ${percent[j]} percent, ${o.votes} votes` : ""}${b.chosen === j ? ", your vote" : ""}`,
+    });
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", String(b.chosen === j));
+    if (look === "list" && b.tally) {
+      const fill = el("span", { className: "fill" });
+      fill.style.width = `${percent[j]}%`;
+      button.append(fill,
+        el("span", { className: "label", textContent: mark + o.label }), el("span", { className: "share", textContent: `${percent[j]}%` }));
+    } else button.append(mark + o.label);
+    button.onclick = () => h.tap(key, { run: { command: b.command, args: o.args } }, via, false);
+    button.oncontextmenu = (e) => {
+      e.preventDefault();
+      h.tap(key, { run: { command: b.command, args: o.args } }, via, true);
+    };
+    return button;
+  });
+  const foot = [b.tally ? `${total} vote${total === 1 ? "" : "s"}` : "", b.closed ? "Closed" : ""].filter(Boolean).join(" · ");
+  return el("div", { className: "block poll" }, el("div", { className: "question", textContent: b.question }),
+    el("div", { className: look === "segmented" ? "segmented" : "options", role: "radiogroup" }, ...options),
+    foot ? el("small", { className: "muted", textContent: foot }) : "");
+}
+
+function phaseMark(phase: TapState["phase"]): string {
+  return phase === "waiting" ? "◌ " : phase === "done" ? "✓ " : phase === "refused" ? "⊘ " : "⏱ ";
+}
+
+function renderBlock(b: Block, index: number, via: string, h: Handlers, tap: TapState | null): HTMLElement {
+  if ("text" in b) return el("div", { className: "block" }, collapsible(el("div", { className: "text", textContent: b.text.text }), b.text.text, TEXT_LINES));
+  if ("fields" in b) {
+    return el("div", { className: "block fields" }, ...b.fields.rows.map(([k, value]) => el("div", { className: "field" },
+      el("span", { className: "muted", textContent: k }),
+      isToken(value) ? el("span", { className: "line" }, el("span", { className: "mono", textContent: value }), copyButton(() => value)) : el("span", { textContent: value }))));
+  }
   if ("secret" in b) return secretBlock(b.secret);
   if ("file" in b) return fileBlock(b.file, h);
   if ("invoice" in b) return invoiceBlock(b.invoice.invoice, h);
-  return el("div", { className: `block status s${b.status.state}`, textContent: `${STATES[b.status.state]}${b.status.text ? ": " + b.status.text : ""}` });
+  if ("code" in b) {
+    return el("div", { className: "block code" }, collapsible(el("pre", { className: "mono", textContent: b.code.text }), b.code.text, CODE_LINES),
+      copyButton(() => b.code.text));
+  }
+  if ("poll" in b) return pollBlock(b.poll, index, via, h, tap);
+  const state = b.status.state;
+  return el("div", { className: `block status s${state}`, role: "status" }, el("span", { className: "dot", textContent: STATE_ICONS[state] ?? "" }),
+    el("span", { textContent: b.status.text || STATES[state] || "" }));
 }
 
-export function renderActions(actions: Action[], messageId: string, h: Handlers): HTMLElement {
-  return el("div", { className: "actions" }, ...actions.map((a) => {
-    const k = a.kind;
-    // An update for the owner (22-grain-chats §4): Saltix draws it in its own words, for the grain's team only, and the
-    // owner approves it in the publishing sheet with the PIN. The simulator only says so.
-    if ("publish" in k) {
-      let version = "?";
-      try {
-        version = String(readPublishText(k.publish.manifest).version);
-      } catch {
-        // The card's bounds were checked before it was shown.
-      }
-      return el("small", { className: "block", textContent: `App update available: v${version}. The owner approves it in Saltix (Review and approve).` });
+/**
+ * A message as every Saltix draws it (22-grain-chats §5a): the blocks in a capsule, the actions in a bar attached under
+ * it — rows by the labels' length and the card's width, the first `run` filled, destructive commands red, a choice as
+ * one segmented control, an `open` the app's own row — and the state of the last tap.
+ */
+export function renderCard(m: ChatMessage, mark: string, h: Handlers, tap: TapState | null, widthDp: number): HTMLElement {
+  const capsule = el("div", { className: `capsule${isWide(m) ? " wide" : ""}` },
+    el("div", { className: "mark", textContent: mark }), ...m.blocks.map((b, i) => renderBlock(b, i, m.id, h, tap)),
+    el("div", { className: "foot", textContent: new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }));
+  const layout = cardLayout(m.actions, perRow(widthDp));
+  const busy = tap?.phase === "waiting";
+  const button = (i: number, extra = "") => {
+    const a = m.actions[i]!;
+    const key = `a${i}`;
+    const b = el("button", { className: `btn ${layout.emphasis[i]}${extra}`, disabled: busy && tap?.key !== key });
+    const state = tap?.key === key ? phaseMark(tap.phase) : "";
+    b.append(layout.emphasis[i] === "app" ? el("span", { className: "appicon", textContent: "▣" }) : "", state + a.label, layout.emphasis[i] === "app" ? el("span", { className: "chev", textContent: "›" }) : "");
+    if (tap?.key === key && tap.phase === "waiting") b.setAttribute("aria-busy", "true");
+    b.title = "run" in a.kind ? "Right-click to edit before sending" : "";
+    b.onclick = () => ("open" in a.kind ? h.open(a.kind.open.start) : h.tap(key, a.kind, m.id, false));
+    b.oncontextmenu = (e) => {
+      if (!("run" in a.kind)) return;
+      e.preventDefault();
+      h.tap(key, a.kind, m.id, true);
+    };
+    return b;
+  };
+  const rows = layout.rows.map((row) => {
+    if ("app" in row) return el("div", { className: "barrow" }, button(row.app));
+    if ("choices" in row) {
+      const picked = tap && row.choices.some((i) => tap.key === `a${i}`) && tap.phase !== "late" ? tap.key : null;
+      return el("div", { className: "barrow segmented", role: "radiogroup" }, ...row.choices.map((i) => button(i, picked === `a${i}` ? " picked" : "")));
     }
-    const button = el("button", { textContent: a.label, className: "small" });
-    button.onclick = () => ("run" in k ? h.run(k.run.command, k.run.args, messageId) : "open" in k ? h.open(k.open.start) : h.reply(k.reply.text, messageId));
-    return button;
-  }));
+    return el("div", { className: "barrow" }, ...row.buttons.map((i) => button(i)));
+  });
+  // A publish is the owner's panel, in the wallet's own words: the simulator only says so.
+  const proposals = m.actions.filter((a) => "publish" in a.kind).map((a) => {
+    let version = "?";
+    try {
+      version = String(readPublishText((a.kind as { publish: { manifest: string } }).publish.manifest).version);
+    } catch {
+      // The card's bounds were checked before it was shown.
+    }
+    return el("div", { className: "block owner", textContent: `App update available: v${version}. The owner approves it in Saltix (Review and approve).` });
+  });
+  proposals.forEach((p) => capsule.insertBefore(p, capsule.lastChild));
+  return el("div", { className: `card${isWide(m) ? " wide" : ""}` }, capsule, ...(rows.length ? [el("div", { className: "bar" }, ...rows)] : []));
 }
 
 /** The intro, the commands and what the server keeps: what a wallet shows before the first action (§5). */
