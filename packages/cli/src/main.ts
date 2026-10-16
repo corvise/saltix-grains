@@ -3,14 +3,16 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
 import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, rpc, type GrainCall, type Manifest } from "@saltix/grain-server";
+import { UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, nodeCall, type GrainCall, type Manifest } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, salt, type Signing } from "./registry.js";
 import {
   APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, sendCall, serverKeyOf,
-  waitForRegistry, walletFor, writeAppKey,
+  waitForRegistry, writeAppKey,
 } from "./studio.js";
+import { type Reach, reachOf } from "./network.js";
+import { grantAddress, granted, requestGrant, saltOf, waitForSalt } from "./faucet.js";
 import { serve, linkFor, simulatorFor } from "./dev.js";
 import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
@@ -36,13 +38,13 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
                                            seal public/ into one ZIP; grain.json names its hash and size
                                            (upload bundle.zip to the sources; grain dev serves it itself)
-  grain publish --node URL [--wallet] [--wait] [--out signed.json]
+  grain publish [--wallet] [--wait] [--out signed.json]
                                            register the slug or record a newer version: signed in the owner's
                                            wallet by a QR code, or with --key (a key file, for test networks)
                                            when owner.key is there. The deposit is the node's quote for the
                                            slug's length: 100 SALT for 3-5 characters, 30 for 6-7, 10 for 8+
-  grain retire --slug S --node URL         close the slug for good; the deposit returns 30 days later
-  grain show --slug S --node URL [--out F] what the registry holds for a slug, or its deposit; F gets the manifest
+  grain retire --slug S                    close the slug for good; the deposit returns 30 days later
+  grain show --slug S [--out F]            what the registry holds for a slug, or its deposit; F gets the manifest
   grain chat-spec [--spec chat.json] [--cert cert.json] [--out chat.signed.json]
                                            lint the chat spec and sign it with the owner key: the document to serve
                                            at /.well-known/saltix-grain-chat ({spec, cert} with --cert)
@@ -51,33 +53,39 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain cert [--server server.key | --server-key HEX] [--days 30] [--out cert.json]
                                            the owner key certifies the server key for the grain (31 days at most
                                            for chats: issue a new one before it ends)
-  grain configure --slug S --server KEY [--server KEY…] [--category C] --node URL
+  grain configure --slug S --server KEY [--server KEY…] [--category C]
                                            name the grain's server keys (hex, or a key file such as server.key; at
                                            most 4) and its category: both replace the registry's. --revoke-all
                                            names none: every developer key stops at once
-  grain access --slug S --public|--private [--member ADDRESS:ROLES…] --node URL
+  grain access --slug S --public|--private [--member ADDRESS:ROLES…]
                                            who may use the grain: anyone, or its owner and members (roles user,
                                            developer, viewer joined by +; at most 64); both replace the registry's
-  grain rate --slug S --score 1-5 [--review TEXT] --node URL --key rater.key
+  grain rate --slug S --score 1-5 [--review TEXT] --key rater.key
                                            rate someone else's grain (0 withdraws your rating); public, by account
-  grain bind --handle @name --slug S --node URL   (or --clear) point a username you hold at your grain: @name
-                                           opens its chat
-  grain app-key [--file F] [--node URL] [--offline]
-                                           a developer key's public parts (from SALTIX_APP_KEY, --file or stdin),
-                                           and whether the registry names it; never the secret
-  grain app-key make --slug S --node URL [--server server.key] [--out app.key]
+  grain bind --handle @name --slug S       (or --clear) point a username you hold at your grain: @name opens
+                                           its chat
+  grain app-key [--file F] [--offline]     a developer key's public parts (from SALTIX_APP_KEY, --file or stdin),
+                                           and whether its network's registry names it; never the secret
+  grain app-key make --slug S [--server server.key] [--out app.key]
                                            a developer key for a server key file, written owner-only (test networks)
   The owner's calls are signed with owner.key (--key) where there is one, for test networks; without it the tool
   says what to do in the owner's Saltix (My apps) and waits for the registry (--timeout seconds, 600).
 
   grain sponsor init                       a sponsor key (sponsor.key): its account pays relays for your users
-  grain sponsor --node URL                 the sponsor's account, WORK, channels and the exchanges to open one with
-  grain sponsor open --exchange C --amount W --node URL   a channel with city C's exchange, W WORK deposited
-  grain sponsor top-up --exchange C --amount W --node URL
-  grain sponsor close --exchange C --node URL             the deposit returns after the claim window
+  grain sponsor                            the sponsor's account, WORK, channels and the exchanges to open one with
+  grain sponsor open --exchange C --amount W   a channel with city C's exchange, W WORK deposited
+  grain sponsor top-up --exchange C --amount W
+  grain sponsor close --exchange C         the deposit returns after the claim window
+
+  grain faucet [--key owner.key | --address A] [--wait]
+                                           test SALT (and WORK while it lasts) for the key file's account or an
+                                           address, from the test network's faucet: once every 5 minutes; --wait
+                                           until it is in the account (--timeout seconds, 120)
 
   --manifest F   the manifest (grain.json); --key F   the owner's key file (owner.key)
-  --node URL     a node's wallet interface (plain HTTP: a local node or a tunnel)
+  --network N    whose public relays a registry command goes through: devnet, Saltix's test network (the default)
+  --relay URL#H  or a relay you name, pinned by its certificate's SHA-256 H (wss://host:30335/#…; repeat it)
+  --node URL     or your own node's wallet interface (plain HTTP: a local node or a tunnel)
   --genesis H    refuse a node of another network; --fee N   base units of SALT; --valid-for N   slots (600)
   A flag's value is the word after it, or comes after = in the same word; a flag a command does not take is refused.
   grain --version says which version of the tool this is.
@@ -90,10 +98,10 @@ function text(flags: Map<string, string | true>, name: string, fallback?: string
   throw new Error(`--${name} is needed`);
 }
 
-function signing(flags: Map<string, string | true>): Signing {
+function signing(flags: Map<string, string | true>, reach: Reach): Signing {
   const fee = flags.get("fee");
   return {
-    node: text(flags, "node"),
+    node: reach.node,
     genesis: typeof flags.get("genesis") === "string" ? (flags.get("genesis") as string) : undefined,
     fee: typeof fee === "string" ? BigInt(fee) : undefined,
     validFor: Number(text(flags, "valid-for", "600")),
@@ -101,8 +109,8 @@ function signing(flags: Map<string, string | true>): Signing {
 }
 
 /** The owner's call `call`: signed with the key file when there is one, else done in Saltix and waited for. */
-async function ownerCall(call: GrainCall, keyPath: string, flags: Map<string, string | true>): Promise<number> {
-  const node = text(flags, "node");
+async function ownerCall(call: GrainCall, keyPath: string, flags: Map<string, string | true>, reach: Reach): Promise<number> {
+  const node = reach.node;
   if (flags.get("wallet") === true || !existsSync(keyPath)) {
     console.log(inSaltix(call));
     console.log("Waiting for the registry…");
@@ -110,7 +118,7 @@ async function ownerCall(call: GrainCall, keyPath: string, flags: Map<string, st
     console.log(ok ? "the registry has it" : "not in the registry yet: check with grain show");
     return ok ? 0 : 1;
   }
-  const { sent, landed } = await sendCall(call, readKey(keyPath), signing(flags), flags.get("wait") === true ? 180_000 : 0);
+  const { sent, landed } = await sendCall(call, readKey(keyPath), signing(flags, reach), flags.get("wait") === true ? 180_000 : 0);
   console.log(`${sent.call}: transaction ${sent.id} (fee ${sent.fee})`);
   if (landed !== null) console.log(landed ? "the registry has it" : "not in the registry yet: check with grain show");
   return landed === false ? 1 : 0;
@@ -127,6 +135,8 @@ async function stdinText(): Promise<string | undefined> {
 async function main(argv: string[]): Promise<number> {
   const { command, topic, positional, flags, all } = parse(argv);
   const manifestPath = text(flags, "manifest", MANIFEST_FILE);
+  /** Where the command reaches the network: the public relays by default, --relay, or --node. */
+  const reach = () => reachOf(flags, all);
   const keyPath = text(flags, "key", KEY_FILE);
   switch (command) {
     case "init": {
@@ -160,8 +170,8 @@ async function main(argv: string[]): Promise<number> {
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
         console.log(`next: make the app in Saltix (Apps → My apps → New app, slug ${slug}) and put its developer key in app.key ` +
           `(owner-only, never on the command line); then npm install && npm start in ${dir}`);
-        console.log(`  or on a test network, with owner.key: grain publish --node URL, grain cert init, ` +
-          `grain configure --slug ${slug} --server server.key --node URL, grain app-key make --slug ${slug} --node URL`);
+        console.log(`  or on the test network, with owner.key: grain faucet --wait, grain publish, grain cert init, ` +
+          `grain configure --slug ${slug} --server server.key, grain app-key make --slug ${slug}`);
         return 0;
       }
       writeFileSync(join(dir, "public", "index.html"), template.indexHtml(name));
@@ -214,7 +224,8 @@ async function main(argv: string[]): Promise<number> {
     case "publish": {
       if (flags.get("wallet") === true || !existsSync(keyPath)) {
         // The owner's key stays in the wallet: it fills in the owner and its key, signs and pays (12-grains §10).
-        const node = text(flags, "node");
+        const r = reach();
+        const node = r.node;
         const { manifest } = readManifest(manifestPath);
         const unowned = { ...manifest, ...UNOWNED };
         const { errors } = lint(unowned);
@@ -228,7 +239,7 @@ async function main(argv: string[]): Promise<number> {
         console.log("Waiting for the registry…");
         const signed = await waitForPublished(node, manifest, Number(text(flags, "timeout", "600")) * 1000);
         if (signed === null) {
-          console.error(`not in the registry yet: once the wallet's transaction lands, grain show --slug ${manifest.slug} --node ${node} --out signed.json writes it`);
+          console.error(`not in the registry yet: once the wallet's transaction lands, grain show --slug ${manifest.slug}${r.flags} --out signed.json writes it`);
           return 1;
         }
         writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
@@ -237,7 +248,7 @@ async function main(argv: string[]): Promise<number> {
       }
       const secret = readKey(keyPath);
       const signed = signedFor(manifestPath, secret);
-      const s = signing(flags);
+      const s = signing(flags, reach());
       const sent = await publish(signed, secret, s);
       writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
       const deposit = sent.amount > 0n ? `, deposit ${salt(sent.amount)} SALT` : "";
@@ -252,16 +263,17 @@ async function main(argv: string[]): Promise<number> {
     }
     case "retire": {
       const slug = text(flags, "slug");
-      const sent = await retire(slug, readKey(keyPath), signing(flags));
+      const sent = await retire(slug, readKey(keyPath), signing(flags, reach()));
       console.log(`retire ${slug}: transaction ${sent.id}`);
       return 0;
     }
     case "show": {
       const slug = text(flags, "slug");
-      const g = await show(text(flags, "node"), slug);
+      const node = reach().node;
+      const g = await show(node, slug);
       console.log(JSON.stringify(g, null, 2));
       if (g === null) {
-        const { deposit } = await grainQuote(text(flags, "node"), slug);
+        const { deposit } = await grainQuote(node, slug);
         console.log(`${slug} is free: registering it keeps a deposit of ${salt(deposit)} SALT`);
       }
       const out = flags.get("out");
@@ -329,14 +341,16 @@ async function main(argv: string[]): Promise<number> {
       if (servers.length > 0 && flags.get("revoke-all") === true) throw new Error("--server or --revoke-all, not both");
       const category = typeof flags.get("category") === "string" ? (flags.get("category") as string) : undefined;
       const owner = existsSync(keyPath) && flags.get("wallet") !== true ? readKey(keyPath) : undefined;
-      return ownerCall(await configureCall(text(flags, "node"), slug, servers, category, owner), keyPath, flags);
+      const r = reach();
+      return ownerCall(await configureCall(r.node, slug, servers, category, owner), keyPath, flags, r);
     }
     case "access": {
       const open = flags.get("public") === true;
       if (open === (flags.get("private") === true)) throw new Error("--public or --private");
       const owner = existsSync(keyPath) && flags.get("wallet") !== true ? readKey(keyPath) : undefined;
-      const call = await accessCall(text(flags, "node"), text(flags, "slug"), open, membersOf(all("member")), owner);
-      return ownerCall(call, keyPath, flags);
+      const r = reach();
+      const call = await accessCall(r.node, text(flags, "slug"), open, membersOf(all("member")), owner);
+      return ownerCall(call, keyPath, flags, r);
     }
     case "rate": {
       const score = Number(text(flags, "score"));
@@ -346,32 +360,33 @@ async function main(argv: string[]): Promise<number> {
         return 1;
       }
       const rater = readKey(keyPath);
-      const { sent } = await sendCall(await rateCall(text(flags, "node"), text(flags, "slug"), score, review, rater), rater, signing(flags));
+      const r = reach();
+      const { sent } = await sendCall(await rateCall(r.node, text(flags, "slug"), score, review, rater), rater, signing(flags, r));
       console.log(`rate ${text(flags, "slug")} ${score}: transaction ${sent.id} (fee ${sent.fee}); a rating names its account`);
       return 0;
     }
     case "bind": {
       const clear = flags.get("clear") === true;
       const slug = clear ? null : text(flags, "slug");
-      const node = text(flags, "node");
+      const r = reach();
       if (!existsSync(keyPath) || flags.get("wallet") === true) {
         const handle = parseHandle(text(flags, "handle"));
         if (handle === null) throw new Error(`${text(flags, "handle")}: not a name (@anna) or a number (+0 777 1234)`);
-        return ownerCall({ bind: { handle, slug } }, keyPath, flags);
+        return ownerCall({ bind: { handle, slug } }, keyPath, flags, r);
       }
-      return ownerCall(await bindCall(node, text(flags, "handle"), slug, readKey(keyPath)), keyPath, flags);
+      return ownerCall(await bindCall(r.node, text(flags, "handle"), slug, readKey(keyPath)), keyPath, flags, r);
     }
     case "app-key": {
       if (positional[0] === "make") {
-        const node = text(flags, "node");
-        const status = await rpc<{ network: "mainnet" | "testnet" | "devnet"; genesis: string }>(node, "node_status");
+        const r = reach();
+        const status = await nodeCall<{ network: "mainnet" | "testnet" | "devnet"; genesis: string }>(r.node, "node_status");
         const secret = readKey(text(flags, "server", "server.key"));
         const key = AppKey.of(status.network, status.genesis, text(flags, "slug"), secret);
         const out = text(flags, "out", APP_KEY_FILE);
         writeAppKey(out, key);
         console.log(`${out}: the developer key of ${key.slug} on ${status.network} ${key.genesis}, server key ${key.publicKey} (owner-only; keep it secret)`);
-        const described = await describeAppKey(key, walletFor(status.network, node));
-        if (described.registered !== true) console.log(`the registry does not name it yet: grain configure --slug ${key.slug} --server ${key.publicKey} --node ${node}`);
+        const described = await describeAppKey(key, r.node);
+        if (described.registered !== true) console.log(`the registry does not name it yet: grain configure --slug ${key.slug} --server ${key.publicKey}${r.flags}`);
         return 0;
       }
       if (positional.length > 0) {
@@ -379,8 +394,8 @@ async function main(argv: string[]): Promise<number> {
       }
       const file = typeof flags.get("file") === "string" ? (flags.get("file") as string) : undefined;
       const key = readAppKey(file, process.env, file === undefined && !process.env.SALTIX_APP_KEY ? await stdinText() : undefined);
-      const node = typeof flags.get("node") === "string" ? (flags.get("node") as string) : undefined;
-      const described = await describeAppKey(key, flags.get("offline") === true ? null : walletFor(key.network, node));
+      // The key's own network unless told: its public relays, --relay or --node.
+      const described = await describeAppKey(key, flags.get("offline") === true ? null : reachOf(flags, all, key.network).node);
       console.log(JSON.stringify(described, null, 2));
       return described.registered === false ? 1 : 0;
     }
@@ -390,12 +405,12 @@ async function main(argv: string[]): Promise<number> {
       if (sub === "init") {
         const key = newKey(sponsorKey);
         console.log(`a sponsor key in ${sponsorKey} (keep it secret, on your server); its public key ${key}`);
-        console.log(`set "sponsor" in grain.json to its account: grain sponsor --node URL shows it`);
+        console.log(`set "sponsor" in grain.json to its account: grain sponsor shows it`);
         return 0;
       }
       const secret = readKey(sponsorKey);
       if (sub === "show") {
-        console.log(JSON.stringify(await sponsorStatus(text(flags, "node"), secret), null, 2));
+        console.log(JSON.stringify(await sponsorStatus(reach().node, secret), null, 2));
         return 0;
       }
       const exchange = text(flags, "exchange").toLowerCase();
@@ -403,9 +418,22 @@ async function main(argv: string[]): Promise<number> {
         : sub === "top-up" ? { topUp: { exchange, amount: parseWork(text(flags, "amount")) } }
         : sub === "close" ? { close: { exchange } } : null;
       if (call === null) throw new Error(`grain sponsor ${sub}: init, show, open, top-up or close`);
-      const sent = await channel(call, secret, signing(flags));
+      const sent = await channel(call, secret, signing(flags, reach()));
       console.log(`${sub} the channel with ${exchange}: transaction ${sent.id} (fee ${sent.fee})`);
       return 0;
+    }
+    case "faucet": {
+      const r = reach();
+      const given = flags.get("address");
+      const address = await grantAddress(r.node, typeof given === "string" ? { address: given } : { secret: readKey(keyPath) });
+      const before = flags.get("wait") === true ? await saltOf(r.node, address).catch(() => 0n) : 0n;
+      const grant = await requestGrant(r.node, address);
+      console.log(`the faucet sent ${granted(grant)}, through ${r.where}`);
+      if (flags.get("wait") !== true) return 0;
+      console.log("Waiting for it in the account…");
+      const landed = await waitForSalt(r.node, address, before + grant.salt.amount, Number(text(flags, "timeout", "120")) * 1000);
+      console.log(landed ? "it is in the account" : `not in the account yet: its shard's next blocks bring it (grain faucet again in 5 minutes if not)`);
+      return landed ? 0 : 1;
     }
     case "help": {
       if (topic === undefined) {

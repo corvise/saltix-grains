@@ -1,5 +1,4 @@
 import { referenceInMemo } from "./invoice.js";
-import type { WalletInterface } from "./network.js";
 
 /** A payment found on chain. */
 export interface Payment {
@@ -13,16 +12,34 @@ export interface Payment {
   confirmations: number;
 }
 
-/** A node's answer that is an error (`code` as 08-node §6 numbers them: 1, it does not follow the account's shard). */
+/** A node's answer that is an error (`code` as 08-node §6 numbers them: 1, it does not follow the account's shard; 3,
+ *  the faucet refused), its `reason` (the node's message) and `data` (`retry_after` seconds for a faucet's `too_soon`). */
 export class RpcError extends Error {
-  constructor(public readonly method: string, public readonly code: number, detail: string) {
+  readonly reason: string;
+  constructor(public readonly method: string, public readonly code: number, detail: string, public readonly data: unknown = null) {
     super(`${method}: ${detail} (${code})`);
     this.name = "RpcError";
+    this.reason = detail;
   }
 }
 
 /** The node does not follow the shard an account lives in: another node may. */
 export const NOT_FOLLOWED = 1;
+/** A test network's faucet refused (`faucet_request`): `no_faucet`, `too_soon`, `daily_limit`, `empty`, `self`. */
+export const FAUCET = 3;
+
+/** Whether an error answer is this node's alone, so that another node may answer: it does not follow the shard, or runs
+ *  no faucet. */
+export const nodeOnly = (code: number, reason: string): boolean => code === NOT_FOLLOWED || (code === FAUCET && reason === "no_faucet");
+
+/** A node's wallet interface: your own node's URL (plain HTTP: a local node or a tunnel), or the interface however it is
+ *  reached (the network's relays' gateways, `RelayGateways`; a fake in tests). */
+export type NodeLike = string | { call<T>(method: string, params?: object): Promise<T> };
+
+/** Call `method` of `node`'s wallet interface. */
+export function nodeCall<T>(node: NodeLike, method: string, params: object = {}): Promise<T> {
+  return typeof node === "string" ? rpc<T>(node, method, params) : node.call<T>(method, params);
+}
 
 /** A JSON-RPC call to a node's wallet interface (Saltix 08-node §6), plain HTTP: your own node or a tunnel. Throws an
  *  `RpcError` for the node's error answer. */
@@ -32,8 +49,8 @@ export async function rpc<T>(url: string, method: string, params: object = {}): 
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
-  const body = (await response.json()) as { result?: T; error?: { code: number; message: string } };
-  if (body.error) throw new RpcError(method, body.error.code, body.error.message);
+  const body = (await response.json()) as { result?: T; error?: { code: number; message: string; data?: unknown } };
+  if (body.error) throw new RpcError(method, body.error.code, body.error.message, body.error.data ?? null);
   return body.result as T;
 }
 
@@ -54,13 +71,8 @@ interface HistoryEntry {
  * any wallet interface (`ChatServer` reaches one through the relays: `chat.paymentOf`). Check its
  * amount and asset against your invoice, and wait for the confirmations you need.
  */
-export async function findPayment(
-  node: string | WalletInterface, address: string, reference: string, limit = 200,
-): Promise<Payment | null> {
-  const params = { address, limit };
-  const { entries } = typeof node === "string"
-    ? await rpc<{ entries: HistoryEntry[] }>(node, "account_history", params)
-    : await node.call<{ entries: HistoryEntry[] }>("account_history", params);
+export async function findPayment(node: NodeLike, address: string, reference: string, limit = 200): Promise<Payment | null> {
+  const { entries } = await nodeCall<{ entries: HistoryEntry[] }>(node, "account_history", { address, limit });
   const e = entries.find(
     (x) => (x.kind === "received" || x.kind === "receipt") && x.memo?.text !== undefined && referenceInMemo(x.memo.text) === reference,
   );

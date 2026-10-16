@@ -119,6 +119,10 @@ already use the network's public relays (`RelayGateways`, pinned by their certif
   public relays, or the developer key's), and `--node` stays for your own node.
 - `grain faucet --key owner.key`: test SALT for a key file's account (`faucet_request`).
 - **Effort** M (`registry.ts`, `studio.ts`, `sponsor.ts` take a `WalletInterface` instead of a URL).
+- **Built** (2026-10-16): every command reaches the network through `--network` (devnet by default), `--relay
+  URL#sha256` or `--node`; the SDK's reads take a node's URL or any wallet interface (`NodeLike`); `RelayGateways` asks
+  `relay_list` when the relays it knows cannot answer and passes over a node with no faucet; `grain faucet [--wait]`.
+  Checked live: `grain show` and `grain faucet --wait` for a throwaway key on the test network.
 
 ### 5. A spec changed under its version is refused
 

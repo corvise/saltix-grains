@@ -1,14 +1,16 @@
-// `grain publish`, `grain retire` and `grain show`: the owner's registry calls through a node's wallet interface
-// (Saltix 12-grains §3, 08-node §6), signed with the owner's key file; and what every signed registry call shares.
+// `grain publish`, `grain retire` and `grain show`: the owner's registry calls through the network's wallet interface
+// (Saltix 12-grains §3, 08-node §6: the public relays' gateways, or your own node), signed with the owner's key file; and
+// what every signed registry call shares.
 import {
-  type Manifest, type SignedManifest, type GrainCall, rpc, grainGet, grainQuote, signGrainTx, minimumFee, callAmount, accountId, toHex,
+  type Manifest, type SignedManifest, type GrainCall, type NodeLike, nodeCall, grainGet, grainQuote, signGrainTx, minimumFee, callAmount, accountId, toHex,
   fromHex, type RegisteredGrain, sameManifest,
 } from "@saltix/grain-server";
 import { publishLink } from "./publish.js";
 import { publicKeyOf } from "./project.js";
 
 export interface Signing {
-  node: string;
+  /** Where the network's wallet interface is: your node's URL, or the relays' gateways (`reachOf`). */
+  node: NodeLike;
   /** Refuse a node of another network. */
   genesis?: string;
   /** Base units of SALT; the pool's floor for the size by default. */
@@ -66,32 +68,32 @@ export async function retire(slug: string, secret: Uint8Array, s: Signing): Prom
   return submit({ retire: slug }, secret, s);
 }
 
-export async function show(node: string, slug: string): Promise<RegisteredGrain | null> {
+export async function show(node: NodeLike, slug: string): Promise<RegisteredGrain | null> {
   return grainGet(node, slug);
 }
 
 /** Sign `call` with the key file's secret and submit it, after the network, the balance and the call's own bounds are
  *  checked: what a node would refuse is refused before a transaction is made. */
 export async function submit(call: GrainCall, secret: Uint8Array, s: Signing): Promise<Sent> {
-  const status = await rpc<Status>(s.node, "node_status");
+  const status = await nodeCall<Status>(s.node, "node_status");
   if (s.genesis !== undefined && status.genesis !== s.genesis.toLowerCase()) {
     throw new Error(`the node is on genesis ${status.genesis}, not ${s.genesis}`);
   }
   const id = toHex(accountId(fromHex(publicKeyOf(secret), 32)));
-  const account = await rpc<Account>(s.node, "account_get", { address: id });
+  const account = await nodeCall<Account>(s.node, "account_get", { address: id });
   const fee = s.fee ?? minimumFee(call);
   const amount = callAmount(call);
   if (BigInt(account.salt) < amount + fee) {
     throw new Error(`the account has ${account.salt} base units of SALT; this needs ${amount + fee}`);
   }
   const signed = signGrainTx(secret, { nonce: account.nonce, fee, validUntilSlot: status.slot + s.validFor }, call, status.genesis);
-  const answer = await rpc<{ id: string }>(s.node, "transaction_submit", { transaction: signed.hex });
+  const answer = await nodeCall<{ id: string }>(s.node, "transaction_submit", { transaction: signed.hex });
   const kind = (["register", "update", "retire", "configure", "access", "rate", "bind"] as const).find((k) => k in call)!;
   return { call: kind, id: answer.id, fee, amount };
 }
 
 /** Wait until the registry shows `done`, at most `ms`. */
-export async function waitFor(node: string, slug: string, done: (g: RegisteredGrain | null) => boolean, ms: number): Promise<boolean> {
+export async function waitFor(node: NodeLike, slug: string, done: (g: RegisteredGrain | null) => boolean, ms: number): Promise<boolean> {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     if (done(await grainGet(node, slug))) return true;
@@ -102,7 +104,7 @@ export async function waitFor(node: string, slug: string, done: (g: RegisteredGr
 
 /** The link that asks the owner's wallet to publish `m` (12-grains §10), after what the registry says rules it out:
  *  a retired slug, or a version not above the registered one. Whose the slug is, the wallet checks. */
-export async function walletLink(m: Manifest, node: string): Promise<string> {
+export async function walletLink(m: Manifest, node: NodeLike): Promise<string> {
   const now = await grainGet(node, m.slug);
   if (now?.retired != null) throw new Error(`${m.slug}: retired at slot ${now.retired}; a retired slug is never used again`);
   if (now && m.version <= now.version) throw new Error(`${m.slug}: version ${now.version} is registered; raise "version" above it`);
@@ -110,7 +112,7 @@ export async function walletLink(m: Manifest, node: string): Promise<string> {
 }
 
 /** The signed manifest once the registry holds `m` as a wallet published it (any owner key); null after `ms`. */
-export async function waitForPublished(node: string, m: Manifest, ms: number): Promise<SignedManifest | null> {
+export async function waitForPublished(node: NodeLike, m: Manifest, ms: number): Promise<SignedManifest | null> {
   let found: SignedManifest | null = null;
   await waitFor(node, m.slug, (g) => {
     if (g?.manifest && g.retired === null && sameManifest(g.manifest.manifest, m)) found = g.manifest;

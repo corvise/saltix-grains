@@ -50,6 +50,9 @@ header h1 { min-height: max(48px, var(--saltix-controls-height)); display: flex;
 main { padding-bottom: calc(16px + var(--saltix-safe-bottom)); }
 ```
 
+The `grain` command line needs no node: registry commands and `grain faucet` (test SALT) go through the test network's
+public relays, each pinned by its certificate; `--node URL` is for a node of your own.
+
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
 

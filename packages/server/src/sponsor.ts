@@ -3,7 +3,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { accountId } from "./address.js";
-import { rpc } from "./node.js";
+import { type NodeLike, nodeCall } from "./node.js";
 import { minimumTxFee, signTx, type TxFields } from "./tx.js";
 
 /** What a certificate lets a key buy at relays (the relay enforces it). */
@@ -82,9 +82,9 @@ export function sponsorCertProblem(hex: string, sponsorAccount: string, genesisH
  * A grant for the user's grain key `userKey` (hex) from now, as a login handler issues it: `days` long (at most 30),
  * for `services`, up to `perDay` µWORK a day. The node gives the slot and the network.
  */
-export async function grantFor(nodeUrl: string, sponsorSecret: Uint8Array, userKey: string,
+export async function grantFor(node: NodeLike, sponsorSecret: Uint8Array, userKey: string,
   options: { perDay: bigint; days?: number; services?: number }): Promise<string> {
-  const { slot, genesis } = await rpc<{ slot: number; genesis: string }>(nodeUrl, "node_status");
+  const { slot, genesis } = await nodeCall<{ slot: number; genesis: string }>(node, "node_status");
   const days = Math.min(options.days ?? 7, 30);
   return issueSponsorCert(sponsorSecret, {
     user_key: userKey, per_day: options.perDay, services: options.services ?? SERVICE.messages, issued: slot, expires: slot + days * 86_400,

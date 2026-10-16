@@ -7,7 +7,7 @@ import { Writer, fromHex, toHex } from "./bytes.js";
 import { type Handle, handleProblem, writeHandle } from "./handle.js";
 import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
 import { UNOWNED } from "./publish.js";
-import { rpc } from "./node.js";
+import { type NodeLike, nodeCall } from "./node.js";
 import { type TxFields, encodeTx, minimumTxFee, signTx, txId } from "./tx.js";
 
 export type { TxFields } from "./tx.js";
@@ -228,14 +228,14 @@ export interface RegisteredGrain {
 }
 
 /** What the registry holds under `slug`; null when nobody registered it. */
-export async function grainGet(nodeUrl: string, slug: string): Promise<RegisteredGrain | null> {
-  return (await grainQuote(nodeUrl, slug)).grain;
+export async function grainGet(node: NodeLike, slug: string): Promise<RegisteredGrain | null> {
+  return (await grainQuote(node, slug)).grain;
 }
 
 /** What the registry holds under `slug`, and the deposit registering it needs: the node's quote, or 100 SALT from a node
  *  that quotes none (it predates deposits by length and takes 100 SALT for any slug). */
-export async function grainQuote(nodeUrl: string, slug: string): Promise<{ grain: RegisteredGrain | null; deposit: bigint }> {
-  const answer = await rpc<{ grain: RegisteredGrain | null; deposit?: string }>(nodeUrl, "grain_get", { slug });
+export async function grainQuote(node: NodeLike, slug: string): Promise<{ grain: RegisteredGrain | null; deposit: bigint }> {
+  const answer = await nodeCall<{ grain: RegisteredGrain | null; deposit?: string }>(node, "grain_get", { slug });
   return { grain: answer.grain, deposit: typeof answer.deposit === "string" ? BigInt(answer.deposit) : GRAIN_DEPOSIT };
 }
 

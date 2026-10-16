@@ -122,16 +122,17 @@ When it is ready: **My apps → your app → Make public**. A public app is in t
 and it never learns who its users are: each user is a key of their own in your app.
 
 The same from the command line in the checkout (`npx grain …`): signed with the owner's key file on test networks, or,
-without one, done in Saltix while the tool waits for the registry. `--node URL` is a test-network node's wallet
-interface over plain HTTP: one you run, or a tunnel to one (`ssh -N -L 30334:127.0.0.1:30334 you@server`, then
-`--node http://127.0.0.1:30334`; [README](../README.md#networks-and-where---node-comes-from)). Without a node, do these
-in Saltix; `grain app-key` needs none:
+without one, done in Saltix while the tool waits for the registry. Every command reaches the test network through its
+public relays, pinned by their certificates; `--node URL` is a node of your own instead
+([README](../README.md#networks-no-node-of-your-own-needed)). `grain faucet --wait` gives `owner.key`'s account test
+SALT for the fees and deposits:
 
 ```sh
-grain access --slug your-app --private --member dsalt1q…:user --node URL   # members, while private
-grain access --slug your-app --public --node URL                            # anyone
-grain bind --handle @your_app --slug your-app --node URL                    # a username you hold opens its chat
-grain app-key --file app.key                                                # the key's public parts; is it registered?
+grain faucet --wait                                                # test SALT for owner.key's account
+grain access --slug your-app --private --member dsalt1q…:user      # members, while private
+grain access --slug your-app --public                              # anyone
+grain bind --handle @your_app --slug your-app                      # a username you hold opens its chat
+grain app-key --file app.key                                       # the key's public parts; is it registered?
 ```
 
 ## When something fails, you hear of it

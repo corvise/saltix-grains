@@ -181,6 +181,18 @@
   event carries the relay's answer (`{taken, slug, at}` or `{taken: false, reason}`), logged as `relay_stats_taken` or
   `relay_stats_refused`. The chat server reports each signing (at most hourly). The development relay keeps the newest
   numbers of each grain (`relay.stats`) and answers as a relay does.
+- **The command line needs no node** (Saltix 09-relay §10.7; `docs/devex.md` item 4). Every registry command
+  (`show`, `publish` and its QR code, `retire`, `configure`, `access`, `rate`, `bind`, `sponsor`, `app-key make`)
+  reaches the network through its public relays' gateways by default (`--network devnet`, Saltix's test network), each
+  pinned by the certificate its relay record publishes; `--relay wss://host:port/#<sha256>` (repeatable) names relays of
+  your own, `--node URL` stays for your own node, and one command takes one of them. **`grain faucet [--key F |
+  --address A] [--wait]`**: test SALT, and WORK while the purse holds some, from the test network's faucet
+  (`faucet_request`), its refusals in words (`try again in 240 s`), `--wait` until it is in the account. In the server
+  SDK: `grainGet`, `grainQuote`, `grantFor` and `findPayment` take a node's URL or any wallet interface (`NodeLike`,
+  `nodeCall`); `RelayGateways` takes `{ discover: true }` (once the relays it knows cannot answer, it asks `relay_list`
+  and tries the relays named, under their records' pins) and passes over a node that runs no faucet as over one that
+  does not follow the shard; `publicGateways(network)`; `RpcError` carries the node's `reason` and `data`
+  (`retry_after`). Checked live against the test network: `grain show` and `grain faucet --wait` for a throwaway key.
 - `docs/agents/`: pages for coding agents beside `AGENTS.md`: building an app from a developer key (set up, the chat
   spec, handlers and cards, the rules every app follows, testing, shipping under systemd, acting on an error report
   pasted from the console, what each start-up error means) and working on the SDK (its map, commands, rules and how a

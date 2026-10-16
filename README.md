@@ -50,19 +50,24 @@ npm run example        # hello-grain's chat as your app's server, from your deve
 - `NODE_RPC` (default `http://127.0.0.1:30334`, a node's own default) is a node of the wallet's network: the server
   reads its genesis for invoices and finds payments there.
 
-### Networks, and where `--node` comes from
+### Networks: no node of your own needed
 
 Saltix's **test network** is of the devnet kind: addresses `dsalt1…`, developer keys `saltix-app:1:dsalt:…`, and
 `network: "devnet"` wherever the SDK asks (`testnet` is a kind no public network runs yet). It is reset now and then;
 a developer key names the genesis it was made on, and the SDK refuses a key of a network that was reset.
 
-- **The chat server and `grain app-key`** need no node: they reach the test network through its public relays
-  (`PUBLIC_RELAYS`, pinned by their certificates).
-- **The other commands' `--node`** is a node's wallet interface over plain HTTP: a test-network node of your own
-  (`https://download.saltix.io/node/install.sh`, Linux x86-64; its wallet interface listens on
-  `http://127.0.0.1:30334`), or one reached through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`. Without
-  one, do the owner's calls in Saltix (My apps). `grain publish` needs a node even for its QR code: it quotes the
-  deposit and watches the registry.
+- **The chat server and every command** reach the test network through its public relays: each relay serves the
+  wallet interface at `POST /rpc` on its client port (Saltix 09-relay §10.7) behind a self-signed certificate, which
+  the SDK pins by the hash its relay record publishes (`PUBLIC_RELAYS`, `publicGateways`); a call goes on to the next
+  relay when one fails, and to the relays `relay_list` names when none of these can answer. `--network devnet` is the
+  default; no other network has public relays yet.
+- **`--relay wss://host:30335/#<sha256>`** (repeatable) names relays of your own instead, each pinned by its
+  certificate's SHA-256 as its relay record names it.
+- **`--node URL`** is your own node's wallet interface over plain HTTP instead: a test-network node
+  (`https://download.saltix.io/node/install.sh`, Linux x86-64; it listens on `http://127.0.0.1:30334`), or one reached
+  through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`.
+- **Test SALT**: `grain faucet` asks the test network's faucet for owner.key's account (or `--address`), once every 5
+  minutes; `--wait` until it is there. Then `grain publish --key owner.key` can pay the deposit.
 
 ## The command line
 
@@ -81,19 +86,21 @@ npx grain icon icon.png                   # the hash grain.json names its 256x25
 npx grain sign                            # signed.json: serve it at /.well-known/saltix-grain
 npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
                                           # a sealed grain: public/ as one ZIP named by its hash
-npx grain publish --node http://127.0.0.1:30334   # a QR code: the owner's Saltix registers it (the node quotes the deposit)
-npx grain publish --node … --key owner.key --wait # or sign with a key file (test networks)
-npx grain retire --slug dice --node …     # close the slug for good; the deposit returns 30 days later
+npx grain publish                         # a QR code: the owner's Saltix registers it (the network quotes the deposit)
+npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
+npx grain publish --key owner.key --wait  # or sign with a key file (test networks)
+npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
 npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
 npx grain init coach --chat               # a chat-only grain: grain.json, chat.json, server.mjs (npm start), no page
-npx grain configure --slug dice --server server.key --category games --node …   # the registry names the server key
-npx grain app-key make --slug dice --node …     # app.key: its developer key, owner-only, never printed
+npx grain configure --slug dice --server server.key --category games   # the registry names the server key
+npx grain app-key make --slug dice        # app.key: its developer key, owner-only, never printed
 npx grain app-key --file app.key          # a developer key's public parts, and whether the registry names it
-npx grain access --slug dice --private --member dsalt1q…:user+developer --node …  # its owner and members only
-npx grain access --slug dice --public --node …  # anyone
-npx grain bind --handle @dice --slug dice --node …   # a username you hold opens the app's chat
-npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …   # rate someone else's app
+npx grain access --slug dice --private --member dsalt1q…:user+developer   # its owner and members only
+npx grain access --slug dice --public     # anyone
+npx grain bind --handle @dice --slug dice # a username you hold opens the app's chat
+npx grain rate --slug chess --score 5 --review "Good" --key rater.key   # rate someone else's app
+npx grain show --slug dice --node http://127.0.0.1:30334   # any command, through your own node instead
 ```
 
 - `grain help <command>` (or `grain <command> --help`, `-h`) prints that command's part of the help and runs nothing;
@@ -112,11 +119,14 @@ npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …
   registry, shows the grain and the deposit and, after the PIN, signs and registers it (or records
   a newer version). The tool waits for the registry and writes `signed.json`, the form your origin
   serves. The owner's key never leaves the phone.
-- With `owner.key` (or `--key`), for devnets and the test network: it asks the node for the slug —
+- With `owner.key` (or `--key`), for devnets and the test network: it asks the registry for the slug —
   unregistered → `RegisterGrain` with the deposit; the owner's with a lower version → `UpdateGrain`;
   anything else is refused before a transaction is made — checks the balance, signs and submits
-  through the node's wallet interface (plain HTTP: a local node or an SSH tunnel).
-- `grain show --slug S --node … --out signed.json` writes the signed manifest the registry holds; for a free slug it
+  through the network's wallet interface (its public relays, `--relay` or `--node`).
+- `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
+  owner.key's account or `--address` (`faucet_request`): one every 5 minutes an address; a refusal says when to come
+  back. A relay whose node runs no faucet passes the request to the next.
+- `grain show --slug S --out signed.json` writes the signed manifest the registry holds; for a free slug it
   says the deposit registering it keeps: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more (24-app-studio §5).
 - `configure`, `access` and `bind` are the owner's (the handle's holder's) calls: signed with `owner.key` on test
   networks, refused before a node would refuse them; without a key file the tool says what to do in the owner's Saltix
@@ -125,7 +135,7 @@ npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …
   members. A rating names its account and is signed by the rater's key (`--key`), or given in Saltix.
 - `grain app-key` reads a developer key from `SALTIX_APP_KEY`, `--file` or stdin, never from the command line (shells
   keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
-  (through the network's public relays, or `--node`).
+  (through the key's network's public relays, `--relay` or `--node`).
 - `grain bundle` seals `public/` (Saltix 12-grains §8): one ZIP of its files — sorted, no times, so
   the same files make the same bytes — at most 20 MiB, and `grain.json` names its hash, size,
   `sources` (where you upload `bundle.zip`), `start` and the `connect` origins the grain may reach.
@@ -230,13 +240,14 @@ A **sponsor** pays the relays for your users' grain frames when the free share i
 
 ```sh
 grain sponsor init                                   # sponsor.key; put its account in grain.json "sponsor"
-grain sponsor --node URL                             # its account, WORK, channels, the exchanges to open one with
-grain sponsor open --exchange <city> --amount 10 --node URL
+grain sponsor                                        # its account, WORK, channels, the exchanges to open one with
+grain sponsor open --exchange <city> --amount 10
 ```
 
 ```ts
 // At login: a grant for the user's grain key (what grain.login returned), for the page's grain.relay.open({ grant }).
-const grant = await grantFor(nodeUrl, sponsorSecret, answer.key, { perDay: 500_000n, days: 7 });
+// A node's URL, or the network's relays: publicGateways("devnet").
+const grant = await grantFor(publicGateways("devnet"), sponsorSecret, answer.key, { perDay: 500_000n, days: 7 });
 ```
 
 The wallet checks the grant against the manifest's sponsor and network; the exchange holds each user to `perDay` µWORK.
