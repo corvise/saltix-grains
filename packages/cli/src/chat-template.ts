@@ -33,14 +33,16 @@ export const chatServer = (slug: string) => `// The chat of ${slug}, run by its 
 //   npm start             the key from SALTIX_APP_KEY, the file SALTIX_APP_KEY_FILE names (a systemd credential), or
 //                         app.key (owner-only)
 //   NODE_RPC              your own node's wallet interface, for a network with no public relays
-//   STATE_DIRECTORY       where chat.store.json is kept (systemd sets it with StateDirectory=; else here)
+//   STATE_DIRECTORY       where chat.store.json is kept (systemd sets it with StateDirectory=; else here): it also
+//                         remembers the spec served, so chat.json changed without raising "version" is refused (78)
 //
 // The log is one JSON line per event, and never holds a key or what users wrote.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { AppKey, ChatServer, card, chatSpecFromJson, fileChatStore } from "@saltix/grain-server";
+import { AppKey, ChatServer, card, chatSpecFromJson, fileChatStore, setupCannotWork } from "@saltix/grain-server";
 
-/** The exit code when the key cannot work (EX_CONFIG): a supervisor restarting the server would not help. */
+/** The exit code when the setup cannot work as it stands (EX_CONFIG, the SDK's EXIT_CONFIG): the key is not one or the
+ *  registry does not name it, or chat.json changed under a version this server served. Restarting would not help. */
 const DEAD_KEY = 78;
 
 const log = (level, event, meta = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), level, event, ...meta }));
@@ -68,8 +70,9 @@ try {
     onStop: () => process.exit(DEAD_KEY),
   });
 } catch (e) {
+  // The log says what to do; 78 when restarting cannot help (raise "version" for a chat.json changed under it).
   log("error", "not_started", { error: e.message });
-  process.exit(["AppKeyError", "ChatKeyNotRegistered"].includes(e.name) ? DEAD_KEY : 1);
+  process.exit(setupCannotWork(e) ? DEAD_KEY : 1);
 }
 
 // One handler for each command chat.json declares. ask.args holds its arguments, typed by the spec; ask.lang is the

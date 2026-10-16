@@ -9,19 +9,20 @@
 // key carries it, and is the server's whole configuration), or certified by the owner key for at most 31 days.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
+import { sha256 } from "@noble/hashes/sha256";
 import { accountId, decodeAddress, encodeAddress } from "./address.js";
-import { AppKey } from "./app-key.js";
+import { AppKey, AppKeyError } from "./app-key.js";
 import { fromHex, toBase64, toHex } from "./bytes.js";
 import {
   CHAT_CERT_LIFE_MS, CHAT_FRAME_MAGIC, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, MAX_FRAME_BYTES, WELCOME_EVERY_MS,
   type ChainParams, type ChatDocument, type ChatMessage, type ChatRequest, type GrainChatSpec, type SignedChatHello,
   type SignedChatRequest, type SignedGrainChatSpec, chatCertHolds, chatDocumentOf, chatHelloProblem, chatMessageBoundsProblem,
-  chatRequestProblem, chatSpecProblem, commandOf, decodeChatFrame, decodeSignedChatSpec, encodeChatFrame, newChatId,
+  chatRequestProblem, chatSpecProblem, commandOf, decodeChatFrame, decodeSignedChatSpec, encodeChatFrame, encodeChatSpec, newChatId,
   signChatMessage, signChatSpecAsServer, signChatWelcome, signedChatSpecProblem,
 } from "./chat.js";
 import { type Args, Card, argOf } from "./chat-card.js";
 import { lintCard } from "./card-lint.js";
-import { type ChatStore, type ChatUsage, UsageWindow, memoryChatStore } from "./chat-store.js";
+import { type ChatStore, type ChatUsage, type ServedSpec, UsageWindow, memoryChatStore } from "./chat-store.js";
 import type { FileRef } from "./file.js";
 import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
@@ -95,8 +96,9 @@ export interface ChatServerOptions {
   relay?: RelayClient;
   /** Or the node's wallet interface however it is reached (tests, a gateway of your own). */
   wallet?: WalletInterface;
-  /** What survives a restart: the requests answered, the unasked budget, the spec versions sent, the numbers reported.
-   *  In memory by default. */
+  /** What survives a restart: the requests answered, the unasked budget, the spec versions sent, the numbers reported,
+   *  the team's addresses, and the spec served (a spec changed under its version is refused at start). In memory by
+   *  default. */
   store?: ChatStore;
   /** Events worth logging: names and numbers, never keys, secrets or what users wrote. */
   log?: ChatLog;
@@ -152,10 +154,33 @@ const REMEDY: Record<ChatStopReason, (slug: string) => string> = {
     `and start again; otherwise make it in Saltix (Apps → My apps → New app) or register it (grain publish).`,
 };
 
+/** The exit code of a server whose setup cannot work as it stands (EX_CONFIG): restarting it would not help, so a
+ *  supervisor should not (systemd: `RestartPreventExitStatus=78`). */
+export const EXIT_CONFIG = 78;
+
+/** Why a server's setup cannot work as it stands: the key is another network's (`chat_wrong_network`: the network was
+ *  reset, or another answers), the registry does not name it (`chat_key_not_registered`), the spec changed under the
+ *  version served or went below it, or no relay is known for the key's network (`chat_no_relays`). */
+export type ChatSetupCode =
+  | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version" | "chat_spec_version_lowered" | "chat_no_relays";
+
+/**
+ * A setup the server refuses to run as it stands (the configuration refusals of `ChatServer.start`): restarting it
+ * does not help, its message says what does. Exit with `exitCode` (`EXIT_CONFIG`, 78), which a supervisor should not
+ * restart on. `ChatKeyNotRegistered` and `ChatSpecVersionError` are kinds of it.
+ */
+export class ChatSetupError extends Error {
+  readonly exitCode = EXIT_CONFIG;
+  constructor(readonly code: ChatSetupCode, message: string) {
+    super(message);
+    this.name = "ChatSetupError";
+  }
+}
+
 /** The server key is not one the registry names for the grain (at start), or stopped being one. */
-export class ChatKeyNotRegistered extends Error {
+export class ChatKeyNotRegistered extends ChatSetupError {
   constructor(public readonly reason: ChatStopReason, slug: string) {
-    super(`the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ${REMEDY[reason](slug)}`);
+    super("chat_key_not_registered", `the registry does not name this server key for ${slug}: ${STOPPED[reason]}. ${REMEDY[reason](slug)}`);
     this.name = "ChatKeyNotRegistered";
   }
 }
@@ -184,6 +209,41 @@ export interface SignedAppInvoice {
   invoice: Invoice;
   hex: string;
   payee: string;
+}
+
+/**
+ * The spec is not one a wallet would take over what this server already served (22-grain-chats §2): `changed`, a spec
+ * changed under the version it served, which reaches no wallet that holds that version; `lowered`, a version below the
+ * one it served, which wallets that hold the higher one refuse. Raise `version` above `served`.
+ */
+export class ChatSpecVersionError extends ChatSetupError {
+  declare readonly code: "chat_spec_changed_under_version" | "chat_spec_version_lowered";
+  constructor(readonly version: number, readonly served: number) {
+    super(version === served ? "chat_spec_changed_under_version" : "chat_spec_version_lowered", version === served
+      ? `chat.json changed but keeps version ${version}: raise "version" above ${served}. A wallet replaces the spec it ` +
+        `holds only with a higher version, so this one would reach nobody who has version ${served}, and nothing would say so`
+      : `chat.json is version ${version}, below version ${served} this server already served: raise "version" above ` +
+        `${served}. A wallet that holds version ${served} refuses a lower one`);
+    this.name = "ChatSpecVersionError";
+  }
+}
+
+/** The hash that tells two specs of one version apart: SHA-256 of the spec's Borsh, hex. */
+export const chatSpecHash = (spec: GrainChatSpec): string => toHex(sha256(encodeChatSpec(spec)));
+
+/** Why a wallet would not take `spec` over `served` (the highest spec served before), or null: the same spec, a higher
+ *  version, or nothing served yet. */
+export function servedSpecProblem(spec: GrainChatSpec, served: ServedSpec | null): ChatSpecVersionError | null {
+  if (served === null || spec.version > served.version) return null;
+  if (spec.version === served.version && chatSpecHash(spec) === served.hash) return null;
+  return new ChatSpecVersionError(spec.version, served.version);
+}
+
+/** Whether `error`, thrown by `ChatServer.start` or `AppKey.parse`, means the setup cannot work as it stands: not a
+ *  developer key (`AppKeyError`), or any `ChatSetupError` — another network's key, one the registry does not name, a spec
+ *  changed under a version served. Exit with `EXIT_CONFIG` then; anything else (a network down) may pass on a restart. */
+export function setupCannotWork(error: unknown): boolean {
+  return error instanceof AppKeyError || error instanceof ChatSetupError;
 }
 
 /** A message the server sent: what `replace` updates. */
@@ -473,8 +533,13 @@ export class ChatServer {
   /** The hellos checked against the node in the current minute, and how many were dropped past the cap. */
   private readonly helloWindow = { start: 0, checks: 0, dropped: 0 };
   private readonly helloCap: number;
+  /** The highest spec served, as the store keeps it: what `setSpec` is held to. */
+  private served: ServedSpec | null;
 
-  private constructor(private readonly options: ChatServerOptions, setup: Setup, relay: RelayClient, signed: SignedGrainChatSpec) {
+  private constructor(
+    private readonly options: ChatServerOptions, setup: Setup, relay: RelayClient, signed: SignedGrainChatSpec, store: ChatStore,
+    served: ServedSpec | null,
+  ) {
     this.relay = relay;
     this.signed = signed;
     this.slug = setup.slug;
@@ -485,7 +550,8 @@ export class ChatServer {
     this.ownerKey = setup.ownerKey;
     this.view = setup.view;
     this.record = setup.grain;
-    this.store = options.store ?? memoryChatStore();
+    this.store = store;
+    this.served = served;
     this.log = options.log ?? (() => {});
     this.now = options.now ?? Date.now;
     this.redactions = [...(options.redact ?? []), toBase64(setup.secret), toBase64(setup.secret, true)];
@@ -525,7 +591,9 @@ export class ChatServer {
     if (!wallet) {
       gateways = new RelayGateways([...(options.endpoints ?? []), ...(appKey && !options.endpoints ? PUBLIC_RELAYS[appKey.network] : [])]);
       if (gateways.endpoints.length > 0) wallet = gateways;
-      else if (appKey) throw new Error(`no public relays are known for ${appKey.network}: pass node (your node's wallet interface) or endpoints`);
+      else if (appKey) {
+        throw new ChatSetupError("chat_no_relays", `no public relays are known for ${appKey.network}: pass node (your node's wallet interface) or endpoints`);
+      }
     }
     if (!cert && !wallet) throw new Error("a server key without a certificate must be one the registry names: pass a developer key, or node");
     const view = wallet ? new ChainView(wallet, options.now) : null;
@@ -535,11 +603,11 @@ export class ChatServer {
     if (view) {
       const status = await view.nodeStatus(true);
       if (appKey && !appKey.isFor(status.network, status.genesis)) {
-        throw new Error(`the developer key is for ${appKey.network} ${appKey.genesis}…, but the network answering is ${status.network} ` +
+        throw new ChatSetupError("chat_wrong_network", `the developer key is for ${appKey.network} ${appKey.genesis}…, but the network answering is ${status.network} ` +
           `${status.genesis.slice(0, 16)}…: was the network reset? Make a new developer key in Saltix, or pass node for your own network`);
       }
       if (chain && (chain.genesis !== status.genesis || chain.network !== status.network)) {
-        throw new Error(`chain: the node is on ${status.network} ${status.genesis}, not ${chain.network} ${chain.genesis}`);
+        throw new ChatSetupError("chat_wrong_network", `chain: the node is on ${status.network} ${status.genesis}, not ${chain.network} ${chain.genesis}`);
       }
       chain = { genesis: status.genesis, network: status.network as ChainParams["network"] };
       grain = await view.grain(slug, true);
@@ -565,6 +633,8 @@ export class ChatServer {
     if (options.relay && options.relay.address !== encodeAddress(chain.network, accountId(fromHex(key, 32)))) {
       throw new Error("relay: a connection under another key");
     }
+    const store = options.store ?? memoryChatStore();
+    const served = await ChatServer.serve(store, signed.spec, log);
     const relay = options.relay ?? await RelayClient.connect({
       endpoints: options.endpoints ?? (gateways ? gateways.endpoints : []),
       discover: wallet ? async () => {
@@ -575,9 +645,27 @@ export class ChatServer {
       secret, network: chain.network, ackKept: "by_handler",
       log: (level, event, meta) => log(level, event, meta),
     });
-    const server = new ChatServer(options, setup, relay, signed);
+    const server = new ChatServer(options, setup, relay, signed, store, served);
     server.started(now);
     return server;
+  }
+
+  /**
+   * Hold `spec` to the highest spec served (22-grain-chats §2: a wallet replaces its spec only with a higher version):
+   * throw a `ChatSpecVersionError` for one changed under that version or below it, and keep it as served otherwise. A
+   * store that keeps no served spec checks nothing.
+   */
+  private static async serve(store: ChatStore, spec: GrainChatSpec, log: ChatLog): Promise<ServedSpec | null> {
+    if (!store.served || !store.setServed) return null;
+    const served = await store.served();
+    const refused = servedSpecProblem(spec, served);
+    if (refused) {
+      log("error", refused.code, { version: spec.version, served: refused.served, hint: `raise "version" above ${refused.served}` });
+      throw refused;
+    }
+    const now = { version: spec.version, hash: chatSpecHash(spec) };
+    if (served?.version !== now.version || served.hash !== now.hash) await store.setServed(now);
+    return now;
   }
 
   /** The spec as the server serves it: signed, or signed now by the registered key. */
@@ -657,15 +745,23 @@ export class ChatServer {
     return serveChatDocument(req, res, () => this.document());
   }
 
-  /** A newer spec (a version not below the current one): signed by the owner key, or unsigned for a registered key to
-   *  sign. Users get it on their next request. */
+  /** A newer spec (a higher version, or the same spec again): signed by the owner key, or unsigned for a registered key
+   *  to sign. Users get it on their next request. Throws a `ChatSpecVersionError` for a spec changed under the version
+   *  served, or below it: a wallet would never take it. */
   setSpec(spec: SignedGrainChatSpec | GrainChatSpec | string): void {
     const setup = this.setup();
     const signed = ChatServer.signedSpec(spec, setup);
-    if (signed.spec.version < this.signed.spec.version) throw new Error("a wallet refuses a lower version than it holds");
     const problem = ChatServer.problem(setup, signed, this.certificate, this.now());
     if (problem) throw new Error(problem);
+    const served = this.served ?? { version: this.signed.spec.version, hash: chatSpecHash(this.signed.spec) };
+    const refused = servedSpecProblem(signed.spec, served);
+    if (refused) throw refused;
     this.signed = signed;
+    const next = { version: signed.spec.version, hash: chatSpecHash(signed.spec) };
+    if (this.served && (this.served.version !== next.version || this.served.hash !== next.hash) && this.store.setServed) {
+      this.served = next;
+      void Promise.resolve(this.store.setServed(next)).catch((e: Error) => this.log("warn", "chat_store_failed", { reason: e.message }));
+    }
     this.log("info", "chat_spec_set", { version: signed.spec.version });
   }
 

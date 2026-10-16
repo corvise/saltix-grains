@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppKey, chatSpecFromJson, fileChatStore } from "../../packages/server/dist/index.js";
+import { AppKey, EXIT_CONFIG, chatSpecFromJson, fileChatStore, setupCannotWork } from "../../packages/server/dist/index.js";
 import { startChat } from "./chat.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -42,11 +42,12 @@ console.log(`starting ${key}`);
 try {
   const chat = await startChat({
     appKey: key, spec, node: process.env.NODE_RPC, store: fileChatStore(process.env.CHAT_STORE ?? "chat.store.json"), log,
-    onStop: () => process.exit(3),
+    onStop: () => process.exit(EXIT_CONFIG),
   });
   console.log(`the chat of ${chat.slug} answers at ${chat.address} on ${chat.chain.network} (spec v${chat.spec.version})`);
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { chat.close(); process.exit(0); });
 } catch (e) {
+  // 78 when restarting cannot help (the key, or chat.json changed under a version served): the message says what does.
   console.error(`not started: ${e.message}`);
-  process.exit(1);
+  process.exit(setupCannotWork(e) ? EXIT_CONFIG : 1);
 }

@@ -30,9 +30,10 @@ npm start
 
 `npm start` logs one JSON line per event. `{"event":"ready","slug":…,"address":…,"network":"devnet","spec":2}` means
 the app answers. It exits with **1** for a fault of the setup (no key, `app.key` readable by others) and with **78** when
-the key cannot work (another network's, replaced, revoked, the app retired): restarting does not help, the log says what
-does. `owner.key`, which `grain init` also makes, is for registering from a computer on a test network; an app made in
-Saltix has its owner on the phone and never uses it.
+the key cannot work (another network's, replaced, revoked, the app retired) or `chat.json` changed under a version it
+served (`setupCannotWork`: an `AppKeyError` or a `ChatSetupError`): restarting does not help, the log says what does.
+`owner.key`, which `grain init` also makes, is for registering from a computer on a test network; an app made in Saltix
+has its owner on the phone and never uses it.
 
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 
@@ -113,6 +114,9 @@ chat.text((ask) => card().text("Pick Plan below."));
   `ChatStore`): the default keeps answered requests and your team's consoles in memory only.
 - **Versions**: raise `chat.json`'s `version` with every change of it, and the program's own version (`version`, which
   `server.mjs` takes from `package.json`) with every release, so error reports name it.
+- **One spec a version**: the server keeps the spec it served in its store and refuses to start (78,
+  `chat_spec_changed_under_version`) on a `chat.json` changed under that version; never delete `chat.store.json` to get
+  past it, raise `version`.
 - **Pages**: an app with a screen is shown full screen, with the wallet's controls (⋯ | ✕, the capsule) floating in its
   top right corner. Follow the full-screen rules in `AGENTS.md`: nothing tappable under the controls, text inside the
   safe area.
@@ -200,5 +204,6 @@ Time (UTC): <time>
 | `the registry does not name this server key …: the owner replaced this server key` | Ask the owner for the new developer key |
 | `…: the registry has no such grain` | Just made: wait until Saltix shows the app live in My apps, then start again |
 | `…: the grain is retired` | A retired slug is never used again: the owner makes a new app |
+| `chat.json changed but keeps version N` / `…below version N this server already served` | Raise `version` in `chat.json` above N and start again |
 | `wallets write to the first server key the registry names` (a warning) | Requests go to the first key's server: run that one |
 | `no public relays are known for mainnet` | Pass `NODE_RPC`, your own node's wallet interface |

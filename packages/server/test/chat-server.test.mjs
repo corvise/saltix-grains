@@ -3,11 +3,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   ChatServer, ChatRefusal, ChatBudgetSpent, card, toHex, fromHex, chatDocumentOf, serveChatDocument, chatDocumentResponse,
   CHAT_DOCUMENT_PATH, CHAT_UNASKED_PER_DAY, memoryChatStore, downloadFile, signChatRequest, encodeChatFrame, newChatId,
-  decodeNotification, openFrame, fromBase64Url, serverMessagingSecret, messagingPublic, derive,
+  decodeNotification, openFrame, fromBase64Url, serverMessagingSecret, messagingPublic, derive, fileChatStore, ChatSpecVersionError,
+  ChatKeyNotRegistered, AppKeyError, AppKey, EXIT_CONFIG, setupCannotWork, chatSpecHash, servedSpecProblem,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, options, serverOn, wallet, sleep } from "./chat-helpers.mjs";
@@ -36,6 +40,62 @@ test("a server starts only with a spec and a certificate a wallet takes", async 
   } finally {
     await relay.close();
   }
+});
+
+test("a spec changed under the version it served stops the server at start; a higher version starts it", async () => {
+  const relay = await createDevRelay();
+  const path = join(mkdtempSync(join(tmpdir(), "chat-served-")), "chat.store.json");
+  const logged = [];
+  const start = (s) => ChatServer.start(options(relay, { spec: s, store: fileChatStore(path), log: (level, event, meta) => logged.push({ level, event, meta }) }));
+  const registered = () => relay.sent.filter((f) => f.type === "register").length;
+  try {
+    (await start(signedSpec(2))).close();
+    (await start(signedSpec(2))).close(); // the same spec again: a restart
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).served, { version: 2, hash: chatSpecHash(spec(2)) });
+    const before = registered();
+    assert.ok(before >= 2, "each start registers at the relay");
+    const changed = signedSpec(2, { intro: { en: "Something else" } });
+    await assert.rejects(start(changed), (e) => e instanceof ChatSpecVersionError && e.code === "chat_spec_changed_under_version" &&
+      e.version === 2 && e.served === 2 && /raise "version" above 2/.test(e.message));
+    assert.equal(registered(), before, "refused before it reaches a relay");
+    assert.deepEqual(logged.at(-1), { level: "error", event: "chat_spec_changed_under_version", meta: { version: 2, served: 2, hint: 'raise "version" above 2' } });
+    await assert.rejects(start(signedSpec(1)), (e) => e.code === "chat_spec_version_lowered" && /below version 2/.test(e.message), "nor a lower version");
+    const raised = await start(signedSpec(3, { intro: { en: "Something else" } }));
+    // setSpec is held to it too, and what it serves is kept for the next start.
+    assert.throws(() => raised.setSpec(signedSpec(3)), (e) => e.code === "chat_spec_changed_under_version");
+    raised.setSpec(signedSpec(4));
+    raised.close();
+    await sleep(20);
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).served.version, 4);
+    await assert.rejects(start(signedSpec(3, { intro: { en: "Something else" } })), /below version 4/);
+    (await start(signedSpec(4))).close();
+    // A store that keeps no served spec checks nothing across restarts; a file that lost it starts over.
+    const base = memoryChatStore();
+    const forgetful = Object.fromEntries(["take", "forget", "spend", "specSent", "setSpecSent"].map((m) => [m, base[m].bind(base)]));
+    (await ChatServer.start(options(relay, { spec: signedSpec(1), store: forgetful }))).close();
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), served: { version: 9, hash: "not hex" } }));
+    (await start(signedSpec(1))).close();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("what a wallet would not take over the spec served, and which setups restarting cannot fix", () => {
+  const served = { version: 3, hash: chatSpecHash(spec(3)) };
+  assert.equal(servedSpecProblem(spec(3), null), null, "nothing served yet");
+  assert.equal(servedSpecProblem(spec(3), served), null, "the same spec");
+  assert.equal(servedSpecProblem(spec(4, { keeps: 1 }), served), null, "a higher version, whatever it says");
+  assert.equal(servedSpecProblem(spec(3, { keeps: 1 }), served)?.code, "chat_spec_changed_under_version");
+  assert.equal(servedSpecProblem(spec(3, { commands: [] }), served)?.code, "chat_spec_changed_under_version");
+  assert.equal(servedSpecProblem(spec(2), served)?.code, "chat_spec_version_lowered");
+  assert.notEqual(chatSpecHash(spec(3)), chatSpecHash(spec(3, { intro: { en: "One-time access keys for the closed sites!" } })));
+  assert.equal(EXIT_CONFIG, 78);
+  assert.ok(setupCannotWork(new ChatSpecVersionError(3, 3)));
+  assert.ok(setupCannotWork(new ChatKeyNotRegistered("replaced", "access")));
+  assert.ok(setupCannotWork(new AppKeyError("malformed")));
+  assert.throws(() => AppKey.parse("saltix-app:1:dsalt:zz"), (e) => setupCannotWork(e));
+  assert.ok(!setupCannotWork(new Error("connect ECONNREFUSED")), "a network that is down may come back");
+  assert.ok(!setupCannotWork("chat_spec_changed_under_version"));
 });
 
 test("a request is checked, routed by command with typed arguments, and answered with a signed card", async () => {
@@ -215,7 +275,11 @@ test("a newer spec reaches each user once, before the next answer", async () => 
     assert.deepEqual(specs, [1, 2]);
     const order = user.frames.map((f) => ("spec" in f ? `spec ${f.spec.spec.spec.version}` : "answer"));
     assert.deepEqual(order, ["spec 1", "answer", "spec 2", "answer", "answer"]);
-    assert.throws(() => server.setSpec(signedSpec(1)), /lower version/);
+    assert.throws(() => server.setSpec(signedSpec(1)), (e) => e.code === "chat_spec_version_lowered" && /below version 2/.test(e.message));
+    assert.throws(() => server.setSpec(signedSpec(2, { keeps: 7 })), (e) => e.code === "chat_spec_changed_under_version",
+      "a spec changed under the version served reaches nobody who holds it");
+    server.setSpec(signedSpec(2));
+    assert.equal(server.spec.keeps, 30, "the same spec again is taken, and changes nothing");
   } finally {
     user.client.close();
     await close();

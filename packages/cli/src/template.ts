@@ -138,7 +138,8 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    \`(umask 077 && cat > app.key)\` and never repeat it back.
 2. **Raise \`chat.json\`'s \`version\` with every change of it.** Saltix takes a spec only when its version is higher than
    the one it holds (an app made in Saltix starts at 1): a spec changed under the same version reaches nobody, and nothing
-   says so.
+   says so. The server remembers the spec it served (in its store) and refuses to start on one changed under the same
+   version (exit 78, \`raise "version" above N\`); never delete the store to get past it.
 3. **Unasked messages have a budget**: \`chat.notify\` and \`chat.notification\` count against 10 per user in any 24
    hours (100 to a member of the app's team). Past it the SDK throws \`ChatBudgetSpent\` and sends nothing
    (\`chat.notifyTeam\` skips that member), and a wallet drops whatever goes over. Answer requests; never use the budget
@@ -146,10 +147,12 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
 4. **Persistent state goes in \`STATE_DIRECTORY\`**, which systemd sets with \`StateDirectory=\`: \`server.mjs\` keeps its
    store (\`chat.store.json\`: the requests answered, the budget, the team's consoles) there, and in the directory it
    was started from without one. \`ChatServer\`'s default store keeps them in memory only, and a restart forgets them.
-5. **Exit with status 78 when the key cannot work**: the registry does not name it (replaced, revoked, the app retired,
-   not registered) or it is not a developer key. \`server.mjs\` does, at start and from \`ChatServer\`'s \`onStop\`, and
-   exits with 1 for anything else; a unit with \`RestartPreventExitStatus=78\` then does not restart a server that
-   restarting cannot help.
+5. **Exit with status 78 when the key cannot work**, or the setup otherwise cannot as it stands: the registry does not
+   name the key (replaced, revoked, the app retired, not registered), it is not a developer key, it is another network's
+   (the test network was reset), or \`chat.json\` changed under a version served. \`server.mjs\` does, at start
+   (\`setupCannotWork(e)\`: an \`AppKeyError\` or a \`ChatSetupError\`) and from \`ChatServer\`'s \`onStop\`, and exits with 1
+   for anything else; a unit with \`RestartPreventExitStatus=78\` then does not restart a server that restarting cannot
+   help.
 6. **Money moves only in the wallet, and only to the app's owner.** Ask for a payment with \`chat.invoice\` and a card's
    \`invoice\` block (a page: \`grain.pay\` with the invoice your server signed). A developer key's invoice pays the app's
    owner and nobody else; wallets refuse any other payee. Deliver only once \`chat.paymentOf\` finds the payment on chain

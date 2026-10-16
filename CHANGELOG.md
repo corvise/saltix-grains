@@ -113,6 +113,22 @@
   `npx grain` said "could not determine executable to run" until a second `npm install`). Before the build it says to
   build. A project outside the checkout installs the tool with `npm install --save-dev <checkout>/packages/cli`.
 
+- **A spec changed under its version stops the server** (Saltix 22-grain-chats §2, corvise/saltix#222: a wallet
+  replaces the spec it holds only with a higher version). `ChatServer` keeps the highest spec it served in its store
+  (`ChatStore.served`/`setServed`, the version and `chatSpecHash`, SHA-256 of the spec's Borsh; `fileChatStore` and
+  `memoryChatStore` keep it) and refuses to start on a spec changed under that version or below it
+  (`ChatSpecVersionError`, `code` `chat_spec_changed_under_version` or `chat_spec_version_lowered`, logged with the
+  version served and `raise "version" above N`); `setSpec` is held to it, and takes the same spec again. Before, such a
+  server started, answered, and its spec reached nobody who held that version. Saltix's access grain's own guard
+  (`checkServed`) can move to it.
+- **A developer key of another network exits with 78, not 1** (the test network was reset): systemd restarted such a
+  server forever, though the docs promised 78. Every configuration refusal of `ChatServer.start` is now a
+  `ChatSetupError` with a `code` and `exitCode` 78: `chat_wrong_network` (the key's network, or `chain`, against the
+  node's), `chat_key_not_registered` (`ChatKeyNotRegistered` is one), `chat_spec_changed_under_version` and
+  `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_no_relays`. `setupCannotWork(e)` (these and
+  `AppKeyError`) and `EXIT_CONFIG`: the template's `server.mjs` and the example exit with 78 through it, 1 for anything
+  else. The template's `AGENTS.md` rules say which setups exit with 78.
+
 ### Added
 
 - **The team's hello** (Saltix 22-grain-chats §3a): an account on the grain's team introduces itself to its own app

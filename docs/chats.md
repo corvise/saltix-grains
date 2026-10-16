@@ -68,8 +68,9 @@ grain chat-spec --cert cert.json   # chat.json → chat.signed.json, the documen
 
 1. Write `chat.json` (below) next to `grain.json`.
 2. `grain chat-spec` checks it (the fault is named: `command key, parameter site: …`), checks its slug and the key file
-   against `grain.json`, and signs it with the owner key. A spec that changed needs a higher `version`: a wallet keeps
-   the highest it has seen and refuses lower.
+   against `grain.json`, and signs it with the owner key. A spec that changed needs a higher `version`: a wallet
+   replaces the spec it holds only with a higher version (Saltix 22-grain-chats §2), keeps its own for the same one and
+   refuses a lower one.
 3. Serve `{spec, cert}` at `https://<origins[0]>/.well-known/saltix-grain-chat` (a sealed grain: its first `connect`
    origin). `ChatServer.serveDocument` or `chatDocumentResponse` does it from the running server, with the current
    certificate.
@@ -119,7 +120,22 @@ Keep the owner key off the server: it signs the spec and the certificate offline
 `keeps` and `ai` are always stated; unknown fields are refused, so a typo is never a silent default. Texts hold no
 control characters. The signed spec is at most 32 KiB. It is signed by the manifest's owner key (`grain chat-spec`,
 `server` none) or, while every price is 0, by a registered server key (`signChatSpecAsServer`, `server` the key); a
-server key never signs a price (`server_price`). A wallet keeps the highest version it has seen.
+server key never signs a price (`server_price`). A wallet replaces the spec it holds only with a higher version.
+
+**One spec a version.** `ChatServer` keeps the highest spec it served in its store (`served`: the version and the
+spec's SHA-256, `chatSpecHash`) and refuses to start on a spec changed under that version (`ChatSpecVersionError`,
+`chat_spec_changed_under_version`) or below it (`chat_spec_version_lowered`), logging the event: such a spec would reach
+no wallet that holds the version served, and nothing else would say so. `setSpec` is held to the same rule. Raise
+`version` and start again.
+
+**Setups that cannot work.** Every configuration refusal of `ChatServer.start` is a `ChatSetupError` (`code`, and
+`exitCode` 78): `chat_wrong_network` (a developer key of another network: the test network was reset, or `chain`
+contradicts the node), `chat_key_not_registered` (`ChatKeyNotRegistered`: replaced, revoked, retired, not registered),
+`chat_spec_changed_under_version` and `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_no_relays` (a network
+with no public relays and no node given). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
+developer key): exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on; anything else (a network
+that is down) exits with 1 and may pass on a restart. A store without
+`served` and `setServed` (your own `ChatStore`) checks nothing across restarts; `fileChatStore` keeps it.
 
 | Kind | JSON | A handler reads | Bounds |
 |---|---|---|---|
@@ -224,8 +240,8 @@ it. `chat.replace(sent, card)`
 updates a message in place: while the request it answered lives, the update answers it too; after that it counts as
 unasked. A user is their address in the grain or their grain key in hex.
 
-**A newer spec.** `chat.setSpec(spec)` takes a version not below the current one, signed, or unsigned for a registered
-key to sign. Each user is sent the spec they have not seen (`ChatFrame::Spec`, with the certificate when the key has
+**A newer spec.** `chat.setSpec(spec)` takes a higher version (or the same spec again), signed, or unsigned for a
+registered key to sign. Each user is sent the spec they have not seen (`ChatFrame::Spec`, with the certificate when the key has
 one) before their next answer; `chat.pushSpec(user)` sends it now.
 
 ## Private apps and members

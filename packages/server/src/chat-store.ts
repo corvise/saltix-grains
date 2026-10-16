@@ -2,7 +2,8 @@
 // so each is answered once; the unasked messages it sent each user in the last 24 hours; the spec version each user
 // was last sent; what the app reports about its use (24-app-studio §6a): when each user last sent a request, for
 // 30 days and no longer, and how many requests came in each hour of those 30 days; and where the grain's team is
-// (24-app-studio §4): each member's address in the grain, as their proof showed it, while they are on the team.
+// (24-app-studio §4): each member's address in the grain, as their proof showed it, while they are on the team; and the
+// highest spec version the server served with its spec's hash (22-grain-chats §2), so a spec changed under it is refused.
 // `memoryChatStore` forgets on restart; `fileChatStore` keeps it in a file of its own.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
@@ -30,6 +31,17 @@ export interface ChatStore {
   team?(): Record<string, string> | Promise<Record<string, string>>;
   /** Keep `account`'s address in the grain, or forget it (`null`: no longer on the team). */
   setTeam?(account: string, address: string | null): void | Promise<void>;
+  /** The highest spec version the server served, with its spec's hash, or null. A store without `served` and
+   *  `setServed` cannot tell a spec changed under its version after a restart (`ChatServer` checks it at start). */
+  served?(): ServedSpec | null | Promise<ServedSpec | null>;
+  /** Keep `spec` as the highest served. */
+  setServed?(spec: ServedSpec): void | Promise<void>;
+}
+
+/** A spec the server served: its version, and the hash (hex) that tells two specs of one version apart. */
+export interface ServedSpec {
+  version: number;
+  hash: string;
 }
 
 /** Distinct users who sent a request in the last day and the last 30 days, and the requests of the last 30 days. */
@@ -102,6 +114,7 @@ interface State {
   specs: Record<string, number>;
   usage: UsageState;
   team: Record<string, string>;
+  served: ServedSpec | null;
 }
 
 class Store implements ChatStore {
@@ -174,6 +187,15 @@ class Store implements ChatStore {
     this.saved();
   }
 
+  served(): ServedSpec | null {
+    return this.state.served ? { ...this.state.served } : null;
+  }
+
+  setServed(spec: ServedSpec): void {
+    this.state.served = { version: spec.version, hash: spec.hash };
+    this.saved();
+  }
+
   private sweep(now: number): void {
     for (const [k, until] of Object.entries(this.state.taken)) if (until <= now) delete this.state.taken[k];
     for (const [user, times] of Object.entries(this.state.unasked)) {
@@ -187,18 +209,26 @@ class Store implements ChatStore {
 /** A store in memory: a restart forgets which requests were answered (a request answered just before it, whose
  *  acknowledgement had not left, may be answered again). */
 export function memoryChatStore(): ChatStore {
-  return new Store({ taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} }, team: {} });
+  return new Store({ taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} }, team: {}, served: null });
+}
+
+/** What a file keeps as the served spec, if it reads as one. */
+function servedOf(value: unknown): ServedSpec | null {
+  const v = value as Partial<ServedSpec> | null | undefined;
+  return v && Number.isSafeInteger(v.version) && typeof v.hash === "string" && /^[0-9a-f]{64}$/.test(v.hash)
+    ? { version: v.version!, hash: v.hash }
+    : null;
 }
 
 /** A store kept in the JSON file `path` (owner-only), written whole on every change: enough for a small grain. A
  *  larger one implements `ChatStore` over its own database. */
 export function fileChatStore(path: string): ChatStore {
-  let state: State = { taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} }, team: {} };
+  let state: State = { taken: {}, unasked: {}, specs: {}, usage: { users: {}, hours: {} }, team: {}, served: null };
   if (existsSync(path)) {
     const read = JSON.parse(readFileSync(path, "utf8")) as Partial<State>;
     state = {
       taken: read.taken ?? {}, unasked: read.unasked ?? {}, specs: read.specs ?? {},
-      usage: { users: read.usage?.users ?? {}, hours: read.usage?.hours ?? {} }, team: read.team ?? {},
+      usage: { users: read.usage?.users ?? {}, hours: read.usage?.hours ?? {} }, team: read.team ?? {}, served: servedOf(read.served),
     };
   }
   return new Store(state, () => {

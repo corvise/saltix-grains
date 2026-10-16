@@ -62,7 +62,11 @@ Saltix 0.1.53 and older cannot pay a developer key's invoice, so say in the card
 
 Secrets (`owner.key`, `server.key`, `app.key`, a developer key `saltix-app:1:…`) are never committed, printed, logged or
 pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
-status of a dead key, payments) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows).
+status of a dead key, payments) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows). Two of them, in short:
+raise `chat.json`'s `version` with every change of it (the server refuses to start on a spec changed under a version it
+served, and the store that remembers it is never deleted to get past it); and a server whose setup cannot work as it
+stands (a key of another network or one the registry does not name, such a spec) exits with 78 (`setupCannotWork`,
+`ChatSetupError`), which its supervisor must not restart.
 
 ## Working on this repository
 

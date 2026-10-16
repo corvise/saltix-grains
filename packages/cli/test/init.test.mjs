@@ -133,7 +133,7 @@ test("a chat-only grain's server starts from its developer key alone and answers
   assert.equal(await none.exited, 1);
   assert.match((await none.until("not_started")).error, /no developer key/);
   // The key in the environment, as a secret store hands it over.
-  const viaEnv = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: key.reveal() });
+  const viaEnv = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: key.reveal(), STATE_DIRECTORY: mkdtempSync(join(tmpdir(), "grain-env-")) });
   assert.equal((await viaEnv.until("ready")).address, key.address);
   viaEnv.child.kill("SIGTERM");
   assert.equal(await viaEnv.exited, 0);
@@ -184,12 +184,31 @@ test("a chat-only grain's server starts from its developer key alone and answers
   assert.ok(existsSync(join(state, "chat.store.json")), "the store is in the state directory");
   assert.ok(!existsSync(join(elsewhere, "chat.store.json")) && !existsSync(join(dir, "chat.store.json")));
 
+  // chat.json changed without raising its version: 78 and what to do, since no wallet that holds version 2 would get it.
+  const json = JSON.parse(readFileSync(join(dir, "chat.json"), "utf8"));
+  json.intro.en = "Coach: plans a workout.";
+  writeFileSync(join(dir, "chat.json"), JSON.stringify(json));
+  const supervised = { NODE_RPC: node.url, SALTIX_APP_KEY_FILE: join(elsewhere, "credential"), STATE_DIRECTORY: state };
+  const unraised = start(dir, supervised, elsewhere);
+  assert.equal(await unraised.exited, 78);
+  assert.match((await unraised.until("not_started")).error, /chat\.json changed but keeps version 2: raise "version" above 2/);
+  writeFileSync(join(dir, "chat.json"), JSON.stringify({ ...json, version: 3 }));
+  const raised = start(dir, supervised, elsewhere);
+  t.after(() => raised.child.kill());
+  assert.equal((await raised.until("ready")).spec, 3);
+  raised.child.kill("SIGTERM");
+  assert.equal(await raised.exited, 0);
+
   // A key the registry does not name: 78, which a supervisor does not restart on. The log never holds the key.
   servers = ["ab".repeat(32)];
   const dead = start(dir, { NODE_RPC: node.url });
   assert.equal(await dead.exited, 78);
   assert.match((await dead.until("not_started")).error, /does not name this server key/);
-  const everything = JSON.stringify([none.lines, viaEnv.lines, open.lines, server.lines, dead.lines]) +
-    [none, viaEnv, open, server, dead].map((p) => p.stderr()).join("");
+  // A key of another network (the test network was reset): 78 too, not 1, or a supervisor restarts it forever.
+  const reset = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: AppKey.of("devnet", "77".repeat(32), "coach", secret).reveal() });
+  assert.equal(await reset.exited, 78);
+  assert.match((await reset.until("not_started")).error, /the developer key is for devnet 7777777777777777…, but the network answering is devnet .*reset/);
+  const everything = JSON.stringify([none.lines, viaEnv.lines, open.lines, server.lines, unraised.lines, raised.lines, dead.lines, reset.lines]) +
+    [none, viaEnv, open, server, unraised, raised, dead, reset].map((p) => p.stderr()).join("");
   assert.ok(!everything.includes(toHex(secret)), "no secret in the log");
 });

@@ -67,7 +67,8 @@ npm start                                            # the starting chat: one co
 
 `owner.key` is the command line's own owner key, for registering from a computer on a test network; an app made in
 Saltix has its owner on your phone and never uses it. `server.mjs` logs one JSON line per event and exits with 78 when
-the key cannot work (replaced, revoked, the app retired, another network's), which a supervisor should not restart on.
+the key cannot work (replaced, revoked, the app retired, another network's) or `chat.json` changed without raising its
+`version`, which a supervisor should not restart on.
 
 `chat.json` declares what users can send; its `slug` is your app's. Each command has a title, help and typed parameters;
 the wallet draws the form and checks it before anything leaves the phone ([docs/chats.md](chats.md#the-spec)):
@@ -110,7 +111,8 @@ when you can, and in English otherwise.
 
 The spec is signed by your server key, which may sign a spec while every command is free. A wallet keeps the highest
 version it has seen: start above the spec Saltix signed when it made the app, and raise `version` with every change.
-Each user gets the new spec before their next answer.
+Each user gets the new spec before their next answer. The server remembers the spec it served (in `chat.store.json`)
+and will not start on a `chat.json` changed under the same version: it says `raise "version" above N`.
 
 ## 4. Go public (1 minute)
 
