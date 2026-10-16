@@ -119,6 +119,9 @@ chat.text((ask) => card().text("Pick Plan below."));
 - **Cards** follow the card design standard ([cards.md](cards.md)): a status first, at most 6 actions, labels of at
   most 18 characters, the first `run` primary, destructive commands named so. Check each with `assertCardStandard(card,
   spec)` in the tests.
+- **Bundles**: `grain bundle` makes the same bytes from the same files on any computer (files stored, never deflated,
+  at most 20 MiB): rebuild it in CI and fail when `grain.json` changes (`git diff --exit-code grain.json`); never edit
+  `entry.sealed` by hand.
 - **Formats**: never build a protocol message by hand. The SDK makes and checks every one, byte for byte the network's.
 - **Money**: never deliver on the page's or the user's word: only on `chat.paymentOf` (or `findPayment`) with enough
   confirmations. Never put another payee in an invoice: a developer key's invoice pays the owner, and wallets refuse

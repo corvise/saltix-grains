@@ -87,6 +87,12 @@
   (grains' registry calls, a sponsor's channel) carry the sender's tag and the proof's, and their id is
   `"Saltix transaction v3"`; fees count the extra byte. Vectors synced from Saltix 602995e. Every package's tests
   exit when one fails instead of waiting on an open server.
+- **`grain bundle` stores every file as it is** (ZIP method 0), never deflated: a bundle's bytes, and so the hash the
+  owner signs, depend on its files only, not on the zlib inside the Node that made it (Node bundles its own, which
+  changes between releases; Saltix's access grain stores its files for the same reason). A test pins the hash of a
+  fixed tree, matched byte for byte by a ZIP built by hand from the format, and CI builds it again on Node 20 and 24.
+  The next bundle of a published grain gets a new hash, as any new bundle does. Its files may come to 20 MiB at most
+  (deflated, compressible ones could exceed that); a host may still compress the download on the wire.
 
 ### Fixed
 

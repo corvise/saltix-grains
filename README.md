@@ -126,8 +126,9 @@ npx grain rate --slug chess --score 5 --review "Good" --key rater.key --node …
 - `grain app-key` reads a developer key from `SALTIX_APP_KEY`, `--file` or stdin, never from the command line (shells
   keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
   (through the network's public relays, or `--node`).
-- `grain bundle` seals `public/` (Saltix 12-grains §8): one ZIP of its files — sorted, no times, so
-  the same files make the same bytes — at most 20 MiB, and `grain.json` names its hash, size,
+- `grain bundle` seals `public/` (Saltix 12-grains §8): one ZIP of its files — sorted, no times, every file stored as
+  it is (never deflated), so the same files make the same bytes on any computer and any Node — at most 20 MiB of files,
+  and `grain.json` names its hash, size,
   `sources` (where you upload `bundle.zip`), `start` and the `connect` origins the grain may reach.
   Wallets download it, check the hash and serve it from the phone at `https://<slug>.grain.invalid`,
   with the network limited to `connect`. A sealed grain's `grain dev` makes the bundle for every

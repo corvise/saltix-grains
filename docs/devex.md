@@ -154,6 +154,8 @@ exactly this reason.
 
 - Store (method 0), or deflate with a pinned pure-JS implementation; a test that the hash of a fixed tree is a constant,
   run on Node 20, 22 and 24 in CI.
+- **Built** (2026-10-16): every file stored; the fixed tree's hash is pinned and matched by a ZIP built by hand from
+  the format; CI runs it on Node 22, then 24 and 20.
 - **Effort** S. Changes the bytes of every bundle: the next version of a published grain gets a new hash, which is
   expected.
 
