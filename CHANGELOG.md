@@ -49,6 +49,13 @@
 
 ### Fixed
 
+- **The command line never runs a command it was asked about, and never ignores a flag** (`args.ts`): `--help` or
+  `-h` anywhere (and `grain help <command>`) prints that command's part of the help and exits 0. Before, `grain init
+  --help` made a grain with an owner key in the current directory, `grain dev --help` served forever and `grain publish
+  --help` went on to publish. A switch no longer swallows the next word (`grain init --chat coach` made a hosted grain
+  named after the current directory); a flag a command does not take is refused with the ones it takes (exit 2: a typo
+  such as `--manifst` linted `grain.json`); `--name=value` works; an unknown command says so instead of printing the
+  whole help; `grain --version`. A test holds every flag each command's help names to the ones it takes.
 - **A private app publishes no numbers** (Saltix 22-grain-chats §4, 24-app-studio §6a; the owner's rule, 2026-10-16):
   while the registry says the grain is private, the chat server hands none to its relay (`RelayClient.clearStats()`
   forgets the kept ones, so none go again on registering) and leaves `stats` out of its well-known document; it logs
