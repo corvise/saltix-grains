@@ -2,12 +2,15 @@
 
 Rules for coding agents, and the people working with them: building an app for Saltix with these SDKs, and working on
 this repository (saltix-grains: the grain SDKs, the simulator and the `grain` command line). `CLAUDE.md` points here.
-Two pages go on from it:
+Three pages go on from it:
 
 - [docs/agents/app.md](docs/agents/app.md): building an app, from a developer key to an app that runs, is tested and
   ships; the rules every app follows; how to act on an error report pasted from Saltix's console.
 - [docs/agents/sdk.md](docs/agents/sdk.md): working on the SDK: the repository's map, its commands and tests, the golden
   vectors, and how a change lands.
+- [docs/agents/cards.md](docs/agents/cards.md): the card design standard as rules for every card an app sends (a status
+  first, at most 6 actions, short labels, destructive names, choices and polls, answering every tap), checked with
+  `assertCardStandard`.
 
 ## Building an app: Saltix shows apps full screen
 

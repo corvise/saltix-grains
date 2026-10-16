@@ -51,16 +51,56 @@
     #chat-card ul { margin: 6px 0; padding-left: 18px; }
     #chat-log { display: flex; flex-direction: column; gap: 8px; min-height: 200px; max-height: 50vh; overflow: auto; background: #070b17; border-radius: 12px; padding: 10px; }
     .msg { border-radius: 12px; padding: 8px 10px; max-width: 92%; font-size: 13px; }
-    .msg.in { background: #16224a; align-self: flex-start; }
-    .msg.out { background: #2f6bff; align-self: flex-end; white-space: pre-wrap; }
-    .mark { font-size: 11px; color: #9fb0d8; margin-bottom: 4px; }
-    .block { margin: 4px 0; }
-    .block.text { white-space: pre-wrap; }
-    table.block th { text-align: left; color: #9fb0d8; font-weight: normal; padding-right: 10px; }
-    .secret { font-family: monospace; cursor: pointer; background: #0b1020; padding: 2px 6px; border-radius: 6px; }
-    .status { font-size: 12px; } .s0 { color: #e6c35c; } .s1 { color: #6fe08a; } .s2, .s3, .bad { color: #ff8a8a; }
-    .note { font-size: 12px; color: #9fb0d8; } .bad { font-size: 12px; }
-    .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .msg.out { background: #1a3352; color: #eaf4fd; align-self: flex-end; white-space: pre-wrap; border-radius: 16px 16px 4px 16px; }
+    .mark { font-size: 11px; color: #8e9bb2; }
+    /* The card standard (Saltix 22-grain-chats §5a): a capsule, and the actions in a bar attached under it. */
+    .card { align-self: flex-start; display: flex; flex-direction: column; gap: 4px; max-width: 400px; font-size: 13.5px; }
+    .card.wide { width: 100%; }
+    .capsule { background: #111a2b; border: 1px solid #22304a; border-radius: 18px 18px 18px 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .card:has(.bar) .capsule { border-radius: 18px 18px 8px 8px; }
+    .foot { font-size: 10.5px; color: #66748c; align-self: flex-end; }
+    .muted { color: #8e9bb2; }
+    .mono { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 12.5px; word-break: break-all; }
+    .line { display: flex; align-items: center; gap: 6px; }
+    .text { white-space: pre-wrap; line-height: 1.45; }
+    .clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines); overflow: hidden; }
+    button.link { background: none; border: 0; padding: 6px 0; color: #7ec4f2; font-weight: 600; min-height: 32px; }
+    button.icon { background: transparent; border: 0; color: #7ec4f2; min-width: 40px; min-height: 40px; padding: 0; font-size: 16px; }
+    .status { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; font-weight: 600; }
+    .status .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; }
+    .s0 { color: #7ec4f2; background: rgba(126,196,242,.12); } .s1 { color: #63c58a; background: rgba(99,197,138,.12); }
+    .s2, .s3 { color: #e2929a; background: rgba(211,96,108,.13); } .bad { color: #e2929a; font-size: 12px; }
+    .fields { display: flex; flex-direction: column; background: #172236; border-radius: 12px; padding: 2px 10px; }
+    .field { display: grid; grid-template-columns: minmax(80px, 40%) 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid #22304a; }
+    .field:last-child { border-bottom: 0; }
+    .secret { background: #172236; border-radius: 12px; padding: 8px 10px; }
+    .code { position: relative; } .code pre { margin: 0; background: #070b17; border-radius: 10px; padding: 10px 40px 10px 10px; white-space: pre-wrap; }
+    .code > button.icon { position: absolute; top: 2px; right: 2px; }
+    .tile { display: flex; align-items: center; gap: 10px; background: #172236; border-radius: 12px; padding: 8px 6px 8px 10px; }
+    .tile .badge { min-width: 40px; height: 40px; border-radius: 10px; background: rgba(126,196,242,.14); color: #7ec4f2; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+    .tile .grow { flex: 1; min-width: 0; } .tile .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+    .image { display: block; max-width: 100%; border-radius: 14px; margin-top: 6px; }
+    .invoice .amount { font-size: 18px; font-weight: 700; }
+    .owner { background: rgba(126,196,242,.14); border: 1px solid rgba(126,196,242,.4); border-radius: 12px; padding: 10px; }
+    .poll .question { font-weight: 600; margin-bottom: 8px; }
+    .poll .options { display: flex; flex-direction: column; gap: 6px; }
+    .option { position: relative; overflow: hidden; display: flex; justify-content: space-between; min-height: 44px; border-radius: 12px; background: #172236; border: 1px solid #22304a; text-align: left; }
+    .option .fill { position: absolute; inset: 0 auto 0 0; background: rgba(126,196,242,.16); }
+    .option .label, .option .share { position: relative; } .option.chosen { border-color: #7ec4f2; color: #7ec4f2; }
+    .segmented { display: flex; background: #172236; border-radius: 999px; padding: 3px; gap: 3px; }
+    .segmented > button { flex: 1; border-radius: 999px; border: 0; background: transparent; min-height: 42px; color: #eaf1fa; }
+    .segmented > button.chosen, .segmented > button.picked { background: linear-gradient(90deg, #94d0f6, #62a9e4); color: #0b1220; font-weight: 700; }
+    .bar { display: flex; flex-direction: column; gap: 4px; }
+    .barrow { display: flex; gap: 4px; }
+    .barrow:last-child .btn { border-bottom-left-radius: 18px; border-bottom-right-radius: 18px; }
+    .btn { flex: 1; min-height: 48px; border-radius: 10px; font-weight: 600; font-size: 13px; padding: 6px 10px; border: 1px solid transparent; }
+    .btn.primary { background: linear-gradient(90deg, #94d0f6, #62a9e4); color: #0b1220; }
+    .btn.secondary { background: rgba(126,196,242,.14); border-color: rgba(126,196,242,.4); color: #7ec4f2; }
+    .btn.danger { background: rgba(211,96,108,.13); border-color: rgba(211,96,108,.38); color: #e2929a; }
+    .btn.app { background: #172236; border-color: #22304a; color: #eaf1fa; display: flex; align-items: center; gap: 10px; text-align: left; }
+    .btn.app .appicon { color: #7ec4f2; } .btn.app .chev { margin-left: auto; color: #8e9bb2; }
+    .btn:disabled, .option:disabled { opacity: .55; cursor: default; }
+    .note { font-size: 12px; color: #9fb0d8; }
     button.small { padding: 4px 8px; font-size: 12px; }
     .preview { max-width: 100%; max-height: 240px; overflow: auto; }
     .form { display: flex; flex-direction: column; gap: 6px; }

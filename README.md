@@ -22,6 +22,7 @@ at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENTS.md), [Designing 
 | [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's full-screen layout, and work on this repository; `CLAUDE.md` points to it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 | [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
+| [`docs/cards.md`](docs/cards.md) | the card design standard: how every Saltix draws a card (the capsule, the action bar, emphasis, polls, states after a tap), what each block is for, do's and don'ts, and the lint |
 
 The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones included, logins, invoices, notifications,
 the registry transactions of 12-grains and 24-app-studio, deposits, the developer key), the addresses of

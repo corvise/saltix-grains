@@ -4,6 +4,17 @@
 
 ### Added
 
+- **The card design standard** (Saltix 22-grain-chats §4, §5a; vectors synced from corvise/saltix#221): `card().code(text)`
+  and `card().poll(question, command, options, {chosen, closed, tally})` (blocks 6 and 7, typed by the spec when sent:
+  `Card.typedBlocks`), `ask.update(card)` to answer a tap in place of the card tapped (a poll's new counts), the
+  standard's rules (`cardLayout`, `isDestructive`, `pollLook`, `shares`, `perRow`, `isToken`, `isImage`, `isWide`,
+  reproducing the vectors' `cards`), and its lint (`lintCard`, `assertCardStandard`, `CARD_LIMITS`; `ChatServer` logs
+  `card_standard` once per rule broken). The simulator draws cards by the standard: the action bar under the capsule,
+  emphasis, choices, polls, code, collapsed text, file tiles, and a tap's spinner and check; a `run` whose arguments
+  fill its form sends at once (a right click opens the form). Guides: [docs/cards.md](docs/cards.md) and
+  [docs/agents/cards.md](docs/agents/cards.md), linked from `AGENTS.md`; every `grain init` project's `AGENTS.md` gains
+  a seventh rule, cards by the standard (`CARDS_GUIDE`, `assertCardStandard` in its tests). Saltix 0.1.53 and older drop
+  a message with a code or poll block.
 - **Payments from a developer key** (Saltix 12-grains §5.2, vectors synced from Saltix #223): a registered server key
   signs invoices whose `to` is the grain's owner, which wallets check against the registry. `ChatServer.invoice`
   signs one to the owner the registry names and refuses any other payee, a retired grain or an unknown record, before

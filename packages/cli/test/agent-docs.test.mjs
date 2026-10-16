@@ -14,7 +14,7 @@ const help = spawnSync("node", [fileURLToPath(new URL("../dist/main.js", import.
 const commands = new Set([...help.matchAll(/^ {2}grain ([a-z][a-z-]*)/gm)].map((m) => m[1]));
 
 test("the agents' pages exist and link to files that do", () => {
-  assert.deepEqual(pages.map((p) => p.name).sort(), ["README.md", "app.md", "sdk.md"]);
+  assert.deepEqual(pages.map((p) => p.name).sort(), ["README.md", "app.md", "cards.md", "sdk.md"]);
   for (const { name, text } of pages) {
     for (const [, target] of text.matchAll(/\]\(([^)#\s]+)(#[^)]*)?\)/g)) {
       if (/^[a-z]+:/.test(target)) continue;

@@ -20,9 +20,10 @@ import {
 } from "../packages/server/src/records";
 import { messagingPublic, openFrame, sealFrame } from "../packages/server/src/seal";
 import {
-  CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, HELLO_RETRY_MS, type ChainParams, type ChatArgs, type ChatValue, type SignedChatMessage,
-  type SignedChatWelcome, type SignedGrainChatSpec, chatCertHolds, chatMessageProblem, chatWelcomeProblem, commandOf, decodeChatDocument,
-  decodeChatFrame, encodeChatFrame, newChatId, requestFitProblem, signChatHello, signChatRequest, signedChatSpecProblem,
+  CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, HELLO_RETRY_MS, type ActionKind, type ChainParams, type ChatArgs, type ChatMessage,
+  type ChatValue, type SignedChatMessage, type SignedChatWelcome, type SignedGrainChatSpec, chatCertHolds, chatMessageProblem,
+  chatWelcomeProblem, commandOf, decodeChatDocument, decodeChatFrame, encodeChatFrame, newChatId, requestFitProblem, signChatHello,
+  signChatRequest, signedChatSpecProblem,
 } from "../packages/server/src/chat";
 import { type FileRef, fileRefProblem, openFile, sealFile } from "../packages/server/src/file";
 import { type InvoiceKeyCert, decodeCert, invoiceProblem } from "../packages/server/src/invoice";
@@ -30,7 +31,8 @@ import { MEMBER_PROOF_LIFE_MS, onTeam, signMemberProof } from "../packages/serve
 import { type SignedGrainStats, grainStatsProblem } from "../packages/server/src/stats";
 import type { DeviceKey } from "../packages/server/src/keys";
 import { argOf } from "../packages/server/src/chat-card";
-import { el, pick, renderActions, renderBlock, renderForm, renderSpecCard } from "./chat-ui";
+import { type TapState, el, pick, renderCard, renderForm, renderSpecCard } from "./chat-ui";
+import { isDestructive } from "../packages/server/src/card-standard";
 
 export interface ChatHost {
   slug(): string;
@@ -76,6 +78,13 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   /** Requests sent: id → when they expire. */
   const sent = new Map<string, number>();
   const drawn = new Map<string, HTMLElement>();
+  /** Cards drawn, by message id, with what they say above them: a tap redraws its card. */
+  const cards = new Map<string, { message: ChatMessage; mark: string }>();
+  /** The last tap on each card (22-grain-chats §5a), and which card and control each request was tapped on. */
+  const taps = new Map<string, TapState>();
+  const tapped = new Map<string, { card: string; key: string }>();
+  /** A form opened from a card: the control it was opened from. */
+  let formTap: { card: string; key: string } | null = null;
   const unasked: number[] = [];
   /** The hello in flight (its id and when it went), and the server key that welcomed this wallet. */
   let hello: { id: string; at: number } | null = null;
@@ -216,21 +225,82 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
       if (recent.length >= limit) return host.log(`chat: an unasked message, dropped (${limit} today already)`);
       unasked.splice(0, unasked.length, ...recent, Date.now());
     }
-    const handlers = {
-      download: (file: FileRef) => download(file),
-      invoiceProblem: (hex: string) => invoiceProblem(hex, host.slug(), host.owner()!, chain!.genesis),
-      run: (command: string, args: ChatArgs, id: string) => pickCommand(command, args, id),
-      open: (start: string) => host.open(start),
-      reply: (text: string, id: string) => void sendRequest("", [], text, id),
-    };
-    const bubble = el("div", { className: "msg in" },
-      el("div", { className: "mark", textContent: `from ${host.slug()}, verified${answers ? "" : teamMember ? " · to the team" : " · unasked"}` }),
-      ...msg.blocks.map((b) => renderBlock(b, handlers)), renderActions(msg.actions, msg.id, handlers));
+    // An answer to a tap: its control shows a check (or the refused mark) on the card it was tapped on, or on this card
+    // when it takes that card's place (a poll's new counts).
+    // A "working" status is not the answer yet: the control keeps waiting for the message that replaces it.
+    const tap = msg.answers !== null ? tapped.get(msg.answers) : undefined;
+    const status = msg.blocks.find((b) => "status" in b);
+    const state = status && "status" in status ? status.status.state : null;
+    if (tap && state !== 0) {
+      tapped.delete(msg.answers!);
+      taps.set(msg.replaces === tap.card ? msg.id : tap.card, { key: tap.key, phase: state !== null && state >= 2 ? "refused" : "done" });
+      if (msg.replaces !== tap.card) redraw(tap.card);
+    }
+    const mark = `from ${host.slug()}, verified${answers ? "" : teamMember ? " · to the team" : " · unasked"}`;
+    cards.set(msg.id, { message: msg, mark });
+    const bubble = draw(msg.id);
     const earlier = msg.replaces ? drawn.get(msg.replaces) : undefined;
     if (earlier) earlier.replaceWith(bubble);
     else pane.append(bubble);
     drawn.set(msg.id, bubble);
     pane.scrollTop = pane.scrollHeight;
+  }
+
+  const handlers = {
+    download: (file: FileRef) => download(file),
+    invoiceProblem: (hex: string) => invoiceProblem(hex, host.slug(), host.owner()!, chain!.genesis),
+    tap: (key: string, kind: ActionKind, card: string, edit: boolean) => void tapOn(key, kind, card, edit),
+    open: (start: string) => host.open(start),
+  };
+
+  /** The card `id` as it stands, by the card standard at the chat pane's width. */
+  function draw(id: string): HTMLElement {
+    const c = cards.get(id)!;
+    return renderCard(c.message, c.mark, handlers, taps.get(id) ?? null, Math.min(400, pane.clientWidth - 24));
+  }
+
+  function redraw(id: string): void {
+    const old = drawn.get(id);
+    if (!old || !cards.has(id)) return;
+    const next = draw(id);
+    old.replaceWith(next);
+    drawn.set(id, next);
+  }
+
+  /**
+   * A tap on a card's control (22-grain-chats §4, §5a): a reply goes at once; a run (or a poll's option) goes at once
+   * when its arguments fill the command's form, after "Send?" when the command is confirm or destructive, and opens the
+   * form otherwise or on a long press (here, a right click). The control waits for the answer, a minute at most.
+   */
+  async function tapOn(key: string, kind: ActionKind, card: string, edit: boolean): Promise<void> {
+    if ("open" in kind || "publish" in kind) return;
+    let id: string | null;
+    if ("reply" in kind) id = await sendRequest("", [], kind.reply.text, card);
+    else {
+      const c = spec && commandOf(spec.spec, kind.run.command);
+      if (!c) return note(`The spec has no command ${kind.run.command}.`, "bad");
+      const fits = requestFitProblem({ slug: host.slug(), id: "00".repeat(16), at: 0, expires_at: 1, via: null, command: c.name, args: kind.run.args, text: "", member: null, lang: "" }, spec!.spec) === null;
+      if (edit || !fits) {
+        formTap = { card, key };
+        return pickCommand(c.name, kind.run.args, card);
+      }
+      if ((c.confirm || isDestructive(c.name)) && !confirm(`Send "${pick(c.title, host.language())}"?`)) return;
+      id = await sendRequest(c.name, kind.run.args, "", card, true);
+    }
+    if (id) waitFor(id, card, key);
+  }
+
+  function waitFor(request: string, card: string, key: string): void {
+    tapped.set(request, { card, key });
+    taps.set(card, { key, phase: "waiting" });
+    redraw(card);
+    setTimeout(() => {
+      const t = taps.get(card);
+      if (tapped.has(request) && t?.key === key && t.phase === "waiting") {
+        taps.set(card, { key, phase: "late" });
+        redraw(card);
+      }
+    }, 60_000);
   }
 
   async function download(file: FileRef): Promise<Uint8Array> {
@@ -298,8 +368,9 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     host.log("chat: welcomed: the app's console reaches this account without it writing first");
   }
 
-  async function sendRequest(command: string, args: ChatArgs, text: string, viaId: string | null): Promise<void> {
-    if (!spec || !chain || !registered || !serverKey()) return note("Load the chat first.", "bad");
+  /** Send a request: its id, or null when it did not go. `asked`: the card's tap asked "Send?" already. */
+  async function sendRequest(command: string, args: ChatArgs, text: string, viaId: string | null, asked = false): Promise<string | null> {
+    if (!spec || !chain || !registered || !serverKey()) return note("Load the chat first.", "bad"), null;
     const now = Date.now();
     // A private app's member proves its account with every request, and so does the app's team to a public app, so that
     // the app reaches it in its console (24-app-studio §2a, §4); a public app's users never send one.
@@ -307,12 +378,12 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     // The page's language, as Saltix sends its display language with every request (22-grain-chats §3).
     const request = { slug: host.slug(), id: newChatId(), at: now, expires_at: now + DAY, via: viaId, command, args, text, member, lang: host.language() };
     const problem = requestFitProblem(request, spec.spec);
-    if (problem) return note(`Not sent: ${problem}`, "bad");
+    if (problem) return note(`Not sent: ${problem}`, "bad"), null;
     const c = commandOf(spec.spec, command);
-    if (c?.confirm && !confirm(`Send "${pick(c.title, host.language())}"?`)) return;
+    if (!asked && c?.confirm && !confirm(`Send "${pick(c.title, host.language())}"?`)) return null;
     const to = serverAddress()!;
     const key = await keyOf(to);
-    if (!key) return note("The server is not registered at the relay.", "bad");
+    if (!key) return note("The server is not registered at the relay.", "bad"), null;
     const frame = encodeChatFrame({ request: signChatRequest(request, grainKey(), chain.genesis) });
     ws!.send(JSON.stringify({ type: "message", to, payload: toBase64Url(sealFrame(frame, key, messagingSecret())), msgId: newChatId() }));
     sent.set(request.id, request.expires_at);
@@ -320,6 +391,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     const shown = command ? `${pick(c!.title, host.language())} ${args.map(([n, v]) => `${n}: ${value(v)}`).join(", ")}` : text;
     pane.append(el("div", { className: "msg out", textContent: shown }));
     pane.scrollTop = pane.scrollHeight;
+    return request.id;
   }
 
   function pickCommand(name: string, prefill: ChatArgs = [], viaId: string | null = null): void {
@@ -327,6 +399,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     $<HTMLSelectElement>("chat-command").value = c ? name : "";
     currentCommand = c ? name : "";
     via = viaId;
+    if (viaId === null) formTap = null;
     current = c ? renderForm(c, host.language(), prefill) : null;
     $("chat-form").replaceChildren(...(current ? [current.form, el("button", { textContent: "Send", onclick: () => void sendForm() })] : []));
   }
@@ -341,7 +414,9 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
       return note((e as Error).message, "bad");
     }
     read.sort((a, b) => (a[0] < b[0] ? -1 : 1));
-    await sendRequest(currentCommand, read, "", via);
+    const from = formTap;
+    const id = await sendRequest(currentCommand, read, "", via);
+    if (id && from && via === from.card) waitFor(id, from.card, from.key);
     pickCommand("");
   }
 

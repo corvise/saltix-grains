@@ -43,11 +43,15 @@ export async function startChat(options, owner = null) {
   chat.command("key", (ask) => {
     const { site, duration } = ask.args;
     const code = toHex(randomBytes(5)).toUpperCase().replace(/(.{4})(.{4})(.{2})/, "$1-$2-$3");
+    // The card standard (docs/cards.md): the status first, as the card's title; three runs of one command side by side
+    // are a choice, one segmented control in Saltix, each sending at once with its arguments.
     return card()
+      .status("done", "A made-up key: the example mints nothing")
       .secret("Key", code, { expiresAt: Date.now() + duration * 1000 })
       .fields({ Site: SITES[site], "Valid for": human(duration) })
-      .status("done", "A made-up key: the example mints nothing")
-      .run("Another", "key", { site, duration });
+      .run("10 min", "key", { site, duration: 600 })
+      .run("1 hour", "key", { site, duration: 3600 })
+      .run("1 day", "key", { site, duration: 86400 });
   });
 
   chat.command("report", async (ask) => {

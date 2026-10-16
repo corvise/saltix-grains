@@ -20,6 +20,7 @@ import {
   signChatMessage, signChatSpecAsServer, signChatWelcome, signedChatSpecProblem,
 } from "./chat.js";
 import { type Args, Card, argOf } from "./chat-card.js";
+import { lintCard } from "./card-lint.js";
 import { type ChatStore, type ChatUsage, UsageWindow, memoryChatStore } from "./chat-store.js";
 import type { FileRef } from "./file.js";
 import type { InvoiceKeyCert } from "./invoice.js";
@@ -342,6 +343,17 @@ export class ChatAsk<A extends Args = Args> {
     return this.server.send(this.user, card, this.answering(this.progress));
   }
 
+  /**
+   * The answer, in place of the card whose button or poll the user tapped (`via`): a poll with its new votes and the
+   * user's `chosen`, a card whose buttons changed. Without `via` (a command from the chat's list), a new card. Once.
+   */
+  async update(card: Card): Promise<ChatSent> {
+    if (this.answered) throw new Error("a request is answered once");
+    if (this.via === null) return this.answer(card);
+    this.answered = true;
+    return this.server.send(this.user, card, { answers: this.request.id, expiresAt: this.request.expires_at, replaces: this.via });
+  }
+
   /** A `refused` status with `text`, as the answer. */
   refuse(text: string): Promise<ChatSent> {
     return this.answer(new Card().status("refused", text));
@@ -439,6 +451,8 @@ export class ChatServer {
   private readonly store: ChatStore;
   private readonly window = new UsageWindow();
   private readonly log: ChatLog;
+  /** The card standard's rules a card broke, logged once each. */
+  private readonly linted = new Set<string>();
   private readonly now: () => number;
   private stats: SignedGrainStats | null = null;
   /** Whether the numbers are kept from the relay and the document: the registry says the grain is private. */
@@ -870,11 +884,17 @@ export class ChatServer {
     return { user: address, id: message.id, answers: how.answers, expiresAt: how.expiresAt };
   }
 
-  /** `card` as a message of this chat, dated now. */
+  /** `card` as a message of this chat, dated now. What it does against the card standard is logged, each rule once. */
   private message(card: Card, how: { answers: string | null; replaces: string | null }): ChatMessage {
+    for (const w of lintCard(card, this.signed.spec)) {
+      if (w.level !== "warning" || this.linted.has(w.rule)) continue;
+      this.linted.add(w.rule);
+      this.log("warn", "card_standard", { rule: w.rule, detail: w.message });
+    }
+    const commands = (name: string) => commandOf(this.signed.spec, name);
     return {
-      slug: this.slug, id: newChatId(), at: this.now(), answers: how.answers, replaces: how.replaces, blocks: card.blocks,
-      actions: card.actions((name) => commandOf(this.signed.spec, name), publishText),
+      slug: this.slug, id: newChatId(), at: this.now(), answers: how.answers, replaces: how.replaces, blocks: card.typedBlocks(commands),
+      actions: card.actions(commands, publishText),
     };
   }
 

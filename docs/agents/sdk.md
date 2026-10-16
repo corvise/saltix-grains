@@ -11,6 +11,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `packages/server/src/` | `@saltix/grain-server`; `index.ts` re-exports every module below |
 | `manifest.ts`, `registry.ts`, `tx.ts`, `handle.ts` | the manifest, the registry's calls (`signGrainTx`, `grainCallProblem`), transactions v3, usernames |
 | `chat.ts`, `chat-card.ts` | the chat's formats (specs, requests, messages, member proofs) and the card builder |
+| `card-standard.ts`, `card-lint.ts` | the card standard (22-grain-chats §5a: the action bar's rows and emphasis, polls' looks and shares; it reproduces the vectors' `cards`), and the lint against the guide's numbers ([cards.md](cards.md)) |
 | `chat-server.ts`, `chat-store.ts`, `report.ts`, `stats.ts`, `member.ts` | `ChatServer`: requests, budget, console, error reports, numbers, private apps |
 | `app-key.ts`, `network.ts` | the developer key; the public relays and the chain view a server reads |
 | `relay.ts`, `records.ts`, `seal.ts`, `upload.ts`, `file.ts` | `RelayClient`, relay records, sealed frames, files next to the relay |
