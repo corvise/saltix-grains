@@ -352,8 +352,10 @@ test("an update is proposed to the team in the console, for the owner to approve
     await assert.rejects(server.proposeUpdate({ ...next, version: 1 }), /registry holds access v1/);
     await assert.rejects(server.proposeUpdate(next, { roles: ["developer"] }), /owner/);
     await assert.rejects(server.proposeUpdate("salt:grain-publish?m=AAAA"), /a manifest to publish/);
+    assert.equal((await server.registered(true)).version, 1, "what the registry holds");
     fake.state.grain.version = 2;
     fake.block();
+    assert.equal((await server.registered(true)).version, 2);
     await assert.rejects(server.proposeUpdate(next), /registry holds access v2/, "approved: nothing left to propose");
     assert.equal(unasked(owner).length, 2, "the owner got the two proposals that went");
   } finally {

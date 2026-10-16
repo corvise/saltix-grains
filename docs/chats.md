@@ -323,7 +323,9 @@ A new screen, a new bundle, a new name: each is a new manifest, and only the own
 Saltix 12-grains §10). The program proposes it where the owner already is, in the console (22-grain-chats §4):
 
 ```ts
-// The registry's manifest, one version up, with the screen's sealed entry: the owner and owner key are the wallet's.
+// The registry's manifest (chat.registered()), one version up, with the screen's sealed entry: the owner and owner key
+// are the wallet's to fill in.
+const next = { ...(await chat.registered(true))!.manifest!.manifest, version: 4, entry: { sealed: screen } };
 const r = await chat.proposeUpdate(next);       // { sent: 2, unreachable: 0, spent: 0, failed: 0, version: 4, owner: true }
 await chat.proposeUpdate(link, { text: "Notes has a screen of its own.", roles: ["owner", "developer", "viewer"] });
 card().text("…").publish("Review", next);      // the same action on a card of your own

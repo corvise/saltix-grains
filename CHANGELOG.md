@@ -64,7 +64,8 @@
   protocol PR): the card action `publish` (`Card.publish(label, manifest | link)`, tag 3) carries the manifest's text
   as a publishing link does, and `ChatServer.proposeUpdate(manifest | link, { text?, label?, roles? })` sends it to the
   team in the console, refusing another grain's manifest or a version the registry holds, and says whether the owner
-  got it (`owner`; logged as `chat_update_proposed`). `chatMessageBoundsProblem` refuses a `publish` of another grain
+  got it (`owner`; logged as `chat_update_proposed`); `ChatServer.registered(fresh?)` reads what the registry holds for the
+  grain. `chatMessageBoundsProblem` refuses a `publish` of another grain
   (`slug`), two of them, or a text out of form (`bounds:action`); `proposedManifest` and `teamOnly` read it.
   `readPublishText`, `readPublishLink` and `decodeManifest` read the link's form strictly in any runtime (a raw DEFLATE
   decoder of our own, `inflate.ts`, so the simulator runs it too); `publishText` and `publishLink` (with `UNOWNED`)

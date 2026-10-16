@@ -836,6 +836,14 @@ export class ChatServer {
     return (await this.toTeam(card, options.roles ?? DEFAULT_TEAM_ROLES)).delivery;
   }
 
+  /** What the registry holds for the grain at the beacon chain's tip (`fresh`: the tip asked now; otherwise cached for a
+   *  few seconds): its manifest, version, keys and team; null for an unregistered grain. Throws without a registry to
+   *  read (a certified key with no node). */
+  async registered(fresh = false): Promise<RegisteredGrain | null> {
+    if (!this.view) throw new Error("the registry is read through a node: start the server from a developer key, or pass node");
+    return this.view.grain(this.slug, fresh);
+  }
+
   /**
    * Propose the grain's next manifest to the team in the app's console (22-grain-chats §4): a card with `text` and a
    * `Publish` action, which the owner's Saltix shows as **Review and approve** — the publishing sheet, what changes and
