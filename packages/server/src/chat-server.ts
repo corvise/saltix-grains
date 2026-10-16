@@ -22,11 +22,14 @@ import { type ChatStore, type ChatUsage, UsageWindow, memoryChatStore } from "./
 import type { FileRef } from "./file.js";
 import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
+import type { Manifest } from "./manifest.js";
 import {
   type GrainAccess, type MemberProblem, TEAM_ROLES, admits, needsController, needsTeamController, onTeam, rolesOf, teamMemberOf,
 } from "./member.js";
 import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
+import { readPublishText, publishTextOf } from "./publish.js";
+import { publishText } from "./publish-link.js";
 import { ROLES, type RegisteredGrain } from "./registry.js";
 import { RelayClient, type RelayEndpoint, type RelayFrame } from "./relay.js";
 import { type ErrorFacts, REPORT_FOLD_MS, type ReportContext, errorFacts, errorFingerprint, reportCard, scrubSecrets } from "./report.js";
@@ -188,6 +191,13 @@ export interface TeamDelivery {
 /** What `report` did: folded into an earlier report of the same error (sent nothing), or sent as `notifyTeam` says. */
 export interface ReportOutcome extends TeamDelivery {
   folded: boolean;
+}
+
+/** What `proposeUpdate` did: as `notifyTeam` says, the version proposed, and whether the owner's console got it — the
+ *  only one who can approve it. */
+export interface UpdateProposal extends TeamDelivery {
+  version: number;
+  owner: boolean;
 }
 
 /** Whether `m` plays one of `roles`. The owner plays "owner" only, whatever bits its roles have. */
@@ -752,7 +762,7 @@ export class ChatServer {
   private message(card: Card, how: { answers: string | null; replaces: string | null }): ChatMessage {
     return {
       slug: this.slug, id: newChatId(), at: this.now(), answers: how.answers, replaces: how.replaces, blocks: card.blocks,
-      actions: card.actions((name) => commandOf(this.signed.spec, name)),
+      actions: card.actions((name) => commandOf(this.signed.spec, name), publishText),
     };
   }
 
@@ -823,14 +833,57 @@ export class ChatServer {
    * is counted and the others still go. The log says how many, never to whom. Throws for a card out of bounds.
    */
   async notifyTeam(card: Card, options: { roles?: readonly TeamRole[] } = {}): Promise<TeamDelivery> {
+    return (await this.toTeam(card, options.roles ?? DEFAULT_TEAM_ROLES)).delivery;
+  }
+
+  /**
+   * Propose the grain's next manifest to the team in the app's console (22-grain-chats §4): a card with `text` and a
+   * `Publish` action, which the owner's Saltix shows as **Review and approve** — the publishing sheet, what changes and
+   * the PIN —, while the developers (and viewers, with `roles`) see what is proposed. Only a key that speaks for the
+   * owner signs a manifest; this is how a developer's change reaches the owner's phone.
+   *
+   * `update` is the manifest (this grain's, a version above the registry's: owner and owner key are the wallet's to
+   * fill in), or its publishing link. It goes as `notifyTeam` sends, within the team's unasked budget; `owner` says
+   * whether the owner's console got it. Until it has (the owner has not written to the app yet, or their day's budget
+   * is spent), propose again later. Throws for another grain's manifest, one the registry already holds or passed, a
+   * card out of bounds, or roles without the owner. Saltix 0.1.51 and older drop such a card.
+   */
+  async proposeUpdate(
+    update: Manifest | string,
+    options: { text?: string; label?: string; roles?: readonly TeamRole[] } = {},
+  ): Promise<UpdateProposal> {
     this.running();
+    if (!this.view) throw new Error("an update is proposed against the registry: start the server from a developer key, or pass node");
+    const manifest = typeof update === "string" ? readPublishText(publishTextOf(update)) : update;
+    if (manifest.slug !== this.slug) throw new TypeError(`the manifest is ${manifest.slug}'s, not ${this.slug}'s: a chat proposes its own grain's only`);
     const roles = options.roles ?? DEFAULT_TEAM_ROLES;
+    if (!roles.includes("owner")) throw new TypeError("roles: the owner approves an update, so the owner is among them");
+    const g = await this.view.grain(this.slug, true);
+    if (!g || g.retired !== null) throw new Error(`${this.slug} is not a live grain in the registry: nothing to update`);
+    if (manifest.version <= g.version) {
+      throw new Error(`the registry holds ${this.slug} v${g.version}: propose a version above it (this one is ${manifest.version})`);
+    }
+    const name = manifest.name.en ?? this.slug;
+    const text = options.text ?? `${name} has a new version (${manifest.version}). The owner approves it here.`;
+    const card = new Card().text(text).publish(options.label ?? "Review the update", typeof update === "string" ? publishTextOf(update) : manifest);
+    const { delivery, owner } = await this.toTeam(card, roles);
+    this.log(owner ? "info" : "warn", "chat_update_proposed", {
+      version: manifest.version, ...delivery, owner,
+      ...(owner ? {} : { hint: "the owner's console did not get it (not written to the app yet, or the day's budget spent): propose it again later" }),
+    });
+    return { ...delivery, version: manifest.version, owner };
+  }
+
+  /** Write `card` unasked to each member who plays one of `roles`: what was sent, and whether the owner got it. */
+  private async toTeam(card: Card, roles: readonly TeamRole[]): Promise<{ delivery: TeamDelivery; owner: boolean }> {
+    this.running();
     if (roles.length === 0 || roles.some((r) => r !== "owner" && r !== "developer" && r !== "viewer")) {
       throw new TypeError(`roles: some of ${["owner", "developer", "viewer"].join(", ")}`);
     }
     const problem = chatMessageBoundsProblem(this.message(card, UNASKED));
     if (problem) throw new TypeError(`chat message: ${problem}`);
     const result = { ...NO_DELIVERY };
+    let owner = false;
     for (const m of await this.team()) {
       if (!plays(m, roles)) continue;
       if (m.address === null) {
@@ -844,6 +897,7 @@ export class ChatServer {
       try {
         await this.send(m.address, card, UNASKED);
         result.sent++;
+        if (m.owner) owner = true;
       } catch (e) {
         if (e instanceof ChatKeyNotRegistered) throw e;
         result.failed++;
@@ -852,7 +906,7 @@ export class ChatServer {
     this.log(result.failed > 0 || (result.sent === 0 && result.unreachable > 0) ? "warn" : "info", "chat_team_notified", {
       ...result, ...(result.sent === 0 && result.unreachable > 0 ? { hint: "no one on the team has written to the app yet: it reaches each member once they have" } : {}),
     });
-    return result;
+    return { delivery: result, owner };
   }
 
   /**

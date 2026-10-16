@@ -183,7 +183,8 @@ http.createServer((req, res) => chat.serveDocument(req, res) || app(req, res));
 markup), `fields` (1–16 rows of a label up to 40 and a value up to 200 characters), `secret` (label, value up to 256,
 `expiresAt`), `file` (a `FileRef` from `chat.upload`, a title, a format such as `csv`), `invoice` (`signInvoice`'s hex,
 for this grain), `status` (`working`, `done`, `refused`, `failed`, up to 200 characters); actions `run` (a command and
-arguments, typed by the spec), `open` (the grain's screen with `start`) and `reply` (a text up to 200 characters). The
+arguments, typed by the spec), `open` (the grain's screen with `start`), `reply` (a text up to 200 characters) and
+`publish` (an update of the app for its owner to approve, [below](#updates-the-owner-approves-in-the-console)). The
 server signs it with the server key, as a registered key (`ServerKey::Registered`) or under its certificate; a frame
 carries at most 48 000 bytes, so a larger report goes as a file.
 
@@ -316,6 +317,32 @@ a card:
   id, the user still getting a `failed` status. `ChatServer.start({ reportErrors: false })` turns it off. It needs the
   registry (a developer key, or `node`); `report` never throws, and says in your log what it could not do.
 
+### Updates the owner approves in the console
+
+A new screen, a new bundle, a new name: each is a new manifest, and only the owner's phone signs one (`UpdateGrain`,
+Saltix 12-grains §10). The program proposes it where the owner already is, in the console (22-grain-chats §4):
+
+```ts
+// The registry's manifest, one version up, with the screen's sealed entry: the owner and owner key are the wallet's.
+const r = await chat.proposeUpdate(next);       // { sent: 2, unreachable: 0, spent: 0, failed: 0, version: 4, owner: true }
+await chat.proposeUpdate(link, { text: "Notes has a screen of its own.", roles: ["owner", "developer", "viewer"] });
+card().text("…").publish("Review", next);      // the same action on a card of your own
+```
+
+- The card carries a `publish` action: the manifest as a publishing link carries it (`salt:grain-publish?m=…`, its
+  owner zeroed, raw DEFLATE, base64url; at most 2 027 characters and 16 384 bytes inflated: `publishText`,
+  `publishLink`, `readPublishText`). It must be **this grain's**, one a message, or the wallet refuses the whole card
+  (`slug`, `bounds:action`); `proposeUpdate` also refuses a version the registry already holds or passed.
+- Saltix shows it to the **team only**. The owner gets "App update available, v3 → v4" and **Review and approve**, in
+  Saltix's own words (never your `label`), which opens the publishing sheet: what changes, what it costs, the PIN. The
+  developers (and viewers, if you name them) see what is proposed and that the owner approves it. Once the registry
+  holds the version, the card says it is approved.
+- It goes like `notifyTeam`, within the team's budget, and `owner` says whether the owner's console got it: until
+  then (they have not written to the app yet, or their budget is spent) nobody can approve it, so propose again later.
+  The log says `chat_update_proposed` with the counts.
+- Saltix 0.1.51 and older do not know the action and drop the card: send it once the owner's Saltix is newer, or
+  give them the link (`grain publish`, or `publishLink(next)`) as well.
+
 ## The numbers an app reports
 
 With a registered key, the server signs `GrainStats` at most once an hour (`chat.publishStats()`, `chat.reported`):
@@ -335,8 +362,8 @@ request, and forgets it once that is 30 days old; requests are counted by the ho
 (`UsageWindow`, kept by the `ChatStore`).
 
 **Logs** carry names and numbers (`chat_request`, `chat_request_refused`, `chat_request_dropped`,
-`chat_handler_failed`, `chat_budget_spent`, `chat_team_notified`, `chat_error_reported`, `chat_error_folded`,
-`file_uploaded`…), never keys, secrets, arguments, what users wrote or who is on the team.
+`chat_handler_failed`, `chat_budget_spent`, `chat_team_notified`, `chat_update_proposed`, `chat_error_reported`,
+`chat_error_folded`, `file_uploaded`…), never keys, secrets, arguments, what users wrote or who is on the team.
 
 ## Files
 
@@ -366,7 +393,8 @@ It refuses:
   ending more than **31 days** ahead, or for a key the spec revokes. Every message names its key, so a refused one
   refuses the message;
 - **a message** that did not come from the server key's own address, is out of bounds, dated more than 5 minutes
-  ahead or more than 30 days old, or whose signature does not check;
+  ahead or more than 30 days old, or whose signature does not check; one with a `publish` action of another grain, or
+  two of them; one with a `publish` action to anyone off the app's team;
 - **reported numbers** not signed by a key the registry names, older than 2 days or contradicting each other;
 - **an unasked message** (one that answers no request of the user's that still lives) while the user has not allowed
   them (allowed by default once they sent a request), or past 10 that day (100 to the app's team), notifications

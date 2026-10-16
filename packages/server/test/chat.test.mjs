@@ -17,7 +17,8 @@ import {
   CHAT_CERT_LIFE_MS, MAX_MESSAGE_AGE_MS, MAX_REQUEST_LIFE_MS, MESSAGE_AHEAD_MS, MAX_FRAME_BYTES, MAX_FILE_BYTES, STATUS,
   signChatSpecAsServer, serverKeyHolds, decodeChatDocument, signMemberProof, memberProofToSign, encodeSignedMemberProof,
   decodeSignedMemberProof, admits, signGrainStats, grainStatsToSign, encodeSignedGrainStats, decodeSignedGrainStats, grainStatsProblem,
-  STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS,
+  STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS, encodeManifest, readPublishText, readPublishLink, publishText, proposedManifest, teamOnly,
+  UNOWNED,
 } from "../dist/index.js";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/grain-chats-v1.json", import.meta.url), "utf8"));
@@ -213,6 +214,55 @@ test("requests, answers, reports and frames are the node's", () => {
   assert.ok("spec" in decodeChatFrame(fromHex(v.spec_frame_hex)));
   assert.equal(decodeChatFrame(fromHex(v.server_spec.frame_hex)).spec.cert, null, "a registered key's spec frame carries no certificate");
   assert.ok("stats" in decodeChatFrame(fromHex(v.stats.frame_hex)));
+});
+
+/** The access grain's next manifest, which its program proposes in the console: version 2, with a sealed screen. */
+const updateManifest = () => ({
+  slug: "access", version: 2, owner: toHex(accountId(ed25519.getPublicKey(OWNER))), owner_key: ownerKey,
+  name: { en: "Access", ru: "Доступ" }, description: { en: "One-time access keys for the closed sites." }, icon: repeat("77", 32),
+  entry: {
+    sealed: {
+      bundle: repeat("88", 32), size: 154_240, sources: [`https://download.saltix.io/apps/screens/${repeat("88", 32)}.zip`], start: "index.html",
+      connect: ["https://api.saltix.io"],
+    },
+  },
+  permissions: 0, sponsor: null, min_host: 1,
+});
+const proposal = (manifest) => ({
+  slug: "access", id: repeat("35", 16), at: NOW + 3_000, answers: null, replaces: null,
+  blocks: [{ text: { text: "Access has a new version: its own screen. The owner approves it here." } }],
+  actions: [{ label: "Review", kind: { publish: { manifest } } }],
+});
+
+test("an update proposed in the console is the node's, and what the file says is refused is refused", () => {
+  const p = v.publish;
+  assert.equal(hex(encodeManifest({ ...updateManifest(), ...UNOWNED })), p.manifest_unowned_borsh_hex);
+  assert.deepEqual(readPublishText(p.manifest_text), { ...updateManifest(), ...UNOWNED });
+  assert.deepEqual(readPublishLink(p.link), { ...updateManifest(), ...UNOWNED });
+  // Another compressor, another text, the same manifest: readers never compare texts.
+  assert.deepEqual(readPublishText(publishText(updateManifest())), { ...updateManifest(), ...UNOWNED });
+
+  const signed = signChatMessage(proposal(p.manifest_text), SERVER, chain.genesis);
+  assert.equal(hex(chatMessageToSign(proposal(p.manifest_text), chain.genesis)), p.message_hex);
+  assert.equal(hex(encodeSignedChatMessage(signed)), p.signed_hex);
+  assert.equal(hex(encodeChatFrame({ message: signed })), p.frame_hex);
+  const read = decodeChatFrame(fromHex(p.frame_hex)).message;
+  assert.deepEqual(read, signed);
+  assert.equal(proposedManifest(read.message), p.manifest_text);
+  assert.ok(teamOnly(read.message), "only the team's wallets show it");
+  assert.ok(!teamOnly(answer()));
+  const s = decodeSignedChatSpec(v.spec_doc.signed_hex).spec;
+  const check = (m) => chatMessageProblem(m, { chain, ownerKey, servers, spec: s, from: serverAddress, now: NOW + 5_000 });
+  assert.equal(check(read), null);
+
+  assert.equal(p.refused.length, 6);
+  for (const r of p.refused) {
+    const m = decodeChatFrame(fromHex(r.frame_hex)).message;
+    assert.equal(check(m), r.why.includes("Slug") ? "slug" : "bounds:action", r.why);
+    assert.equal(chatMessageBoundsProblem(m.message), r.why.includes("Slug") ? "slug" : "bounds:action", r.why);
+  }
+  // The SDK never signs one of them.
+  for (const r of p.refused) assert.throws(() => signChatMessage(decodeChatFrame(fromHex(r.frame_hex)).message.message, SERVER, chain.genesis), /chat message/);
 });
 
 test("a client checks everything from the file alone", () => {

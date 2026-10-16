@@ -6,6 +6,8 @@ import {
 } from "./chat.js";
 import { compareUtf8 } from "./bytes.js";
 import type { FileRef } from "./file.js";
+import type { Manifest } from "./manifest.js";
+import { publishTextOf } from "./publish.js";
 
 /** An argument as a handler reads it and a `Run` action takes it: text, choice → string; number → bigint in units of
  *  10^-decimals (a decimal string such as "12.50" is taken too); duration → seconds; date → "YYYY-MM-DD"; file →
@@ -68,6 +70,12 @@ interface PendingRun {
   args: Args;
 }
 
+/** A publish action before its manifest is packed (`ChatServer` packs it with Node's zlib). */
+interface PendingPublish {
+  label: string;
+  update: Manifest;
+}
+
 /**
  * A card: the blocks (1–16) and actions (0–8) of a message, in order. `ChatServer` signs it with the server key and
  * sends it. Each method checks nothing beyond its own shape; the message's bounds are checked when it is signed.
@@ -75,11 +83,12 @@ interface PendingRun {
  * ```ts
  * card().secret("Key", "7KQ2-M9XA-4F", { expiresAt }).fields({ Site: "saltix.io" }).status("done", "Opens the site once")
  *   .run("Revoke", "revoke", { id: "k-0042" }).open("All keys", "keys")
+ * card().text("Notes has a new version: its own screen. The owner approves it here.").publish("Review", nextManifest)
  * ```
  */
 export class Card {
   readonly blocks: Block[] = [];
-  private readonly items: Array<Action | PendingRun> = [];
+  private readonly items: Array<Action | PendingRun | PendingPublish> = [];
 
   /** Text, line breaks kept, no markup: 1–4 000 characters. */
   text(text: string): this {
@@ -127,10 +136,27 @@ export class Card {
     this.items.push({ label, kind: { reply: { text } } });
     return this;
   }
-  /** The actions, `Run` arguments typed by `commandOf` (the spec's commands). */
-  actions(commandOf: (name: string) => Command | undefined): Action[] {
+  /**
+   * A proposal of the grain's next manifest for its owner to approve (22-grain-chats §4): `update` is the manifest (this
+   * grain's, a version above the registry's), its publishing link (`salt:grain-publish?m=…`), or the link's text after
+   * `m=`. Send it to the team (`ChatServer.proposeUpdate` does both): wallets show it to the team only, and the owner's
+   * Saltix draws **Review and approve** in its own words — `label` is for readers that list actions (at most 32
+   * characters). One a message.
+   */
+  publish(label: string, update: Manifest | string): this {
+    if (typeof update === "string") this.items.push({ label, kind: { publish: { manifest: publishTextOf(update) } } });
+    else this.items.push({ label, update });
+    return this;
+  }
+  /** The actions, `Run` arguments typed by `commandOf` (the spec's commands) and a proposed manifest packed by `pack`
+   *  (`publishText`; `ChatServer` passes it). */
+  actions(commandOf: (name: string) => Command | undefined, pack?: (m: Manifest) => string): Action[] {
     return this.items.map((item) => {
       if ("kind" in item) return item;
+      if ("update" in item) {
+        if (!pack) throw new TypeError("publish: pass the manifest's link, or send the card through ChatServer, which packs the manifest");
+        return { label: item.label, kind: { publish: { manifest: pack(item.update) } } };
+      }
       const command = commandOf(item.command);
       if (!command) throw new TypeError(`run: the spec has no command ${item.command}`);
       return { label: item.label, kind: { run: { command: item.command, args: argsFor(command, item.args) } } };

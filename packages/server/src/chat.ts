@@ -4,7 +4,8 @@
 // - `ChatRequest`: what the user sends, typed by the spec, signed by the user's grain key, with a member's proof for a
 //   private grain (§3, 24-app-studio §2a) and the language the user reads;
 // - `ChatMessage`: what the app answers, in blocks and actions, signed by a server key the owner certified or the
-//   registry names (`ServerKey`, §4);
+//   registry names (`ServerKey`, §4); an action may propose the grain's next manifest for its owner to approve
+//   (`publish`);
 // - `ChatFrame`: the plaintext of a sealed frame, "SGC1" ‖ Borsh: a request, a message, a newer spec, or the numbers the
 //   app reports (24-app-studio §6a).
 // Byte for byte the protocol's (vectors/grain-chats-v1.json), with every check its reference makes.
@@ -17,6 +18,7 @@ import { type FileRef, MAX_FILE_BYTES, fileRefProblem, readFileRef, writeFileRef
 import { type InvoiceKeyCert, certMessage, decodeInvoice, readCertBody, readSignedInvoice, writeCertBody } from "./invoice.js";
 import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
 import { type SignedMemberProof, readSignedMemberProof, writeSignedMemberProof } from "./member.js";
+import { readPublishText } from "./publish.js";
 import { type SignedGrainStats, readSignedGrainStats, writeSignedGrainStats } from "./stats.js";
 
 export const CHAT_SPEC_DOMAIN = "Saltix grain chat spec v1";
@@ -174,7 +176,13 @@ export type ActionKind =
   /** Opens the grain's screen with `start` (12-grains §4). */
   | { open: { start: string } }
   /** Sends this text. */
-  | { reply: { text: string } };
+  | { reply: { text: string } }
+  /**
+   * A new version of this grain's manifest for its owner to approve: the text of a publishing link (12-grains §10), its
+   * slug the chat's, one a message. Wallets show it to the grain's team only, in their own words; the owner's tap opens
+   * the publishing sheet (22-grain-chats §4).
+   */
+  | { publish: { manifest: string } };
 
 export interface Action {
   label: string;
@@ -532,6 +540,7 @@ function writeAction(w: Writer, a: Action): void {
   if ("run" in k) writeArgs(w.u8(0).string(k.run.command), k.run.args);
   else if ("open" in k) w.u8(1).string(k.open.start);
   else if ("reply" in k) w.u8(2).string(k.reply.text);
+  else if ("publish" in k) w.u8(3).string(k.publish.manifest);
   else throw new TypeError("an action's kind");
 }
 
@@ -541,6 +550,7 @@ function readAction(r: Reader): Action {
     case 0: return { label, kind: { run: { command: r.string(), args: readArgs(r) } } };
     case 1: return { label, kind: { open: { start: r.string() } } };
     case 2: return { label, kind: { reply: { text: r.string() } } };
+    case 3: return { label, kind: { publish: { manifest: r.string() } } };
     default: throw new TypeError("borsh: an action's tag");
   }
 }
@@ -810,15 +820,40 @@ function actionOk(a: Action): boolean {
   if ("run" in k) return nameOk(k.run.command, true) && ascending(k.run.args);
   if ("open" in k) return /^[A-Za-z0-9_-]{1,64}$/.test(k.open.start);
   if ("reply" in k) return textOk(k.reply.text, 1, 200);
+  // Read whole, with the message's slug, by `chatMessageBoundsProblem`.
+  if ("publish" in k) return typeof k.publish.manifest === "string";
   return false;
 }
 
+/** The manifest text `m` proposes for the owner to approve (its `publish` action's), or null. */
+export const proposedManifest = (m: ChatMessage): string | null => {
+  for (const a of m.actions) if ("publish" in a.kind) return a.kind.publish.manifest;
+  return null;
+};
+
+/** Whether wallets show `m` only to an account on the grain's team: it proposes an update (§4). */
+export const teamOnly = (m: ChatMessage): boolean => proposedManifest(m) !== null;
+
 /** What is out of bounds in `m` (§4), or null. An invoice must be this grain's; its signature is the payment sheet's to
- *  check (12-grains §5.2). */
+ *  check (12-grains §5.2). A `publish` action, one at most, carries a manifest that reads (`readPublishText`) and is
+ *  this grain's (`slug` otherwise): the whole message is refused, never shown without it. */
 export function chatMessageBoundsProblem(m: ChatMessage): ChatProblem | null {
   if (!slugOk(m.slug)) return "slug";
   if (m.blocks.length < 1 || m.blocks.length > 16 || m.actions.length > 8) return "bounds:blocks and actions";
   if (!m.blocks.every((b) => blockOk(b, m.slug))) return "bounds:block";
+  const proposals = m.actions.filter((a) => "publish" in a.kind);
+  if (proposals.length > 1) return "bounds:action";
+  for (const a of proposals) {
+    let slug: string;
+    try {
+      slug = readPublishText((a.kind as { publish: { manifest: string } }).publish.manifest).slug;
+    } catch {
+      return "bounds:action";
+    }
+    // An update of another grain is never proposed in this chat: its owner would approve what the card's sender does
+    // not speak for.
+    if (slug !== m.slug) return "slug";
+  }
   if (!m.actions.every(actionOk)) return "bounds:action";
   return null;
 }
