@@ -71,6 +71,16 @@ main { padding-bottom: calc(16px + var(--saltix-safe-bottom)); }
 The `grain` command line needs no node: registry commands and `grain faucet` (test SALT) go through the test network's
 public relays, each pinned by its certificate; `--node URL` is for a node of your own.
 
+**Every app ships a complete Connect profile, and asks only for what it uses.** The first time someone opens an app,
+Saltix shows its Connect sheet (Saltix specs/19-connect.md §12): "Saltix Connect", the app's identity, its profile "in
+its own words", then a row for each permission the manifest asks for, and Continue. The profile is `connect.json`
+(`grain init` writes one): a tagline that says what the app is, what it does, highlights that are facts (not slogans),
+and what it keeps about a user and for how long (required when `grain.json` asks for `address` or `storage`), in
+English and Russian. `grain lint` fails without it and checks every rule; it warns about a permission nothing in the
+app's sources uses: drop it. `grain profile` sets it in the registry (a QR code for the owner's Saltix, or `--key` on
+the test network). How to write one: [docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson). Websites
+and DApps use the same standard to sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`).
+
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
 
@@ -83,7 +93,7 @@ Saltix 0.1.53 and older cannot pay a developer key's invoice, so say in the card
 
 Secrets (`owner.key`, `server.key`, `app.key`, a developer key `saltix-app:1:…`) are never committed, printed, logged or
 pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
-status of a dead key, payments) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows). Two of them, in short:
+status of a dead key, payments, the Connect profile) are in [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows). Two of them, in short:
 raise `chat.json`'s `version` with every change of it (the server refuses to start on a spec changed under a version it
 served, and the store that remembers it is never deleted to get past it); and a server whose setup cannot work as it
 stands (a key of another network or one the registry does not name, such a spec) exits with 78 (`setupCannotWork`,

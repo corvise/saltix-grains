@@ -22,7 +22,7 @@ it speaks for the app until the owner replaces it.
 ```sh
 git clone git@github.com:corvise/saltix-grains.git && cd saltix-grains
 npm ci && npm run build
-npx grain init ../<slug> --chat --slug <slug>    # chat.json, server.mjs, package.json, .gitignore, README.md
+npx grain init ../<slug> --chat --slug <slug>    # chat.json, connect.json, server.mjs, package.json, .gitignore, README.md
 cd ../<slug> && npm install                      # the SDK, from the checkout: it is not on npm yet
 # put the key in app.key (above), then:
 npm start
@@ -71,6 +71,57 @@ What users can send, declared ahead; the wallet draws each command's form and ch
 - At most 32 commands of at most 8 parameters; names `[a-z0-9_]`, a command's starting with a letter; every text has
   `en`; unknown fields are refused. The server signs the spec with its key at start, which it may while every price is 0.
 
+## The Connect profile: `connect.json`
+
+The first time someone opens your app, Saltix shows its **Connect sheet** (Saltix specs/19-connect.md §12): "Saltix
+Connect" on top, your app's icon, name and owner, then **In its own words**: your profile. Below it, "To continue, sign
+in" with a row for each permission the manifest asks for, and Continue. `connect.json` is that profile: the JSON form's
+`profile` object without `owner` and `revision`, which are filled in when it is set.
+
+```json
+{
+  "version": 1,
+  "subject": { "grain": { "slug": "<slug>" } },
+  "texts": {
+    "en": {
+      "tagline": "Split a bill with friends in two taps",
+      "about": "Add what everyone paid, and Split Bill works out who owes whom.\nSettle up in SALT from the chat.",
+      "highlights": ["Invoices you confirm in Saltix", "No sign-up, no password", "Groups of up to 20"],
+      "privacy": "Keeps the bills you add for 90 days, under the ID it sees for you. It never sees your address unless you share it."
+    },
+    "ru": { "tagline": "Разделите счёт с друзьями в два касания", "about": "…", "highlights": ["…"], "privacy": "…" }
+  },
+  "website": "https://splitbill.example/about",
+  "support": "@splitbill_help",
+  "terms": "https://splitbill.example/terms"
+}
+```
+
+How to write a good one:
+
+- **The tagline says what the app is**, in one line of at most 80 characters: "Split a bill with friends in two taps",
+  not "The best app ever". It is shown under the name, and in lists.
+- **About says what it does** (at most 600 characters, line breaks allowed): what a user does in it and what they get.
+- **Highlights are facts, not slogans** (at most 4 of 60 characters): "Invoices you confirm in Saltix", "Works in groups
+  of up to 20". A user should be able to check each one.
+- **Privacy says what is kept and for how long** (one line of at most 300 characters): which data, where, how long, and
+  whether the app sees the address. It is required when `grain.json` asks for `address` or `storage`. The address is
+  not secret data: what is on chain is public, and the address links it to the user, so the sheet words it as "it can
+  follow your activity on the blockchain".
+- **English and Russian.** `en` is required; a reader sees their own language, else English.
+- **Links**: `website` and `terms` are `https://` links; `support` is an `https://` link, a `mailto:` address or a
+  Saltix username (`@name`). Anything else is refused, so the sheet never opens a link a profile could turn against
+  its user.
+- **Ask only for what you use.** Every permission is a row on the sheet, and `address` and `notifications` are switches
+  users may leave off. `grain lint` warns about a permission nothing in the app's sources uses.
+
+`grain lint` checks every rule of the format with the field and its limit, the privacy summary, the icon file
+(`icon.png` or `public/icon.png`: a 256×256 PNG whose hash `grain.json` names) and the link's length for a QR code.
+`grain profile` sets it once the app is registered: a QR code the owner's Saltix scans (it fills in its account and the
+registry's revision and one, shows the profile as the sheet will, and signs after the PIN), or `--key owner.key` on the
+test network. The owner may also write it in Saltix's app studio (My apps → the app → Connect profile). `grain show`
+prints the registry's profile and whether a wallet takes it.
+
 ## Handlers and cards: `server.mjs`
 
 One handler for each command:
@@ -108,6 +159,9 @@ chat.text((ask) => card().text("Pick Plan below."));
 
 ## The rules every app follows
 
+- **Connect profile**: every app ships a complete one (`connect.json`: tagline, about, highlights, privacy, in English
+  and Russian) and asks only for what it uses ([above](#the-connect-profile-connectjson)). `grain lint` fails without
+  it.
 - **Secrets**: never log, print, commit or report a key (the developer key, `owner.key`, `server.key`, `sponsor.key`)
   or a token. The SDK scrubs developer keys, long hex and the server secret from reports and its own log; name anything
   else in `redact`.

@@ -43,7 +43,7 @@ test("the map names files that are there", () => {
     assert.ok(existsSync(join(root, path)), `sdk.md names ${path}, which is not there`);
   }
   for (const [, file] of sdk.matchAll(/`([a-z-]+\.ts)`/g)) {
-    const found = ["packages/server/src", "packages/cli/src", "packages/grain/src"].some((d) => existsSync(join(root, d, file)));
+    const found = ["packages/server/src", "packages/cli/src", "packages/grain/src", "packages/connect/src"].some((d) => existsSync(join(root, d, file)));
     assert.ok(found, `sdk.md names ${file}, which no package has`);
   }
 });

@@ -4,6 +4,18 @@
 
 ### Added
 
+- **Every app ships a Connect profile** (Saltix 19-connect §11–§12, 12-grains §10): `grain init` writes `connect.json`
+  (every template, chat-only included: the JSON form's `profile` without `owner` and `revision`, in English and Russian,
+  describing the app it makes). `grain lint` fails without it and checks every rule of the format with the field and
+  its limit, the privacy summary (required when the manifest asks for `address` or `storage`), the subject's slug, the
+  icon file (`icon.png` or `public/icon.png`: 256×256, the hash `grain.json` names), the Borsh size; it warns about an
+  empty about, English alone, owner or revision given, a link too long for a QR code, and each permission nothing in
+  the app's sources uses ("asks only for what it uses"). `grain profile` sets it: a QR code of `salt:grain-profile?p=…`
+  for the owner's Saltix (waiting for the registry), or with `--key` signed at the registry's revision and one and sent
+  as `SetGrainProfile`; `--clear` removes it. `grain show` prints the registry's profile and whether a wallet takes it.
+  `grain connect-profile --origin --name --category --key [--owner] [--revision] [--out]` signs a website's profile for
+  `/.well-known/saltix-connect`. `AGENTS.md`, every project's `AGENTS.md` (a ninth rule) and `docs/agents/app.md` (the
+  Connect profile: how to write a good one) say so.
 - **`@saltix/connect`** (packages/connect, Saltix 19-connect §2–§5, §13): "Sign in with Saltix" for websites and
   DApps, the page's side of Saltix Connect ported from the explorer's tested `explorer/src/connect/`. `createConnect({
   network, relays, node, name, origin?, genesis? })` runs the session (keys, a link slot through relays the page reaches,

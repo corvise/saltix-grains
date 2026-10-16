@@ -40,6 +40,8 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   "app-key": ["file", ...NET, "offline", "slug", "server", "out"],
   sponsor: ["exchange", "amount", ...SIGNED],
   faucet: ["key", "address", "wait", "timeout", ...NET],
+  profile: ["profile", "clear", "manifest", ...OWNER],
+  "connect-profile": ["profile", "origin", "name", "category", "key", "owner", "revision", "out"],
 };
 
 export interface Parsed {
@@ -140,7 +142,7 @@ export function entriesOf(help: string, command: string): string[] {
 
 /** The note about the owner's calls, and the commands it concerns. */
 const OWNER_NOTE = /owner's calls|says what to do in the owner's Saltix/;
-const OWNER_CALLS = new Set(["publish", "configure", "access", "bind"]);
+const OWNER_CALLS = new Set(["publish", "configure", "access", "bind", "profile"]);
 
 /** Every `--flag` the text names. */
 export const flagsNamed = (text: string): string[] => [...new Set([...text.matchAll(/--([a-z][a-z-]*)/g)].map((m) => m[1]!))];

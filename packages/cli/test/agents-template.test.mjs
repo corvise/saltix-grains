@@ -1,5 +1,5 @@
 // The AGENTS.md every `grain init` project gets says what the SDK and its guide for agents say: the full-screen rule,
-// a link to docs/agents/app.md, and the eight rules every app follows, each as the server `grain init --chat` makes and
+// a link to docs/agents/app.md, and the nine rules every app follows, each as the server `grain init --chat` makes and
 // the SDK's guide have it, so the three never drift apart.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -18,13 +18,14 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
     assert.ok(text.includes(FULL_SCREEN_RULE), "the full-screen rule, word for word");
     assert.ok(text.includes(`](${APP_GUIDE})`), "the guide, by its address: a project has no copy");
     assert.ok(text.includes(`](${APP_GUIDE}#the-rules-every-app-follows)`));
-    assert.ok(text.includes(appRules), "the eight rules");
+    assert.ok(text.includes(appRules), "the nine rules");
+    assert.ok(text.includes("`connect.json`"), "the Connect profile is in the project");
     assert.ok(text.includes("--saltix-controls-width"), "and the full-screen ones");
   }
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
-  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 8);
+  assert.equal([...appRules.matchAll(/^\d\. \*\*/gm)].length, 9);
 });
 
 test("the anchor the rules link to is the guide's heading", () => {
@@ -113,4 +114,16 @@ test("(h) tests: the template's test runs on the SDK's harness, as the rules and
   assert.match(appRules, /Test every command end to end\*\* with `testChat`/);
   assert.match(agentsMd("coach", true), /`npm test`/);
   assert.match(guide, /testChat/);
+});
+
+test("(i) the Connect profile: every app ships one and asks only for what it uses, as the guide says", async () => {
+  const { lintConnect } = await import("../dist/connect.js");
+  assert.equal(typeof lintConnect, "function");
+  assert.match(appRules, /Ship a complete Connect profile, and ask only for what the app uses/);
+  for (const words of ["`connect.json`", "a tagline that says what the app is", "highlights that are facts", "for how long", "`address` or `storage`", "`grain profile`"]) {
+    assert.ok(appRules.includes(words), words);
+  }
+  assert.match(guide, /^## The Connect profile: `connect\.json`$/m);
+  assert.match(guide, /\*\*Connect profile\*\*: every app ships a complete one/);
+  assert.match(guide, /asks only for what it uses/);
 });

@@ -59,7 +59,7 @@ relay) and **Fail on purpose** (below).
 Make a project of your own beside the checkout, named by your app's slug (in the checkout):
 
 ```sh
-npx grain init ../your-app --chat --slug your-app   # chat.json, chat.mjs, server.mjs, test/, package.json, README.md
+npx grain init ../your-app --chat --slug your-app   # chat.json, connect.json, chat.mjs, server.mjs, test/, package.json, README.md
 cd ../your-app && npm install                        # the SDK, from the checkout (it is not on npm yet)
 mv ../saltix-grains/app.key .                        # .gitignore keeps every *.key out of git
 npm start                                            # the starting chat: one command, hello
@@ -131,6 +131,13 @@ Until now only you could use the app. To let testers in, add them as members: **
 *user* uses it, *developer* gets a server key of their own, *viewer* reads the app's page). A member's wallet proves the
 account with every request; your handler sees it as `ask.member`.
 
+Before anyone else opens it, say what it is: the first time someone opens an app, Saltix shows its **Connect sheet**
+("Saltix Connect", your app, its profile "in its own words", what it asks for, Continue). The profile is `connect.json`
+in your project: a tagline that says what the app is, what it does, highlights that are facts, and what it keeps about a
+user and for how long, in English and Russian ([how to write it](agents/app.md#the-connect-profile-connectjson)).
+`grain lint` checks it; `grain profile` shows a QR code your Saltix sets it from (or write it in **My apps → your app →
+Connect profile**). Ask only for the permissions the app uses: each is a row on that sheet.
+
 When it is ready: **My apps → your app → Make public**. A public app is in the marketplace, anyone can open its chat,
 and it never learns who its users are: each user is a key of their own in your app.
 
@@ -145,6 +152,7 @@ grain faucet --wait                                                # test SALT f
 grain access --slug your-app --private --member dsalt1q…:user      # members, while private
 grain access --slug your-app --public                              # anyone
 grain bind --handle @your_app --slug your-app                      # a username you hold opens its chat
+grain profile --key owner.key --wait                               # the Connect profile from connect.json
 grain app-key --file app.key                                       # the key's public parts; is it registered?
 ```
 

@@ -3,7 +3,9 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
 import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, nodeCall, type GrainCall, type Manifest } from "@saltix/grain-server";
+import {
+  UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, type GrainCall, type Manifest,
+} from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { publish, retire, show, waitFor, walletLink, waitForPublished, salt, type Signing } from "./registry.js";
@@ -16,6 +18,8 @@ import { grantAddress, granted, requestGrant, saltOf, waitForSalt } from "./fauc
 import { serve, linkFor, simulatorFor } from "./dev.js";
 import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
+import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, readConnectFile } from "./connect.js";
+import { clearCall, profileCall, profileLinkFor, siteProfile, waitForProfile, wellKnownOf } from "./profile.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
 import * as chatTemplate from "./chat-template.js";
@@ -26,13 +30,14 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
 
   grain help [command]                     this, or one command's part of it (also: grain <command> --help)
   grain init [dir] [--slug S] [--name N] [--chat]
-                                           a new grain: grain.json, owner.key, public/; --chat a chat-only one
-                                           (no page: grain.json and chat.json)
+                                           a new grain: grain.json, connect.json, owner.key, public/; --chat a
+                                           chat-only one (no page: grain.json, connect.json and chat.json)
   grain dev [--port 8090]                  serve public/ with the manifest signed for this computer, and the
                                            simulator: your page framed as Saltix frames it, with the wallet's
                                            controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704
-  grain lint [--manifest grain.json]       what stops the manifest from being registered, and warnings about
-                                           public/ (a top bar under the wallet's controls)
+  grain lint [--manifest grain.json]       what stops the manifest and connect.json (the Connect profile) from
+                                           being registered, the icon file, and warnings: public/ (a top bar under
+                                           the wallet's controls), permissions nothing uses
   grain icon <png>                         the hash a manifest names its 256x256 icon by
   grain sign [--out signed.json]           the signed manifest, for /.well-known/saltix-grain
   grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
@@ -44,7 +49,16 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            when owner.key is there. The deposit is the node's quote for the
                                            slug's length: 100 SALT for 3-5 characters, 30 for 6-7, 10 for 8+
   grain retire --slug S                    close the slug for good; the deposit returns 30 days later
-  grain show --slug S [--out F]            what the registry holds for a slug, or its deposit; F gets the manifest
+  grain show --slug S [--out F]            what the registry holds for a slug (its Connect profile checked), or its
+                                           deposit; F gets the manifest
+  grain profile [--profile connect.json] [--wallet] [--wait] [--clear]
+                                           set the grain's Connect profile, what Saltix shows before anyone signs
+                                           in: a QR code for the owner's Saltix, or with --key (test networks;
+                                           revision: the registry's + 1); --clear removes it
+  grain connect-profile --origin URL --name N --category C --key site.key [--profile F] [--revision N] [--out F]
+                                           a website's Connect profile signed by its operator's key file (or a
+                                           device's of the account --owner names), written where the site serves
+                                           it (--out .well-known/saltix-connect)
   grain chat-spec [--spec chat.json] [--cert cert.json] [--out chat.signed.json]
                                            lint the chat spec and sign it with the owner key: the document to serve
                                            at /.well-known/saltix-grain-chat ({spec, cert} with --cert)
@@ -158,6 +172,8 @@ async function main(argv: string[]): Promise<number> {
       };
       if (!manifest.description.en) delete (manifest.description as Record<string, string>).en;
       writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
+      // Every app ships a Connect profile: what Saltix shows before anyone signs in (19-connect §11).
+      writeFileSync(join(dir, CONNECT_FILE), template.connectJson(slug, name, chat));
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
       // The rules a coding agent follows (an app's page: safe by default, full screen with viewport-fit=cover), for every
       // agent and for Claude Code.
@@ -205,6 +221,13 @@ async function main(argv: string[]): Promise<number> {
       const owner = existsSync(keyPath) ? publicKeyOf(readKey(keyPath)) : undefined;
       const { errors, warnings } = lint(manifest, owner);
       if (signed && !verifyManifest(signed)) errors.push("signature: does not check against owner_key");
+      // What Saltix's Connect sheet shows before anyone signs in: the profile, the icon, the permissions (19-connect §12).
+      const projectDir = dirname(resolve(manifestPath));
+      for (const more of [lintConnect(projectDir, manifest), lintIcon(projectDir, manifest)]) {
+        errors.push(...more.errors);
+        warnings.push(...more.warnings);
+      }
+      warnings.push(...lintPermissionsUse(projectDir, manifest));
       // A page's frame: inside the safe area, or edge to edge with viewport-fit=cover (12-grains §7). A chat-only grain has
       // none.
       if (!("chat" in manifest.entry)) warnings.push(...lintPages(join(dirname(resolve(manifestPath)), "public")));
@@ -277,6 +300,16 @@ async function main(argv: string[]): Promise<number> {
       const node = reach().node;
       const g = await show(node, slug);
       console.log(JSON.stringify(g, null, 2));
+      if (g?.profile) {
+        // As a wallet takes it: checked against the record's slug and owner (whether its key still speaks for the owner
+        // is the registry's, which took it).
+        const problem = checkGrainProfile(g.profile, g.slug, g.owner);
+        const p = g.profile.profile;
+        console.log(`Connect profile, revision ${p.revision}: "${profileText(p, "en").tagline}" (${Object.keys(p.texts).sort().join(", ")})` +
+          (problem ? `; a wallet refuses it: ${problem}` : "; it checks"));
+      } else if (g && g.profile === null) {
+        console.log(`${slug} has no Connect profile: grain profile sets it`);
+      }
       if (g === null) {
         const { deposit } = await grainQuote(node, slug);
         console.log(`${slug} is free: registering it keeps a deposit of ${salt(deposit)} SALT`);
@@ -425,6 +458,48 @@ async function main(argv: string[]): Promise<number> {
       if (call === null) throw new Error(`grain sponsor ${sub}: init, show, open, top-up or close`);
       const sent = await channel(call, secret, signing(flags, reach()));
       console.log(`${sub} the channel with ${exchange}: transaction ${sent.id} (fee ${sent.fee})`);
+      return 0;
+    }
+    case "profile": {
+      const { manifest } = readManifest(manifestPath);
+      const slug = manifest.slug;
+      const r = reach();
+      const wallet = flags.get("wallet") === true || !existsSync(keyPath);
+      if (flags.get("clear") === true) {
+        return ownerCall(await clearCall(r.node, slug, wallet ? undefined : readKey(keyPath)), keyPath, flags, r);
+      }
+      const value = readConnectFile(text(flags, "profile", join(dirname(resolve(manifestPath)), CONNECT_FILE)));
+      if (!wallet) return ownerCall(await profileCall(r.node, slug, value, readKey(keyPath)), keyPath, flags, r);
+      // The owner's key stays in the wallet: it fills in its account and the revision, signs and sends (12-grains §10).
+      const { link, profile, before } = await profileLinkFor(r.node, slug, value);
+      console.log(await QRCode.toString(link, { type: "terminal", small: true, errorCorrectionLevel: "L" }));
+      console.log(`Scan it with the owner's Saltix: it shows ${slug}'s Connect profile as the sheet will, and sets it after the PIN.`);
+      console.log(`The link: ${link}`);
+      console.log("Waiting for the registry…");
+      const set = await waitForProfile(r.node, slug, profile, before, Number(text(flags, "timeout", "600")) * 1000);
+      console.log(set ? `the registry has it: revision ${set.profile.revision}` : `not in the registry yet: grain show --slug ${slug}${r.flags} says when it is`);
+      return set ? 0 : 1;
+    }
+    case "connect-profile": {
+      const out = text(flags, "out", ".well-known/saltix-connect");
+      const given = flags.get("revision");
+      if (given !== undefined && (typeof given !== "string" || !/^[1-9][0-9]{0,9}$/.test(given) || Number(given) > 0xffff_ffff)) {
+        throw new UsageError("--revision N: 1 or more, above the one the site serves now");
+      }
+      const site = siteProfile({
+        value: readConnectFile(text(flags, "profile", CONNECT_FILE)),
+        origin: typeof flags.get("origin") === "string" ? (flags.get("origin") as string) : undefined,
+        name: typeof flags.get("name") === "string" ? (flags.get("name") as string) : undefined,
+        category: typeof flags.get("category") === "string" ? (flags.get("category") as string) : undefined,
+        revision: typeof given === "string" ? Number(given) : undefined,
+        previous: out,
+        owner: typeof flags.get("owner") === "string" ? (flags.get("owner") as string) : undefined,
+      }, readKey(text(flags, "key")));
+      mkdirSync(dirname(resolve(out)), { recursive: true });
+      writeFileSync(out, JSON.stringify(site, null, 2) + "\n");
+      const origin = "site" in site.profile.subject ? site.profile.subject.site.origin : "";
+      console.log(`${out}: revision ${site.profile.revision}, owner account ${site.profile.owner}`);
+      console.log(`serve it at ${wellKnownOf(origin)} as application/json, with no redirect: Saltix reads it before a sign-in (docs/connect.md)`);
       return 0;
     }
     case "faucet": {
