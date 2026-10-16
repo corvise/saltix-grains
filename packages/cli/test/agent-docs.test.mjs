@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const dir = join(root, "docs", "agents");
 const pages = readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => ({ name: f, text: readFileSync(join(dir, f), "utf8") }));
 const help = spawnSync("node", [fileURLToPath(new URL("../dist/main.js", import.meta.url)), "help"], { encoding: "utf8" }).stdout;
-const commands = new Set([...help.matchAll(/^ {2}grain ([a-z-]+)/gm)].map((m) => m[1]));
+const commands = new Set([...help.matchAll(/^ {2}grain ([a-z][a-z-]*)/gm)].map((m) => m[1]));
 
 test("the agents' pages exist and link to files that do", () => {
   assert.deepEqual(pages.map((p) => p.name).sort(), ["README.md", "app.md", "sdk.md"]);
