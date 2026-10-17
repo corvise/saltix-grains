@@ -84,7 +84,7 @@ Keep the owner key off the server: it signs the spec and the certificate offline
 
 ```json
 {
-  "slug": "access", "version": 1,
+  "slug": "keys", "version": 1,
   "intro": { "en": "One-time access keys for the closed sites.", "ru": "Одноразовые ключи доступа к закрытым сайтам." },
   "commands": [
     {
@@ -162,7 +162,7 @@ const chat = await ChatServer.start({
 
 // Or under a certificate:
 const certified = await ChatServer.start({
-  slug: "access",
+  slug: "keys",
   spec: doc.spec,                       // chat.signed.json's hex, or a SignedGrainChatSpec
   secret: serverSecret,                 // server.key
   cert,                                 // cert.json
@@ -176,20 +176,20 @@ chat.command("key", async (ask) => {
   const { site, duration } = ask.args;            // checked against the spec
   const key = await mint(ask.key, site, duration); // ask.key: the user's grain key, as grain.login gives it
   return card()
+    .status("done", "Opens the site once")         // a status first: the card's title (docs/cards.md)
     .secret("Key", key.code, { expiresAt: key.expiresAt })
     .fields({ Site: site, "Valid for": `${duration / 3600} h` })
-    .status("done", "Opens the site once")
-    .run("Revoke", "revoke", { id: key.id })      // opens the form filled in; the user may edit it
+    .run("Revoke", "revoke_key", { id: key.id })  // destructive: red, and asks "Send?" first
     .open("All keys", "keys");                     // opens the grain's screen with start=keys
 });
 
 chat.command("report", async (ask) => {
   await ask.working("Building the report…");      // shown at once; the answer replaces it in place
   const file = await chat.upload(csvBytes, { name: "report.csv", mime: "text/csv" });
-  return card().text("Yesterday: 41 sessions, 3 errors.").file(file, { title: "Daily digest", format: "csv" }).status("done");
+  return card().status("done").text("Yesterday: 41 sessions, 3 errors.").file(file, { title: "Daily digest", format: "csv" });
 });
 
-chat.command("revoke", (ask) => {                // a "refused" status, in the user's language when you have it
+chat.command("revoke_key", (ask) => {            // a "refused" status, in the user's language when you have it
   throw new ChatRefusal(ask.lang === "ru" ? "Ключ k-1 не ваш." : "No key k-1 is yours.");
 });
 chat.text((ask) => card().text("Pick a command below.").reply("Hello", "hello"));
@@ -265,6 +265,11 @@ Membership is read from `grain_get` and the accounts' keys from `account_get`, c
 record) or the account's shard's tip moves, so removing a member or a device takes effect with the block that does it.
 A proof that cannot pass whatever the account's keys are (another app's, expired, a stranger's, a bad signature) costs
 the node nothing. The handler of an admitted request sees `ask.member`: `{ account, roles }`.
+
+The same proof comes with the sign-in to the app's page (`grain_login`'s `member`, Saltix 12-grains §5.1a), so a page
+knows its team and a private app's members before it shows them anything: `SignIns` (`SignIns.of(chat)`) checks it with
+`ChatServer.member(proof, key)`, as a request's, and answers with the rights `owner`, `developer`, `viewer`, `user` or
+`none` ([docs/agents/app.md](agents/app.md#a-page-for-some-people-only-check-first-then-render)).
 
 ## Your app's console
 

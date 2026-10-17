@@ -18,9 +18,10 @@ developer key cannot send a payment anywhere but the owner. The owner replaces o
 app → Developer key). Such an invoice has no certificate, like the owner key's, and the wallet tries the owner key
 first and then each key the registry names.
 
-**Which wallets take it.** Saltix 0.1.53 and older know no registered key for invoices: they refuse such an invoice as
-not signed and pay nothing. The next Saltix release takes it. In a chat, your server cannot tell which version a user
-runs. So say in the card's text what the user does if the sheet does not open: update Saltix.
+**Which wallets take it.** Saltix 0.1.54 and newer take it, checked against the registry read when the invoice comes.
+Saltix 0.1.53 and older know no registered key for invoices: they refuse such an invoice as not signed and pay nothing.
+In a chat, your server cannot tell which version a user runs. So say in the card's text what the user does if the sheet
+does not open: update Saltix.
 
 ## In a chat (`ChatServer`)
 

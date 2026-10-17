@@ -141,8 +141,9 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
 
 - **Inside the safe area, by default.** A page that says nothing is drawn below the status bar, the cutout and a band
   that holds the controls, above the navigation bar or gesture area and the keyboard. Nothing of the system or the
-  wallet is ever over it; the band takes the page's colour (\`grain.setHeader\`, else \`<meta name="theme-color">\`,
-  else its background). Such a page needs nothing else.
+  wallet is ever over it; the band takes the page's colour (\`grain.setHeader\`, else the first
+  \`<meta name="theme-color">\` whose \`media\` matches, else the background of \`<body>\`, then \`<html>\`). Such a page
+  needs nothing else.
 - **Edge to edge only with \`viewport-fit=cover\`**: \`<meta name="viewport" content="width=device-width,
   initial-scale=1, viewport-fit=cover">\`. The page is then drawn under the status bar and the navigation bar, and must
   keep its text and controls inside the safe area itself: Saltix sets, on \`:root\`, \`--saltix-safe-top\`,
@@ -157,13 +158,17 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
   them (\`top: calc(var(--saltix-controls-top) + var(--saltix-controls-height))\`).
 - **No close button of your own.** ✕ and the system's Back close the app; Back goes through your page's history first.
 - \`grain.setHeader("#rrggbb")\` names the colour at the top of your page: the wallet draws the band, the status bar's
-  icons and its controls to contrast with it.
-- Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2) draws its header above the page, so
-  the safe area and the controls are 0; a plain browser gives its own insets (\`env(safe-area-inset-*)\`).
-- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes in CSS px, which equal dp) and on the iPhone-like
-  screen in \`grain dev\`'s simulator, light and dark: it frames the page as Saltix does, in both ways. \`grain lint\`
-  warns about a page that declares \`viewport-fit=cover\` and reads no inset (\`cover-without-insets\`), and about a bar
-  pinned to the top of such a page that keeps clear of nothing (\`full-screen-top-bar\`).
+  icons and its controls to contrast with it. It holds until the next call: call it again when your theme changes.
+- **Saltix gives a page no design tokens**: no colours, fonts, corners or spacing of its own, and no variables but the
+  eight above. Bring your own palette, light and dark, and switch by \`grain_info.theme\` (\`dark\` or \`light\`) and the
+  \`theme\` event (\`grain.on("theme", …)\`), not by \`prefers-color-scheme\`, which need not match the theme chosen in
+  Saltix. Saltix follows your colours instead: its band, the bars' icons and its controls.
+- Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2, and 0.1.53) draws its header above
+  the page, so the safe area and the controls are 0; a plain browser gives its own insets (\`env(safe-area-inset-*)\`).
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes in CSS px, which equal dp), on a 360×780 phone and
+  on the iPhone-like screen in \`grain dev\`'s simulator, light and dark: it frames the page as Saltix does, in both ways.
+  \`grain lint\` warns about a page that declares \`viewport-fit=cover\` and reads no inset (\`cover-without-insets\`), and
+  about a bar pinned to the top of such a page that keeps clear of nothing (\`full-screen-top-bar\`).
 `;
 
 const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
@@ -194,8 +199,8 @@ export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/d
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
  * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, the
- * exit status of a key that cannot work, payments, the card design standard, tests, the Connect profile, and checking
- * first, then rendering.
+ * exit status of a key that cannot work, payments, the card design standard, tests, the Connect profile, checking
+ * first, then rendering, and naming people.
  */
 export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
    (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
@@ -243,7 +248,13 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    for them at all (Saltix checks the registry first). The server answers the sign-in with \`SignIns\` and
    \`signInAnswer\` (\`@saltix/grain-server\`) and checks the session's rights again on every request: the page's gate
    decides what people see, never what they may do. \`grain lint\` warns about a page that shows anything else first
-   (\`render-before-sign-in\`).`;
+   (\`render-before-sign-in\`).
+11. **Name people only by what they gave the app.** Saltix gives an app nobody's name: not the name an account sets for
+   itself (its profile, Saltix 09-relay §1.5), not its username. A user is their grain key, a pseudonym of this app
+   alone (\`ask.key\`, \`grain.login\`); only the team and a private app's members are known as accounts (\`ask.member\`,
+   \`SignIns\`). Never show a key as a name. Where the app shows people to each other, it shows the name each one typed
+   in it (the app's own data: \`connect.json\`'s privacy line says so) or an address the user shared
+   (\`grain.requestAddress\`), shortened; a name someone typed is never proof of who they are.`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
@@ -283,7 +294,7 @@ ${appRules}
 
 More in [the SDK's page](${APP_GUIDE}#the-rules-every-app-follows).
 
-## The page's frame
+## The page's frame, and what Saltix gives a page
 
 ${fullScreenRules}`;
 
@@ -314,11 +325,15 @@ A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
 - Saltix lays the page inside the safe area unless it declares \`viewport-fit=cover\` (this one does): \`AGENTS.md\` says
   how the page keeps clear of the system's bars and the wallet's controls (coding agents read it too; \`CLAUDE.md\`
   points to it).
-- \`grain lint\` checks \`grain.json\`; set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
+- Check first, render after: \`public/index.html\` shows only a splash (\`data-grain-splash\`) until \`public/app.js\`'s
+  gate decides; set \`SIGN_IN\` to your server's sign-in and \`FOR\` to whom the app is for (\`AGENTS.md\`, rule 10).
+- \`grain lint\` checks \`grain.json\` and \`connect.json\` (the Connect profile Saltix shows before anyone signs in: write
+  it for your app); set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
 - Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
 - \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
   more; back 30 days after \`grain retire\`), through the test network's public relays (\`--node <url>\` for your own
-  node); on the test network \`grain faucet --wait\` gives \`owner.key\`'s account test SALT first.
+  node); on the test network \`grain faucet --wait\` gives \`owner.key\`'s account test SALT first. \`grain profile\`
+  then sets the Connect profile from \`connect.json\`.
 
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
 `;
@@ -394,15 +409,18 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
   new developer key in Saltix, since restarting does not help. Under systemd: the key as a credential
   (\`LoadCredential=app-key:…\`, \`Environment=SALTIX_APP_KEY_FILE=%d/app-key\`), \`StateDirectory=\` for its store, and
   \`RestartPreventExitStatus=78\`.
-- **Add a command:** declare it in \`chat.json\`, add its handler in \`server.mjs\`, and raise \`version\` with every change:
-  a wallet takes only a version above the one it holds, and an app made in Saltix starts at 1.
+- **Add a command:** declare it in \`chat.json\`, add its handler in \`chat.mjs\` and its test in \`test/chat.test.mjs\`
+  (\`npm test\`), and raise \`version\` with every change: a wallet takes only a version above the one it holds, and an
+  app made in Saltix starts at 1.
 - \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
   more; back 30 days after \`grain retire\`), through the test network's public relays; \`grain faucet --wait\` gives
   \`owner.key\`'s account test SALT first. Or make the app in Saltix: My apps → New app.
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key\` names it in the registry;
   \`grain app-key make --slug ${slug}\` writes \`app.key\`, the developer key the server runs with. Each takes \`--node
   <url>\` for a node of your own.
-- Run the chat: \`ChatServer.start({ appKey, spec })\` with \`chat.json\` (docs/first-app.md).
+- \`grain profile\` sets the Connect profile from \`connect.json\` once the app is registered: write it for your app.
+- \`server.mjs\` runs the chat with \`ChatServer.start({ appKey, spec })\` from \`chat.json\` (the SDK's
+  [docs/first-app.md](https://github.com/corvise/saltix-grains/blob/main/docs/first-app.md)).
 - \`AGENTS.md\` is what a coding agent follows here (\`CLAUDE.md\` points to it).
 
 \`owner.key\`, \`server.key\` and \`app.key\` are secrets: keep them out of git.

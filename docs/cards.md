@@ -50,7 +50,7 @@ at a phone's width), in its dark theme unless they say otherwise.
   - longer: a row of its own.
 
   A row takes the next action while every label in it allows one more; on a card narrower than 320 dp, two a row at
-  most. An `open` always has a row of its own.
+  most, and narrower than 220 dp, one. An `open` always has a row of its own.
 - **Keep labels short verbs**: "Renew", "Revoke", "All keys", "Details". 18 characters at most, 10 to share three a row.
 - **Order is meaning.** The first `run` is the card's primary button, so put the action most people want first.
 
@@ -114,9 +114,9 @@ chat.command("vote", async (ask) => {
 ## Older wallets
 
 `code` and `poll` are new blocks. **Saltix 0.1.53 and older drop the whole message** that carries one (the frame does
-not read), and nothing tells your server which Saltix a user runs. Use them once your users run a Saltix that draws them,
-and keep a card that everyone must see to `status`, `text`, `fields`, `secret`, `file` and `invoice`. Older Saltix opens
-the form on every `run`; the request is the same either way.
+not read), and nothing tells your server which Saltix a user runs. Saltix 0.1.54 draws them, and the whole standard: use
+them once your users run it, and keep a card that everyone must see to `status`, `text`, `fields`, `secret`, `file` and
+`invoice`. Older Saltix opens the form on every `run`; the request is the same either way.
 
 ## The lint
 
@@ -127,9 +127,9 @@ lintCard(myCard, spec);              // [{ rule: "label", level: "warning", mess
 assertCardStandard(myCard, spec);    // in your tests: throws when a card breaks the standard
 ```
 
-- `warning`: Saltix draws the card worse than it could: too many actions or rows, a long label, a status that is not
-  first or too long, more than one status or poll, a table as fields, too many poll options, a command your spec does not
-  have, four or more buttons of one command.
+- `warning`: Saltix draws the card worse than it could: more than 6 blocks, too many actions or rows, a long label, a
+  status that is not first or too long, more than one status or poll, a table as fields, too many poll options or a long
+  question, a command your spec does not have, four or more buttons of one command.
 - `info`: worth knowing: the card uses a block older Saltix drops, a long text or code is collapsed, a destructive
   command is not marked `confirm`. `assertCardStandard(card, spec, { strict: true })` fails on these too.
 - `ChatServer` logs each rule a sent card breaks once (`card_standard`), so you see it in development.

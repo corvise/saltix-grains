@@ -26,7 +26,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
 | `scripts/sync-vectors.sh` | copies the protocol's golden vectors from a Saltix checkout; `vectors/SOURCE` names its commit |
 | `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key) |
-| `docs/` | `first-app.md`, `chats.md`, and these pages |
+| `docs/` | `first-app.md`, `chats.md`, `cards.md` (and its pictures in `cards/`), `payments.md`, `connect.md`, `devex.md` (the developer experience and its roadmap), and these pages |
 
 ## Commands
 
@@ -56,15 +56,18 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 - **Logs** carry event names and numbers, never keys, arguments, what users wrote or who is on a team.
 - **The command line**: every flag a command takes is in its help; `--help` runs nothing. Every command keeps a key off
   the command line (files, `SALTIX_APP_KEY`, stdin).
-- **Docs move with the code**: README, `docs/first-app.md`, `docs/chats.md` and a line in `CHANGELOG.md` under
-  `[Unreleased]` in the same pull request.
+- **Docs move with the code**: README, `docs/` and a line in `CHANGELOG.md` under `[Unreleased]` in the same pull
+  request. A change a developer meets also extends `AGENTS.md`, these pages and every project's `AGENTS.md` (the texts in
+  `packages/cli/src/template.ts`: `agentsMd`, `appRules`, `fullScreenRules`), which `agents-template.test.mjs`,
+  `agent-docs.test.mjs` and `docs.test.mjs` hold to each other and to the code.
 
 ## How a change lands
 
 1. A branch from `main`: `feat/…`, `fix/…`, `docs/…`.
-2. Conventional Commits in English, scope the package (`server`, `grain`, `cli`, `simulator`, `docs`); a format change
-   is `feat(server)!:` with a `BREAKING CHANGE:` footer.
-3. `npm test` passes; CI (`.github/workflows/ci.yml`: Node 22 on the project's own runner, `npm ci && npm test`) passes
-   on the pull request.
-4. Squash merge. Saltix's own app (saltix-wallet `server/access-grain`) vendors the built server SDK by its sync script:
-   a change it needs is synced there in a pull request of its own.
+2. Conventional Commits in English, scope the package (`server`, `grain`, `connect`, `cli`, `simulator`, `docs`); a
+   format change is `feat(server)!:` with a `BREAKING CHANGE:` footer.
+3. `npm test` passes; CI (`.github/workflows/ci.yml`: `npm ci && npm test` on Node 22 on the project's own runner, and
+   the bundle's bytes again on Node 24 and 20) passes on the pull request.
+4. Squash merge. The program that runs Saltix's own apps by their developer keys (Saltix Pass; saltix-wallet
+   `server/access-grain`, named for the retired access grain) vendors the built server SDK with its sync script
+   (saltix-wallet scripts/sync-grain-sdk.sh): a change it needs is synced there in a pull request of its own.
