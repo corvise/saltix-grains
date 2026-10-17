@@ -40,8 +40,9 @@ the registry transactions of 12-grains and 24-app-studio, deposits, the develope
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
 chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
 apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json` and the
-Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a checkout of
-corvise/saltix) refreshes them.
+Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a clean checkout of
+corvise/saltix) refreshes them and records each file's blob id in `vectors/SOURCE`, which CI holds them to
+(`node scripts/check-vectors.mjs`).
 
 ## Quick start
 

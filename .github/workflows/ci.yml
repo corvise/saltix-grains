@@ -10,6 +10,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci
+      # The golden vectors are the protocol's bytes: each file's git blob id is the one vectors/SOURCE records at the
+      # corvise/saltix commit it names (scripts/sync-vectors.sh writes both).
+      - run: node scripts/check-vectors.mjs
       - run: npm test
       # A bundle's bytes are a constant of its files, whatever Node makes them (docs/devex.md, 7): the same build, run
       # again on the newest and the oldest Node the SDK supports.

@@ -196,9 +196,11 @@ today (so does the simulator). A page that checks first shows a splash of its ow
 [docs/agents/sdk.md](docs/agents/sdk.md) is the whole of it. In short:
 
 - **The protocol is corvise/saltix's.** Its `specs/` are the source of truth, and its golden vectors are copied here by
-  `scripts/sync-vectors.sh <a Saltix checkout>` (`vectors/SOURCE` names the commit). The SDKs reproduce them byte for
-  byte, refusals included; a format changes in the specs first, never here.
-- **`npm ci && npm test`** is what CI runs: it builds every package and the simulator, then runs each package's tests.
+  `scripts/sync-vectors.sh <a Saltix checkout>` (`vectors/SOURCE` names the commit and each file's blob id, which CI
+  holds them to: `node scripts/check-vectors.mjs`). The SDKs reproduce them byte for byte, refusals included; a format
+  changes in the specs first, never here.
+- **`npm ci && npm test`** is what CI runs (after `node scripts/check-vectors.mjs`): it builds every package and the
+  simulator, then runs each package's tests.
 - **One Ed25519 check:** `verifyEd25519` (`packages/server/src/keys.ts`), the node's own `verify_strict` (no key or `R`
   of small order, `s` reduced, `R` exactly `[s]B − [k]A`); never a library's `verify`, which takes signatures the node
   refuses (`ed25519.test.mjs` holds every module to it). `@saltix/connect`'s check of a grant (`verifyGrant`) is the

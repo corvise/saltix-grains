@@ -24,7 +24,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `packages/cli/src/` others | `network.ts` (where a command reaches the network: public relays, `--relay`, `--node`), `faucet.ts`, `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `connect.ts` (`connect.json`, and `grain lint`'s checks of it, the icon and permissions nothing uses), `profile.ts` (`grain profile`, `grain connect-profile`), `bundle.ts`, `registry.ts` (publish, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `send.ts` (an account's registry calls one at a time: each waits until it landed, and one the pool refuses for an earlier pending call is built again), `chat.ts` (chat-spec, cert), `sponsor.ts` |
 | `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
 | `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
-| `scripts/sync-vectors.sh` | copies the protocol's golden vectors from a Saltix checkout; `vectors/SOURCE` names its commit |
+| `scripts/sync-vectors.sh`, `scripts/check-vectors.mjs` | copies the protocol's golden vectors from a Saltix checkout, `vectors/SOURCE` naming its commit and each file's blob id; the check CI runs that every file is those bytes |
 | `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key); `packages/server/test/example.test.mjs` runs its chat on `testChat` and holds every card to the card standard |
 | `docs/` | `first-app.md`, `chats.md`, `cards.md` (and its pictures in `cards/`), `payments.md`, `connect.md`, `devex.md` (the developer experience and its roadmap), and these pages |
 
@@ -44,8 +44,10 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 ## Rules of the repository
 
 - **Formats come from the protocol.** A change to a format starts in corvise/saltix's `specs/` and its vectors; here,
-  `scripts/sync-vectors.sh <saltix checkout>`, then the code until `vectors.test.mjs` and `chat.test.mjs` pass. Never edit
-  a vector by hand.
+  `scripts/sync-vectors.sh <saltix checkout>` (a clean one: it records the commit and each file's git blob id in
+  `vectors/SOURCE`), then the code until `vectors.test.mjs` and `chat.test.mjs` pass. Never edit a vector by hand: CI runs
+  `node scripts/check-vectors.mjs`, which holds every file to its id in `SOURCE`; with `--saltix <checkout>` it also says
+  which files the protocol changed since, time to sync.
 - **Tests assert behaviour**, refusals included. A check that guards money, keys or what a wallet trusts is
   mutation-tested: break it in `dist/*.js`, run its test file, see it fail, restore and rebuild (the CHANGELOG and pull
   requests say how many mutants were killed).
