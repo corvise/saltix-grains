@@ -11,7 +11,7 @@ import QRCode from "qrcode";
 import { publishCall, retireCall, show, walletLink, waitForPublished, salt, type Sent, type Signing } from "./registry.js";
 import { sendSettled } from "./send.js";
 import {
-  APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, serverKeyOf,
+  APP_KEY_ENV, APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, serverKeyOf,
   waitForRegistry, writeAppKey,
 } from "./studio.js";
 import { type Reach, reachOf } from "./network.js";
@@ -33,9 +33,12 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain init [dir] [--slug S] [--name N] [--chat]
                                            a new grain: grain.json, connect.json, owner.key, public/; --chat a
                                            chat-only one (no page: grain.json, connect.json and chat.json)
-  grain dev [--port 8090]                  serve public/ with the manifest signed for this computer, and the
+  grain dev [--port 8090] [--app-key F]    serve public/ with the manifest signed for this computer, and the
                                            simulator: your page framed as Saltix frames it, with the wallet's
-                                           controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704
+                                           controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704, held
+                                           to Saltix's rules; a development registry (the team, members) at
+                                           /api/dev/rpc for your server, of the developer key's network and
+                                           naming its key with --app-key (or SALTIX_APP_KEY)
   grain lint [--manifest grain.json]       what stops the manifest and connect.json (the Connect profile) from
                                            being registered, the icon file, and warnings: public/ (a top bar under
                                            the wallet's controls), permissions nothing uses
@@ -231,8 +234,12 @@ async function main(argv: string[]): Promise<number> {
         throw new Error("a chat-only grain has no page to serve: run its chat server (npm start; docs/first-app.md)");
       }
       const secret = readKey(keyPath);
-      await serve(process.cwd(), () => readManifest(manifestPath).manifest, secret, port);
+      const keyFile = typeof flags.get("app-key") === "string" ? (flags.get("app-key") as string) : undefined;
+      const appKey = keyFile !== undefined || process.env[APP_KEY_ENV]?.trim() ? readAppKey(keyFile) : undefined;
+      await serve(process.cwd(), () => readManifest(manifestPath).manifest, secret, port, "0.0.0.0", { appKey });
       console.log(`serving ${resolve("public")} on port ${port}`);
+      console.log(`  a development registry at http://localhost:${port}/api/dev/rpc (node for your server): ` +
+        (appKey ? `${appKey.network} ${appKey.genesis}…, naming the developer key's server key` : "pass --app-key to run your server from its developer key against it"));
       console.log(`  a debug Saltix in the emulator: ${linkFor(`http://10.0.2.2:${port}`)}`);
       console.log(`  this computer:                  ${linkFor(`http://localhost:${port}`)}`);
       console.log(`  the simulator (your page framed as in Saltix, the wallet's controls, the Fold's sizes): ${simulatorFor(`http://localhost:${port}`)}`);

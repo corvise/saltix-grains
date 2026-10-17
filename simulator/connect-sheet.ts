@@ -68,6 +68,7 @@ const WORDS = {
 /** The manifest's fields the sheet shows. */
 export interface SheetManifest {
   slug: string;
+  version: number;
   owner: string;
   name: Record<string, string>;
   description: Record<string, string>;

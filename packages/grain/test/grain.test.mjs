@@ -695,3 +695,41 @@ test("grain.layout() in a wallet tells a page without viewport-fit=cover, once, 
     _reset();
   }
 });
+
+test("in the simulator a request says whether the user's tap is still fresh, as Saltix knows it", async () => {
+  delete globalThis.saltix;
+  const posted = [];
+  let listener = null;
+  const parent = { postMessage: (m) => posted.push(m) };
+  const saved = { name: globalThis.name, parent: globalThis.parent, add: globalThis.addEventListener };
+  const activation = Object.getOwnPropertyDescriptor(globalThis.navigator, "userActivation");
+  globalThis.name = "saltix-simulator";
+  globalThis.parent = parent;
+  globalThis.addEventListener = (type, f) => { if (type === "message") listener = f; };
+  try {
+    for (const isActive of [true, false]) {
+      Object.defineProperty(globalThis.navigator, "userActivation", { value: { isActive }, configurable: true });
+      _reset();
+      const asked = grain.info();
+      const m = posted.at(-1);
+      assert.equal(m.method, "grain_info");
+      assert.equal(m.activation, isActive);
+      listener({ source: parent, data: { saltixSim: 1, id: m.id, result: { slug: "dice" } } });
+      assert.equal((await asked).slug, "dice");
+    }
+    // A browser that cannot tell says null: the simulator then takes the request as Saltix would after a tap.
+    delete globalThis.navigator.userActivation;
+    _reset();
+    const asked = grain.info();
+    assert.equal(posted.at(-1).activation, null);
+    listener({ source: parent, data: { saltixSim: 1, id: posted.at(-1).id, result: {} } });
+    await asked;
+  } finally {
+    globalThis.name = saved.name;
+    globalThis.parent = saved.parent;
+    globalThis.addEventListener = saved.add;
+    if (activation) Object.defineProperty(globalThis.navigator, "userActivation", activation);
+    else delete globalThis.navigator.userActivation;
+    _reset();
+  }
+});

@@ -7,6 +7,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 
 | Where | What |
 |---|---|
+| `packages/grain/src/rules.ts` | `@saltix/grain/rules`, the wallet's bridge rules the simulator plays by (from saltix-wallet `GrainBridge.kt`, `GrainContainer.kt`, `GrainStorage.kt`, `SealedSite.kt`): `tapRule`, `permissionRule`, `manageRule`, `BridgeLimiter` (a bucket per known method only), `bridgeAnswer` and `bridgeEvent` (64 KiB), `storageRule`, `sealedCsp`; tested in `packages/grain/test/rules.test.mjs`; never part of a page's `index.js` |
 | `packages/grain/src/index.ts` | `@saltix/grain`, the page's side of the bridge, one module (`grain init` copies it into `public/`); `layoutSheet`, where `grain.layout()` keeps its CSS variables below the wallet's; and the wallet's rules the simulator plays by (`frameFor`, `controlsFor`, `pageColorOf`, `frameColors`) |
 | `packages/server/src/` | `@saltix/grain-server`; `index.ts` re-exports every module below |
 | `manifest.ts`, `registry.ts`, `tx.ts`, `handle.ts` | the manifest, the registry's calls (`signGrainTx`, `grainCallProblem`), transactions v3, usernames |
@@ -62,9 +63,11 @@ Tests import `dist/`: build the package before running its tests by path, and ag
   `packages/server/test/chat-helpers.mjs` does): a broken change must fail the test, not hang CI.
 - **The simulator plays Saltix by Saltix's own code.** What it draws (the frame, the band's colours, the icons'
   contrast, the splash) follows the wallet's (saltix-wallet `assets/grain/frame.js`, `AppFrame` and `GrainScreen` in
-  its Android app); each rule it needs is a pure function in `@saltix/grain` (`frameFor`, `controlsFor`,
-  `pageColorOf`, `frameColors`) with its test in `packages/grain/test/grain.test.mjs`, never logic inline in
-  `simulator/`, which no test reaches. When Saltix changes, change the function and its test to match first.
+  its Android app), and so does what it answers (`GrainBridge.kt`: taps, permissions, the team, rate limits, storage,
+  64 KiB a message, a sealed grain's origin and policy); each rule it needs is a pure function in `@saltix/grain`
+  (`frameFor`, `controlsFor`, `pageColorOf`, `frameColors`; `@saltix/grain/rules` for the bridge's) with its test in
+  `packages/grain/test/`, never logic inline in `simulator/`, which no test reaches. When Saltix changes, change the
+  function and its test to match first.
 - **`grain.layout()` never writes `:root`'s inline style.** Saltix sets the variables itself, in a sheet that wins over
   the page's stylesheets (12-grains §5); the SDK's go in `layoutSheet`, below it, and `stop()` removes them and nothing
   else. `grain.test.mjs` models the cascade (inline, adopted sheets, `<style>`) with Saltix's frame script in place: a

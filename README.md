@@ -136,7 +136,15 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
   the page's colours as Saltix takes them, and Saltix's splash while the page loads, on a phone, the Galaxy Z Fold's
-  sizes and an iPhone-like screen.
+  sizes and an iPhone-like screen. The simulator holds every request to Saltix's rules (`@saltix/grain/rules`, from
+  the wallet's own): a tap of the user (within 5 seconds) before a payment, the app's chat, its page in the wallet
+  (for its team only) and asking again for the address or notifications; the manifest's permissions; rate limits per
+  method; storage's bounds (keys of 1 to 128 bytes, values of 60 KiB, 1 MiB an app); and 64 KiB an answer or an event
+  (a relay frame over about 32 KB never reaches a page). A sealed grain signs in under its virtual origin
+  (`https://<slug>.grain.invalid`) and its pages carry Saltix's Content-Security-Policy. `grain dev` keeps a
+  development registry: the simulator's account joins the team or a private app (so its sign-ins carry member
+  proofs), and your server reads it at `/api/dev/rpc` (`node`), of a developer key's network and naming its key with
+  `--app-key`; invoices of that key pay the owner there as in Saltix.
 - `grain init`'s page declares `viewport-fit=cover` and lays itself out edge to edge by the variables Saltix (and
   `grain.layout()`) sets, and `grain init` writes `AGENTS.md` (the rules a coding agent follows) and `CLAUDE.md` (which
   points to it). `grain lint` warns when a page in `public/` declares `viewport-fit=cover` and nothing reads the safe

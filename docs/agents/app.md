@@ -203,6 +203,10 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
 
 - `grain.info()`: `slug`, `version`, `form`, `listing`, `host`, `host_version`, `bridge` (3), `language`, `theme`
   (`dark` or `light`), `safe_area`, `controls`, `network`, `start`. Events: `theme`, `visibility`, `insets`, `relay`.
+- Limits: a tap within 5 seconds before a payment, the chat, the app's page (its team only) and asking again for the
+  address or notifications; the manifest's permissions (4100); a rate per method (4290); storage's 128-byte keys,
+  60 KiB values and 1 MiB an app; 64 KiB of JSON an answer (else error 5000) or an event (else dropped): a relay frame
+  over about 32 KB never reaches a page. `grain dev`'s simulator holds you to them.
 - Eight CSS variables on `:root`, in `px`: `--saltix-safe-top|right|bottom|left` and
   `--saltix-controls-top|right|width|height`. Saltix's win over the page's stylesheets and over `grain.layout()`'s,
   which fills them in only where Saltix sets none and takes them away on `stop()`. Never write them into `:root`'s

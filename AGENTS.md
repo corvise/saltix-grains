@@ -151,6 +151,12 @@ This is everything Saltix tells a page (bridge version 3, Saltix 0.1.54; Saltix 
   which count only where Saltix sets none.
 - **`window.saltix`** (`isSaltix`, `isGrain`, `bridge`, `request`, `on`, `off`), which `@saltix/grain` wraps;
   `inWallet()` says whether it is there.
+- **Its limits**: a payment, the app's chat (`grain.chat.open`), its page in the wallet (`grain.manage.open`, the team
+  only) and asking again for the address or notifications need a tap of the user within 5 seconds; what the manifest
+  does not ask for is 4100; each method has a rate (4290 past it); storage keeps keys of 1 to 128 bytes, values of
+  60 KiB, 1 MiB an app; and an answer or an event is at most 64 KiB of JSON: a longer answer is the error 5000, a longer
+  event is dropped. A relay frame arrives as hex, twice its size, so one over about 32 KB never reaches a page: keep
+  frames small. `grain dev`'s simulator holds a page to all of it (`@saltix/grain/rules`).
 
 **No design tokens.** Saltix gives a page no colours, palette, accent, fonts, corners or spacing, and no CSS variables
 besides the eight above. A page brings its own design, for a light and a dark theme, and picks one by `grain_info.theme`

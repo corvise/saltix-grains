@@ -59,7 +59,16 @@ interface DevInfo {
   access: { owner: string; public: boolean; members: Array<{ account: string; roles: number }> } | null;
 }
 
-export function setupChat(host: ChatHost): { open(cert?: string, spec?: string): Promise<void>; loginMember(): Promise<string | null> } {
+export interface SimChat {
+  open(cert?: string, spec?: string): Promise<void>;
+  loginMember(): Promise<string | null>;
+  /** Whether this account is on the app's team by the development registry; null without one to read. */
+  onTeam(): Promise<boolean | null>;
+  /** The registry's record as an invoice is checked against it (its server keys and owner); null without one. */
+  record(): Promise<{ servers: string[]; owner: string; retired: boolean } | null>;
+}
+
+export function setupChat(host: ChatHost): SimChat {
   const pane = $("chat-log");
   let chain: ChainParams | null = null;
   let spec: SignedGrainChatSpec | null = null;
@@ -486,9 +495,27 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
     }
   }
 
+  async function onTeamNow(): Promise<boolean | null> {
+    try {
+      const a = (await readRegistry()).access;
+      return a === null ? null : onTeam(a, myAccount());
+    } catch {
+      return null;
+    }
+  }
+
+  async function record(): Promise<{ servers: string[]; owner: string; retired: boolean } | null> {
+    try {
+      const dev = await readRegistry();
+      return dev.access === null ? null : { servers: dev.servers, owner: dev.access.owner, retired: false };
+    } catch {
+      return null;
+    }
+  }
+
   $<HTMLInputElement>("chat-private").onchange = () => void setAccess();
   $<HTMLInputElement>("chat-member").onchange = () => void setAccess();
   $<HTMLButtonElement>("chat-load").onclick = () => void open();
-  return { open, loginMember };
+  return { open, loginMember, onTeam: onTeamNow, record };
 }
 

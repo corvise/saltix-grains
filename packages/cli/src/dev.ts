@@ -3,12 +3,16 @@
 // A sealed grain's bundle is made from `public/` for every manifest asked for and served at `/_bundle.zip`. The
 // simulator (saltix-grains' `simulator/`, built into this package) is at `/_simulator/`: the page framed as Saltix
 // frames it, with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and the bridge
-// answered.
-import { createServer, type Server } from "node:http";
+// answered. A development registry stands in for the network's (`/api/dev`, for the simulator: the team, a private app's
+// members, so that sign-ins carry member proofs; `/api/dev/rpc`, a node's wallet interface for the app's own server), and
+// a sealed grain's pages carry the Content-Security-Policy Saltix serves them with.
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, normalize, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Manifest } from "@saltix/grain-server";
+import { type AppKey, type Manifest, ROLES } from "@saltix/grain-server";
+import { createDevRegistry } from "@saltix/grain-server/dev";
+import { sealedCsp } from "@saltix/grain/rules";
 import { forOrigin, sign, originOf } from "./project.js";
 import { makeBundle, sealed } from "./bundle.js";
 
@@ -34,13 +38,72 @@ function fileIn(dir: string, path: string): string | null {
   return file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile() ? file : null;
 }
 
+/** The simulator's view of the development registry. */
+export const DEV_API = "/api/dev";
+
+/** A request's JSON body, at most 16 KiB. */
+async function jsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  let text = "";
+  for await (const chunk of req) {
+    text += chunk;
+    if (text.length > 16_384) throw new Error("too large");
+  }
+  const value = JSON.parse(text || "{}") as unknown;
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+export interface ServeOptions {
+  /** A developer key: the development registry is then of its network and genesis and names its key, so the app's
+   *  server started from it runs against the registry (`node: <origin>/api/dev/rpc`). */
+  appKey?: AppKey;
+}
+
 /** The server; `manifest` is read again for every request, so edits show without a restart. */
-export function serve(root: string, manifest: () => Manifest, secret: Uint8Array, port: number, host = "0.0.0.0"): Promise<Server> {
+export function serve(root: string, manifest: () => Manifest, secret: Uint8Array, port: number, host = "0.0.0.0", o: ServeOptions = {}): Promise<Server> {
   const publicDir = join(root, "public");
   // The bundle the last manifest named: what `/_bundle.zip` serves, so the two always agree.
   let bundle: Uint8Array | null = null;
+  // The development registry: the grain public until the simulator makes it private, its owner the owner key's account.
+  const registry = createDevRegistry({
+    slug: manifest().slug, ownerSecret: secret, servers: o.appKey ? [o.appKey.publicKey] : [],
+    // A developer key names its network's genesis by a prefix: the registry's starts with it.
+    network: o.appKey?.network ?? "devnet", genesis: o.appKey ? o.appKey.genesis.padEnd(64, "0") : undefined,
+  });
+  const json = (res: ServerResponse, status: number, body: unknown): void => {
+    res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(body));
+  };
+  const dev = async (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> => {
+    const g = registry.grain;
+    if (path === DEV_API) {
+      return json(res, 200, {
+        chain: { genesis: registry.genesis, network: registry.network }, chat: null, relay: null, servers: g.servers ?? [],
+        access: { owner: g.owner, public: g.public, members: g.members ?? [] },
+      });
+    }
+    if (req.method !== "POST") return json(res, 405, { error: "POST" });
+    const body = await jsonBody(req);
+    if (path === `${DEV_API}/access`) {
+      // Who uses and develops the app besides its owner: on its team, so their sign-ins carry member proofs.
+      const members = (Array.isArray(body.members) ? body.members : [])
+        .filter((m): m is string => typeof m === "string" && /^[0-9a-f]{64}$/.test(m) && m !== g.owner)
+        .slice(0, 64).map((account) => ({ account, roles: ROLES.user | ROLES.developer }));
+      registry.setAccess(body.public !== false, members);
+      return json(res, 200, { access: { public: g.public, members: g.members ?? [] } });
+    }
+    // `${DEV_API}/rpc`: JSON-RPC 2.0, as a node's wallet interface answers it.
+    try {
+      const result = await registry.call(String(body.method ?? ""), (body.params ?? {}) as object);
+      return json(res, 200, { jsonrpc: "2.0", id: body.id ?? null, result });
+    } catch (e) {
+      return json(res, 200, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: (e as Error).message } });
+    }
+  };
   const server = createServer((req, res) => {
     const path = decodeURIComponent((req.url ?? "/").split("?")[0]!);
+    if (path === DEV_API || path === `${DEV_API}/access` || path === `${DEV_API}/rpc`) {
+      dev(req, res, path).catch((e: Error) => json(res, 400, { error: e.message }));
+      return;
+    }
     if (path === SIMULATOR.slice(0, -1)) {
       res.writeHead(302, { location: SIMULATOR }).end();
       return;
@@ -90,7 +153,15 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
       res.writeHead(404).end("not found");
       return;
     }
-    res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
+    // A sealed grain's files carry the policy Saltix serves them with: what it refuses, the browser refuses here first.
+    let entry: Manifest["entry"] | null = null;
+    try {
+      entry = manifest().entry;
+    } catch {
+      /* a manifest being edited: served as it is */
+    }
+    const policy = entry && "sealed" in entry ? { "content-security-policy": sealedCsp(entry.sealed.connect), "x-content-type-options": "nosniff" } : {};
+    res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store", ...policy });
     res.end(readFileSync(file));
   });
   const secretOf = () => secret;

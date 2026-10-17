@@ -26,7 +26,7 @@ const OWNER = [...KEYED, "wallet", "timeout"];
 /** The flags each command takes (`--help` aside, which every one does). */
 export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   init: ["slug", "name", "chat"],
-  dev: ["port", "manifest", "key"],
+  dev: ["port", "manifest", "key", "app-key"],
   lint: ["manifest", "key"],
   icon: [],
   sign: ["out", "manifest", "key"],

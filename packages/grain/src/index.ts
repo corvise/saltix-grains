@@ -547,7 +547,10 @@ function simulatorProvider(): Provider | null {
       new Promise((resolve, reject) => {
         const id = ++next;
         pending.set(id, { resolve, reject });
-        w.parent.postMessage({ saltixSim: 1, id, method, params: params ?? {} }, "*");
+        // Saltix knows when the user last touched the app; across frames the simulator cannot see it, so the page says
+        // whether its tap is still fresh (the browser's transient activation, about 5 seconds), or null.
+        const activation = (globalThis.navigator as { userActivation?: { isActive: boolean } } | undefined)?.userActivation?.isActive ?? null;
+        w.parent.postMessage({ saltixSim: 1, id, method, params: params ?? {}, activation }, "*");
       }),
     on: (event, handler) => {
       if (!listeners.has(event)) listeners.set(event, new Set());

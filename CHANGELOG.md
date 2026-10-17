@@ -172,6 +172,40 @@
 
 ### Fixed
 
+- **The simulator plays by Saltix's rules** (`@saltix/grain/rules`, from the wallet's own `GrainBridge.kt`,
+  `GrainContainer.kt`, `GrainStorage.kt`, `SealedSite.kt`, each a tested pure function): a payment, the app's chat, its
+  page in the wallet and asking again for the address or notifications need a tap of the user within 5 seconds (the page
+  says whether its tap is fresh: `navigator.userActivation`); what the manifest does not ask for is 4100; the app's page
+  is for its team (by the development registry); each method has Saltix's rate, and only a method the bridge answers
+  gets a bucket (`BridgeLimiter`: a made-up name is 4200 and costs nothing to keep); storage keeps keys of 1 to 128
+  bytes, values of 60 KiB, 1 MiB an app; an answer over 64 KiB of JSON is the error 5000 and an event over it is dropped,
+  as in Saltix (a relay frame over about 32 KB never reaches a page). A sealed grain signs in under its virtual origin
+  (`https://<slug>.grain.invalid`), so `SignIns` with `sealedOrigin` takes it, and `grain dev` serves its pages with
+  Saltix's Content-Security-Policy (`sealedCsp`). An invoice of a server key the development registry names pays the
+  owner, as in Saltix. `grain dev` keeps a development registry (`/api/dev`, `/api/dev/access`, and `/api/dev/rpc`, a
+  node's wallet interface for the app's own server; with `--app-key`, of its network and naming its key), so the
+  simulator's sign-ins carry member proofs and the team's gate can be tried without `npm run dev`. `AGENTS.md`,
+  `docs/agents/app.md` and the README say the limits.
+- **A developer key's server refuses a chat spec of version 1** (`ChatSetupError` `chat_spec_version_starter`, exit 78):
+  Saltix makes an app with a starting spec of version 1 that wallets keep until a higher one comes, so such a server's
+  commands never appeared, and nothing said so. `docs/chats.md`'s example is version 2; every project's `AGENTS.md`
+  (rule 2) and `docs/agents/app.md` say to serve 2 or more.
+- **A member proof may end 5 minutes past 30 days** (`MEMBER_PROOF_AHEAD_MS`, `memberProofTimely`), the time a wallet's
+  clock may run ahead of the server's, as the node's check allows with corvise/saltix `fix/node-review`: a server whose
+  clock lagged called a fresh proof "expired", and the team's first sign-in failed. `testChat` and the simulator mint
+  proofs at the full 30 days, as Saltix does. (The vectors' "+30 days + 1 ms" refusal moves when they are synced with the
+  node change.)
+- **`grain connect-profile` goes above the revision the site serves now**, read at `/.well-known/saltix-connect` as a
+  wallet reads it, and above the file written before; when neither can be told it asks for `--revision N` instead of
+  starting at 1, which a wallet keeping a higher revision never takes (`--offline`: the file only).
+- **An account's registry calls one at a time**: a call signed with a key file (`publish`, `retire`, `configure`,
+  `access`, `rate`, `bind`, `profile`) returns once it landed and the registry holds it (3 minutes at most), so the
+  next is built above it (its nonce, a profile's revision); one the pool refuses for the account's earlier call still
+  pending is built again once that landed. `--no-wait` returns once the pool took it (`--wait`, now the default, is
+  still taken).
+- **The vectors are the protocol's bytes, checked in CI**: `relay-v1.json` (the 24 profile-name vectors) and
+  `grain-chats-v1.json` synced from corvise/saltix 4b431c1; `scripts/sync-vectors.sh` records each file's git blob id
+  in `vectors/SOURCE` (from a clean checkout only), and `scripts/check-vectors.mjs`, run by CI, holds every file to it.
 - **Ed25519 is verified as the node verifies it, everywhere** (security): `verifyLogin`, `SignIns`, chat requests,
   hellos, welcomes and messages, address records and key bindings, an app's numbers, sponsors' certificates and the
   development relay's mailbox acks checked signatures with `@noble/curves`' permissive `verify` (ZIP-215, cofactored), so
