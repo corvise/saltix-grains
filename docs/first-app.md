@@ -20,7 +20,7 @@ In Saltix: **Apps → My apps → New app**.
 4. **A category and a description.**
 5. **Create.** The phone makes a server key, registers the app, names the key in the registry and signs a starting chat
    spec (an intro, no commands yet).
-6. **The developer key** is shown once: `saltix-app:1:dsalt:6f4c…:your-app:…`. Copy it.
+6. **The developer key** is shown once: `saltix-app:1:dsalt:7e70a4e3…:your-app:…`. Copy it.
 
 The developer key is a secret: whoever holds it speaks for your app until you replace it. Never post it in a chat or a
 repository. You can replace or revoke it at any time (My apps → your app → Developer key); a replaced key stops working
@@ -33,13 +33,13 @@ public when it is ready (step 4).
 
 ```sh
 git clone git@github.com:corvise/saltix-grains.git && cd saltix-grains
-npm install
+npm install && npm run build                # the SDK and the grain command line
 (umask 077 && pbpaste > app.key)            # the key from the clipboard into an owner-only file (Linux: xclip -o)
 npm run example
 ```
 
 ```text
-starting AppKey(dsalt 6f4c9ce9ccbafc18 your-app, key 1476ff04a2885b87…)
+starting AppKey(dsalt 7e70a4e3c2b04efe your-app, key 1476ff04a2885b87…)
 the chat of your-app answers at dsalt1q… on devnet (spec v3)
 ```
 
@@ -202,11 +202,16 @@ An app with a screen of its own (a page: `grain init`, then `grain dev`) opens a
 - **No close button of your own.** ✕ closes the app, and the system's Back goes through your page's history first, then
   closes it. ⋯ opens the wallet's own sheet for the app (its chat, manage, share, reload, permissions).
 - **Name the colour at the top of your page** with `grain.setHeader("#rrggbb")`: the wallet draws its band, the status
-  bar's icons and its controls to contrast with it.
-- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes; CSS px equal dp) and on the iPhone-like screen in
-  the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, inside the safe area or edge to
-  edge by your meta, draws the bars, the cutout and the controls where a phone and Saltix do, and its ✕ and **Back**
-  close the app as the phone's do. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
+  bar's icons and its controls to contrast with it. Without it, Saltix takes the page's `theme-color`, else its
+  background.
+- **Your design is your own.** Saltix gives a page no colours, fonts or spacing (no design tokens), only `grain_info`
+  (its `theme`, `dark` or `light`, and `language`) and the eight variables above. Draw both themes and switch by
+  `grain_info.theme` and the `theme` event. Nor does Saltix give anyone's name: a user is a key of their own in your
+  app, so let people type the name your app shows ([AGENTS.md](../AGENTS.md#naming-apps-and-people)).
+- **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes; CSS px equal dp), on a 360×780 phone and on the
+  iPhone-like screen in the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, inside the
+  safe area or edge to edge by your meta, draws the bars, the cutout and the controls where a phone and Saltix do, and
+  its ✕ and **Back** close the app as the phone's do. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
   (`cover-without-insets`), and about a bar pinned to the top of such a page that keeps clear of nothing
   (`full-screen-top-bar`).
 
@@ -223,10 +228,13 @@ header h1 { min-height: max(48px, var(--saltix-controls-height)); display: flex;
 main { padding-bottom: calc(16px + var(--saltix-safe-bottom)); }
 ```
 
-Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2) draws its header above the page, so
-they are 0; a plain browser gives its own insets (`env(safe-area-inset-*)`). A chat-only app has no page: Saltix draws
-its home itself. Every project `grain init` makes has an `AGENTS.md` with these rules, and a `CLAUDE.md` that points to
-it, so a coding agent follows them too.
+Outside Saltix the variables fall back by themselves: an older Saltix (bridge 1–2, and 0.1.53) draws its header above
+the page, so they are 0; a plain browser gives its own insets (`env(safe-area-inset-*)`). A chat-only app has no page:
+Saltix draws its home itself. A page for some people only (its team, a private circle) shows a splash until its
+sign-in decides, then the app or a refusal page
+([check first, then render](agents/app.md#a-page-for-some-people-only-check-first-then-render)), as `grain init`'s page
+does. Every project `grain init` makes has an `AGENTS.md` with these rules, and a `CLAUDE.md` that points to it, so a
+coding agent follows them too.
 
 ## What the server does for you
 
@@ -252,7 +260,7 @@ it, so a coding agent follows them too.
 | `the registry does not name this server key for your-app: the owner replaced this server key` (or `names no server key`) | Make a new developer key in Saltix (My apps → your app → Developer key), or run the server that holds the new one |
 | `…: the grain is retired` | A retired slug is never used again: make a new app |
 | `…: the registry has no such grain` | Just made? Wait until Saltix shows the app live in My apps, then start again |
-| `the developer key is for devnet 6f4c…, but the network answering is …: was the network reset?` | The test network was reset: make the app and its key again |
+| `the developer key is for devnet 7e70a4e3…, but the network answering is …: was the network reset?` | The test network was reset: make the app and its key again |
 | `not a developer key` / `a malformed developer key` | Copy the whole key again (it starts with `saltix-app:1:`) |
 | `no public relays are known for mainnet` | Pass `node` (your own node's wallet interface) to `ChatServer.start`, or `NODE_RPC` to the example |
 | `wallets write to the first server key the registry names` (a warning) | Requests reach the first key's server: run that one, or make yours first in Saltix |

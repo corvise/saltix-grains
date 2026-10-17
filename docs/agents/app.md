@@ -22,7 +22,7 @@ it speaks for the app until the owner replaces it.
 ```sh
 git clone git@github.com:corvise/saltix-grains.git && cd saltix-grains
 npm ci && npm run build
-npx grain init ../<slug> --chat --slug <slug>    # chat.json, connect.json, server.mjs, package.json, .gitignore, README.md
+npx grain init ../<slug> --chat --slug <slug>    # grain.json, chat.json, connect.json, chat.mjs, server.mjs, test/, AGENTS.md…
 cd ../<slug> && npm install                      # the SDK, from the checkout: it is not on npm yet
 # put the key in app.key (above), then:
 npm start
@@ -37,10 +37,10 @@ has its owner on the phone and never uses it.
 
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 
-**No node needed.** Every registry command (`grain show`, `publish`, `configure`, `access`, `bind`, `rate`, `sponsor`,
-`app-key`) and `grain faucet` (test SALT for `owner.key`'s account, once every 5 minutes) reach the test network through
-its public relays, each pinned by its certificate's hash. `--node URL` is for a node of your own and `--relay
-wss://…#<sha256>` for a relay you name, always with its pin.
+**No node needed.** Every registry command (`grain show`, `publish`, `retire`, `profile`, `configure`, `access`, `bind`,
+`rate`, `sponsor`, `app-key`) and `grain faucet` (test SALT for `owner.key`'s account, once every 5 minutes) reach the
+test network through its public relays, each pinned by its certificate's hash. `--node URL` is for a node of your own
+and `--relay wss://…#<sha256>` for a relay you name, always with its pin.
 
 ## The chat spec: `chat.json`
 
@@ -132,8 +132,8 @@ chat.command("plan", (ask) => {
   const minutes = Number(ask.args.minutes);                   // a number arrives as a bigint
   const sets = Math.max(1, Math.floor(minutes / (ask.args.level === "hard" ? 5 : 10)));
   return card()
+    .status("done")                                           // the card's title: a status comes first
     .fields({ Minutes: String(minutes), Sets: String(sets), Where: ask.args.outdoor ? "outdoors" : "indoors" })
-    .status("done")
     .run("Again", "plan", { minutes: ask.args.minutes, level: ask.args.level });
 });
 chat.text((ask) => card().text("Pick Plan below."));
@@ -147,10 +147,11 @@ chat.text((ask) => card().text("Pick Plan below."));
   a public app never learns who its users are), `ask.request.id`.
 - **Cards**: 1–16 blocks (`text`, `fields`, `secret`, `file`, `invoice`, `status`, `code`, `poll`) and 0–8 actions
   (`run`, `open`, `reply`, `publish`), designed by the card standard: [cards.md](cards.md) (a status first, at most 6
-  actions, labels of at most 18 characters, the first `run` primary, destructive commands named so). Check each card
-  with `assertCardStandard(card, spec)` in the tests. A poll's vote and a card whose buttons change are answered with
-  `ask.update(card)`, in place of the card tapped. A frame holds 48 000 bytes: send more as a file (`await chat.upload(bytes, {name, mime})`, then
-  `.file(ref, {format})`). Slow work: `await ask.working("…")` first; the answer replaces it.
+  blocks and 6 actions, labels of at most 18 characters, the first `run` primary, destructive commands named so). Check
+  each card with `assertCardStandard(card, spec)` in the tests. A poll's vote and a card whose buttons change are
+  answered with `ask.update(card)`, in place of the card tapped. A frame holds 48 000 bytes: send more as a file
+  (`await chat.upload(bytes, {name, mime})`, then `.file(ref, {format})`). Slow work: `await ask.working("…")` first;
+  the answer replaces it.
 - **Refuse** with `throw new ChatRefusal(text)` (a `refused` status, in the user's language). Any other error answers
   `failed` and is reported to your team's console.
 - **Payments** (`chat.invoice`, `chat.paymentOf`): `const inv = chat.invoice({ amount: "2.5", memo: "Premium, 1 month" })`, then
@@ -189,6 +190,24 @@ if (gate === "open") drawApp(); else drawRefusal(gate);
 `grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything in its HTML outside its
 splash, or marks no splash. `grain init` makes a page that does all of this (`SIGN_IN`, `FOR` in `public/app.js`).
 
+Saltix's own splash (the app's icon and name) covers the page only while it loads; `grain.ready()` does not hold it.
+From then on the page's `data-grain-splash` is all a user sees until the gate decides.
+
+## What a page gets from Saltix
+
+All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets-from-saltix-and-what-it-does-not).
+
+- `grain.info()`: `slug`, `version`, `form`, `listing`, `host`, `host_version`, `bridge` (3), `language`, `theme`
+  (`dark` or `light`), `safe_area`, `controls`, `network`, `start`. Events: `theme`, `visibility`, `insets`, `relay`.
+- Eight CSS variables on `:root`, in `px`: `--saltix-safe-top|right|bottom|left` and
+  `--saltix-controls-top|right|width|height`.
+- **No design tokens**: no palette, accent, fonts, corners or spacing. Bring your own, light and dark, and switch by
+  `grain_info.theme` and the `theme` event (`prefers-color-scheme` need not match the theme chosen in Saltix).
+- **Saltix takes its colours from the page**: its band, the status bar's icons and its controls follow
+  `grain.setHeader`'s colour, else the page's own: its `theme-color` (the first whose `media` matches), else its
+  background, which the room around the page and the navigation bar's icons follow too. Give opaque colours.
+- **No one's name**: a user is a grain key ([the rules](#the-rules-every-app-follows), *People's names*).
+
 ## The rules every app follows
 
 - **Connect profile**: every app ships a complete one (`connect.json`: tagline, about, highlights, privacy, in English
@@ -198,6 +217,12 @@ splash, or marks no splash. `grain init` makes a page that does all of this (`SI
   then the app or a refusal page with none of its UI; a public app for a limited circle shows strangers that refusal
   page ([above](#a-page-for-some-people-only-check-first-then-render)). The server checks the session's rights on every
   request.
+- **People's names**: Saltix gives an app nobody's name, neither the profile name an account sets for itself (Saltix
+  09-relay §1.5) nor its username. A user is their grain key, a pseudonym of this app alone (`ask.key`, the page's
+  `grain.login`); only the team and a private app's members are known as accounts (`ask.member`, `SignIns`), and a
+  page gets an address only from `grain.requestAddress` (the `address` permission) or `grain.pickContact`.
+  Never show a key as a name. To show people to each other, show the name each typed in the app (its own data: say so
+  in `connect.json`'s privacy) or a shared address, shortened; a typed name is never proof of who someone is.
 - **Secrets**: never log, print, commit or report a key (the developer key, `owner.key`, `server.key`, `sponsor.key`)
   or a token. The SDK scrubs developer keys, long hex and the server secret from reports and its own log; name anything
   else in `redact`.
@@ -218,7 +243,8 @@ splash, or marks no splash. `grain init` makes a page that does all of this (`SI
   safe area, below the band that holds its controls (⋯ | ✕, the capsule): a page that says nothing needs nothing.
   Draw edge to edge only by declaring `viewport-fit=cover` in the viewport meta, and then keep text inside
   `--saltix-safe-*` and nothing tappable under `--saltix-controls-*` (Saltix sets them on `:root`). The rules in full
-  are in `AGENTS.md`; `grain lint` warns about a page that declares it and reads no inset.
+  are in `AGENTS.md`; `grain lint` warns about a page that declares it and reads no inset. Saltix gives no colours or
+  other design tokens: bring your own for both themes and switch by `grain_info.theme` and the `theme` event.
 - **Cards** follow the card design standard ([cards.md](cards.md)): a status first, at most 6 actions, labels of at
   most 18 characters, the first `run` primary, destructive commands named so. Check each with `assertCardStandard(card,
   spec)` in the tests.
@@ -228,8 +254,8 @@ splash, or marks no splash. `grain init` makes a page that does all of this (`SI
 - **Formats**: never build a protocol message by hand. The SDK makes and checks every one, byte for byte the network's.
 - **Money**: never deliver on the page's or the user's word: only on `chat.paymentOf` (or `findPayment`) with enough
   confirmations. Never put another payee in an invoice: a developer key's invoice pays the owner, and wallets refuse
-  anything else (`payee`). Say in the card what to do if the payment sheet does not open (Saltix 0.1.53 and older
-  refuse a developer key's invoice: update Saltix).
+  anything else (`payee`). Say in the card what to do if the payment sheet does not open (Saltix 0.1.54 pays a
+  developer key's invoice, 0.1.53 and older refuse it: update Saltix).
 
 ## Test
 
@@ -246,7 +272,7 @@ splash, or marks no splash. `grain init` makes a page that does all of this (`SI
   import { handlers } from "../chat.mjs";
   const t = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers, access: "private", members: { ann: ["user"] } });
   const reply = await t.as("ann").ask("plan", { minutes: 30n, level: "hard" }, { lang: "ru" });
-  assert.deepEqual(reply.fields, { Minutes: "30", Sets: "6" });
+  assert.deepEqual(reply.fields, { Minutes: "30", Sets: "6", Where: "indoors" });
   assertCardStandard(reply.message, t.chat.spec);                                               // the card standard
   assert.equal((await t.ask("plan", { minutes: 30n, level: "hard" })).status.state, "refused");  // a stranger
   await t.as("owner").hello();                         // the owner's console, before anyone writes
@@ -304,9 +330,11 @@ App version: <your program's version>
 Chat spec: v<version>
 Time (UTC): <time>
 <the stack, and the context you passed>
+Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
 ```
 
-1. Find the handler of **Command** and the line of **Where**; the stack is under the fields.
+1. Find the handler of **Command** and the line of **Where**; the stack is under the fields. The last line, the same in
+   every copy, is the rule of an app's page ([AGENTS.md](../../AGENTS.md)): keep to it in any page you touch.
 2. The report never carries the user's arguments or text. Reproduce with a test over the arguments that could get
    there; add to `chat.report`'s `context` (or a `ChatRefusal` check) what the next report should say.
 3. Fix it, raise the program's version, run the tests, restart the server.

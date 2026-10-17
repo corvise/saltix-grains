@@ -27,11 +27,11 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | Wrong advice | an unregistered or retired grain was told to make a new developer key | fixed, #22 |
 | Docs | `npm run dev` read a node at port 30734 (a node listens on 30334); examples said `network: "testnet"` for the test network, which is of the devnet kind; nothing said where `--node` comes from | fixed, #23 |
 | Local loop | your own chat cannot run locally: the development relay and registry only serve `hello-grain` | roadmap 1 |
-| Tests | testing one command end to end took 50 lines, imports by path into the checkout and wire details (the messaging key's domain, arguments typed and sorted) | roadmap 2 |
-| SDK | not on npm, the repository private; Saltix's own app vendors `dist/` | roadmap 3 |
-| `--node` | every registry command needs a node's plain-HTTP interface; the node is published for Linux x86-64 only; the test network's nodes are not reachable that way | roadmap 4 |
-| Spec changes | a `chat.json` changed under the same version starts fine and reaches nobody | roadmap 5 |
-| Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | roadmap 6, 7 |
+| Tests | testing one command end to end took 50 lines, imports by path into the checkout and wire details (the messaging key's domain, arguments typed and sorted) | fixed, #32 (`testChat`) |
+| SDK | not on npm, the repository private; Saltix's own apps' program vendors `dist/` | roadmap 3 |
+| `--node` | every registry command needs a node's plain-HTTP interface; the node is published for Linux x86-64 only; the test network's nodes are not reachable that way | fixed, #31 (the public relays, `grain faucet`) |
+| Spec changes | a `chat.json` changed under the same version starts fine and reaches nobody | fixed, #28 (78, `ChatSpecVersionError`) |
+| Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | roadmap 6; the bytes fixed, #27 |
 | Payments | a server running from a developer key could not sign invoices | done: it signs invoices to the owner (`chat.invoice`, [payments.md](payments.md)) |
 | Logs | `ChatServer` logs nothing unless given `log`, and keeps its state in memory unless given a store | roadmap 13 |
 
@@ -80,12 +80,14 @@ sorted by name, decode the frame, find the block. About 50 lines, and every one 
 
 ```ts
 import { testChat } from "@saltix/grain-server/testing";
-const t = await testChat({ spec: "chat.json", setup: (chat) => registerHandlers(chat) });
-const card = await t.ask("plan", { minutes: 30n, level: "hard" }, { lang: "ru" });
-assert.deepEqual(card.fields(), { Minutes: "30", Sets: "6" });   // checked as a wallet checks it
-await t.asMember("owner").ask("stats");                          // a member's proof, a private app
+const t = await testChat({ spec: new URL("../chat.json", import.meta.url), setup: handlers });
+const reply = await t.ask("plan", { minutes: 30n, level: "hard" }, { lang: "ru" });
+assert.equal(reply.fields.Sets, "6");                            // checked as a wallet checks it
+await t.as("owner").ask("stats");                                // the owner's member proof
 await t.close();
 ```
+
+(As built; the walk proposed `card.fields()` and `t.asMember(…)`.)
 
 - Exports what `packages/server/test/chat-helpers.mjs` already has (the fake chain, the wallet), with arguments typed by
   the spec, the card checked by `chatMessageProblem`, and helpers for members, the team, `working` and files.
@@ -100,7 +102,8 @@ await t.close();
 
 The packages are not on npm and the repository is private; Saltix's site says the kit "is shared on request". A project
 outside the checkout installs it by path (`npm install <checkout>/packages/server`), so it breaks when the checkout moves,
-and Saltix's own access grain vendors the built `dist/` with a sync script. Every package is version 0.1.0.
+and the program that runs Saltix's own apps (saltix-wallet `server/access-grain`) vendors the built `dist/` with a
+sync script. Every package is version 0.1.0.
 
 - Release the three packages with versions (semver: a format change is a major version while 0.x is the minor), each
   release's CHANGELOG section, and a tag. Where: npm under `@saltix` if the SDK may be public; otherwise tarballs at
@@ -132,8 +135,8 @@ already use the network's public relays (`RelayGateways`, pinned by their certif
 
 Saltix takes a spec only when its version is higher than the one it holds (`AppChats.newer`), so a `chat.json` changed
 without raising `version` reaches nobody who has the old one, and the server starts and answers as if all were well.
-Saltix's access grain built its own guard (`checkServed`: the spec's hash kept per version, a change under the same
-version refused at start).
+Saltix's access grain (since retired) had built its own guard (`checkServed`: the spec's hash kept per version, a
+change under the same version refused at start).
 
 - `ChatServer` keeps the hash of the spec it served for each version in its `ChatStore` and refuses to start
   (`chat_spec_changed_under_version`) when the spec differs under the same version; `grain chat-spec` lints it too.
@@ -146,7 +149,7 @@ version refused at start).
 ### 6. Bundles hosted without your own server
 
 A sealed screen (`grain bundle`) names `sources`, https URLs where wallets download the ZIP. A developer needs a host;
-Saltix's access grain uses download.saltix.io, the owner's server. A relay's file store (09-relay §10.5) is close: anyone
+Saltix's own apps use download.saltix.io, the owner's server. A relay's file store (09-relay §10.5) is close: anyone
 holding a file's id downloads it, and `ChatServer.upload` already writes there. But a file lives 30 days, a relay's
 certificate is self-signed (pinned through its record), and a manifest's sources must outlive it.
 
@@ -160,7 +163,7 @@ certificate is self-signed (pinned through its record), and a manifest's sources
 
 `grain bundle` deflates each file with Node's zlib at level 9 when that is smaller. The same files make the same bytes
 only with the same zlib, and Node bundles its own (Chromium's), which changes between releases: a CI built on another
-Node may produce another hash than the one the owner approved. Saltix's access grain stores every file uncompressed for
+Node may produce another hash than the one the owner approved. Saltix's access grain stored every file uncompressed for
 exactly this reason.
 
 - Store (method 0), or deflate with a pinned pure-JS implementation; a test that the hash of a fixed tree is a constant,
@@ -193,8 +196,8 @@ Saltix cannot take a payment through an invoice at all.
 - **Decided and built (2026-10-16)**: a registered key signs invoices whose `to` is the grain's owner, as the registry
   has it when the wallet checks (12-grains §5.2), so a stolen developer key cannot redirect money. Saltix's
   **Certify for payments** was rejected: one more owner action for no added safety. The SDK has `chat.invoice`,
-  `chat.paymentOf` and `signInvoice` with an `AppKey` ([payments.md](payments.md)); Saltix takes such invoices from its
-  release after 0.1.53.
+  `chat.paymentOf` and `signInvoice` with an `AppKey` ([payments.md](payments.md)); Saltix takes such invoices from
+  0.1.54.
 
 ### 10. An app doctor
 
@@ -255,7 +258,7 @@ second, then put it first, then drop the old one.
 ### 16. Templates by app type
 
 `grain init --template chat | page | screen | paid | notify`: a chat with a sealed screen beside it (the screen's
-manifest proposed to the owner in the console when its bundle changes, as Saltix's access grain does), paid actions
+manifest proposed to the owner in the console when its bundle changes, as Saltix Pass does), paid actions
 (with 9), notifications. Each with its test (2) and its deploy (8).
 
 - **Effort** M each. **Depends on** 2, 6.
@@ -277,9 +280,8 @@ hash compared with `grain.json`'s.
 
 ## For the owner: what needs the protocol or Saltix
 
-- **The spec's version rule**: 22-grain-chats §2 says a wallet takes a spec whose version is at least the one it holds;
-  Saltix takes only a higher one. Either the spec says "higher", or Saltix takes an equal one (which lets a changed spec
-  under the same version through: the stricter rule with the SDK's guard of 5 is safer).
+- **The spec's version rule** (decided): 22-grain-chats §2 now says a wallet replaces a spec only with a higher
+  version (corvise/saltix#222), as Saltix does; the SDK's guard of 5 holds a server to it.
 - **Long-lived public files for bundles** (6): a file class on relays or the durable tier kept while a live manifest
   names it (09-relay §10.5, 10-storage, 12-grains §8).
 - **Node builds for macOS** (12): a local devnet on a developer's own computer.

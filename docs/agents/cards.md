@@ -7,6 +7,7 @@ standard itself is Saltix 22-grain-chats §5a. Saltix draws every card by it, an
 
 - **Status first, one line.** `card().status(state, text)` is the card's title: at most 60 characters, one a card.
 - **At most 6 actions, 3 rows; labels at most 18 characters** (10 lets three share a row). An `open` takes a row.
+- **At most 6 blocks**: a card is a glance; the rest goes as a file.
 - **The first `run` is the primary button.** Order actions by what most users want.
 - **Destructive commands are named so**: their name, or its part before the first `_`, is `delete`, `remove`, `revoke`,
   `cancel`, `reset`, `wipe`, `erase`, `destroy`, `purge`, `ban`, `block`, `kick`, `reject`, `deny`, `disable`,
@@ -17,8 +18,8 @@ standard itself is Saltix 22-grain-chats §5a. Saltix draws every card by it, an
 - **Answer every tap.** A poll's vote and a card whose buttons change: `ask.update(card)`, in place of the card tapped.
 - **Fields** up to 8 rows; **text** up to 8 lines; more goes as a file (`chat.upload`, `.file(ref, {format})`).
 - **Secrets** (keys, codes) in `secret`, never in `text` or `fields`. Commands to paste in `code`.
-- **`code` and `poll` are dropped whole by Saltix 0.1.53 and older.** A card everyone must see keeps to the other
-  blocks.
+- **`code` and `poll` are dropped whole by Saltix 0.1.53 and older** (0.1.54 draws them). A card everyone must see
+  keeps to the other blocks.
 
 ## Check
 

@@ -1,6 +1,6 @@
 // The AGENTS.md every `grain init` project gets says what the SDK and its guide for agents say: the full-screen rule,
-// a link to docs/agents/app.md, and the ten rules every app follows, each as the server `grain init --chat` makes and
-// the SDK's guide have it, so the three never drift apart.
+// a link to docs/agents/app.md, and the eleven rules every app follows, each as the server `grain init --chat` makes
+// and the SDK's guide have it, so the three never drift apart.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -18,14 +18,14 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
     assert.ok(text.includes(FULL_SCREEN_RULE), "the full-screen rule, word for word");
     assert.ok(text.includes(`](${APP_GUIDE})`), "the guide, by its address: a project has no copy");
     assert.ok(text.includes(`](${APP_GUIDE}#the-rules-every-app-follows)`));
-    assert.ok(text.includes(appRules), "the ten rules");
+    assert.ok(text.includes(appRules), "the eleven rules");
     assert.ok(text.includes("`connect.json`"), "the Connect profile is in the project");
     assert.ok(text.includes("--saltix-controls-width"), "and the full-screen ones");
   }
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
-  assert.equal([...appRules.matchAll(/^\d+\. \*\*/gm)].length, 10);
+  assert.equal([...appRules.matchAll(/^\d+\. \*\*/gm)].length, 11);
 });
 
 test("the anchor the rules link to is the guide's heading", () => {
@@ -141,4 +141,12 @@ test("(j) check first, then render: the splash, the gate and the server's check,
   // The template is the pattern: a splash in the HTML, the gate in the script.
   assert.ok(indexHtml("Dice").includes(SPLASH_ATTRIBUTE));
   for (const words of ["grain.signIn(", "gateOf(", "[data-grain-splash]"]) assert.ok(appJs.includes(words), words);
+});
+
+test("(k) people's names: Saltix gives an app none, as the guide says", () => {
+  assert.match(appRules, /\*\*Name people only by what they gave the app\.\*\*/);
+  for (const words of ["Saltix gives an app nobody's name", "09-relay §1.5", "`ask.key`", "`ask.member`", "`grain.requestAddress`", "Never show a key as a name"]) {
+    assert.ok(appRules.includes(words), words);
+    assert.ok(guide.includes(words), `the guide: ${words}`);
+  }
 });

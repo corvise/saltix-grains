@@ -78,6 +78,11 @@
 
 ### Changed
 
+- **The docs match the code and Saltix 0.1.54** (2026-10-17): `AGENTS.md`, `docs/agents/` and every project's
+  `AGENTS.md` say what a page gets from Saltix (`grain_info`, four events, eight CSS variables, no design tokens; Saltix
+  takes its band's colour from the page) and how to name apps and people (an eleventh rule: Saltix gives an app nobody's
+  name); card examples put their status first; the CLI list, the test network's genesis, the build step, Saltix
+  0.1.54's invoices and blocks, and the retired access grain are brought up to date.
 - **A page's frame: safe by default, full screen only with `viewport-fit=cover`** (Saltix 12-grains §5, §7, §11, the
   owner's report of 2026-10-16: a page that knows nothing of insets went under Android's status bar). Saltix lays a page
   out inside the safe area, below the band that holds its controls, unless the page declares `viewport-fit=cover`; then
