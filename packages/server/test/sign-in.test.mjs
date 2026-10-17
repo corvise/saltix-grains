@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   ChatMemberUnchecked, ChatServer, ROLES, SIGN_IN_CHALLENGE_MS, SignIns, accountId, decodeSignedMemberProof, encodeAddress,
-  encodeSignedMemberProof, fromHex, loginMessage, rightsOf, sealedOrigin, signInAnswer, signMemberProof, toHex, MEMBER_PROOF_LIFE_MS,
+  encodeSignedMemberProof, fromHex, loginMessage, rightsOf, sealedOrigin, signInAnswer, signMemberProof, toHex, MEMBER_PROOF_LIFE_MS, MEMBER_PROOF_AHEAD_MS,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { OWNER, appKey, chain, fakeChain, spec } from "./chat-helpers.mjs";
@@ -164,7 +164,7 @@ test("a proof for another app, another grain key, another network, expired or to
       ["mismatch", proofOf(DEV, { key: "ab".repeat(32) })],
       ["signature", proofOf(DEV, { genesis: "6d".repeat(32) })],
       ["expired", proofOf(DEV, { expires: t - 1 })],
-      ["expired", proofOf(DEV, { expires: t + MEMBER_PROOF_LIFE_MS + 1 })],
+      ["expired", proofOf(DEV, { expires: t + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS + 1 })],
     ];
     for (const [problem, member] of cases) {
       const s = r(await signIns.check(login(signIns.challenge(), { at: t, member })));
@@ -180,6 +180,9 @@ test("a proof for another app, another grain key, another network, expired or to
       const s = r(await signIns.check(login(signIns.challenge(), { at: t, member })));
       assert.deepEqual({ rights: s.rights, problem: s.problem }, { rights: "none", problem: "malformed" });
     }
+    // A proof minted by a wallet whose clock runs up to 5 minutes ahead of the server's still signs its member in.
+    const ahead = r(await signIns.check(login(signIns.challenge(), { at: t, member: proofOf(OWNER, { expires: t + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS }) })));
+    assert.deepEqual({ rights: ahead.rights, problem: ahead.problem }, { rights: "owner", problem: null });
   } finally {
     await close();
   }

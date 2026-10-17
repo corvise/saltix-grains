@@ -18,6 +18,14 @@ import { ROLES } from "./registry.js";
 export const MEMBER_DOMAIN = "Saltix grain member v1";
 /** The longest a member proof lives: 30 days, ms. */
 export const MEMBER_PROOF_LIFE_MS = 30 * 86_400_000;
+/** How far past 30 days a proof's end may lie: a wallet sets it by its own clock, which may run ahead of the server's by
+ *  as much as a message's time may (`MESSAGE_AHEAD_MS`, 5 minutes, 22-grain-chats §3), as the node allows. */
+export const MEMBER_PROOF_AHEAD_MS = 5 * 60_000;
+
+/** Whether a proof that ends at `expiresAt` is alive at `now` and ends within 30 days of it, give or take a clock ahead. */
+export function memberProofTimely(expiresAt: number, now: number): boolean {
+  return expiresAt > now && expiresAt <= now + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS;
+}
 
 /** "`account` uses the grain `slug` under `grain_key`", until `expires_at` (Unix ms). Bytes in lowercase hex. */
 export interface MemberProof {
@@ -115,7 +123,7 @@ export function memberProofProblem(
 ): MemberProblem | null {
   const p = signed.proof;
   if (p.slug !== check.slug || p.grain_key !== check.grainKey) return "mismatch";
-  if (p.expires_at <= check.now || p.expires_at > check.now + MEMBER_PROOF_LIFE_MS) return "expired";
+  if (!memberProofTimely(p.expires_at, check.now)) return "expired";
   if (!keyStandsFor(check.controller, p.account, signed.key)) return "signer";
   return verifyByDeviceKey(signed.key, memberProofToSign(p, check.genesis), signed.signature) ? null : "signature";
 }
@@ -181,8 +189,8 @@ type ProofCheck = { genesis: string; slug: string; requestKey: string; proof: Si
  *  days, and its signature checks. Only then is the account's controller worth asking the node for. */
 export function holdsButSigner(s: SignedMemberProof, check: ProofCheck): boolean {
   const p = s.proof;
-  return p.slug === check.slug && p.grain_key === check.requestKey && p.expires_at > check.now &&
-    p.expires_at <= check.now + MEMBER_PROOF_LIFE_MS && verifyByDeviceKey(s.key, memberProofToSign(p, check.genesis), s.signature);
+  return p.slug === check.slug && p.grain_key === check.requestKey && memberProofTimely(p.expires_at, check.now) &&
+    verifyByDeviceKey(s.key, memberProofToSign(p, check.genesis), s.signature);
 }
 
 /** Whether the server needs the account's controller to judge `proof` (`admits` cannot refuse it without one): a proof

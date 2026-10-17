@@ -28,8 +28,8 @@ import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
 import type { Manifest } from "./manifest.js";
 import {
-  type GrainAccess, MEMBER_PROOF_LIFE_MS, type MemberProblem, type Rights, type SignedMemberProof, TEAM_ROLES, admits, holdsButSigner,
-  introductionProblem, memberProofProblem, needsController, needsTeamController, onTeam, rightsOf, rolesOf, teamMemberOf,
+  type GrainAccess, type MemberProblem, type Rights, type SignedMemberProof, TEAM_ROLES, admits, holdsButSigner,
+  introductionProblem, memberProofProblem, memberProofTimely, needsController, needsTeamController, onTeam, rightsOf, rolesOf, teamMemberOf,
 } from "./member.js";
 import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
@@ -1112,7 +1112,7 @@ export class ChatServer {
     const p = proof.proof;
     // What fails whatever the account's keys are costs the node nothing.
     if (p.slug !== this.slug || p.grain_key !== key) return none("mismatch");
-    if (p.expires_at <= now || p.expires_at > now + MEMBER_PROOF_LIFE_MS) return none("expired");
+    if (!memberProofTimely(p.expires_at, now)) return none("expired");
     if (!holdsButSigner(proof, { genesis: this.chain.genesis, slug: this.slug, requestKey: key, proof, now })) return none("signature");
     // Both reads ask the node: one that does not answer leaves the proof unchecked (the page tries again), never a
     // failure of the server. A registry that stopped naming the server's key is the server's own end, and stays it.

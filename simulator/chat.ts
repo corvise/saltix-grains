@@ -335,7 +335,7 @@ export function setupChat(host: ChatHost): { open(cert?: string, spec?: string):
   /** This account's member proof for the grain key, as a team's or a private app's member's wallet signs it. */
   function memberProof(now: number) {
     return signMemberProof({
-      slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS - 60_000,
+      slug: host.slug(), account: myAccount(), grain_key: toHex(ed25519.getPublicKey(grainKey())), expires_at: now + MEMBER_PROOF_LIFE_MS,
     }, host.account(), chain!.genesis);
   }
 

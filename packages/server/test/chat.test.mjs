@@ -18,7 +18,7 @@ import {
   CHAT_CERT_LIFE_MS, MAX_MESSAGE_AGE_MS, MAX_REQUEST_LIFE_MS, MESSAGE_AHEAD_MS, MAX_FRAME_BYTES, MAX_FILE_BYTES, STATUS,
   signChatSpecAsServer, serverKeyHolds, decodeChatDocument, signMemberProof, memberProofToSign, encodeSignedMemberProof,
   decodeSignedMemberProof, admits, signGrainStats, grainStatsToSign, encodeSignedGrainStats, decodeSignedGrainStats, grainStatsProblem,
-  STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS, encodeManifest, readPublishText, readPublishLink, publishText, proposedManifest, teamOnly,
+  STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS, MEMBER_PROOF_AHEAD_MS, encodeManifest, readPublishText, readPublishLink, publishText, proposedManifest, teamOnly,
   UNOWNED, encodeChatHello, encodeSignedChatHello, decodeSignedChatHello, chatHelloToSign, signChatHello, chatHelloProblem, helloTimely,
   encodeChatWelcome, encodeSignedChatWelcome, decodeSignedChatWelcome, chatWelcomeToSign, signChatWelcome, chatWelcomeProblem,
   introductionProblem, HELLO_LIFE_MS, HELLO_RETRY_MS, WELCOME_EVERY_MS, ROLES,
@@ -465,7 +465,12 @@ test("what the file says is refused is refused", () => {
   const admitted = (r, a = access, now = NOW) => admits(a, { genesis: chain.genesis, slug: "access", requestKey: r.key, proof: r.request.member, controller: null, now });
   assert.equal(admitted(withProof(null)), "missing", refused.get("member = none").why);
   assert.equal(admitted(withProof({ ...proof, grain_key: v.keys.server_public_hex })), "mismatch", refused.get("member_proof.grain_key = the server's key").why);
-  assert.equal(admitted(withProof({ ...proof, expires_at: NOW + 30 * DAY + 1 })), "expired", refused.get("member_proof.expires_at = now + 30 days + 1 ms").why);
+  // A wallet's clock may run 5 minutes ahead of the server's (MEMBER_PROOF_AHEAD_MS, the node's rule from corvise/saltix
+  // fix/node-review): past 30 days by more is refused. The file's own case (+30 days + 1 ms) predates that tolerance and
+  // moves with it when the vectors are synced again.
+  const tooLong = refused.get("member_proof.expires_at = now + 30 days + 1 ms") ?? [...refused.values()].find((r) => /member proof longer than 30 days/.test(r.why));
+  assert.equal(admitted(withProof({ ...proof, expires_at: NOW + 30 * DAY + MEMBER_PROOF_AHEAD_MS + 1 })), "expired", tooLong.why);
+  assert.equal(admitted(withProof({ ...proof, expires_at: NOW + 30 * DAY + MEMBER_PROOF_AHEAD_MS })), null, "5 minutes ahead at most");
   assert.equal(proof.expires_at, NOW + MEMBER_PROOF_LIFE_MS);
   assert.equal(admitted(member, { ...access, members: [] }), "not_member", refused.get("access.members = []").why);
 
