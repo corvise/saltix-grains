@@ -169,6 +169,53 @@ test("an unseen offer is replaced after two minutes, only while the page is in f
   h.session.stop();
 });
 
+test("an offer refused after its two minutes is replaced at once, not left for the slot's thirty", async () => {
+  // The grant comes just before the mark and its check ends after it: the expiry that passed meanwhile is not lost.
+  const pending = [];
+  const refuse = () => pending.shift()(new ConnectError("not_a_device"));
+  const h = harness({ verify: () => new Promise((_, fail) => pending.push(fail)) });
+  await started(h);
+  const { offer, sid } = offerOf(h);
+  await h.clock.advance(QR_LIFE_MS - 1_000);
+  h.links[0].deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grantFor(offer, h.clock.now))), sid);
+  await h.clock.advance(2_000);
+  assert.equal(last(h).kind, "checking");
+  refuse();
+  await h.clock.advance(0);
+  assert.deepEqual(h.refused, ["not_a_device"]);
+  assert.notEqual(offerOf(h).sid, sid, "a new slot and new keys");
+  assert.equal(h.keyCount, 2);
+  assert.equal(h.links[0].closed, true);
+  assert.ok(named(h, "connect_offer_expired"));
+
+  // In the background the refused offer stays until the page is in front again, then goes.
+  const second = offerOf(h);
+  await h.clock.advance(QR_LIFE_MS - 1_000);
+  h.links[1].deliver(sealLinkPayload(second.offer.boxKey, second.offer.sid, second.offer.page, encodeGrant(grantFor(second.offer, h.clock.now))), second.sid);
+  await h.clock.advance(2_000);
+  h.visible.value = false;
+  refuse();
+  await h.clock.advance(KEEP_MS * 2);
+  assert.equal(offerOf(h).sid, second.sid);
+  h.visible.value = true;
+  await h.clock.advance(KEEP_MS + 10);
+  assert.notEqual(offerOf(h).sid, second.sid);
+  assert.equal(h.keyCount, 3);
+
+  // A grant refused well within the two minutes leaves the offer to its own time.
+  const third = offerOf(h);
+  h.links[2].deliver(sealLinkPayload(third.offer.boxKey, third.offer.sid, third.offer.page, encodeGrant(grantFor(third.offer, h.clock.now))), third.sid);
+  await h.clock.advance(1_000);
+  refuse();
+  await h.clock.advance(0);
+  assert.equal(offerOf(h).sid, third.sid);
+  await h.clock.advance(QR_LIFE_MS);
+  assert.notEqual(offerOf(h).sid, third.sid);
+  assert.equal(h.keyCount, 4);
+  h.session.stop();
+  assert.equal(h.clock.timers.size, 0);
+});
+
 test("an offer the visitor took to Saltix on this phone stays", async () => {
   const h = harness();
   await started(h);
