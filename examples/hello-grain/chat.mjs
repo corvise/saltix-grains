@@ -1,7 +1,8 @@
 // The example grain's chat (Saltix 22-grain-chats): three commands that show every block a card has — text, fields,
 // a secret, a file, an invoice and a status — and every action: run, open and reply; and one that fails on purpose, so
-// that the app's team gets the error in its console (24-app-studio §4). `server.mjs` runs it from a developer key on a
-// real network; `npm run dev` on the development relay.
+// that the app's team gets the error in its console (24-app-studio §4). Every card follows the card design standard
+// (docs/cards.md: a status first, as the card's title), which packages/server/test/example.test.mjs holds it to.
+// `server.mjs` runs it from a developer key on a real network; `npm run dev` on the development relay.
 import { randomBytes } from "node:crypto";
 import { ChatServer, ChatRefusal, card, signInvoice, toHex } from "../../packages/server/dist/index.js";
 
@@ -61,18 +62,20 @@ export async function startChat(options, owner = null) {
     await ask.working("Building the report…");
     const { csv, rows } = sessions(day, top, ask.args.errors_only === true);
     const file = await chat.upload(new TextEncoder().encode(csv), { name: `sessions-${day}.csv`, mime: "text/csv" });
-    const c = card()
-      .text(`Sessions of ${day}: ${rows} rows${ask.args.errors_only ? ", errors only" : ""}.\nThe file has every row.`)
-      .file(file, { title: `Sessions, ${day}`, format: "csv" });
-    // An invoice is signed by the owner key or a key it certified (12-grains §5.2): a registered key alone signs none.
-    if (options.cert && options.secret && owner) {
-      c.invoice(signInvoice({
+    // An optional invoice, here only from a server key the owner key certified (`npm run dev` with CHAT_NODE). A server
+    // run from a developer key signs one to the app's owner with `chat.invoice` (docs/payments.md).
+    const invoice = options.cert && options.secret && owner
+      ? signInvoice({
         slug: chat.slug, to: owner, asset: "SALT", amount: 1_000_000n, memo: "Thanks for the example", reference: toHex(randomBytes(16)),
         expires_at: Date.now() + 10 * 60_000,
-      }, options.secret, chat.chain.genesis, options.cert));
-      return c.status("done", "The invoice is optional: the simulator makes no payment");
-    }
-    return c.status("done");
+      }, options.secret, chat.chain.genesis, options.cert)
+      : null;
+    // The card standard (docs/cards.md): the status first, as the card's title, then what it is about.
+    const c = card()
+      .status("done", invoice ? "The invoice is optional: the simulator makes no payment" : "")
+      .text(`Sessions of ${day}: ${rows} rows${ask.args.errors_only ? ", errors only" : ""}.\nThe file has every row.`)
+      .file(file, { title: `Sessions, ${day}`, format: "csv" });
+    return invoice ? c.invoice(invoice) : c;
   });
 
   // An error on purpose: the user gets "failed", and the owner and developers the app can reach (their wallets said hello,

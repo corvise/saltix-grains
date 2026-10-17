@@ -139,7 +139,8 @@ reproduce the protocol's cases in `vectors/grain-chats-v1.json` (`cards`).
 
 ## Do and don't
 
-- **Do** put the status first and keep it to one line; put details in a text or fields under it.
+- **Do** put the status first and keep it to one line; put details in a text or fields under it. When its text depends
+  on what comes after (an optional invoice), decide the text first, then build the card from `card().status(…)`.
 - **Do** keep 1–3 actions on most cards; the first `run` is the one most people want.
 - **Do** name destructive commands with their verb first, and mark them `confirm`.
 - **Do** answer a tap: every `run` should get a card back, so the button's check means something.
