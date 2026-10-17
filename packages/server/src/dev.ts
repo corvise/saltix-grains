@@ -19,6 +19,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
 import { type NetworkName, accountId, encodeAddress } from "./address.js";
 import { Reader, derive, toHex } from "./bytes.js";
+import { verifyEd25519 } from "./keys.js";
 import type { Controller } from "./member.js";
 import { type Manifest, type SignedManifest, signManifest } from "./manifest.js";
 import { decodeAddressRecord, fromBase64Url, recordProblem, toBase64Url } from "./records.js";
@@ -192,7 +193,7 @@ export function createDevRelay(options: { network?: NetworkName; port?: number; 
       r.u64();
       if (r.u8() !== 0) throw new Error("device");
       r.end();
-      const signed = ed25519.verify(proof.subarray(proof.length - 64), derive("Saltix mailbox ack v1", body), key);
+      const signed = verifyEd25519(key, derive("Saltix mailbox ack v1", body), proof.subarray(proof.length - 64));
       if (!signed || msgId !== f.msgId || encodeAddress(network, accountId(key)) !== ws.address) throw new Error("proof");
     } catch {
       return send(ws, { type: "error", message: "bad_proof" });
