@@ -18,8 +18,8 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `relay.ts`, `records.ts`, `seal.ts`, `upload.ts`, `file.ts` | `RelayClient`, relay records, sealed frames, files next to the relay |
 | `login.ts`, `sign-in.ts`, `invoice.ts`, `notification.ts`, `sponsor.ts`, `node.ts` | sign-ins (a page's, with the team's member proof and its rights: `SignIns`), invoices, notifications, sponsors, a node's wallet interface |
 | `profile.ts`, `profile-link.ts`, `keylog.ts`, `web.ts` | the Connect profile (19-connect §11: format, checks with the node's reasons, JSON form, signing, the profile link's reader; its writer needs zlib), key event logs checked offline (a port of the explorer's), and `@saltix/grain-server/web`, the modules that run in a web page |
-| `packages/connect/src/` | `@saltix/connect`, Sign in with Saltix for websites ([../connect.md](../connect.md)): `client.ts` (`createConnect`), `session.ts`, `offer.ts`, `grant.ts`, `seal.ts`, `relay.ts`, `store.ts`, `verify.ts` (ported from the explorer's `explorer/src/connect/`), `button.ts`, `dialog.ts`, `connect.css`, `site.ts` (`readSiteProfile`); built also as one module, `dist/saltix-connect.js` |
-| `publish.ts`, `publish-link.ts`, `inflate.ts`, `keys.ts`, `address.ts`, `bytes.ts` | publishing links, raw DEFLATE, device keys, Address v1, encoding |
+| `packages/connect/src/` | `@saltix/connect`, Sign in with Saltix for websites ([../connect.md](../connect.md)): `client.ts` (`createConnect`), `session.ts`, `offer.ts`, `grant.ts`, `seal.ts`, `relay.ts`, `store.ts`, `verify.ts` (the page's check of a grant: the reference the explorer's `explorer/src/connect/` follows), `button.ts`, `dialog.ts`, `connect.css`, `site.ts` (`readSiteProfile`); built also as one module, `dist/saltix-connect.js` |
+| `publish.ts`, `publish-link.ts`, `inflate.ts`, `keys.ts`, `address.ts`, `bytes.ts` | publishing links, raw DEFLATE, device keys and the one Ed25519 check (`verifyEd25519`), Address v1, encoding |
 | `packages/cli/src/main.ts` | `grain`: the help and every command's dispatch |
 | `packages/cli/src/` others | `network.ts` (where a command reaches the network: public relays, `--relay`, `--node`), `faucet.ts`, `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `connect.ts` (`connect.json`, and `grain lint`'s checks of it, the icon and permissions nothing uses), `profile.ts` (`grain profile`, `grain connect-profile`), `bundle.ts`, `registry.ts` (publish, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `chat.ts` (chat-spec, cert), `sponsor.ts` |
 | `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
@@ -49,6 +49,13 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 - **Tests assert behaviour**, refusals included. A check that guards money, keys or what a wallet trusts is
   mutation-tested: break it in `dist/*.js`, run its test file, see it fail, restore and rebuild (the CHANGELOG and pull
   requests say how many mutants were killed).
+- **Ed25519 is verified in one place**: `verifyEd25519` in `keys.ts`, the node's `verify_strict` case for case
+  (`ed25519.test.mjs` pins ed25519-dalek's verdicts on keys and `R` of small order or with a torsion part, `s` not
+  reduced, non-canonical encodings). A library's `verify` is permissive (RFC 8032's cofactored equation; a key of small
+  order "signs" every message): no module calls one, and the test fails if one does.
+- **The page's check of a Connect grant is the reference.** `@saltix/connect`'s `verifyGrant` and `retryable` decide
+  what is refused, what is only unchecked and when the node is asked again; the explorer's `explorer/src/connect/`
+  (corvise/saltix) follows them, and a change here is synced there in a pull request of its own.
 - **A test that starts a server or a process bounds every wait** (as `wallet.until` in
   `packages/server/test/chat-helpers.mjs` does): a broken change must fail the test, not hang CI.
 - **The simulator plays Saltix by Saltix's own code.** What it draws (the frame, the band's colours, the icons'

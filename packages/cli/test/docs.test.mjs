@@ -32,3 +32,16 @@ test("examples name the test network by its kind", () => {
     assert.doesNotMatch(read(doc), /network: "testnet"/, `${doc}: Saltix's test network is of the devnet kind`);
   }
 });
+
+test("a Connect grant is for showing an account, and nothing invites a server to take it as a login", () => {
+  // Whoever holds a grant's bytes (anyone the page leaked them to, a relayed QR's other end) holds all it proves: it
+  // carries no server's challenge, so a server that took it would sign in whoever copied it (19-connect §5, §8).
+  const store = read("packages/connect/src/store.ts");
+  assert.doesNotMatch(store, /server that checks it/i);
+  assert.match(store, /for display only/i);
+  const doc = read("docs/connect.md");
+  assert.match(doc, /^## .*never a server's login/m);
+  assert.match(doc, /bearer/i);
+  assert.match(doc, /nonce/i, "a server's own login needs a challenge of its own");
+  assert.match(read("AGENTS.md"), /Connect\s+grant[^.]*display only/i);
+});

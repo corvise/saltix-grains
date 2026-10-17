@@ -133,11 +133,13 @@ test("(j) check first, then render: the splash, the gate and the server's check,
   const { indexHtml, appJs } = await import("../dist/template.js");
   assert.match(appRules, /\*\*Check first, then render\.\*\*/);
   for (const words of [`\`${SPLASH_ATTRIBUTE}\``, "`grain.signIn({ url })`", "`gateOf(signIn, TEAM)`", "`SignIns`", "`signInAnswer`", `\`${GATE_RULE}\``,
-    "never what they may do", "update Saltix"]) {
+    "never what they may do", "update Saltix", "`ChatMemberUnchecked`"]) {
     assert.ok(appRules.includes(words), words);
     assert.ok(guide.includes(words), `the guide: ${words}`);
   }
   assert.match(guide, /^## A page for some people only: check first, then render$/m);
+  assert.match(appRules, /`ChatMemberUnchecked`[^.]*503/);
+  assert.match(guide, /`ChatMemberUnchecked`[^.]*503/);
   // The template is the pattern: a splash in the HTML, the gate in the script.
   assert.ok(indexHtml("Dice").includes(SPLASH_ATTRIBUTE));
   for (const words of ["grain.signIn(", "gateOf(", "[data-grain-splash]"]) assert.ok(appJs.includes(words), words);

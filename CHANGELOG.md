@@ -172,6 +172,36 @@
 
 ### Fixed
 
+- **Ed25519 is verified as the node verifies it, everywhere** (security): `verifyLogin`, `SignIns`, chat requests,
+  hellos, welcomes and messages, address records and key bindings, an app's numbers, sponsors' certificates and the
+  development relay's mailbox acks checked signatures with `@noble/curves`' permissive `verify` (ZIP-215, cofactored), so
+  a key of small order "signed" any message: the identity point, with R the identity and s = 0, signed in to any app
+  under a pseudonym shared by everyone, with no wallet. Now all of them go through `verifyEd25519`, rewritten as an
+  exact port of ed25519-dalek's `verify_strict` (the node's `ed25519::verify`): `s` below L, key and `R` canonical and
+  not of small order, and `R` exactly `[s]B − [k]A` (a torsion part in `R` or in a key no longer passes a cofactored
+  equation). `ed25519KeyValid` takes keys as the node's `is_valid_public_key` does, the few non-canonical encodings of
+  points not of small order included. `ed25519.test.mjs` pins ed25519-dalek 2.2.0's verdicts on 12 crafted cases,
+  every small-order point, the golden vectors' signatures, the review's proof of concept at every check, and that no
+  module calls a library's `verify` again.
+- **`ChatServer.member` (and so `SignIns.check`) throws `ChatMemberUnchecked` whenever the node does not answer**: a node
+  down before the grain's registry record was read threw a plain `Error`, which servers answered with 500 instead of
+  503 ("try again"). `ChatKeyNotRegistered` still ends the server; the warning `chat_signin_member_unchecked` names the
+  reason. Every project's `AGENTS.md` (rule 10), `AGENTS.md` and `docs/agents/app.md` say to answer it with 503.
+- **A Connect offer expires after 2 minutes even when a grant's check crosses the mark** (`@saltix/connect`): the
+  expiry found the session `checking` and let it be, and a refused grant then left the offer up for the slot's 30
+  minutes; anyone who saw the QR code could keep it alive so. A refusal after the mark now replaces the offer at once
+  (in front of the visitor; in the background, once the page is in front again).
+- **The page's check of a grant is the reference, and its edges are settled** (`verifyGrant`): it reads the node's
+  status for each grant, so a node now on another network or chain refuses it (`network`) and one that names no account
+  policy leaves even an empty log unchecked (`no_policy`), as the explorer did; the node is asked again only when it
+  could not answer (unreachable, a timeout, HTTP 429, 502, 503, 504 or its JSON-RPC -32603, `retryable`), no longer
+  after an answer that is no answer or any HTTP 5xx, and now after a busy node's -32603. `NodeUnreachable` gains the kind
+  `http`; `VerifyDeps` no longer takes a `policy`. The explorer's `explorer/src/connect/` takes the same rules and the
+  strict Ed25519 check (corvise/saltix, a pull request of its own).
+- **A Connect grant is for display only** (docs): `Connection.grant` said it was kept "for a server that checks it
+  again". A grant is a bearer artefact that answers no server's challenge; `docs/connect.md` (section 5), `store.ts` and
+  `AGENTS.md` now say a server never takes it as a login, and what a server's own login would need (its own nonce, spent
+  once).
 - **An error report keeps the card standard** (docs/cards.md): its status was the error's name and message, up to 200
   characters, so every handler's failure made the server log `card_standard` (`status-length`), and a context with a
   version, a spec and a time gave 9 or more rows of fields. Now the status is a title of at most 60 characters cut at a

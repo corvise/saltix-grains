@@ -8,8 +8,9 @@ transaction the visitor signs in Saltix.
 
 `@saltix/connect` (`packages/connect`) is the page's side: the session, the offer as a QR code and a link, the grant's
 checks (the account's key event log included), the connection kept for 30 days, the **Sign in with Saltix** button and
-its dialog. The site's own profile is signed once, offline, with `grain connect-profile`. The explorer's
-`/explorer/me` (corvise/saltix `explorer/src/connect/`) is the reference page; this package is a port of its tested code.
+its dialog. The site's own profile is signed once, offline, with `grain connect-profile`. This package's check of a grant
+(`verifyGrant`, `checkGrant`, `checkAccount`, and when the node is asked again) is the reference: the explorer's
+`/explorer/me` (corvise/saltix `explorer/src/connect/`), where it began, follows it rule for rule.
 
 ## The flow, end to end
 
@@ -19,7 +20,7 @@ its dialog. The site's own profile is signed once, offline, with `grain connect-
 3. **A tap opens a session** (`createConnect(…).offer()`): the page makes a slot at a relay and fresh keys, and shows the
    offer: on a computer a QR code in a dialog titled "Saltix Connect" ("Scan with Saltix to sign in"), on a phone the link
    `https://saltix.io/connect#saltix-connect:1:…` ("Open Saltix"), which opens Saltix. An offer nobody scanned is
-   replaced after 2 minutes.
+   replaced after 2 minutes, at once when a grant for it is refused after them.
 4. **Saltix shows its Connect sheet**: "Saltix Connect" on top, the site's host in large type and its origin in full,
    the profile it fetched from the origin (checked: signed by a key that speaks for the owner it names, and the
    profile of this origin) "in its own words", and what the site gets: the wallet's address, worded as "it can follow
@@ -28,18 +29,21 @@ its dialog. The site's own profile is signed once, offline, with `grain connect-
    The page meanwhile shows "Continue in Saltix" (the wallet's `ConnectSeen`).
 5. **The user continues**: the wallet signs a login naming this page's network, origin, slot and session key, and
    delivers the grant to the slot, sealed to the page.
-6. **The page checks the grant** (`checkGrant`, `checkAccount`): this session's network, origin, slot and key, a time
-   within 10 minutes of its clock, the signature (Ed25519 strictly, or P-256 with a low `s`), and that the signer is the
-   account's now, by the account's key event log from the page's node (`account_log`) replayed offline: a plain
-   account's own key while it has no controller, else a current device of the account, never a guardian, never the old
-   key of an account that upgraded. Then it keeps `{account, address, grant}` in this origin's `localStorage` for 30 days
-   or until the visitor disconnects.
+6. **The page checks the grant** (`verifyGrant`: `checkGrant`, `checkAccount`): this session's network, origin, slot and
+   key, a time within 10 minutes of its clock, the signature (Ed25519 strictly, as the node verifies: no key or `R` of
+   small order, `s` reduced, no torsion in `R`; or P-256 with a low `s`), and that the signer is the account's now, by
+   the account's key event log from the page's node (`account_log`) replayed offline: a plain account's own key while
+   it has no controller, else a current device of the account, never a guardian, never the old key of an account that
+   upgraded. The node's status is read again for each grant: a node now on another network or chain refuses it
+   (`network`), and one that names no account policy keeps no logs, so even an empty log from it leaves the grant
+   unchecked. Then the page keeps `{account, address, grant}` in this origin's `localStorage` for 30 days or until the
+   visitor disconnects.
 7. **The page reads public data** through a node (`account_get`, `account_history`, `book_links`…) with that account
    first, and asks Saltix to sign every action (19-connect §7): the page never signs.
 
 Anyone who saw the QR code could deliver a grant of their own account to the slot: the page always shows which account
-it now shows. The grant proves the account to one page session; it carries no key, no token and no authority, so a
-server never treats it as a login of its own (ask the wallet to sign an action instead).
+it now shows. The grant proves the account to one page session, for display; it is never a server's login
+([below](#5-a-grant-is-for-display-never-a-servers-login)).
 
 ## 1. The site's profile
 
@@ -127,7 +131,9 @@ signs the origin, so the account claims the site.
 - **Your own UI** instead: `const offer = await connect.offer()` gives `offer.text` (what the QR code holds),
   `offer.link` (the phone's link), `offer.qr` (`size` and one SVG `path`, or `svg` as text) and `offer.expiresAt`; events
   `offer` (a new one), `seen`, `checking`, `connected` (the connection), `refused` (`{reason}`: `origin`, `time`,
-  `not_a_device`…, or `unchecked` when the node could not be asked), `failed` (`no_relay`, `network`, `node`),
+  `not_a_device`, `network`…, or `unchecked` when the node could not check it: asked again after 1 and 3 seconds only
+  while it was unreachable, too slow or busy — HTTP 429, 502, 503, 504 or its JSON-RPC -32603 — and never for an answer
+  of another kind; `retryable` says which), `failed` (`no_relay`, `network`, `node`),
   `reconnecting`, `disconnected`. Call `connect.handOff()` when the visitor opens the link on this phone (the offer then
   stays), `connect.wake()` when the page is in front again, `connect.disconnect()` to forget the connection.
 - Without a bundler, serve `dist/saltix-connect.js` (one self-contained module) and `dist/connect.css` from the package;
@@ -182,6 +188,24 @@ location = /saltix/r/1/ {
   40 bytes or with control or format characters, a genesis that is not 64 hex digits.
 - Telemetry (`telemetry: (event, meta) => …`) names events and numbers (`connect_open`, `connect_seen`,
   `connect_grant`, `connect_refused` with its reason), never a key, a slot, an account or an address.
+
+## 5. A grant is for display, never a server's login
+
+The grant shows the page which account its visitor holds; that is all it is for. Use it to show the account and its
+public data, and ask Saltix to sign every action (19-connect §7).
+
+- **It is a bearer artefact.** Whoever holds its bytes holds everything it proves: any script of the origin (it sits in
+  `localStorage`), a browser extension, any server or log the page sent it to, and the other end of a QR code someone
+  relayed. It names the page's own session key and slot, not a challenge of any server, so a server cannot tell the
+  visitor from someone who copied it, within its 10 minutes or after them.
+- **So a server never takes it as a login**: never exchanges it for a session or a token, never lets it stand for the
+  visitor, and never acts for the account because of it. A server that did would sign in whoever copied the grant.
+  `Connection.grant` is kept for the page to show which key signed, nothing more.
+- **A server's own login needs its own design**, which Saltix Connect does not have yet: the server gives a fresh
+  random nonce, bound to its origin and spent once; the wallet signs that nonce with a key of the account; the server
+  checks the signature and the account's key event log itself, within a short window, before it opens a session. A
+  mini-app's server has exactly that already: `grain.signIn` and `SignIns` (12-grains §5.1: a challenge the server gives
+  and spends once). A website's server waits for the same in Connect's spec; until then it keeps no session by a grant.
 
 ## Numbers
 
