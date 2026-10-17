@@ -10,7 +10,9 @@ Three pages go on from it:
   vectors, and how a change lands.
 - [docs/agents/cards.md](docs/agents/cards.md): the card design standard as rules for every card an app sends (a status
   first, at most 6 actions, short labels, destructive names, choices and polls, answering every tap), checked with
-  `assertCardStandard`.
+  `assertCardStandard`. The SDK's own cards keep it too: an error report (`chat.report`) is titled "Error · TypeError"
+  (at most 60 characters, cut at a word), has at most 8 rows of fields, and carries the rest — the other fields, the
+  full message, the stack — in its text, so the copy for an AI agent loses nothing.
 
 ## Building an app: safe by default, full screen only with viewport-fit=cover
 

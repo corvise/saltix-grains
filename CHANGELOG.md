@@ -172,6 +172,13 @@
 
 ### Fixed
 
+- **An error report keeps the card standard** (docs/cards.md): its status was the error's name and message, up to 200
+  characters, so every handler's failure made the server log `card_standard` (`status-length`), and a context with a
+  version, a spec and a time gave 9 or more rows of fields. Now the status is a title of at most 60 characters cut at a
+  word (`reportStatus`: `Error · TypeError`; the message when the name says nothing; `Refused · ` and a refusal's
+  words), at most 8 rows are fields, and the rest lead the text as `Label: value` lines before the full message and the
+  stack. Nothing is lost: the copy for an AI agent reads the same lines, its first one shorter. `examples/hello-grain`'s
+  test now runs with reports on and holds the report to the standard too.
 - **`grain.layout()` no longer overrides Saltix's CSS variables, nor freezes them after `stop()`** (Saltix 12-grains
   §5, §7): it wrote `--saltix-safe-*` and `--saltix-controls-*` into `:root`'s inline style, which beats the sheet Saltix
   keeps them in (a stale value from `grain_info` hid the frame script's newer one), and left them there after `stop()`,
