@@ -150,3 +150,24 @@ test("(k) people's names: Saltix gives an app none, as the guide says", () => {
     assert.ok(guide.includes(words), `the guide: ${words}`);
   }
 });
+
+test("(l) the frame's variables, the splash and the band, as the SDK does them: in every AGENTS.md and the guide", async () => {
+  const { fullScreenRules } = await import("../dist/template.js");
+  const agents = readFileSync(new URL("../../../AGENTS.md", import.meta.url), "utf8");
+  const flat = (text) => text.replace(/\s+/g, " ");
+  for (const [where, text] of [["the project's AGENTS.md", fullScreenRules], ["AGENTS.md", agents], ["the guide", guide]]) {
+    // grain.layout() fills in below Saltix's own values, and an inline value on :root would beat them.
+    assert.match(flat(text), /Never write (these|those|them) (variables )?into `:root`'s inline style/, `${where}: no inline variables`);
+    // grain.ready() does not hold Saltix's splash, which goes once the page has loaded.
+    assert.match(flat(text), /`grain\.ready\(\)` neither holds nor hides it/, `${where}: ready()`);
+    // The band: setHeader until the next call, else an opaque theme-color whose media matches, read again on a theme change.
+    assert.match(flat(text), /`grain\.setHeader`[^.]*until the next call/, `${where}: setHeader holds`);
+    assert.match(flat(text), /whose `media` matches and which is (a valid, )?(an )?opaque/, `${where}: the theme-color Saltix takes`);
+    assert.match(flat(text), /when the theme changes/, `${where}: read again when the theme changes`);
+  }
+  for (const text of [agents, guide]) assert.match(flat(text), /`stop\(\)`/);
+  assert.match(flat(fullScreenRules), /takes them away on `stop\(\)`/);
+  // The card standard's first rule, the way the example keeps it.
+  assert.match(flat(appRules), /a status first \(build the card with it first/);
+  assert.match(flat(guide), /a status first \(build the card with it first/);
+});

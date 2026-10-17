@@ -172,6 +172,30 @@
 
 ### Fixed
 
+- **`grain.layout()` no longer overrides Saltix's CSS variables, nor freezes them after `stop()`** (Saltix 12-grains
+  §5, §7): it wrote `--saltix-safe-*` and `--saltix-controls-*` into `:root`'s inline style, which beats the sheet Saltix
+  keeps them in (a stale value from `grain_info` hid the frame script's newer one), and left them there after `stop()`,
+  so later changes of Saltix's (a fold, a turn, a keyboard) never showed. Its values now go in a stylesheet of the
+  page's own below Saltix's (`layoutSheet`: a constructed sheet first in `document.adoptedStyleSheets`, which a page's
+  CSP does not refuse, or a `<style data-saltix-layout>` where a browser has none): they count only where Saltix sets
+  none (a web wallet, an older Saltix, a plain browser), still win over the page's own fallbacks, and `stop()` removes
+  them and nothing else. `layoutCss(layout)` gives the rule; `applyLayout`, the inline writer, is gone. Tests model the
+  cascade with Saltix's frame script in place.
+- **`grain.ready()` says what it does**: its doc said "the wallet hides its splash"; Saltix shows its splash only while
+  the page loads and ignores `grain_ready` (12-grains §7). The doc says so, and the simulator, which held its splash
+  until `grain_ready` (or 2.5 s after the load), now takes it away once the page has loaded and only logs the call.
+- **The simulator draws the band in Saltix's colours, in Saltix's order** (12-grains §7, saltix-wallet `frame.js` and
+  `AppFrame`): it read only the first `theme-color` (whatever its `media`) and only as a literal `#rrggbb`, then the
+  body's background, and nothing after. Now the band takes `grain_setHeader`'s colour (held until the next call), else
+  the page's: the first `theme-color` whose `media` matches and which is a valid, opaque CSS colour (read by a canvas,
+  as Saltix does), else the background of `<body>`, then `<html>`, else `#121212` for a dark `color-scheme` and white
+  otherwise; the margins take the page's colour; the status bar's icons and the controls contrast with the band's
+  colour and the navigation bar's with the page's, dark or light by Android's luminance. It reads the colour when
+  Saltix does: as the head is parsed and whenever it changes, on load, on a theme change and on the system's dark
+  preference. The rules are `pageColorOf` and `frameColors` in `@saltix/grain`, unit-tested.
+- **hello-grain's report card puts its status first**, as the card standard says (it came last, after the file and the
+  invoice). `packages/server/test/example.test.mjs` runs every command of the example on `testChat` and holds each card
+  to `assertCardStandard` and the server's own lint.
 - **The command line never runs a command it was asked about, and never ignores a flag** (`args.ts`): `--help` or
   `-h` anywhere (and `grain help <command>`) prints that command's part of the help and exits 0. Before, `grain init
   --help` made a grain with an owner key in the current directory, `grain dev --help` served forever and `grain publish

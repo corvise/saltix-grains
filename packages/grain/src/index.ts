@@ -156,6 +156,77 @@ export function frameFor(system: SystemInsets, cover: boolean): Frame {
   };
 }
 
+// ── the colours around a page (12-grains §7), for tools that play the wallet: the same order as Saltix's ──
+
+/** What Saltix reads of a page for its colour (saltix-wallet `assets/grain/frame.js`), as plain values. */
+export interface PageLook {
+  /** The page's `<meta name="theme-color">` elements in document order: their `content`, and whether their `media`
+   *  matches (true for one without a `media`). */
+  themeColors: readonly { content: string | null; matches: boolean }[];
+  /** Whether the document has a body yet: until it has, only a theme-color says anything. */
+  body: boolean;
+  /** The computed `background-color` of `<body>` and of `<html>`. */
+  bodyBackground?: string | null;
+  rootBackground?: string | null;
+  /** The computed `color-scheme` of `<html>`, and whether the reader's system prefers a dark one. */
+  colorScheme?: string | null;
+  prefersDark?: boolean;
+}
+
+/**
+ * The page's colour as Saltix takes it (12-grains §7): the first theme-color whose `media` matches and which is a valid,
+ * opaque colour, else the background of `<body>`, then of `<html>`, else the canvas the page is drawn on (`#121212` for
+ * a dark `color-scheme`, or a light and dark one read dark, `#ffffff` otherwise); null while there is no body to tell.
+ * `opaque` reads a CSS colour as the browser does: `#rrggbb` in lower case when it is valid and opaque, else null (in a
+ * page, a canvas's `fillStyle`, as Saltix's own script does).
+ */
+export function pageColorOf(page: PageLook, opaque: (css: string) => string | null): string | null {
+  for (const meta of page.themeColors) {
+    if (!meta.matches || !meta.content) continue;
+    const color = opaque(meta.content);
+    if (color) return color;
+  }
+  if (!page.body) return null;
+  const background = (page.bodyBackground ? opaque(page.bodyBackground) : null) ?? (page.rootBackground ? opaque(page.rootBackground) : null);
+  if (background) return background;
+  const scheme = page.colorScheme ?? "";
+  const dark = /\bdark\b/.test(scheme) && (!/\blight\b/.test(scheme) || page.prefersDark === true);
+  return dark ? "#121212" : "#ffffff";
+}
+
+/** What the wallet draws around a page in its colours (12-grains §7); null: the wallet's own background, or icons by its
+ *  theme. */
+export interface FrameColors {
+  /** The band above a page inside the safe area: `grain_setHeader`'s colour, else the page's. */
+  band: string | null;
+  /** The margins around a page inside the safe area: the page's colour. */
+  around: string | null;
+  /** Whether the status bar's icons and the controls are drawn for a dark colour at the top (the band's). */
+  topDark: boolean | null;
+  /** Whether the navigation bar's icons are drawn for a dark page. */
+  bottomDark: boolean | null;
+}
+
+/** sRGB decoded, as Android's `Color.luminance()`: below one half is dark. */
+function isDark(color: string): boolean {
+  const n = parseInt(color.slice(1, 7), 16);
+  const linear = (c: number) => {
+    const x = c / 255;
+    return x >= 0.04045 ? ((x + 0.055) / 1.055) ** 2.4 : x / 12.92;
+  };
+  return 0.2126 * linear((n >> 16) & 255) + 0.7152 * linear((n >> 8) & 255) + 0.0722 * linear(n & 255) < 0.5;
+}
+
+/**
+ * The wallet's colours around a page, as Saltix draws them (saltix-wallet `AppFrame`): `header` is the colour the page
+ * last gave with `grain_setHeader` (it holds until the next call, whatever the page's head says meanwhile), `page` its
+ * own colour (`pageColorOf`), each `#rrggbb` or null.
+ */
+export function frameColors(header: string | null, page: string | null): FrameColors {
+  const top = header ?? page;
+  return { band: top, around: page, topDark: top === null ? null : isDark(top), bottomDark: page === null ? null : isDark(page) };
+}
+
 /** The CSS custom properties `grain.layout()` sets on `:root`, in pixels. */
 export const LAYOUT_VARIABLES = {
   safeTop: "--saltix-safe-top",
@@ -212,8 +283,92 @@ export function cssVariables(layout: Layout): Record<string, string> {
   };
 }
 
+/** The variables of `layout` as one `:root` rule, as `layoutSheet` writes it. */
+export function layoutCss(layout: Layout): string {
+  return `:root{${Object.entries(cssVariables(layout)).map(([name, value]) => `${name}:${value}`).join(";")}}`;
+}
+
+/** Where `grain.layout()` keeps its CSS variables: `set` replaces them with a layout's, `remove` takes them away for good. */
+export interface LayoutSheet {
+  set(layout: Layout): void;
+  remove(): void;
+}
+
+interface StyleElement {
+  textContent: string | null;
+  isConnected?: boolean;
+  setAttribute(name: string, value: string): void;
+  remove(): void;
+}
+
+interface SheetDoc {
+  adoptedStyleSheets?: ArrayLike<unknown> | null;
+  head?: { appendChild(node: unknown): unknown } | null;
+  documentElement?: { appendChild?(node: unknown): unknown } | null;
+  createElement?(tag: string): StyleElement;
+}
+
+/**
+ * A stylesheet of the page's own for the CSS variables, never `:root`'s inline style (12-grains §5, §7). Saltix sets
+ * the variables on `:root` itself and keeps them current, and its values win over the page's own stylesheets, so these
+ * count only where it sets none (a web wallet, an older Saltix, a plain browser), and never hide a value it sets later.
+ * Inline values would beat Saltix's, and outlive `stop()`.
+ *
+ * It is a constructed sheet, first in `document.adoptedStyleSheets`: every sheet after it in the list (Saltix's among
+ * them) wins over it, and it wins over the page's `<style>` and `<link>` sheets (their fallbacks for a plain browser);
+ * a page's CSP does not refuse it. A browser without constructed sheets gets a `<style data-saltix-layout>` at the end
+ * of the head. `remove()` takes away that sheet or element, and nothing else.
+ */
+export function layoutSheet(): LayoutSheet {
+  const g = globalThis as unknown as { document?: SheetDoc; CSSStyleSheet?: new () => { replaceSync(text: string): void } };
+  let sheet: { replaceSync(text: string): void } | null = null;
+  let element: StyleElement | null = null;
+  // Constructed sheets until one fails here (another document's constructor, an old browser): then the <style> alone.
+  let adopt = true;
+  let removed = false;
+  return {
+    set(layout) {
+      const doc = g.document;
+      if (removed || !doc) return;
+      const css = layoutCss(layout);
+      if (adopt && doc.adoptedStyleSheets != null && typeof g.CSSStyleSheet === "function") {
+        try {
+          sheet ??= new g.CSSStyleSheet();
+          sheet.replaceSync(css);
+          const list = Array.from(doc.adoptedStyleSheets);
+          // Put back first if the page replaced the list: below the wallet's sheet again.
+          if (!list.includes(sheet)) doc.adoptedStyleSheets = [sheet, ...list];
+          return;
+        } catch {
+          sheet = null;
+          adopt = false;
+        }
+      }
+      if (element?.isConnected === false) element = null;
+      if (!element) {
+        const parent = doc.head ?? doc.documentElement;
+        if (!doc.createElement || !parent?.appendChild) return;
+        element = doc.createElement("style");
+        element.setAttribute("data-saltix-layout", "");
+        parent.appendChild(element);
+      }
+      element.textContent = css;
+    },
+    remove() {
+      removed = true;
+      const doc = g.document;
+      if (sheet && doc?.adoptedStyleSheets != null) {
+        const list = Array.from(doc.adoptedStyleSheets);
+        if (list.includes(sheet)) doc.adoptedStyleSheets = list.filter((s) => s !== sheet);
+      }
+      element?.remove();
+      sheet = null;
+      element = null;
+    },
+  };
+}
+
 interface Doc {
-  documentElement?: { style?: { setProperty(name: string, value: string): void } };
   body?: { appendChild(node: unknown): unknown };
   createElement?(tag: string): { style: { cssText: string }; remove(): void };
 }
@@ -232,13 +387,6 @@ export function browserInsets(): SafeArea {
   const out = { top: read(style.paddingTop), bottom: read(style.paddingBottom), left: read(style.paddingLeft), right: read(style.paddingRight) };
   probe.remove();
   return out;
-}
-
-/** Set the CSS variables of `layout` on `:root`, where there is a document. */
-export function applyLayout(layout: Layout): void {
-  const style = (globalThis as unknown as { document?: Doc }).document?.documentElement?.style;
-  if (!style) return;
-  for (const [name, value] of Object.entries(cssVariables(layout))) style.setProperty(name, value);
 }
 
 export class GrainError extends Error {
@@ -488,7 +636,12 @@ function unhex(text: string): Uint8Array {
 
 export const grain = {
   info: () => call<GrainInfo>("grain_info"),
-  /** The grain is drawn: the wallet hides its splash. */
+  /**
+   * Tell the wallet the page's first screen is drawn (`grain_ready`). It holds nothing and hides nothing: Saltix shows
+   * its splash (the app's icon and name) only while the page loads, takes it away once it has loaded, and ignores this
+   * call today (12-grains §7); the simulator does the same. A page that checks first shows a splash of its own until its
+   * gate decides. Resolves when the wallet answered; rejects with `NoWallet` outside a wallet.
+   */
   ready: () => call<null>("grain_ready"),
   close: () => call<null>("grain_close"),
   /** Changes nothing since bridge 3: a grain always opens as a full app. */
@@ -500,13 +653,15 @@ export const grain = {
    * The page's frame as Saltix lays it out (12-grains §5, §7): inside the safe area by default, edge to edge with the
    * wallet's controls `⋯ | ✕` floating in the top right corner for a page that declares `viewport-fit=cover`. Resolves
    * with the safe area and the controls' box, and keeps both current (the `insets` event, window resizes and theme
-   * changes), calling `onChange` with each new layout. It sets, on `:root`, `--saltix-safe-top`, `--saltix-safe-bottom`,
+   * changes), calling `onChange` with each new layout. It gives `:root` `--saltix-safe-top`, `--saltix-safe-bottom`,
    * `--saltix-safe-left`, `--saltix-safe-right`, `--saltix-controls-top`, `--saltix-controls-right`,
    * `--saltix-controls-width` and `--saltix-controls-height`, so CSS alone can keep text inside the safe area and a top
-   * bar clear of the controls: the same values Saltix sets itself, which matter where it does not (an older Saltix, a
-   * plain browser). The returned object's fields are the current layout (a destructured copy is not); `stop()` stops
-   * following. In a wallet, a page that has not declared `viewport-fit=cover` is told so on the console: it stays inside
-   * the safe area, where everything is 0.
+   * bar clear of the controls: the same values Saltix sets itself, which matter where it does not (a web wallet, an older
+   * Saltix, a plain browser). They go in a stylesheet below Saltix's own (`layoutSheet`), never in `:root`'s inline
+   * style: where Saltix sets a variable, its value always wins, the later ones too. The returned object's fields are the
+   * current layout (a destructured copy is not); `stop()` stops following and takes away the variables it set, and only
+   * those (Saltix's stay, and keep changing). In a wallet, a page that has not declared `viewport-fit=cover` is told so
+   * on the console: it stays inside the safe area, where everything is 0.
    *
    * Outside Saltix bridge 3 it falls back (`layoutOf`): an older Saltix draws its header above the page, so the safe area
    * is 0 and there are no controls; a plain browser gives its own insets (`env(safe-area-inset-*)`) and no controls.
@@ -665,7 +820,8 @@ export const grain = {
   },
 };
 
-/** What `grain.layout()` resolves with: the current layout, kept current until `stop()`. */
+/** What `grain.layout()` resolves with: the current layout, kept current until `stop()`, which also takes away the CSS
+ *  variables it set. */
 export interface LayoutWatch extends Layout {
   stop(): void;
 }
@@ -703,11 +859,13 @@ async function watchLayout(onChange?: (layout: Layout) => void): Promise<LayoutW
   let seq = 0;
   let reading = false;
   let again = false;
+  // The variables go below Saltix's own (`layoutSheet`), so they count only where it sets none.
+  const sheet = layoutSheet();
 
   const apply = (next: Layout) => {
     if (stopped) return;
     current = next;
-    applyLayout(next);
+    sheet.set(next);
     onChange?.(next);
   };
   const read = async (): Promise<Layout> => {
@@ -768,6 +926,8 @@ async function watchLayout(onChange?: (layout: Layout) => void): Promise<LayoutW
       p?.off?.("insets", onInsets);
       p?.off?.("theme", refresh);
       w.removeEventListener?.("resize", refresh);
+      // Only what this layout set goes: Saltix's own variables, and its later changes, stay in force.
+      sheet.remove();
     },
   };
 }

@@ -6,6 +6,8 @@ standard itself is Saltix 22-grain-chats §5a. Saltix draws every card by it, an
 ## Rules
 
 - **Status first, one line.** `card().status(state, text)` is the card's title: at most 60 characters, one a card.
+  Build the card with it first even when its text depends on what comes after (an optional invoice, say): decide the
+  text, then `card().status(…)`, then the rest. `examples/hello-grain` does, and its test holds every card to this.
 - **At most 6 actions, 3 rows; labels at most 18 characters** (10 lets three share a row). An `open` takes a row.
 - **At most 6 blocks**: a card is a glance; the rest goes as a file.
 - **The first `run` is the primary button.** Order actions by what most users want.

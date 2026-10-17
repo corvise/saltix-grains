@@ -22,7 +22,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 
 | Package | What it is |
 |---|---|
-| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables), `viewportFitCover()`, `frameFor()`, `grain.manage.open()` |
+| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `grain.manage.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, and the grain's chat (`ChatServer`, from a developer key alone); `@saltix/grain-server/web` is what runs in a page |
 | [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet` |
@@ -127,8 +127,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never ignored.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
-  address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, on a phone, the Galaxy Z
-  Fold's sizes and an iPhone-like screen.
+  address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
+  the page's colours as Saltix takes them, and Saltix's splash while the page loads, on a phone, the Galaxy Z Fold's
+  sizes and an iPhone-like screen.
 - `grain init`'s page declares `viewport-fit=cover` and lays itself out edge to edge by the variables Saltix (and
   `grain.layout()`) sets, and `grain init` writes `AGENTS.md` (the rules a coding agent follows) and `CLAUDE.md` (which
   points to it). `grain lint` warns when a page in `public/` declares `viewport-fit=cover` and nothing reads the safe
@@ -192,7 +193,7 @@ if (!inWallet()) showLink(walletLink("https://chess.example/.well-known/saltix-g
 
 const info = await grain.info();               // slug, version, form, listing, host, bridge, language, theme, safe_area…
 const layout = await grain.layout();           // the frame: { safeArea, controls }, kept current, and CSS variables
-await grain.ready();                           // the first screen is drawn
+await grain.ready();                           // says the first screen is drawn; Saltix ignores it today
 const answer = await grain.login(challenge);   // { key, signature, at, origin, member }: check it on your server
 const gate = gateOf(await grain.signIn({ url: "https://api.chess.example/" }), TEAM); // "open", "refused", "update"…
 await grain.storage.set("rating", "1640");     // synced across the user's devices, 1 MiB per grain
@@ -222,9 +223,13 @@ Saltix sets `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left`, `
 `--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width` and `--saltix-controls-height` on `:root`
 itself (0 inside the safe area). `grain.layout(onChange?)` reads `safe_area {top, bottom, left, right}` and `controls
 {top, right, width, height}` (null inside the safe area) from `grain_info`, follows the `insets` event, window resizes
-and theme changes, and sets the same variables where Saltix does not. An older Saltix (bridge 1–2, and 0.1.53) gives
+and theme changes, and sets the same variables where Saltix does not: in a stylesheet below Saltix's own (`layoutSheet`),
+never `:root`'s inline style, so Saltix's values and their later changes always win, and `stop()` takes away what it set
+and nothing else. Never write them into `:root`'s inline style yourself. An older Saltix (bridge 1–2, and 0.1.53) gives
 0 and no controls; a plain browser its own `env(safe-area-inset-*)` and no controls (`layoutOf` decides it, in one place).
-`frameFor` is the frame itself, for tools that play the wallet. Keep text inside the safe area and every tappable
+`frameFor` is the frame itself, and `pageColorOf` and `frameColors` its colours, for tools that play the wallet.
+Saltix's splash shows while the page loads and goes once it has loaded: `grain.ready()` neither holds nor hides it.
+Keep text inside the safe area and every tappable
 element out of the controls' box; no close button of your own (✕ and Back close the app).
 [Designing for Saltix](docs/first-app.md#designing-for-saltix).
 
@@ -232,7 +237,9 @@ element out of the controls' box; no close button of your own (✕ and Back clos
 `grain_info` (with `theme`, `dark` or `light`, and `language`), the events `theme`, `visibility`, `insets` and
 `relay`, and the eight variables above. Saltix gives a page no design tokens (no palette, fonts or spacing): a page
 brings its own, light and dark, switches by `theme`, and Saltix takes its own band and bars' colours from the page
-(`grain.setHeader`, else `theme-color`, else the background). Nor does it give anyone's name: a user is a grain key, a
+(`grain.setHeader` until the next call, else the first `theme-color` whose `media` matches and which is opaque, else
+the background), read again when the head changes, once the page has loaded and when the theme changes; the simulator
+draws them in the same order. Nor does it give anyone's name: a user is a grain key, a
 pseudonym of this app alone.
 
 Every method rejects with a `GrainError` whose `code` is `4001` (the user refused), `4100` (not permitted: the

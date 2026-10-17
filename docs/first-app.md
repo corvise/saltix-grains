@@ -194,7 +194,9 @@ An app with a screen of its own (a page: `grain init`, then `grain dev`) opens a
   viewport-fit=cover">` (`grain init`'s page does). The page then runs under the system's bars: keep text and controls
   inside the safe area by `--saltix-safe-top`, `--saltix-safe-bottom`, `--saltix-safe-left` and `--saltix-safe-right`,
   which Saltix sets on `:root` in pixels and keeps current as the phone turns or unfolds (`grain.layout()`, from
-  `@saltix/grain`, sets them where Saltix does not). Backgrounds may run under the bars.
+  `@saltix/grain`, sets them where Saltix does not, below Saltix's own values, and takes them away on `stop()`). Never
+  write them into `:root`'s inline style: an inline value beats Saltix's and goes stale when the phone turns.
+  Backgrounds may run under the bars.
 - **The wallet's controls `⋯ | ✕` float in the top right corner**: over an edge-to-edge page, a 96 × 48 box, 8 px from
   the right inset and 4 px below the top one, which `grain_info.controls` and `--saltix-controls-top`, `-right`,
   `-width` and `-height` give. Never put anything tappable under it. A top bar's title stops short of it, or the bar
@@ -202,8 +204,12 @@ An app with a screen of its own (a page: `grain init`, then `grain dev`) opens a
 - **No close button of your own.** ✕ closes the app, and the system's Back goes through your page's history first, then
   closes it. ⋯ opens the wallet's own sheet for the app (its chat, manage, share, reload, permissions).
 - **Name the colour at the top of your page** with `grain.setHeader("#rrggbb")`: the wallet draws its band, the status
-  bar's icons and its controls to contrast with it. Without it, Saltix takes the page's `theme-color`, else its
-  background.
+  bar's icons and its controls to contrast with it, until your next call. Without it, Saltix takes the page's
+  `theme-color` (the first whose `media` matches and which is an opaque colour), else its background, and reads it again
+  when the head changes, once the page has loaded and when the theme changes (not when a script changes the body's
+  background alone). The simulator does the same, in the same order.
+- **Saltix's splash** (your app's icon and name) shows while the page loads and goes once it has loaded:
+  `grain.ready()` neither holds nor hides it. A page that checks who signed in first shows a splash of its own.
 - **Your design is your own.** Saltix gives a page no colours, fonts or spacing (no design tokens), only `grain_info`
   (its `theme`, `dark` or `light`, and `language`) and the eight variables above. Draw both themes and switch by
   `grain_info.theme` and the `theme` event. Nor does Saltix give anyone's name: a user is a key of their own in your
