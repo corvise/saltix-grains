@@ -16,7 +16,8 @@ export const chain = { genesis: "6c".repeat(32), network: "devnet" };
 export const quiet = () => {};
 const en = (text) => ({ en: text });
 
-export function spec(version = 1, over = {}) {
+/** The app's spec: version 2 by default, the first a developer key may serve above the starting spec Saltix signed. */
+export function spec(version = 2, over = {}) {
   return {
     slug: "access", version, intro: en("One-time access keys for the closed sites."),
     commands: [

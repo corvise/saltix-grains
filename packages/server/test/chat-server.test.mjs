@@ -11,10 +11,10 @@ import {
   ChatServer, ChatRefusal, ChatBudgetSpent, card, toHex, fromHex, chatDocumentOf, serveChatDocument, chatDocumentResponse,
   CHAT_DOCUMENT_PATH, CHAT_UNASKED_PER_DAY, memoryChatStore, downloadFile, signChatRequest, encodeChatFrame, newChatId,
   decodeNotification, openFrame, fromBase64Url, serverMessagingSecret, messagingPublic, derive, fileChatStore, ChatSpecVersionError,
-  ChatKeyNotRegistered, AppKeyError, AppKey, EXIT_CONFIG, setupCannotWork, chatSpecHash, servedSpecProblem,
+  ChatKeyNotRegistered, AppKeyError, AppKey, EXIT_CONFIG, setupCannotWork, chatSpecHash, servedSpecProblem, ChatSetupError,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
-import { DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, options, serverOn, wallet, sleep } from "./chat-helpers.mjs";
+import { DAY, OWNER, SERVER, appKey, chain, fakeChain, ownerKey, quiet, spec, signedSpec, cert, options, serverOn, wallet, sleep } from "./chat-helpers.mjs";
 
 test("a server starts only with a spec and a certificate a wallet takes", async () => {
   const relay = await createDevRelay();
@@ -75,6 +75,30 @@ test("a spec changed under the version it served stops the server at start; a hi
     (await ChatServer.start(options(relay, { spec: signedSpec(1), store: forgetful }))).close();
     writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), served: { version: 9, hash: "not hex" } }));
     (await start(signedSpec(1))).close();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("from a developer key, a spec of version 1 cannot start: the wallets keep the owner's starting spec", async () => {
+  // Saltix made the app with a starting spec of version 1 (24-app-studio §5), and a wallet replaces a spec only with a
+  // higher version: a server's version 1 would never reach anyone, and its commands never appear.
+  const fake = fakeChain();
+  const relay = await createDevRelay();
+  const logged = [];
+  try {
+    {
+      const version = 1;
+      await assert.rejects(
+        ChatServer.start({ appKey: appKey(), spec: spec(version), wallet: fake.wallet, endpoints: [relay.endpoint()], log: (l, e, m) => logged.push([l, e, m]) }),
+        (e) => e instanceof ChatSetupError && e.code === "chat_spec_version_starter" && setupCannotWork(e) && /raise "version" to 2/.test(e.message),
+      );
+    }
+    assert.deepEqual(logged.at(-1), ["error", "chat_spec_version_starter", { version: 1, hint: 'raise "version" to 2 or more' }]);
+    assert.equal(relay.sent.filter((f) => f.type === "register").length, 0, "refused before it reaches a relay");
+    (await ChatServer.start({ appKey: appKey(), spec: spec(2), wallet: fake.wallet, endpoints: [relay.endpoint()], log: quiet })).close();
+    // A key the owner certified serves the spec the owner signed, whatever its version.
+    (await ChatServer.start(options(relay, { spec: signedSpec(1) }))).close();
   } finally {
     await relay.close();
   }

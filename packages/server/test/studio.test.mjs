@@ -7,7 +7,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import {
   ChatServer, ChatKeyNotRegistered, ChatSetupError, EXIT_CONFIG, setupCannotWork, AppKey, AppKeyError, card, toHex, fromHex, accountId, decodeChatDocument, grainStatsProblem,
   signedChatSpecProblem, signMemberProof, signChatSpecAsServer, registeredKeyStatus, memoryChatStore, ROLES, STATS_EVERY_MS,
-  decodeNotification, notificationProblem, decodeSignedGrainStats, fromBase64Url,
+  decodeNotification, notificationProblem, decodeSignedGrainStats, fromBase64Url, MEMBER_PROOF_AHEAD_MS,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep } from "./chat-helpers.mjs";
@@ -253,7 +253,8 @@ test("a private app takes its owner's and members' requests only", async () => {
       stranger: await ask(proof(fromHex("51".repeat(32), 32))),
       viewer: await ask(proof(VIEWER)),
       expired: await ask(proof(MEMBER, { expires_at: t - 1 })),
-      long: await ask(proof(MEMBER, { expires_at: t + 30 * DAY + 1 })),
+      // Past 30 days by more than a wallet's clock may run ahead.
+      long: await ask(proof(MEMBER, { expires_at: t + 30 * DAY + MEMBER_PROOF_AHEAD_MS + 1 })),
       lent: await ask(proof(MEMBER, { grain_key: "77".repeat(32) })),
     };
     assert.equal(seen.length, 0, "no handler ran");

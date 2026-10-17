@@ -7,8 +7,12 @@
  * (`?manifest=<url>` loads a manifest and opens its page).
  * Sign-in uses a test grain secret kept in this browser (real signatures, checkable by
  * `@saltix/grain-server`), with this account's member proof when the development registry puts it on the app's team or
- * among a private app's members (12-grains §5.1a; "Wallet" plays Saltix 0.1.53, whose sign-ins carry no member); invoices are checked like a wallet checks them; payments are not made
- * (it answers a made-up id); storage lives in this browser. Relay frames the grain sends are logged,
+ * among a private app's members (12-grains §5.1a; "Wallet" plays Saltix 0.1.53, whose sign-ins carry no member), and a
+ * sealed grain's sign-in names its virtual origin as Saltix's does; invoices are checked like a wallet checks them, a
+ * registered server key's too; payments are not made (it answers a made-up id); storage lives in this browser. Every
+ * request is held to Saltix's rules (`@saltix/grain/rules`): a tap before a payment, the chat, the app's page and the
+ * first asks for the address and notifications; the manifest's permissions; the team for the app's page; rate limits;
+ * storage's bounds; 64 KiB an answer or an event. Relay frames the grain sends are logged,
  * and "Frame to the grain" plays one arriving; "Check a notification" checks your server's like a
  * wallet does. The chat pane talks to the grain's chat server through the development relay as a wallet would
  * (22-grain-chats; `npm run dev`).
@@ -22,6 +26,8 @@ import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
 import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
 import { type DeviceKey, deviceKeyOf } from "../packages/server/src/keys";
 import { setupChat } from "./chat";
+import { sealedOrigin } from "../packages/server/src/sign-in";
+import { BridgeLimiter, bridgeAnswer, bridgeEvent, manageRule, permissionRule, storageRule, tapRule } from "../packages/grain/src/rules";
 import { type SheetManifest, fetchProfile, showConnectSheet } from "./connect-sheet";
 import { setupPhone } from "./phone";
 
@@ -76,38 +82,83 @@ class Refusal extends Error {
 }
 
 const consents = new Set<string>();
+/** The consent each method's first ask records. */
+const CONSENT: Record<string, string> = { grain_login: "login", grain_requestAddress: "address", grain_notifications_allow: "notifications" };
+/** Requests counted per method, as Saltix counts them; a new one with each manifest. */
+let limiter = new BridgeLimiter();
+let unknownActivation = false;
+
+/** What this browser's storage keeps for `slug`. */
+function storageOf(slug: string): Map<string, string> {
+  const prefix = `sim.storage.${slug}.`;
+  const kept = new Map<string, string>();
+  for (const k of Object.keys(localStorage)) if (k.startsWith(prefix)) kept.set(k.slice(prefix.length), localStorage.getItem(k) ?? "");
+  return kept;
+}
+
+/** Saltix's rules for a request before it is answered (`@saltix/grain/rules`): known and not too often, asked for by
+ *  the manifest, and from a tap where it needs one. What the page gets instead of an answer, or whether to ask the user. */
+function rulesFor(method: string, params: Record<string, unknown>, activation: boolean | null, slug: string): { answer: unknown } | { ask: boolean } {
+  const counted = limiter.take(method, Date.now());
+  if (counted === "unsupported") throw new Refusal(4200, `unsupported method ${method}`);
+  if (counted === "rate_limited") throw new Refusal(4290, `${method}: too often`);
+  if (loaded) {
+    const refused = permissionRule(method, loaded.manifest.permissions);
+    if (refused) throw new Refusal(refused.refuse, refused.message);
+  }
+  if (activation === null && !unknownActivation) {
+    unknownActivation = true;
+    write("this browser cannot tell a tap (navigator.userActivation): requests that need one are taken as if tapped");
+  }
+  const tap = tapRule(method, { tapped: activation !== false, consented: consents.has(CONSENT[method] ?? "") });
+  if ("refuse" in tap) throw new Refusal(tap.refuse, `${tap.message} (Saltix: within 5 seconds of a touch)`);
+  if ("answer" in tap) return tap;
+  if (method.startsWith("grain_storage_") && method !== "grain_storage_keys") {
+    const refused = storageRule(method.slice("grain_storage_".length) as "get" | "set" | "remove", params, storageOf(slug));
+    if (refused) throw new Refusal(refused.refuse, refused.message);
+  }
+  return { ask: tap.ask };
+}
 
 /** The user's key in the grain, as the wallet derives it (12-grains §5.1). */
 const grainSeed = (slug: string) => derive("Saltix grain key v1", secret(), new TextEncoder().encode(slug));
 /** The grain alias's address once `relay.open` registered it. */
 let alias: string | null = null;
 
-async function handle(origin: string, method: string, params: Record<string, unknown>): Promise<unknown> {
+/** Whether the loaded manifest is a sealed grain's: Saltix serves it at its virtual origin. */
+const isSealed = () => loaded !== null && "sealed" in loaded.manifest.entry;
+
+async function handle(origin: string, method: string, params: Record<string, unknown>, activation: boolean | null): Promise<unknown> {
   const s = settings();
   const storageKey = (k: unknown) => `sim.storage.${s.slug}.${String(k)}`;
+  const rule = rulesFor(method, params, activation, s.slug);
+  if ("answer" in rule) return rule.answer;
   switch (method) {
     case "grain_info":
       // Bridge version 3: the page's frame (12-grains §5, §7): zeros and no controls inside the safe area, the bars'
       // reach and the controls' box edge to edge.
       return {
-        slug: s.slug, version: 1, form: "hosted", listing: "unlisted", host: "simulator", host_version: "0.1.0",
-        bridge: 3, language: s.language, theme: s.theme, ...phone.insets(), network: "devnet", start: s.start,
+        slug: s.slug, version: loaded?.manifest.version ?? 1, form: isSealed() ? "sealed" : "hosted", listing: "unlisted", host: "simulator",
+        host_version: "0.1.0", bridge: 3, language: s.language, theme: s.theme, ...phone.insets(), network: "devnet", start: s.start,
       };
     case "grain_login": {
-      if (!consents.has("login") && !confirm(`${s.slug} asks to sign you in under a key of its own.`)) throw new Refusal(4001, "the user declined");
+      if (rule.ask && !confirm(`${s.slug} asks to sign you in under a key of its own.`)) throw new Refusal(4001, "the user declined");
       consents.add("login");
       const challenge = fromHex(String(params.challenge ?? ""));
       if (challenge.length > 64) throw new Refusal(-32602, "challenge: at most 64 bytes");
       const seed = grainSeed(s.slug);
       const at = Date.now();
-      const answer = { key: toHex(ed25519.getPublicKey(seed)), signature: toHex(ed25519.sign(loginMessage(s.slug, origin, challenge, at), seed)), at, origin };
+      // A sealed grain's page runs at its virtual origin in Saltix, and its sign-ins name that (12-grains §8), whatever
+      // address this computer serves it from.
+      const named = isSealed() ? sealedOrigin(s.slug) : origin;
+      const answer = { key: toHex(ed25519.getPublicKey(seed)), signature: toHex(ed25519.sign(loginMessage(s.slug, named, challenge, at), seed)), at, origin: named };
       // Saltix 0.1.53 puts no `member` in a sign-in; a newer one always does, the team's proof or null (12-grains §5.1a).
       if ($<HTMLSelectElement>("wallet").value === "legacy") return answer;
       return { ...answer, member: await chat.loginMember() };
     }
     case "grain_requestAddress":
       // Switched off on the Connect sheet: Saltix shows the sheet again with that one row, within 5 seconds of a tap.
-      if (!consents.has("address") && !confirm(`${s.slug} asks for your address: it could follow your activity on the blockchain (balances, transfers, names).`)) {
+      if (rule.ask && !confirm(`${s.slug} asks for your address: it could follow your activity on the blockchain (balances, transfers, names).`)) {
         throw new Refusal(4001, "the user declined");
       }
       consents.add("address");
@@ -121,7 +172,8 @@ async function handle(origin: string, method: string, params: Record<string, unk
       let line: string;
       if (typeof params.invoice === "string") {
         if (s.owner && s.genesis) {
-          const problem = invoiceProblem(params.invoice, s.slug, s.owner, s.genesis);
+          // Against the development registry too: an invoice of a server key it names pays the owner (12-grains §5.2).
+          const problem = invoiceProblem(params.invoice, s.slug, s.owner, s.genesis, Date.now(), await chat.record());
           if (problem) throw new Refusal(-32602, `invoice: ${problem}`);
         }
         const { invoice } = decodeInvoice(params.invoice);
@@ -160,10 +212,9 @@ async function handle(origin: string, method: string, params: Record<string, unk
       alias = null;
       return null;
     case "grain_notifications_allow":
-      if (!consents.has("notifications")) {
-        if (!confirm(`${s.slug} asks to send you notifications.`)) return { allowed: false };
-        consents.add("notifications");
-      }
+      // Asked again only from a tap (rulesFor); once allowed, allowed.
+      if (rule.ask && !confirm(`${s.slug} asks to send you notifications.`)) return { allowed: false };
+      consents.add("notifications");
       return { allowed: true };
     case "grain_scanQr": {
       const t = prompt(String(params.hint ?? "The text of a QR code"));
@@ -178,9 +229,11 @@ async function handle(origin: string, method: string, params: Record<string, unk
       return null;
     case "grain_manage_open": {
       // The wallet's own manage page (bridge 3): only for the app's team, within 5 seconds of a tap. The simulator has
-      // no manage page; it checks the section and says what Saltix would open.
+      // no manage page; it checks the section and the team, and says what Saltix would open.
       const section = params.section;
-      if (section !== undefined && section !== "members") throw new Refusal(-32602, "section: members");
+      if (section !== undefined && section !== null && section !== "members") throw new Refusal(-32602, "section: one of members");
+      const team = manageRule(await chat.onTeam());
+      if (team) throw new Refusal(team.refuse, team.message);
       write(`grain_manage_open: Saltix opens ${s.slug}'s manage page${section ? ` at its ${section}` : ""}, above the app, for its team (a mock here)`);
       return null;
     }
@@ -210,11 +263,16 @@ async function handle(origin: string, method: string, params: Record<string, unk
 
 window.addEventListener("message", async (event) => {
   if (event.source !== frame.contentWindow) return;
-  const m = event.data as { saltixSim?: number; id?: number; method?: string; params?: Record<string, unknown> };
+  const m = event.data as { saltixSim?: number; id?: number; method?: string; params?: Record<string, unknown>; activation?: boolean | null };
   if (!m || m.saltixSim !== 1 || !m.method) return;
-  const reply = (body: object) => frame.contentWindow?.postMessage({ saltixSim: 1, id: m.id, ...body }, event.origin);
+  // What Saltix posts, at most 64 KiB of JSON: a longer answer becomes its error (bridgeAnswer).
+  const reply = (body: { result: unknown } | { error: { code: number; message: string } }) => {
+    const answer = JSON.parse(bridgeAnswer(m.id ?? 0, body)) as Record<string, unknown>;
+    if ("error" in answer && "result" in body) write(`${m.method} ✖ 5000: the answer is over 64 KiB, so Saltix answers this error instead`);
+    frame.contentWindow?.postMessage({ saltixSim: 1, ...answer, id: m.id }, event.origin);
+  };
   try {
-    const result = await handle(event.origin, m.method, m.params ?? {});
+    const result = await handle(event.origin, m.method, m.params ?? {}, typeof m.activation === "boolean" ? m.activation : null);
     write(`${m.method} ${JSON.stringify(m.params)} → ${JSON.stringify(result)}`);
     reply({ result });
   } catch (e) {
@@ -225,6 +283,8 @@ window.addEventListener("message", async (event) => {
 });
 
 function emit(event: string, data: object) {
+  // An event over 64 KiB of JSON never reaches a page in Saltix (a relay frame's hex is twice its size).
+  if (bridgeEvent(event, data) === null) return write(`${event} event dropped: over 64 KiB, as Saltix drops it`);
   frame.contentWindow?.postMessage({ saltixSim: 1, event, data }, "*");
 }
 
@@ -340,6 +400,7 @@ async function loadManifest(url: string): Promise<void> {
   $<HTMLInputElement>("url").value = m.entry.hosted?.url ?? (m.entry.sealed ? new URL(m.entry.sealed.start, url).href : "");
   loaded = { manifest: m, url };
   consents.clear();
+  limiter = new BridgeLimiter();
   phone.repaint();
   write(`manifest of ${m.slug} v${m.version} loaded`);
 }

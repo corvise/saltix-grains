@@ -12,7 +12,11 @@ import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
 import { AppKey, accountId, encodeAddress, toHex, fromHex, signManifest } from "@saltix/grain-server";
 import { publish } from "../dist/registry.js";
-import { accessCall, bindCall, configureCall, membersOf, rateCall, readAppKey, sendCall, serverKeyOf, waitForRegistry, describeAppKey } from "../dist/studio.js";
+import { accessCall, bindCall, configureCall, membersOf, rateCall, readAppKey, serverKeyOf, waitForRegistry, describeAppKey } from "../dist/studio.js";
+import { sendSettled } from "../dist/send.js";
+
+/** Send `call` once the pool takes it (`--no-wait`). */
+const sendCall = (call, secret, s) => sendSettled(async () => call, secret, s, { wait: false });
 
 const secret = fromHex("61".repeat(32), 32);
 const owner = toHex(ed25519.getPublicKey(secret));

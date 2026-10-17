@@ -51,6 +51,9 @@ test("(b) the spec's version: raised with every change, as the guide says", () =
   assert.match(appRules, /a spec changed under the same version reaches nobody, and nothing\s+says so/);
   assert.match(appRules, /refuses to start on one changed under the same\s+version \(exit 78/);
   assert.match(guide, /refuses to start \(78,\s+`chat_spec_changed_under_version`\)/);
+  // An app made in Saltix holds a starting spec of version 1: a developer key's server serves 2 or more.
+  assert.match(appRules, /refuses\s+to start on 1: `chat_spec_version_starter`/);
+  assert.match(guide, /refuses to start on 1,\s+`chat_spec_version_starter`/);
 });
 
 test("(c) the unasked budget: the SDK's numbers", () => {

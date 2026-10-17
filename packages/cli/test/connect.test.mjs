@@ -12,10 +12,11 @@ import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   accountId, derive, checkGrainProfile, checkSiteProfile, decodeSignedProfile, fromHex, iconHash, profileProblem, readProfileLink, signProfile,
-  signedProfileFromJson, toHex,
+  signedProfileFromJson, toHex, profileToJson,
 } from "@saltix/grain-server";
 import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, pngSize, profileOfProject } from "../dist/connect.js";
 import { connectJson } from "../dist/template.js";
+import { servedSiteRevision, siteProfile } from "../dist/profile.js";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const grain = (args, cwd) => spawnSync("node", [main, ...args], { cwd, encoding: "utf8", timeout: 20_000 });
@@ -345,17 +346,25 @@ test("grain connect-profile: a website's profile signed by its operator, for /.w
   site.support = "mailto:help@dex.example";
   writeFileSync(join(dir, "connect.json"), JSON.stringify(site));
   const args = ["connect-profile", "--origin", "https://dex.example", "--name", "Example DEX", "--category", "finance", "--key", "site.key"];
-  const made = grain(args, dir);
+  const out = join(dir, ".well-known", "saltix-connect");
+  // The first time, with no file of it here and the site not answering (dex.example is no host), the revision a
+  // wallet would take is unknown: a wallet keeps a higher one, so the command asks for it rather than guess 1.
+  const unknown = grain(args, dir);
+  assert.equal(unknown.status, 1);
+  assert.match(unknown.stderr, /could not read the profile https:\/\/dex\.example serves now[^]*--revision N/);
+  assert.ok(!existsSync(out));
+  const made = grain([...args, "--revision", "1"], dir);
   assert.equal(made.status, 0, made.stderr);
   assert.match(made.stdout, /serve it at https:\/\/dex\.example\/\.well-known\/saltix-connect as application\/json/);
-  const out = join(dir, ".well-known", "saltix-connect");
   const signed = signedProfileFromJson(JSON.parse(readFileSync(out, "utf8")));
   assert.equal(checkSiteProfile(signed, "https://dex.example"), null);
   assert.deepEqual(signed.profile.subject, { site: { origin: "https://dex.example", name: "Example DEX", category: 2 } });
   assert.equal(signed.profile.owner, toHex(accountId(ed25519.getPublicKey(fromHex("64".repeat(32), 32)))));
   assert.equal(signed.profile.revision, 1);
-  // Again: the next revision; --revision names one.
-  assert.equal(grain(args, dir).status, 0);
+  // Again: above the file written before, while the site cannot be read; --revision names one.
+  const again = grain(args, dir);
+  assert.equal(again.status, 0, again.stderr);
+  assert.match(again.stdout, /revision 2/);
   assert.equal(signedProfileFromJson(JSON.parse(readFileSync(out, "utf8"))).profile.revision, 2);
   assert.equal(grain([...args, "--revision", "9"], dir).status, 0);
   assert.equal(signedProfileFromJson(JSON.parse(readFileSync(out, "utf8"))).profile.revision, 9);
@@ -379,11 +388,45 @@ test("grain connect-profile: a website's profile signed by its operator, for /.w
   const managed = "dsalt1q" + "q".repeat(52);
   const { encodeAddress } = await import("@saltix/grain-server");
   const account = encodeAddress("devnet", fromHex("77".repeat(32), 32), 5);
-  assert.equal(grain([...args, "--owner", account, "--out", other], dir).status, 0);
+  assert.equal(grain([...args, "--owner", account, "--out", other, "--revision", "1"], dir).status, 0);
+  // Offline (an operator's machine without the network): above the file written before, never a guess.
+  const offline = grain([...args, "--owner", account, "--out", other, "--offline"], dir);
+  assert.equal(offline.status, 0, offline.stderr);
+  assert.match(offline.stdout, /revision 2/);
   const device = signedProfileFromJson(JSON.parse(readFileSync(other, "utf8")));
   assert.equal(device.profile.owner, "77".repeat(32));
   assert.equal(device.key.ed25519, toHex(ed25519.getPublicKey(fromHex("64".repeat(32), 32))));
   assert.equal(checkSiteProfile(device, "https://dex.example"), null);
   assert.equal(grain([...args, "--owner", managed, "--out", join(dir, "x.json")], dir).status, 1, "not an address");
   assert.equal(grain([...args, "--revision", "0"], dir).status, 2);
+});
+
+test("a website's next revision goes above the one the site serves now, read as a wallet reads it", async () => {
+  const site = signProfile({
+    version: 1, subject: { site: { origin: "https://dex.example", name: "Example DEX", category: 2 } }, owner: ownerId, revision: 7,
+    texts: { en: { tagline: "Swap SALT and WORK", about: "", highlights: [], privacy: "" } }, website: null, support: null, terms: null,
+  }, secret);
+  const asked = [];
+  const answer = (status, body, headers = {}) => async (url, init) => {
+    asked.push({ url: String(url), init });
+    return new Response(body, { status, headers: { "content-type": "application/json", ...headers } });
+  };
+  const json = JSON.stringify(profileToJson(site));
+  assert.equal(await servedSiteRevision("https://dex.example", answer(200, json)), 7);
+  assert.equal(asked[0].url, "https://dex.example/.well-known/saltix-connect");
+  assert.equal(asked[0].init.redirect, "manual", "no redirect is followed, as a wallet follows none");
+  assert.equal(asked[0].init.credentials, "omit");
+  assert.equal(await servedSiteRevision("https://other.example", answer(200, json)), 0, "another origin's profile is none of this one's");
+  assert.equal(await servedSiteRevision("https://dex.example", answer(404, "not found")), 0, "nothing served yet");
+  assert.equal(await servedSiteRevision("https://dex.example", answer(302, "", { location: "https://dex.example/x" })), null, "a redirect a wallet does not follow");
+  assert.equal(await servedSiteRevision("https://dex.example", answer(503, "")), null);
+  assert.equal(await servedSiteRevision("https://dex.example", answer(200, "<html>")), null, "something that is no profile");
+  assert.equal(await servedSiteRevision("https://dex.example", async () => { throw new TypeError("fetch failed"); }), null);
+  // Above both the site's and the file's.
+  const value = { texts: site.profile.texts, website: null, support: null, terms: null };
+  const input = { value, origin: "https://dex.example", name: "Example DEX", category: "2" };
+  assert.equal((await siteProfile({ ...input, served: async () => 7 }, secret)).profile.revision, 8);
+  assert.equal((await siteProfile({ ...input, served: async () => 0 }, secret)).profile.revision, 1, "a site that serves none yet");
+  await assert.rejects(siteProfile({ ...input, served: async () => null }, secret), /--revision N/);
+  assert.equal((await siteProfile({ ...input, served: async () => null, revision: 3 }, secret)).profile.revision, 3);
 });

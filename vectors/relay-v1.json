@@ -19,7 +19,9 @@
     "own-device frame: Borsh(account [32], at u64, body, signer DeviceKey, signature [64]); body = 0 SignFetch(sid, commit) | 1 SignRequest(request) | 2 SignAck(sid, commit) | 3 SignResult(sid, commit, outcome u8, tx Option<[32]>, reason String) | 4 SignCancel(sid, commit) | 5 Renew(DeviceCert) | 6 Rekey(device [32], sealed Vec<u8>) | 7 Unlink(device [32]) | 8 SignGot(sid, commit) | 9 AppOp(op String); the signature is the signer's over BLAKE3 derive_key(\"Saltix own device frame v1\", Borsh of the fields before it): Ed25519, or ECDSA P-256 over SHA-256 of it as r ‖ s with a low s",
     "sync payload: E ‖ XChaCha20-Poly1305(key, nonce = 24 zero bytes, aad = account id) of the frame, sealed to the account's messaging key M: key = BLAKE3 derive_key(\"Saltix own device seal v1\", S ‖ E ‖ M); sent as base64url",
     "rekey payload: Borsh(authority, keys), sealed like the link payload to the browser's box key Q (its link QR's X25519 key) with key = BLAKE3 derive_key(\"Saltix rekey payload v1\", S ‖ E ‖ Q) and aad = account id ‖ device key",
-    "vault item signer (10-storage §5.1, §5.5): the item's last field before the signature is u8 0 (the account key) | 1 ‖ certificate (a certified device) — what Option<cert> encodes — | 2 ‖ managed signer; a managed account's item carries its account id where a kind 0 item carries its key, also in the aad"
+    "vault item signer (10-storage §5.1, §5.5): the item's last field before the signature is u8 0 (the account key) | 1 ‖ certificate (a certified device) — what Option<cert> encodes — | 2 ‖ managed signer; a managed account's item carries its account id where a kind 0 item carries its key, also in the aad",
+    "account profile (09-relay §1.5): SignedProfile = Borsh(profile, signature [64]); profile = (version u8 = 1, account [32], first_name String, last_name String, issued_at u64, signer); signer = tag 0 Key(account_key [32], device Option<cert>) | tag 1 Managed(seq u32, managed signer); signature over BLAKE3 derive_key(\"Saltix profile v1\", Borsh(profile)) by the account key, the certificate's device (a phone), a root or a device of the log (not a browser): Ed25519, or ECDSA P-256 over SHA-256 of it as r ‖ s with a low s; at most 1 024 bytes encoded; frames carry it as base64url",
+    "profile names: first_name 1–64 and last_name 0–64 Unicode scalar values; in NFC; refused: Cc, Cf (connect-v1.json's list), U+2028, U+2029, private use (U+E000–U+F8FF, U+F0000–U+FFFFD, U+100000–U+10FFFD); no White_Space (U+0009–000D, U+0020, U+0085, U+00A0, U+1680, U+2000–200A, U+2028, U+2029, U+202F, U+205F, U+3000) first or last; not starting with @ or +; `profile_name` vectors say which texts each field takes"
   ],
   "vectors": [
     {
@@ -364,6 +366,263 @@
       "kind": "rekey_payload",
       "name": "rekey payload to a browser that stays",
       "sealed_hex": "016fe972ee15bffc83ff35d19d3e149a4a515dc1515bf05c6b182928ae3cb914948254428901434d997a6aabc7c6c66b6414e96d9b68b3964a59b1ae55c76db5fb915a6e813529e5371c8d6fef06966b15d367e6d3f44ceeae391c1896c0b4cb97a60251886128424da5c86cfb251643860ef8ae1fe9844bcf4399204da42d25ca7be7df790ade1fd93cf0b513ea1ca4bd55591ff69182a7ce45f1f4653711d3b94692867a8ca79d4549104a6b0d56e5461a99b9dbf33624b2af5483f95b76a17d0815bf0fd4fc8de158bdc8ced02a410717761f9d6610b9b3a232cc4d3a4d50286f083ebdd81c4049c8f49b8c3ec3dd3e48a0015caa898051c41918c1303c1dd6eb0f2f68eb3165c309fe22c25868fd57797b10ce9ca1a996ebff59ced390b43d99bf7f21bb958bc779b8c542c21ea70e2a804a82b9509e18dec5ee353881cce361caa2"
+    },
+    {
+      "account_hex": "88cab07098d3dbbdde7fdc521bf7000852f95b46ab9f1c41e1b8a0c1d2b26354",
+      "address": "dsalt1q3r9tquyc60dmmhnlm3fphacqppf0jk6x4w03cs0phzsvr54jvd2qwp5urm",
+      "encoded_hex": "0188cab07098d3dbbdde7fdc521bf7000852f95b46ab9f1c41e1b8a0c1d2b2635408000000d090d0bdd0bdd0b010000000d09ad0b0d180d0b5d0bdd0b8d0bdd0b0e09a50c4a001000000d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c97787370007838b4f855798f6347ccc19584075c55718628fc03751d9735e5090bbed9852194e66299726deaf083fe46227a9518bd09edbed0afb0fb6a7cfe9f75afb4e07",
+      "first_name": "Анна",
+      "issued_at": 1790000012000,
+      "kind": "profile",
+      "last_name": "Каренина",
+      "message_hex": "2496445a6c063ca71684b0e973feddb8e45ee5f6f640d00aa93e010ea5a8c713",
+      "name": "profile by the account key",
+      "profile_b64": "AYjKsHCY09u93n_cUhv3AAhS-VtGq58cQeG4oMHSsmNUCAAAANCQ0L3QvdCwEAAAANCa0LDRgNC10L3QuNC90LDgmlDEoAEAAADQSrIydCu0qzoTaL1GFeTm0CJKtxoBa6-FIKMyyXeHNwAHg4tPhVeY9jR8zBlYQHXFVxhij8A3UdlzXlCQu-2YUhlOZimXJt6vCD_kYiepUYvQntvtCvsPtqfP6fda-04H",
+      "signature_hex": "07838b4f855798f6347ccc19584075c55718628fc03751d9735e5090bbed9852194e66299726deaf083fe46227a9518bd09edbed0afb0fb6a7cfe9f75afb4e07",
+      "signer": {
+        "key": "account",
+        "private_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "signer_hex": "00d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c977873700"
+    },
+    {
+      "account_hex": "88cab07098d3dbbdde7fdc521bf7000852f95b46ab9f1c41e1b8a0c1d2b26354",
+      "address": "dsalt1q3r9tquyc60dmmhnlm3fphacqppf0jk6x4w03cs0phzsvr54jvd2qwp5urm",
+      "encoded_hex": "0188cab07098d3dbbdde7fdc521bf7000852f95b46ab9f1c41e1b8a0c1d2b2635404000000416e6e6100000000c89e50c4a001000000d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c977873701204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c2100006c50c4a00100000098011ca8010000232597206d592fb8cd014052d8cc20a2400d2ef2f25e6ccf7437fc50f2d43d9c1395cbca2f6b9c51edfc259fb1756b724a1e5c917984d969eff06044dd86a60a43a156ab64fe7c914183d18225c50f60e895b260a714a958815a4c0e7cf2dccd2368d8906d476d832c85168f8ac2cdc8df0be5c790743ca4c73deddfd64bf00c",
+      "first_name": "Anna",
+      "issued_at": 1790000013000,
+      "kind": "profile",
+      "last_name": "",
+      "message_hex": "5d213d1c73e0bb9cf6e24285935b663e50a20bb365093f47262acb23ffd86e15",
+      "name": "profile by a phone",
+      "profile_b64": "AYjKsHCY09u93n_cUhv3AAhS-VtGq58cQeG4oMHSsmNUBAAAAEFubmEAAAAAyJ5QxKABAAAA0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzcBIEBA42TBDyvsnB_lAKHNTCR8idZQoB7X6CyrqGeHfCEAAGxQxKABAAAAmAEcqAEAACMllyBtWS-4zQFAUtjMIKJADS7y8l5sz3Q3_FDy1D2cE5XLyi9rnFHt_CWfsXVrckoeXJF5hNlp7_BgRN2GpgpDoVarZP58kUGD0YIlxQ9g6JWyYKcUqViBWkwOfPLczSNo2JBtR22DLIUWj4rCzcjfC-XHkHQ8pMc97d_WS_AM",
+      "signature_hex": "43a156ab64fe7c914183d18225c50f60e895b260a714a958815a4c0e7cf2dccd2368d8906d476d832c85168f8ac2cdc8df0be5c790743ca4c73deddfd64bf00c",
+      "signer": {
+        "device_hex": "204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c2100006c50c4a00100000098011ca8010000232597206d592fb8cd014052d8cc20a2400d2ef2f25e6ccf7437fc50f2d43d9c1395cbca2f6b9c51edfc259fb1756b724a1e5c917984d969eff06044dd86a60a",
+        "key": "phone",
+        "private_key_hex": "1212121212121212121212121212121212121212121212121212121212121212"
+      },
+      "signer_hex": "00d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c977873701204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c2100006c50c4a00100000098011ca8010000232597206d592fb8cd014052d8cc20a2400d2ef2f25e6ccf7437fc50f2d43d9c1395cbca2f6b9c51edfc259fb1756b724a1e5c917984d969eff06044dd86a60a"
+    },
+    {
+      "account_hex": "66d4b105a23066a00e502977a214bb4ff4828fa8bb419a8a5a23cb79ddb2814b",
+      "address": "dsalt19vm2tzpdzxpn2qrjs99m6y99mfl6g9raghdqe4zj6y09hnhdjs99s6zwsvu",
+      "encoded_hex": "0166d4b105a23066a00e502977a214bb4ff4828fa8bb419a8a5a23cb79ddb2814b0a000000d09cd0b0d180d0b8d18f17000000d098d0b2d0b0d0bdd0bed0b2d0b02dd0a1d0bcd0b8d182b0a250c4a001000001050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed075bd541739bd9bd655c6906cbf4c1ed252902f0a7a6c3f21920262907eed97610f36969c1fc1a35ee9197269c7b190fe541cc308c766450fffea838fd2b0d08",
+      "first_name": "Мария",
+      "issued_at": 1790000014000,
+      "kind": "profile",
+      "last_name": "Иванова-Смит",
+      "message_hex": "870a5d75fc120f2f269a79fffd0184fcde561cb372d65fa97cc3d6ee1b09faa7",
+      "name": "managed profile by the phone",
+      "profile_b64": "AWbUsQWiMGagDlApd6IUu0_0go-ou0Gailojy3ndsoFLCgAAANCc0LDRgNC40Y8XAAAA0JjQstCw0L3QvtCy0LAt0KHQvNC40YKwolDEoAEAAAEFAAAAAQECAhfmF_C2RDkoJ4-WmZ5pojpPLBUr321s32bluAKC1O0HW9VBc5vZvWVcaQbL9MHtJSkC8Kemw_IZICYpB-7ZdhDzaWnB_Bo17pGXJpx7GQ_lQcwwjHZkUP_-qDj9Kw0I",
+      "signature_hex": "075bd541739bd9bd655c6906cbf4c1ed252902f0a7a6c3f21920262907eed97610f36969c1fc1a35ee9197269c7b190fe541cc308c766450fffea838fd2b0d08",
+      "signer": {
+        "key": "managed phone",
+        "log": "vectors/accounts-v1.json `log`",
+        "p256_secret_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "seq": 5
+      },
+      "signer_hex": "01050000000101020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed"
+    },
+    {
+      "account_hex": "626d80dc4c90c72db9530e27c81b1784b6b9601bcf4a1f4e9290e0a6b4100357",
+      "address": "dsalt19vfkcphzvjrrjmw2npcnusxchsjmtjcqmea9p7n5jjrs2ddqsqdts2t22lv",
+      "encoded_hex": "01626d80dc4c90c72db9530e27c81b1784b6b9601bcf4a1f4e9290e0a6b4100357040000005a6fc3ab0000000098a650c4a0010000010000000000d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da6eda3174e849e706077dd2c5e0cf73965f52faee25b0dbbb5a90dd629dae523cfa0cddf0ccba7b7826985024c46c7eacf627bf1c788831fecb6dc649be9c8b0e",
+      "first_name": "Zoë",
+      "issued_at": 1790000015000,
+      "kind": "profile",
+      "last_name": "",
+      "message_hex": "855870b698bd36f920ab354516348b464aecd89913b34f1807506216428f002a",
+      "name": "profile of a new address by its first root",
+      "profile_b64": "AWJtgNxMkMctuVMOJ8gbF4S2uWAbz0ofTpKQ4Ka0EANXBAAAAFpvw6sAAAAAmKZQxKABAAABAAAAAADVQgfaGUl33PRq2_7CvC51tS1aikIYT-39wAAk8OPo2m7aMXToSecGB33SxeDPc5ZfUvruJbDbu1qQ3WKdrlI8-gzd8My6e3gmmFAkxGx-rPYnvxx4iDH-y23GSb6ciw4",
+      "signature_hex": "6eda3174e849e706077dd2c5e0cf73965f52faee25b0dbbb5a90dd629dae523cfa0cddf0ccba7b7826985024c46c7eacf627bf1c788831fecb6dc649be9c8b0e",
+      "signer": {
+        "key": "root",
+        "log": "empty",
+        "private_key_hex": "1515151515151515151515151515151515151515151515151515151515151515",
+        "seq": 0
+      },
+      "signer_hex": "010000000000d54207da194977dcf46adbfec2bc2e75b52d5a8a42184fedfdc00024f0e3e8da"
+    },
+    {
+      "chars": 4,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "a Latin name",
+      "text": "Anna",
+      "text_hex": "416e6e61"
+    },
+    {
+      "chars": 10,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "Cyrillic with a hyphen",
+      "text": "Анна-Мария",
+      "text_hex": "d090d0bdd0bdd0b02dd09cd0b0d180d0b8d18f"
+    },
+    {
+      "chars": 3,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "Han characters",
+      "text": "李小龙",
+      "text_hex": "e69d8ee5b08fe9be99"
+    },
+    {
+      "chars": 6,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "an emoji",
+      "text": "Anna 🌸",
+      "text_hex": "416e6e6120f09f8cb8"
+    },
+    {
+      "chars": 3,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "an @ inside",
+      "text": "x@y",
+      "text_hex": "784079"
+    },
+    {
+      "chars": 64,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "64 characters",
+      "text": "Я123456789012345678901234567890123456789012345678901234567890123",
+      "text_hex": "d0af313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930313233"
+    },
+    {
+      "chars": 0,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "empty",
+      "text": "",
+      "text_hex": ""
+    },
+    {
+      "chars": 65,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "65 characters",
+      "text": "Я1234567890123456789012345678901234567890123456789012345678901234",
+      "text_hex": "d0af31323334353637383930313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738393031323334"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a space first",
+      "text": " Anna",
+      "text_hex": "20416e6e61"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a no-break space last",
+      "text": "Anna ",
+      "text_hex": "416e6e61c2a0"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "an ideographic space first",
+      "text": "　Anna",
+      "text_hex": "e38080416e6e61"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a line feed",
+      "text": "An\nna",
+      "text_hex": "416e0a6e61"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a right-to-left override",
+      "text": "Anna‮",
+      "text_hex": "416e6e61e280ae"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a right-to-left isolate",
+      "text": "⁧Anna",
+      "text_hex": "e281a7416e6e61"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a zero-width joiner",
+      "text": "An‍na",
+      "text_hex": "416ee2808d6e61"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "private use",
+      "text": "Anna",
+      "text_hex": "416e6e61ee8080"
+    },
+    {
+      "chars": 5,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a username's mark first",
+      "text": "@anna",
+      "text_hex": "40616e6e61"
+    },
+    {
+      "chars": 11,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "a number's mark first",
+      "text": "+0 777 1234",
+      "text_hex": "2b30203737372031323334"
+    },
+    {
+      "chars": 4,
+      "first_name": false,
+      "kind": "profile_name",
+      "last_name": false,
+      "name": "not in NFC (e and a combining diaeresis)",
+      "text": "Zoë",
+      "text_hex": "5a6f65cc88"
+    },
+    {
+      "chars": 3,
+      "first_name": true,
+      "kind": "profile_name",
+      "last_name": true,
+      "name": "in NFC (ë)",
+      "text": "Zoë",
+      "text_hex": "5a6fc3ab"
     }
   ],
   "version": 1

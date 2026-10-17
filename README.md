@@ -40,8 +40,9 @@ the registry transactions of 12-grains and 24-app-studio, deposits, the develope
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
 chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
 apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json` and the
-Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a checkout of
-corvise/saltix) refreshes them.
+Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json` byte for byte, refusals included; `scripts/sync-vectors.sh ../saltix` (a clean checkout of
+corvise/saltix) refreshes them and records each file's blob id in `vectors/SOURCE`, which CI holds them to
+(`node scripts/check-vectors.mjs`).
 
 ## Quick start
 
@@ -102,9 +103,9 @@ npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.
                                           # a sealed grain: public/ as one ZIP named by its hash
 npx grain publish                         # a QR code: the owner's Saltix registers it (the network quotes the deposit)
 npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
-npx grain publish --key owner.key --wait  # or sign with a key file (test networks)
+npx grain publish --key owner.key        # or sign with a key file (test networks): returns once it landed
 npx grain profile                         # a QR code: the owner's Saltix sets the Connect profile (connect.json)
-npx grain profile --key owner.key --wait  # or sign it with a key file (test networks); --clear removes it
+npx grain profile --key owner.key        # or sign it with a key file (test networks); --clear removes it
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
                                           # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
 npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
@@ -123,13 +124,27 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 
 - `grain help <command>` (or `grain <command> --help`, `-h`) prints that command's part of the help and runs nothing;
   `grain --version` names the tool's version. A flag's value is the next word or comes after `=` (`--node=URL`); a
-  switch (`--chat`, `--wallet`, `--wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`) takes none, so
-  `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never ignored.
+  switch (`--chat`, `--wallet`, `--wait`, `--no-wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`)
+  takes none, so `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never
+  ignored.
+- A registry call signed with a key file (`publish`, `retire`, `configure`, `access`, `rate`, `bind`, `profile`)
+  returns once its transaction landed and the registry holds what it makes (3 minutes at most): each carries the
+  account's nonce, and a profile its revision, as the node holds them, so the next call is built above it. A call the
+  pool refuses because the account's earlier one is still pending (another command at the same time) is built again
+  once that landed. `--no-wait` returns once the pool took it.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
   the page's colours as Saltix takes them, and Saltix's splash while the page loads, on a phone, the Galaxy Z Fold's
-  sizes and an iPhone-like screen.
+  sizes and an iPhone-like screen. The simulator holds every request to Saltix's rules (`@saltix/grain/rules`, from
+  the wallet's own): a tap of the user (within 5 seconds) before a payment, the app's chat, its page in the wallet
+  (for its team only) and asking again for the address or notifications; the manifest's permissions; rate limits per
+  method; storage's bounds (keys of 1 to 128 bytes, values of 60 KiB, 1 MiB an app); and 64 KiB an answer or an event
+  (a relay frame over about 32 KB never reaches a page). A sealed grain signs in under its virtual origin
+  (`https://<slug>.grain.invalid`) and its pages carry Saltix's Content-Security-Policy. `grain dev` keeps a
+  development registry: the simulator's account joins the team or a private app (so its sign-ins carry member
+  proofs), and your server reads it at `/api/dev/rpc` (`node`), of a developer key's network and naming its key with
+  `--app-key`; invoices of that key pay the owner there as in Saltix.
 - `grain init`'s page declares `viewport-fit=cover` and lays itself out edge to edge by the variables Saltix (and
   `grain.layout()`) sets, and `grain init` writes `AGENTS.md` (the rules a coding agent follows) and `CLAUDE.md` (which
   points to it). `grain lint` warns when a page in `public/` declares `viewport-fit=cover` and nothing reads the safe
@@ -160,8 +175,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   profile itself at the registry's revision and one, and sends the call; `--clear` removes the profile. `grain show`
   prints the registry's profile and whether a wallet takes it.
 - `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
-  operator's key file, from the texts and links of `--profile` (`connect.json`), at the next revision of the file it
-  writes (`--out`, `.well-known/saltix-connect`) or `--revision N`: serve it at `/.well-known/saltix-connect` as
+  operator's key file, from the texts and links of `--profile` (`connect.json`), at a revision above the one the site
+  serves now and the file it writes (`--out`, `.well-known/saltix-connect`), or `--revision N`; when neither can be
+  told it asks for `--revision` (`--offline`: the file only): serve it at `/.well-known/saltix-connect` as
   `application/json`, with no redirect ([docs/connect.md](docs/connect.md)).
 - `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
   owner.key's account or `--address` (`faucet_request`): one every 5 minutes an address; a refusal says when to come

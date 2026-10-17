@@ -11,7 +11,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import {
   fromHex, toHex, accountId, ROLES, admits, needsController, keyStandsFor, memberProofProblem, signMemberProof, memberProofToSign,
   signGrainStats, grainStatsToSign, grainStatsProblem, STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS, UsageWindow, USAGE_WINDOW_MS,
-  memoryChatStore, fileChatStore, AppKey, AppKeyError,
+  memoryChatStore, fileChatStore, AppKey, AppKeyError, MEMBER_PROOF_AHEAD_MS, MESSAGE_AHEAD_MS, memberProofTimely,
 } from "../dist/index.js";
 
 const NOW = 1_800_000_000_000;
@@ -47,8 +47,15 @@ test("a private grain admits its members only", () => {
   assert.equal(refused(signMemberProof(proof(day, { grain_key: pub(key(0x51)) }), MEMBER, genesis)), "mismatch", "a proof for another grain key: lent");
   assert.equal(refused(signMemberProof(proof(day, { slug: "other" }), MEMBER, genesis)), "mismatch");
   assert.equal(refused(signMemberProof(proof(NOW), MEMBER, genesis)), "expired");
-  assert.equal(refused(signMemberProof(proof(NOW + MEMBER_PROOF_LIFE_MS + 1), MEMBER, genesis)), "expired", "longer than 30 days");
+  // 30 days ahead, with the 5 minutes a clock ahead of the server's may give (MESSAGE_AHEAD_MS): a wallet mints its proof
+  // by its own clock, so a server whose clock lags must not call a fresh 30-day proof "expired".
+  assert.equal(MEMBER_PROOF_AHEAD_MS, MESSAGE_AHEAD_MS);
+  assert.equal(refused(signMemberProof(proof(NOW + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS + 1), MEMBER, genesis)), "expired", "longer than 30 days");
+  assert.equal(refused(signMemberProof(proof(NOW + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS), MEMBER, genesis)), null, "30 days by a clock 5 minutes ahead");
   assert.equal(refused(signMemberProof(proof(NOW + MEMBER_PROOF_LIFE_MS), MEMBER, genesis)), null, "30 days exactly");
+  for (const [at, ok] of [[NOW, false], [NOW + 1, true], [NOW + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS, true], [NOW + MEMBER_PROOF_LIFE_MS + MEMBER_PROOF_AHEAD_MS + 1, false]]) {
+    assert.equal(memberProofTimely(at, NOW), ok, String(at - NOW));
+  }
   assert.equal(refused(signMemberProof(proof(day), key(0x51), genesis)), "signer", "signed by a key that does not speak for the account");
   const forged = signMemberProof(proof(day), MEMBER, genesis);
   forged.proof.expires_at -= 1;

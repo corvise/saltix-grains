@@ -214,7 +214,8 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    commit or report it, nor \`owner.key\`, \`server.key\` or any other key; if it is pasted to you, write it with
    \`(umask 077 && cat > app.key)\` and never repeat it back.
 2. **Raise \`chat.json\`'s \`version\` with every change of it.** Saltix takes a spec only when its version is higher than
-   the one it holds (an app made in Saltix starts at 1): a spec changed under the same version reaches nobody, and nothing
+   the one it holds (an app made in Saltix starts at 1, so a server with its developer key serves 2 or more, and refuses
+   to start on 1: \`chat_spec_version_starter\`): a spec changed under the same version reaches nobody, and nothing
    says so. The server remembers the spec it served (in its store) and refuses to start on one changed under the same
    version (exit 78, \`raise "version" above N\`); never delete the store to get past it.
 3. **Unasked messages have a budget**: \`chat.notify\` and \`chat.notification\` count against 10 per user in any 24

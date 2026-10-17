@@ -443,7 +443,7 @@ test("a handler's error reaches the team as a card for an AI agent; the same err
     assert.equal(rows.Command, "/key");
     assert.equal(rows.Request, r.request.id);
     assert.equal(rows["App version"], "1.4.2");
-    assert.equal(rows["Chat spec"], "v1");
+    assert.equal(rows["Chat spec"], "v2");
     assert.match(rows.Where, /^boom \(/);
     assert.equal(rows["Time (UTC)"], new Date(t).toISOString());
     assert.match(stack.text.text, /^Time \(UTC\): .+\nStack:\nat boom/);

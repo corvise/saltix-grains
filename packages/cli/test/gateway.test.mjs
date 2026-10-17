@@ -94,7 +94,8 @@ test("a command goes to a relay's gateway trusted by its pin; another certificat
   const configured = await grain(["configure", "--slug", "chess", "--server", server, "--relay", g.relay], dir);
   assert.equal(configured.code, 0, configured.stderr);
   assert.match(configured.stdout, new RegExp(`configure: transaction ${"ab".repeat(32)}`));
-  assert.deepEqual(g.asked.map((a) => a.method), ["grain_get", "node_status", "account_get", "transaction_submit"]);
+  // Then it waits for the call to land: this gateway's node says nothing of transactions, so it stops there.
+  assert.deepEqual(g.asked.map((a) => a.method), ["grain_get", "node_status", "account_get", "transaction_submit", "transaction_get"]);
 });
 
 test("grain faucet asks for test SALT for the key file's account, says a refusal in words, and waits when asked", tls, async (t) => {

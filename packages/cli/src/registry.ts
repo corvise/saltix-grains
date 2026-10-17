@@ -37,11 +37,11 @@ export function salt(units: bigint): string {
 interface Status { genesis: string; slot: number; network: string }
 interface Account { nonce: number; salt: string }
 
-/** Register `signed` with the deposit the node quotes for its slug, or update it when its owner registered the slug
- *  before. */
-export async function publish(signed: SignedManifest, secret: Uint8Array, s: Signing): Promise<Sent> {
+/** The call that registers `signed` with the deposit the node quotes for its slug, or updates it when its owner
+ *  registered the slug before: built from what the registry holds now. */
+export async function publishCall(signed: SignedManifest, node: NodeLike, secret: Uint8Array): Promise<GrainCall> {
   const m = signed.manifest;
-  const { grain: now, deposit } = await grainQuote(s.node, m.slug);
+  const { grain: now, deposit } = await grainQuote(node, m.slug);
   const mine = toHex(accountId(fromHex(publicKeyOf(secret), 32)));
   let call: GrainCall;
   if (now === null) {
@@ -55,17 +55,27 @@ export async function publish(signed: SignedManifest, secret: Uint8Array, s: Sig
   } else {
     call = { update: signed };
   }
-  return submit(call, secret, s);
+  return call;
 }
 
-/** Close the slug for good: the deposit returns 30 days later. */
-export async function retire(slug: string, secret: Uint8Array, s: Signing): Promise<Sent> {
-  const now = await grainGet(s.node, slug);
+/** Register or update `signed` (`publishCall`), signed with the key file's secret. */
+export async function publish(signed: SignedManifest, secret: Uint8Array, s: Signing): Promise<Sent> {
+  return submit(await publishCall(signed, s.node, secret), secret, s);
+}
+
+/** The call that closes the slug for good (the deposit returns 30 days later), once the registry says it may. */
+export async function retireCall(slug: string, node: NodeLike, secret: Uint8Array): Promise<GrainCall> {
+  const now = await grainGet(node, slug);
   const mine = toHex(accountId(fromHex(publicKeyOf(secret), 32)));
   if (now === null) throw new Error(`${slug}: not registered`);
   if (now.owner !== mine) throw new Error(`${slug}: registered by another owner`);
   if (now.retired !== null) throw new Error(`${slug}: retired already`);
-  return submit({ retire: slug }, secret, s);
+  return { retire: slug };
+}
+
+/** Retire `slug` (`retireCall`), signed with the key file's secret. */
+export async function retire(slug: string, secret: Uint8Array, s: Signing): Promise<Sent> {
+  return submit(await retireCall(slug, s.node, secret), secret, s);
 }
 
 export async function show(node: NodeLike, slug: string): Promise<RegisteredGrain | null> {

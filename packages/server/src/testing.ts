@@ -265,7 +265,7 @@ export async function testChat(o: TestChatOptions): Promise<TestChat> {
     }
 
     const proof = () => accountSecret === null ? null : signMemberProof(
-      { slug: spec.slug, account: accountOf(accountSecret), grain_key: key, expires_at: Date.now() + MEMBER_PROOF_LIFE_MS - 60_000 },
+      { slug: spec.slug, account: accountOf(accountSecret), grain_key: key, expires_at: Date.now() + MEMBER_PROOF_LIFE_MS },
       accountSecret, chain.genesis,
     );
 
