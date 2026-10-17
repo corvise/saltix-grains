@@ -160,9 +160,15 @@ export const EXIT_CONFIG = 78;
 
 /** Why a server's setup cannot work as it stands: the key is another network's (`chat_wrong_network`: the network was
  *  reset, or another answers), the registry does not name it (`chat_key_not_registered`), the spec changed under the
- *  version served or went below it, or no relay is known for the key's network (`chat_no_relays`). */
+ *  version served or went below it, a developer key's spec is of the starting spec's version (`chat_spec_version_starter`),
+ *  or no relay is known for the key's network (`chat_no_relays`). */
 export type ChatSetupCode =
-  | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version" | "chat_spec_version_lowered" | "chat_no_relays";
+  | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version" | "chat_spec_version_lowered"
+  | "chat_spec_version_starter" | "chat_no_relays";
+
+/** The version of the spec Saltix signs when it makes an app (24-app-studio §5): a developer key's server serves a
+ *  higher one, since a wallet replaces the spec it holds only with a higher version (22-grain-chats §2). */
+export const STARTER_SPEC_VERSION = 1;
 
 /**
  * A setup the server refuses to run as it stands (the configuration refusals of `ChatServer.start`): restarting it
@@ -650,6 +656,14 @@ export class ChatServer {
     const setup: Setup = { slug, secret, key, cert, chain, ownerKey, view, grain };
 
     const signed = ChatServer.signedSpec(options.spec, setup);
+    if (appKey && signed.spec.version <= STARTER_SPEC_VERSION) {
+      // The app's wallets hold the starting spec Saltix signed at version 1: a spec of that version never replaces it,
+      // so its commands would never appear, and nothing would say why.
+      const hint = `raise "version" to ${STARTER_SPEC_VERSION + 1} or more`;
+      log("error", "chat_spec_version_starter", { version: signed.spec.version, hint });
+      throw new ChatSetupError("chat_spec_version_starter", `chat spec: version ${signed.spec.version} is the starting spec's, which ` +
+        `Saltix signed when it made the app; wallets keep theirs until a higher version comes, so this one would reach nobody: ${hint}`);
+    }
     const problem = ChatServer.problem(setup, signed, cert, now);
     if (problem) throw new Error(problem);
     if (options.relay && options.relay.address !== encodeAddress(chain.network, accountId(fromHex(key, 32)))) {

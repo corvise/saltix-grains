@@ -65,7 +65,8 @@ What users can send, declared ahead; the wallet draws each command's form and ch
 ```
 
 - **Raise `version` with every change.** Saltix takes a spec only when its version is higher than the one it holds; an
-  app made in Saltix starts at 1. A spec changed under the same version reaches nobody, and nothing says so.
+  app made in Saltix starts at 1, so your server serves 2 or more (from its developer key it refuses to start on 1,
+  `chat_spec_version_starter`, exit 78). A spec changed under the same version reaches nobody, and nothing says so.
 - `keeps` (days you keep what users send) and `ai` (whether a language model answers) are shown to users before their
   first action: they must be true.
 - At most 32 commands of at most 8 parameters; names `[a-z0-9_]`, a command's starting with a letter; every text has

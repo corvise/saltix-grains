@@ -84,7 +84,7 @@ Keep the owner key off the server: it signs the spec and the certificate offline
 
 ```json
 {
-  "slug": "keys", "version": 1,
+  "slug": "keys", "version": 2,
   "intro": { "en": "One-time access keys for the closed sites.", "ru": "Одноразовые ключи доступа к закрытым сайтам." },
   "commands": [
     {
@@ -131,8 +131,9 @@ no wallet that holds the version served, and nothing else would say so. `setSpec
 **Setups that cannot work.** Every configuration refusal of `ChatServer.start` is a `ChatSetupError` (`code`, and
 `exitCode` 78): `chat_wrong_network` (a developer key of another network: the test network was reset, or `chain`
 contradicts the node), `chat_key_not_registered` (`ChatKeyNotRegistered`: replaced, revoked, retired, not registered),
-`chat_spec_changed_under_version` and `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_no_relays` (a network
-with no public relays and no node given). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
+`chat_spec_changed_under_version` and `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_spec_version_starter`
+(a developer key's spec of version 1: Saltix made the app with a starting spec of version 1, which wallets keep until a
+higher one comes, so serve 2 or more), `chat_no_relays` (a network with no public relays and no node given). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
 developer key): exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on; anything else (a network
 that is down) exits with 1 and may pass on a restart. A store without
 `served` and `setServed` (your own `ChatStore`) checks nothing across restarts; `fileChatStore` keeps it.
