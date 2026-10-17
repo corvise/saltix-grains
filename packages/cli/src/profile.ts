@@ -65,6 +65,34 @@ export async function waitForProfile(node: NodeLike, slug: string, profile: Conn
   }
 }
 
+/** A site's profile is read in at most this many bytes, as a wallet reads it (19-connect §11.3). */
+const SITE_PROFILE_MAX = 64 * 1024;
+
+/**
+ * The revision of the profile `origin` serves now at its well-known path, read as a wallet reads it (no cookies, no
+ * redirect followed, at most 64 KiB, within `timeoutMs`): 0 when it serves none (404, 410) or another origin's, null
+ * when it cannot be told (unreachable, a redirect, another error, something that is no profile). A wallet keeps a site's
+ * profile and replaces it only with a higher revision, so the next one goes above this.
+ */
+export async function servedSiteRevision(origin: string, fetcher: typeof fetch = fetch, timeoutMs = 5_000): Promise<number | null> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    const res = await fetcher(wellKnownOf(origin), { redirect: "manual", credentials: "omit", referrerPolicy: "no-referrer", signal: abort.signal });
+    if (res.status === 404 || res.status === 410) return 0;
+    if (res.status !== 200) return null;
+    const body = new Uint8Array(await res.arrayBuffer());
+    if (body.length > SITE_PROFILE_MAX) return null;
+    const signed = signedProfileFromJson(JSON.parse(new TextDecoder().decode(body)));
+    const subject = signed.profile.subject;
+    return "site" in subject && subject.site.origin === origin ? signed.profile.revision : 0;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface SiteProfileInput {
   /** The project file's fields: texts and links; a `subject` of a site is taken unless the flags name it. */
   value: unknown;
@@ -72,6 +100,8 @@ export interface SiteProfileInput {
   name?: string;
   category?: string;
   revision?: number;
+  /** What the site serves now (`servedSiteRevision`): its revision, 0 for none, null when it cannot be told. */
+  served: (origin: string) => Promise<number | null>;
   /** The file written before, if any: the next revision goes above its own for the same origin. */
   previous?: string;
   /** The operator's account (an address or its id in hex) when the key is one of its devices; the key's own account
@@ -87,9 +117,13 @@ function accountOf(text: string): string {
   throw new Error(`--owner ${text}: an address (dsalt1…) or an account id in hex`);
 }
 
-/** A website's profile (subject `site`) signed with the operator's key file: its JSON form, which the site serves at
- *  `/.well-known/saltix-connect`. */
-export function siteProfile(input: SiteProfileInput, secret: Uint8Array): SignedConnectProfile {
+/**
+ * A website's profile (subject `site`) signed with the operator's key file: its JSON form, which the site serves at
+ * `/.well-known/saltix-connect`. Its revision, unless given, goes above both the one the site serves now and the file
+ * written before; when neither can be told (the site cannot be read and no file of it is here), it asks for one rather
+ * than start at 1, which a wallet that keeps a higher revision would never take.
+ */
+export async function siteProfile(input: SiteProfileInput, secret: Uint8Array): Promise<SignedConnectProfile> {
   const value = (typeof input.value === "object" && input.value !== null ? input.value : {}) as Record<string, unknown>;
   const given = (value.subject as { site?: { origin?: unknown; name?: unknown; category?: unknown } } | undefined)?.site ?? {};
   const origin = input.origin ?? (typeof given.origin === "string" ? given.origin : undefined);
@@ -98,23 +132,32 @@ export function siteProfile(input: SiteProfileInput, secret: Uint8Array): Signed
   if (origin === undefined) throw new Error("--origin https://…: the site's origin as a browser serializes it (no path, no trailing /)");
   if (name === undefined) throw new Error("--name: what the site goes by, 1 to 32 characters");
   if (category === null) throw new Error(`--category: 0 to 9, or ${CATEGORIES.join(", ")}`);
+  const { owner: _owner, revision: _revision, ...rest } = value;
+  const owner = input.owner === undefined ? plainOwnerOf(secret) : accountOf(input.owner);
+  const at = (revision: number) =>
+    profileOfProject({ ...rest, version: rest.version ?? 1, subject: { site: { origin, name, category } } }, owner, revision);
+  // Everything that fails whatever the revision fails first, before the site is asked.
+  const problem = profileProblem(at(input.revision ?? 1));
+  if (problem) throw new Error(`the site's profile: ${problem}: out of bounds (Saltix 19-connect §11.1)`);
   let revision = input.revision;
   if (revision === undefined) {
-    revision = 1;
+    let previous = 0;
     if (input.previous !== undefined && existsSync(input.previous)) {
       try {
         const old = signedProfileFromJson(JSON.parse(readFileSync(input.previous, "utf8")));
-        if ("site" in old.profile.subject && old.profile.subject.site.origin === origin) revision = old.profile.revision + 1;
+        if ("site" in old.profile.subject && old.profile.subject.site.origin === origin) previous = old.profile.revision;
       } catch {
-        /* not a profile: start at 1 */
+        /* not a profile: nothing to go above */
       }
     }
+    const served = await input.served(origin);
+    if (served === null && previous === 0) {
+      throw new Error(`could not read the profile ${origin} serves now, and no file of it is here: pass --revision N above the ` +
+        "revision it serves (a wallet keeps a higher one and never takes a lower)");
+    }
+    revision = Math.max(previous, served ?? 0) + 1;
   }
-  const { owner: _owner, revision: _revision, ...rest } = value;
-  const owner = input.owner === undefined ? plainOwnerOf(secret) : accountOf(input.owner);
-  const profile = profileOfProject({ ...rest, version: rest.version ?? 1, subject: { site: { origin, name, category } } }, owner, revision);
-  const problem = profileProblem(profile);
-  if (problem) throw new Error(`the site's profile: ${problem}: out of bounds (Saltix 19-connect §11.1)`);
+  const profile = at(revision);
   const signed = signProfile(profile, secret);
   const check = checkSiteProfile(signed, origin);
   if (check) throw new Error(`the site's profile: ${check}`);

@@ -152,7 +152,7 @@ grain faucet --wait                                                # test SALT f
 grain access --slug your-app --private --member dsalt1q…:user      # members, while private
 grain access --slug your-app --public                              # anyone
 grain bind --handle @your_app --slug your-app                      # a username you hold opens its chat
-grain profile --key owner.key --wait                               # the Connect profile from connect.json
+grain profile --key owner.key                                     # the Connect profile from connect.json
 grain app-key --file app.key                                       # the key's public parts; is it registered?
 ```
 

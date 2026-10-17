@@ -8,9 +8,10 @@ import {
 } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
-import { publish, retire, show, waitFor, walletLink, waitForPublished, salt, type Signing } from "./registry.js";
+import { publishCall, retireCall, show, walletLink, waitForPublished, salt, type Sent, type Signing } from "./registry.js";
+import { sendSettled } from "./send.js";
 import {
-  APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, sendCall, serverKeyOf,
+  APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, serverKeyOf,
   waitForRegistry, writeAppKey,
 } from "./studio.js";
 import { type Reach, reachOf } from "./network.js";
@@ -19,7 +20,7 @@ import { serve, linkFor, simulatorFor } from "./dev.js";
 import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, readConnectFile } from "./connect.js";
-import { clearCall, profileCall, profileLinkFor, siteProfile, waitForProfile, wellKnownOf } from "./profile.js";
+import { clearCall, profileCall, profileLinkFor, servedSiteRevision, siteProfile, waitForProfile, wellKnownOf } from "./profile.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
 import * as chatTemplate from "./chat-template.js";
@@ -43,7 +44,7 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
                                            seal public/ into one ZIP; grain.json names its hash and size
                                            (upload bundle.zip to the sources; grain dev serves it itself)
-  grain publish [--wallet] [--wait] [--out signed.json]
+  grain publish [--wallet] [--no-wait] [--out signed.json]
                                            register the slug or record a newer version: signed in the owner's
                                            wallet by a QR code, or with --key (a key file, for test networks)
                                            when owner.key is there. The deposit is the node's quote for the
@@ -51,14 +52,15 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain retire --slug S                    close the slug for good; the deposit returns 30 days later
   grain show --slug S [--out F]            what the registry holds for a slug (its Connect profile checked), or its
                                            deposit; F gets the manifest
-  grain profile [--profile connect.json] [--wallet] [--wait] [--clear]
+  grain profile [--profile connect.json] [--wallet] [--no-wait] [--clear]
                                            set the grain's Connect profile, what Saltix shows before anyone signs
                                            in: a QR code for the owner's Saltix, or with --key (test networks;
                                            revision: the registry's + 1); --clear removes it
   grain connect-profile --origin URL --name N --category C --key site.key [--profile F] [--revision N] [--out F]
-                                           a website's Connect profile signed by its operator's key file (or a
+                        [--offline]        a website's Connect profile signed by its operator's key file (or a
                                            device's of the account --owner names), written where the site serves
-                                           it (--out .well-known/saltix-connect)
+                                           it (--out .well-known/saltix-connect); its revision goes above the one
+                                           the site serves now and the file before (--offline: the file only)
   grain chat-spec [--spec chat.json] [--cert cert.json] [--out chat.signed.json]
                                            lint the chat spec and sign it with the owner key: the document to serve
                                            at /.well-known/saltix-grain-chat ({spec, cert} with --cert)
@@ -83,7 +85,10 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain app-key make --slug S [--server server.key] [--out app.key]
                                            a developer key for a server key file, written owner-only (test networks)
   The owner's calls are signed with owner.key (--key) where there is one, for test networks; without it the tool
-  says what to do in the owner's Saltix (My apps) and waits for the registry (--timeout seconds, 600).
+  says what to do in the owner's Saltix (My apps) and waits for the registry (--timeout seconds, 600). A call signed
+  with a key file returns once it landed and the registry holds it (3 minutes at most), so the next one is built
+  above it: its nonce, a profile's revision; one the pool refuses for the account's earlier call still pending is
+  built again once that landed. --no-wait returns once the pool took it.
 
   grain sponsor init                       a sponsor key (sponsor.key): its account pays relays for your users
   grain sponsor                            the sponsor's account, WORK, channels and the exchanges to open one with
@@ -122,18 +127,35 @@ function signing(flags: Map<string, string | true>, reach: Reach): Signing {
   };
 }
 
-/** The owner's call `call`: signed with the key file when there is one, else done in Saltix and waited for. */
-async function ownerCall(call: GrainCall, keyPath: string, flags: Map<string, string | true>, reach: Reach): Promise<number> {
+/** The owner's call that `build` makes from what the registry holds: signed with the key file when there is one (one
+ *  call of the account at a time, `sendSettled`), else done in Saltix and waited for. */
+async function ownerCall(build: () => Promise<GrainCall>, keyPath: string, flags: Map<string, string | true>, reach: Reach): Promise<number> {
   const node = reach.node;
   if (flags.get("wallet") === true || !existsSync(keyPath)) {
+    const call = await build();
     console.log(inSaltix(call));
     console.log("Waiting for the registry…");
     const ok = await waitForRegistry(node, call, Number(text(flags, "timeout", "600")) * 1000);
     console.log(ok ? "the registry has it" : "not in the registry yet: check with grain show");
     return ok ? 0 : 1;
   }
-  const { sent, landed } = await sendCall(call, readKey(keyPath), signing(flags, reach), flags.get("wait") === true ? 180_000 : 0);
-  console.log(`${sent.call}: transaction ${sent.id} (fee ${sent.fee})`);
+  return keyCall(build, readKey(keyPath), flags, reach, (sent) => `${sent.call}: transaction ${sent.id} (fee ${sent.fee})`);
+}
+
+/**
+ * Send the call `build` makes, signed with `secret`, and wait until it landed (unless `--no-wait`): a command returns
+ * once the registry holds what it made, so the next one is built above it (its nonce, a profile's revision). `said`
+ * names the transaction once the pool took it.
+ */
+async function keyCall(build: () => Promise<GrainCall>, secret: Uint8Array, flags: Map<string, string | true>, reach: Reach, said: (s: Sent) => string): Promise<number> {
+  const wait = flags.get("no-wait") !== true;
+  const { landed } = await sendSettled(build, secret, signing(flags, reach), {
+    wait,
+    onSent: (sent) => {
+      console.log(said(sent));
+      if (wait) console.log("Waiting for it to land…");
+    },
+  });
   if (landed !== null) console.log(landed ? "the registry has it" : "not in the registry yet: check with grain show");
   return landed === false ? 1 : 0;
 }
@@ -276,24 +298,18 @@ async function main(argv: string[]): Promise<number> {
       }
       const secret = readKey(keyPath);
       const signed = signedFor(manifestPath, secret);
-      const s = signing(flags, reach());
-      const sent = await publish(signed, secret, s);
+      const r = reach();
       writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
-      const deposit = sent.amount > 0n ? `, deposit ${salt(sent.amount)} SALT` : "";
-      console.log(`${sent.call} ${signed.manifest.slug} v${signed.manifest.version}: transaction ${sent.id} (fee ${sent.fee}${deposit})`);
-      if (flags.get("wait") === true) {
-        const v = signed.manifest.version;
-        const ok = await waitFor(s.node, signed.manifest.slug, (g) => g?.version === v && g.retired === null, 180_000);
-        console.log(ok ? "the registry has it" : "not in the registry yet: check with grain show");
-        return ok ? 0 : 1;
-      }
-      return 0;
+      return keyCall(() => publishCall(signed, r.node, secret), secret, flags, r, (sent) => {
+        const deposit = sent.amount > 0n ? `, deposit ${salt(sent.amount)} SALT` : "";
+        return `${sent.call} ${signed.manifest.slug} v${signed.manifest.version}: transaction ${sent.id} (fee ${sent.fee}${deposit})`;
+      });
     }
     case "retire": {
       const slug = text(flags, "slug");
-      const sent = await retire(slug, readKey(keyPath), signing(flags, reach()));
-      console.log(`retire ${slug}: transaction ${sent.id}`);
-      return 0;
+      const secret = readKey(keyPath);
+      const r = reach();
+      return keyCall(() => retireCall(slug, r.node, secret), secret, flags, r, (sent) => `retire ${slug}: transaction ${sent.id}`);
     }
     case "show": {
       const slug = text(flags, "slug");
@@ -380,15 +396,15 @@ async function main(argv: string[]): Promise<number> {
       const category = typeof flags.get("category") === "string" ? (flags.get("category") as string) : undefined;
       const owner = existsSync(keyPath) && flags.get("wallet") !== true ? readKey(keyPath) : undefined;
       const r = reach();
-      return ownerCall(await configureCall(r.node, slug, servers, category, owner), keyPath, flags, r);
+      return ownerCall(() => configureCall(r.node, slug, servers, category, owner), keyPath, flags, r);
     }
     case "access": {
       const open = flags.get("public") === true;
       if (open === (flags.get("private") === true)) throw new Error("--public or --private");
       const owner = existsSync(keyPath) && flags.get("wallet") !== true ? readKey(keyPath) : undefined;
       const r = reach();
-      const call = await accessCall(r.node, text(flags, "slug"), open, membersOf(all("member")), owner);
-      return ownerCall(call, keyPath, flags, r);
+      const members = membersOf(all("member"));
+      return ownerCall(() => accessCall(r.node, text(flags, "slug"), open, members, owner), keyPath, flags, r);
     }
     case "rate": {
       const score = Number(text(flags, "score"));
@@ -399,9 +415,8 @@ async function main(argv: string[]): Promise<number> {
       }
       const rater = readKey(keyPath);
       const r = reach();
-      const { sent } = await sendCall(await rateCall(r.node, text(flags, "slug"), score, review, rater), rater, signing(flags, r));
-      console.log(`rate ${text(flags, "slug")} ${score}: transaction ${sent.id} (fee ${sent.fee}); a rating names its account`);
-      return 0;
+      return keyCall(() => rateCall(r.node, text(flags, "slug"), score, review, rater), rater, flags, r,
+        (sent) => `rate ${text(flags, "slug")} ${score}: transaction ${sent.id} (fee ${sent.fee}); a rating names its account`);
     }
     case "bind": {
       const clear = flags.get("clear") === true;
@@ -410,9 +425,10 @@ async function main(argv: string[]): Promise<number> {
       if (!existsSync(keyPath) || flags.get("wallet") === true) {
         const handle = parseHandle(text(flags, "handle"));
         if (handle === null) throw new Error(`${text(flags, "handle")}: not a name (@anna) or a number (+0 777 1234)`);
-        return ownerCall({ bind: { handle, slug } }, keyPath, flags, r);
+        return ownerCall(async () => ({ bind: { handle, slug } }), keyPath, flags, r);
       }
-      return ownerCall(await bindCall(r.node, text(flags, "handle"), slug, readKey(keyPath)), keyPath, flags, r);
+      const holder = readKey(keyPath);
+      return ownerCall(() => bindCall(r.node, text(flags, "handle"), slug, holder), keyPath, flags, r);
     }
     case "app-key": {
       if (positional[0] === "make") {
@@ -466,10 +482,14 @@ async function main(argv: string[]): Promise<number> {
       const r = reach();
       const wallet = flags.get("wallet") === true || !existsSync(keyPath);
       if (flags.get("clear") === true) {
-        return ownerCall(await clearCall(r.node, slug, wallet ? undefined : readKey(keyPath)), keyPath, flags, r);
+        const owner = wallet ? undefined : readKey(keyPath);
+        return ownerCall(() => clearCall(r.node, slug, owner), keyPath, flags, r);
       }
       const value = readConnectFile(text(flags, "profile", join(dirname(resolve(manifestPath)), CONNECT_FILE)));
-      if (!wallet) return ownerCall(await profileCall(r.node, slug, value, readKey(keyPath)), keyPath, flags, r);
+      if (!wallet) {
+        const owner = readKey(keyPath);
+        return ownerCall(() => profileCall(r.node, slug, value, owner), keyPath, flags, r);
+      }
       // The owner's key stays in the wallet: it fills in its account and the revision, signs and sends (12-grains §10).
       const { link, profile, before } = await profileLinkFor(r.node, slug, value);
       console.log(await QRCode.toString(link, { type: "terminal", small: true, errorCorrectionLevel: "L" }));
@@ -486,12 +506,13 @@ async function main(argv: string[]): Promise<number> {
       if (given !== undefined && (typeof given !== "string" || !/^[1-9][0-9]{0,9}$/.test(given) || Number(given) > 0xffff_ffff)) {
         throw new UsageError("--revision N: 1 or more, above the one the site serves now");
       }
-      const site = siteProfile({
+      const site = await siteProfile({
         value: readConnectFile(text(flags, "profile", CONNECT_FILE)),
         origin: typeof flags.get("origin") === "string" ? (flags.get("origin") as string) : undefined,
         name: typeof flags.get("name") === "string" ? (flags.get("name") as string) : undefined,
         category: typeof flags.get("category") === "string" ? (flags.get("category") as string) : undefined,
         revision: typeof given === "string" ? Number(given) : undefined,
+        served: flags.get("offline") === true ? async () => null : (origin) => servedSiteRevision(origin),
         previous: out,
         owner: typeof flags.get("owner") === "string" ? (flags.get("owner") as string) : undefined,
       }, readKey(text(flags, "key")));

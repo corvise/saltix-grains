@@ -78,8 +78,11 @@ npx grain connect-profile --origin https://dex.example --name "Example DEX" --ca
   a port only when it is not 443, no path and no trailing `/`. `--name` is 1–32 characters; `--category` is 0–9 or its
   name (`other`, `tools`, `finance`, `social`, `games`, `shopping`, `education`, `news`, `business`, `developer`).
 - The owner is the key's account; `--owner <address>` names a managed account whose Ed25519 device key signs.
-- Each run writes the next revision of the file it writes (or `--revision N`). Wallets keep a site's profile for a day
-  and replace it only with a higher revision.
+- Each run goes above the revision the site serves now (read at `/.well-known/saltix-connect` as a wallet reads it) and
+  the file written before, or takes `--revision N`. Wallets keep a site's profile for a day and replace it only with a
+  higher revision, so a revision that starts over at 1 would reach none of them: when the site cannot be read and no file
+  of it is here, the command asks for `--revision N` instead. `--offline` (a machine without the network) reads only
+  the file.
 - Serve the file at `/.well-known/saltix-connect` as `application/json`, with no redirect (a wallet follows none), at most
   64 KiB. A wallet fetches it without cookies or a referrer and waits at most 5 seconds.
 - `readSiteProfile(origin, { node, genesis, policy })` (in `@saltix/connect`) reads it as a wallet does, owner's key

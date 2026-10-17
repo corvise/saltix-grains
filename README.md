@@ -102,9 +102,9 @@ npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.
                                           # a sealed grain: public/ as one ZIP named by its hash
 npx grain publish                         # a QR code: the owner's Saltix registers it (the network quotes the deposit)
 npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
-npx grain publish --key owner.key --wait  # or sign with a key file (test networks)
+npx grain publish --key owner.key        # or sign with a key file (test networks): returns once it landed
 npx grain profile                         # a QR code: the owner's Saltix sets the Connect profile (connect.json)
-npx grain profile --key owner.key --wait  # or sign it with a key file (test networks); --clear removes it
+npx grain profile --key owner.key        # or sign it with a key file (test networks); --clear removes it
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
                                           # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
 npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
@@ -123,8 +123,14 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 
 - `grain help <command>` (or `grain <command> --help`, `-h`) prints that command's part of the help and runs nothing;
   `grain --version` names the tool's version. A flag's value is the next word or comes after `=` (`--node=URL`); a
-  switch (`--chat`, `--wallet`, `--wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`) takes none, so
-  `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never ignored.
+  switch (`--chat`, `--wallet`, `--wait`, `--no-wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`)
+  takes none, so `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never
+  ignored.
+- A registry call signed with a key file (`publish`, `retire`, `configure`, `access`, `rate`, `bind`, `profile`)
+  returns once its transaction landed and the registry holds what it makes (3 minutes at most): each carries the
+  account's nonce, and a profile its revision, as the node holds them, so the next call is built above it. A call the
+  pool refuses because the account's earlier one is still pending (another command at the same time) is built again
+  once that landed. `--no-wait` returns once the pool took it.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
@@ -160,8 +166,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   profile itself at the registry's revision and one, and sends the call; `--clear` removes the profile. `grain show`
   prints the registry's profile and whether a wallet takes it.
 - `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
-  operator's key file, from the texts and links of `--profile` (`connect.json`), at the next revision of the file it
-  writes (`--out`, `.well-known/saltix-connect`) or `--revision N`: serve it at `/.well-known/saltix-connect` as
+  operator's key file, from the texts and links of `--profile` (`connect.json`), at a revision above the one the site
+  serves now and the file it writes (`--out`, `.well-known/saltix-connect`), or `--revision N`; when neither can be
+  told it asks for `--revision` (`--offline`: the file only): serve it at `/.well-known/saltix-connect` as
   `application/json`, with no redirect ([docs/connect.md](docs/connect.md)).
 - `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
   owner.key's account or `--address` (`faucet_request`): one every 5 minutes an address; a refusal says when to come

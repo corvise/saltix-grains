@@ -8,7 +8,6 @@ import {
   fromHex, grainCallProblem, grainGet, nodeCall, parseHandle, parseRoles, roleNames, toHex, serverKeyOk,
 } from "@saltix/grain-server";
 import { publicKeyOf, readKey } from "./project.js";
-import { type Sent, type Signing, submit } from "./registry.js";
 
 export const APP_KEY_FILE = "app.key";
 /** Where tools read a developer key from when no file is named. */
@@ -101,16 +100,17 @@ export async function bindCall(node: NodeLike, typed: string, slug: string | nul
   return checked({ bind: { handle, slug } });
 }
 
-/** Sign `call` with the key file and send it; with `waitMs`, until the registry holds what it makes (a rating is not
- *  watched). */
-export async function sendCall(call: GrainCall, secret: Uint8Array, s: Signing, waitMs = 0): Promise<{ sent: Sent; landed: boolean | null }> {
-  const sent = await submit(call, secret, s);
-  if (waitMs <= 0 || "rate" in call) return { sent, landed: null };
-  return { sent, landed: await waitForRegistry(s.node, call, waitMs) };
-}
-
-/** Whether the registry's record of `slug` is what `call` makes it. */
+/** Whether the registry's record is what `call` makes it (a rating: never, as nothing shows whose it is). */
 export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
+  if ("register" in call || "update" in call) {
+    const m = ("register" in call ? call.register : call.update).manifest;
+    const g = await grainGet(node, m.slug);
+    return g !== null && g.retired === null && g.version === m.version;
+  }
+  if ("retire" in call) {
+    const g = await grainGet(node, call.retire);
+    return g !== null && g.retired !== null;
+  }
   if ("configure" in call) {
     const g = await grainGet(node, call.configure.slug);
     return g !== null && JSON.stringify(g.servers ?? []) === JSON.stringify(call.configure.servers) && g.category === call.configure.category;
