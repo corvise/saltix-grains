@@ -5,16 +5,28 @@
 /** A wallet interface: its URL, or an object that answers its calls. */
 export type NodeLike = string | { call<T>(method: string, params?: object): Promise<T> };
 
-/** The node could not be asked (unreachable, busy, too slow): not an answer about the grant. */
+/**
+ * The node could not be asked (`unreachable`, `timeout`, `busy`: HTTP 429, 502, 503 or 504), or the way to it answered
+ * something that is no answer (`http`: another HTTP status, such as a proxy's 403 or 404; `bad_answer`): not an answer
+ * about the grant either way.
+ */
 export class NodeUnreachable extends Error {
   constructor(
     readonly method: string,
-    readonly kind: "unreachable" | "timeout" | "busy" | "bad_answer",
+    readonly kind: "unreachable" | "timeout" | "busy" | "http" | "bad_answer",
   ) {
-    super(`${method}: the node ${kind === "bad_answer" ? "gave an answer that is no answer" : kind === "busy" ? "is busy" : `is ${kind}`}`);
+    super(`${method}: ${UNREACHABLE[kind]}`);
     this.name = "NodeUnreachable";
   }
 }
+
+const UNREACHABLE: Record<NodeUnreachable["kind"], string> = {
+  unreachable: "the node is unreachable",
+  timeout: "the node did not answer in time",
+  busy: "the node is busy",
+  http: "the way to the node answered with an HTTP error",
+  bad_answer: "the node gave an answer that is no answer",
+};
 
 /** The node's own error answer. */
 export class NodeError extends Error {
@@ -26,6 +38,21 @@ export class NodeError extends Error {
     super(`${method}: ${reason} (${code})`);
     this.name = "NodeError";
   }
+}
+
+/** The node's JSON-RPC code for its own failure, which it also answers when it cannot answer within 10 s ("the node is
+ *  busy", 08-node §6). */
+export const NODE_FAILURE = -32603;
+
+/**
+ * Whether asking again may get an answer: the node could not be reached, did not answer in time, or said it is busy
+ * (HTTP 429, 502, 503, 504, or its JSON-RPC -32603). An answer of any other kind — the node's refusal, an HTTP error of
+ * the way to it, something that is no answer, a failure of a page's own transport — stays what it is however often it
+ * is asked. The explorer's `/explorer/me` asks again by the same rule.
+ */
+export function retryable(e: unknown): boolean {
+  if (e instanceof NodeUnreachable) return e.kind === "unreachable" || e.kind === "timeout" || e.kind === "busy";
+  return e instanceof NodeError && e.code === NODE_FAILURE;
 }
 
 const TIMEOUT_MS = 10_000;
@@ -49,7 +76,9 @@ export async function nodeCall<T>(node: NodeLike, method: string, params: object
   } finally {
     clearTimeout(timer);
   }
-  if (response.status === 429 || response.status >= 500) throw new NodeUnreachable(method, "busy");
+  const status = response.status;
+  if (status === 429 || status === 502 || status === 503 || status === 504) throw new NodeUnreachable(method, "busy");
+  if (status < 200 || status > 299) throw new NodeUnreachable(method, "http");
   let body: { result?: T; error?: { code: number; message: string } };
   try {
     body = (await response.json()) as typeof body;

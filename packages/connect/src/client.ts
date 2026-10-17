@@ -3,7 +3,7 @@
 // checks the grant the wallet delivers (rules 1–5, the account's key event log from the page's node included), and keeps
 // the connection in this origin's storage for 30 days or until the visitor disconnects. Events tell the page what to
 // show; the button (`signInButton`) and the dialog (`openConnectDialog`) are built on it.
-import { type AccountPolicy, type NetworkName, connectOriginOk, fromHex, policyOf } from "@saltix/grain-server/web";
+import { type NetworkName, connectOriginOk, fromHex } from "@saltix/grain-server/web";
 import { type Offer, nameOk } from "./offer.js";
 import { type NodeLike, type NodeStatus, nodeCall } from "./node.js";
 import { type QrCode, qrCode } from "./qr.js";
@@ -132,7 +132,8 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
   };
 
   let genesis: string | null = o.genesis ?? null;
-  let policy: AccountPolicy | null = null;
+  /** Whether the node's network and genesis were read and agree with the page's: each grant reads them again. */
+  let known = false;
   let session: ConnectSession<Connection> | null = null;
   let current: OfferView | null = null;
   let kept: Connection | null = loadConnection(o.network, genesis, Date.now(), storage);
@@ -152,9 +153,9 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
     return { text: p.text, link: p.link, qr: qrCode(p.text), expiresAt };
   };
 
-  /** The node's network, genesis and policy, once: a node or a genesis of another network fails the session. */
+  /** The node's network and genesis, once: a node or a genesis of another network fails the session. */
   async function status(): Promise<FailReason | null> {
-    if (policy !== null && genesis !== null) return null;
+    if (known) return null;
     let s: NodeStatus;
     try {
       s = await nodeCall<NodeStatus>(o.node, "node_status");
@@ -163,7 +164,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
     }
     if (s.network !== o.network || !/^[0-9a-f]{64}$/.test(s.genesis) || (genesis !== null && s.genesis !== genesis)) return "network";
     genesis = s.genesis;
-    policy = s.accounts ? policyOf(s.accounts.policy) : null;
+    known = true;
     // A connection of another genesis (a network reset) is dropped.
     kept = loadConnection(o.network, genesis, Date.now(), storage);
     return null;
@@ -205,7 +206,9 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
       settle(new ConnectFailed(failed));
       return pending;
     }
-    const network = fromHex(genesis!, 32);
+    // The genesis this session offers under: each grant's node must still be on it.
+    const offered = genesis!;
+    const network = fromHex(offered, 32);
     const s: ConnectSession<Connection> = new ConnectSession<Connection>({
       relays: o.relays,
       network,
@@ -214,7 +217,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
       name: o.name,
       dial: o.dial ?? dialWebSocket,
       keys: o.keys ?? makeKeys,
-      verify: (grant, bytes, sess) => verifyGrant(grant, bytes, sess, { node: o.node, network: o.network, genesis: genesis!, policy }),
+      verify: (grant, bytes, sess) => verifyGrant(grant, bytes, sess, { node: o.node, network: o.network, genesis: offered }),
       connected: (c) => {
         if (session !== s) return;
         session = null;
