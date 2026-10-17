@@ -2,6 +2,11 @@
 // storage, one per network, until the visitor disconnects or 30 days pass (`CONNECT_LIFE`). It grants nothing: the page
 // shows public data with this account first. Storage that is unavailable (a private window, blocked site data) keeps
 // the connection for this page only. As the explorer keeps it.
+//
+// The grant is for display only. It is a bearer artefact: whoever holds its bytes (any script of this origin, whoever
+// the page sent them to) holds all it proves, and it answers no server's challenge, so a server cannot tell the visitor
+// from a copy. Never send it to a server as a login or exchange it for a session (docs/connect.md, "never a server's
+// login").
 import { CONNECT_LIFE_MS } from "./grant.js";
 
 export interface Connection {
@@ -11,7 +16,8 @@ export interface Connection {
   account: string;
   /** The account's address (Address v1), as the page shows it. */
   address: string;
-  /** The grant's Borsh, base64url: the proof the page checked, for a server that checks it again. */
+  /** The grant's Borsh, base64url: what this page checked, kept for display only (which key signed for the account);
+   *  never a login to a server. */
   grant: string;
   signer: "ed25519" | "p256";
   /** Whether a device of a managed account signed it (else the plain account's own key). */

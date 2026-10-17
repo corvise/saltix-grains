@@ -4,6 +4,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { p256 } from "@noble/curves/p256";
 import { sha256 } from "@noble/hashes/sha256";
+import { sha512 } from "@noble/hashes/sha512";
 import { Reader, Writer, fromHex, toHex } from "./bytes.js";
 
 export type DeviceKey = { ed25519: string } | { p256: string };
@@ -39,13 +40,30 @@ export function sameDeviceKey(a: DeviceKey, b: DeviceKey): boolean {
   return "ed25519" in a ? "ed25519" in b && a.ed25519 === b.ed25519 : "p256" in b && a.p256 === b.p256;
 }
 
-/** An Ed25519 key the node takes: a canonical encoding of a point not of small order (`ed25519::is_valid_public_key`). */
-export function ed25519KeyValid(key: Uint8Array): boolean {
+type Point = InstanceType<typeof ed25519.ExtendedPoint>;
+
+/**
+ * The point `bytes` encode, or null. `canonical`: only as RFC 8032 writes it (y < p, and x = 0 with its sign bit clear);
+ * otherwise as curve25519-dalek decompresses (any y below 2^255, reduced), which is how the node reads a key.
+ */
+function pointOf(bytes: Uint8Array, canonical: boolean): Point | null {
+  if (bytes.length !== 32) return null;
   try {
-    return key.length === 32 && !ed25519.ExtendedPoint.fromHex(key).isSmallOrder();
+    return ed25519.ExtendedPoint.fromHex(bytes, !canonical);
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * An Ed25519 key the node takes as a key (`ed25519::is_valid_public_key`): 32 bytes that decode to a point not of small
+ * order. Like the node it takes the few non-canonical encodings (y ≥ p) of points not of small order: no one knows a
+ * secret for any of them, so they sign nothing (`verifyEd25519` refuses them), but a log that lists one stays the log
+ * the node replays.
+ */
+export function ed25519KeyValid(key: Uint8Array): boolean {
+  const point = pointOf(key, false);
+  return point !== null && !point.isSmallOrder();
 }
 
 /** A device key the node takes: such an Ed25519 key, or a compressed P-256 point other than the identity. */
@@ -58,19 +76,40 @@ export function deviceKeyValid(key: DeviceKey): boolean {
   }
 }
 
+const L = ed25519.CURVE.n;
+
+const littleEndian = (bytes: Uint8Array): bigint => {
+  let n = 0n;
+  for (let i = bytes.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(bytes[i]!);
+  return n;
+};
+
 /**
- * Strict Ed25519, as the node verifies every signature (`verify_strict`): canonical encodings of the key, `R` and `s`, and
- * neither the key nor `R` of small order. A permissive check would take signatures the node refuses, so two readers of
- * one signature could disagree.
+ * Whether `signature` is `publicKey`'s over `message`: the SDK's one Ed25519 check, and the node's (saltix-crypto
+ * `ed25519::verify`, ed25519-dalek 2's `verify_strict`). `s` below the group's order L; the key and `R` canonical
+ * encodings of points not of small order; and `R` exactly `[s]B − [k]A`, k = SHA-512(R ‖ A ‖ message) mod L — never
+ * merely equal up to a point of small order, as the cofactored check of RFC 8032 (and `@noble/curves`' `verify`, ZIP-215
+ * or not) allows. A check any weaker takes what the node refuses (a key of small order "signs" every message), so two
+ * readers of one signature disagree. The node's decoder also takes the non-canonical encodings of a few keys
+ * (`ed25519KeyValid`); refusing them here changes no verdict, as no one can sign for those points.
  */
 export function verifyEd25519(publicKey: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean {
-  try {
-    if (signature.length !== 64 || !ed25519KeyValid(publicKey)) return false;
-    if (ed25519.ExtendedPoint.fromHex(signature.slice(0, 32)).isSmallOrder()) return false;
-    return ed25519.verify(signature, message, publicKey, { zip215: false });
-  } catch {
-    return false;
-  }
+  if (signature.length !== 64) return false;
+  const rBytes = signature.subarray(0, 32);
+  const s = littleEndian(signature.subarray(32));
+  if (s >= L) return false;
+  const A = pointOf(publicKey, true);
+  const R = pointOf(rBytes, true);
+  if (A === null || R === null || A.isSmallOrder() || R.isSmallOrder()) return false;
+  const h = new Uint8Array(64 + message.length);
+  h.set(rBytes, 0);
+  h.set(publicKey, 32);
+  h.set(message, 64);
+  const k = littleEndian(sha512(h)) % L;
+  const expected = ed25519.ExtendedPoint.BASE.multiplyUnsafe(s).subtract(A.multiplyUnsafe(k)).toRawBytes();
+  let diff = 0;
+  for (let i = 0; i < 32; i++) diff |= expected[i]! ^ rBytes[i]!;
+  return diff === 0;
 }
 
 /**

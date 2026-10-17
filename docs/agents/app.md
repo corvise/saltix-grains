@@ -174,7 +174,9 @@ loads for them (Saltix reads the registry first and shows only that the app is p
    server) and `signInAnswer`: `const r = await signIns.check(body)` checks the challenge, the grain key's login and the
    proof, and gives `r.signedIn.rights`: `owner`, `developer`, `viewer`, `user` or `none`. Give a session to those the
    app is for only, and check its rights again on every request: the page's gate decides what people see,
-   never what they may do.
+   never what they may do. `check` throws `ChatMemberUnchecked` when the node did not answer (for the registry record or
+   the account's keys): answer it with 503, so that the page shows "try again" (`failed`), never a refusal and never a
+   500.
 4. **`gateOf(signIn, TEAM)`** says what to draw: `open` the app; `refused` a page that says whom the app is for and that
    its owner can invite them, with none of the app's UI; `update` "update Saltix" (Saltix 0.1.53 and older send no
    proof, so `none` may be a member: never tell them the app is not for them; ask them to update Saltix);

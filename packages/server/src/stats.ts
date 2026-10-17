@@ -5,6 +5,7 @@
 // No Node APIs here: the simulator runs it in a browser.
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
+import { verifyEd25519 } from "./keys.js";
 
 export const STATS_DOMAIN = "Saltix grain stats v1";
 /** The oldest numbers a wallet shows: 2 days, ms. */
@@ -91,7 +92,7 @@ export function grainStatsProblem(s: SignedGrainStats, check: { genesis: string;
   if (n.at > check.now + STATS_AHEAD_MS || check.now - n.at > STATS_MAX_AGE_MS) return "time";
   if (n.users_1d > n.users_30d || n.users_30d > n.requests_30d) return "inconsistent";
   try {
-    return ed25519.verify(fromHex(s.signature, 64), grainStatsToSign(n, check.genesis), fromHex(s.key, 32)) ? null : "signature";
+    return verifyEd25519(fromHex(s.key, 32), grainStatsToSign(n, check.genesis), fromHex(s.signature, 64)) ? null : "signature";
   } catch {
     return "signature";
   }

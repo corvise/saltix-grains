@@ -255,7 +255,8 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    sends no member proof. A public app for a limited circle shows strangers that refusal page; a private app never loads
    for them at all (Saltix checks the registry first). The server answers the sign-in with \`SignIns\` and
    \`signInAnswer\` (\`@saltix/grain-server\`) and checks the session's rights again on every request: the page's gate
-   decides what people see, never what they may do. \`grain lint\` warns about a page that shows anything else first
+   decides what people see, never what they may do. \`ChatMemberUnchecked\` (the node did not answer) is a 503, so the
+   page offers to try again, never a refusal. \`grain lint\` warns about a page that shows anything else first
    (\`render-before-sign-in\`).
 11. **Name people only by what they gave the app.** Saltix gives an app nobody's name: not the name an account sets for
    itself (its profile, Saltix 09-relay §1.5), not its username. A user is their grain key, a pseudonym of this app

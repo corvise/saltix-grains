@@ -1,6 +1,6 @@
-import { ed25519 } from "@noble/curves/ed25519";
 import { randomBytes } from "@noble/hashes/utils";
 import { Writer, derive, fromHex, toHex } from "./bytes.js";
+import { verifyEd25519 } from "./keys.js";
 
 /** How far a login's time may be from the server's (12-grains §5.1). */
 export const LOGIN_SKEW_MS = 5 * 60_000;
@@ -38,7 +38,7 @@ export function verifyLogin(
     if (challenge.length > 64 || Math.abs(answer.at - now) > LOGIN_SKEW_MS) return false;
     if (answer.origin !== undefined && answer.origin !== expected.origin) return false;
     const message = loginMessage(expected.slug, expected.origin, challenge, answer.at);
-    return ed25519.verify(fromHex(answer.signature, 64), message, fromHex(answer.key, 32));
+    return verifyEd25519(fromHex(answer.key, 32), message, fromHex(answer.signature, 64));
   } catch {
     return false;
   }

@@ -358,11 +358,12 @@ export interface SignInMember {
   problem: MemberProblem | null;
 }
 
-/** The node did not answer while a sign-in's member proof was checked (`ChatServer.member`): nothing is refused for
- *  good, and the page may try again in a moment. */
+/** The node did not answer while a sign-in's member proof was checked (`ChatServer.member`: the grain's registry record
+ *  or the account's keys): nothing is refused for good, and the page may try again in a moment. Answer it with 503, not
+ *  as a failure of the server. */
 export class ChatMemberUnchecked extends Error {
-  constructor(reason: string) {
-    super(`the member proof could not be checked now: ${reason}`);
+  constructor(reason: string, cause?: unknown) {
+    super(`the member proof could not be checked now: ${reason}`, cause === undefined ? undefined : { cause });
     this.name = "ChatMemberUnchecked";
   }
 }
@@ -1099,18 +1100,20 @@ export class ChatServer {
     if (p.slug !== this.slug || p.grain_key !== key) return none("mismatch");
     if (p.expires_at <= now || p.expires_at > now + MEMBER_PROOF_LIFE_MS) return none("expired");
     if (!holdsButSigner(proof, { genesis: this.chain.genesis, slug: this.slug, requestKey: key, proof, now })) return none("signature");
-    const g = await this.readRecord();
+    // Both reads ask the node: one that does not answer leaves the proof unchecked (the page tries again), never a
+    // failure of the server. A registry that stopped naming the server's key is the server's own end, and stays it.
+    const unchecked = (e: unknown): never => {
+      if (e instanceof ChatKeyNotRegistered) throw e;
+      const reason = e instanceof Error ? e.message : String(e);
+      this.log("warn", "chat_signin_member_unchecked", { reason });
+      throw new ChatMemberUnchecked(reason, e);
+    };
+    const g = await this.readRecord().catch(unchecked);
     if (!g) return none("not_team");
     const access = accessOf(g);
     const roles = rolesOf(access, p.account);
     if (access.public ? !onTeam(access, p.account) : roles === 0) return none(access.public ? "not_team" : "not_member");
-    let controller;
-    try {
-      controller = await this.view.controller(p.account);
-    } catch (e) {
-      this.log("warn", "chat_signin_member_unchecked", { reason: (e as Error).message });
-      throw new ChatMemberUnchecked((e as Error).message);
-    }
+    const controller = await this.view.controller(p.account).catch(unchecked);
     const problem = memberProofProblem(proof, { genesis: this.chain.genesis, slug: this.slug, grainKey: key, controller, now });
     if (problem) return none(problem);
     if (onTeam(access, p.account)) await this.remember(p.account, key);

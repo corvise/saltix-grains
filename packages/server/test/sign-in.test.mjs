@@ -6,8 +6,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  ChatMemberUnchecked, ChatServer, ROLES, SIGN_IN_CHALLENGE_MS, SignIns, accountId, encodeAddress, encodeSignedMemberProof, fromHex,
-  loginMessage, rightsOf, sealedOrigin, signInAnswer, signMemberProof, toHex, MEMBER_PROOF_LIFE_MS,
+  ChatMemberUnchecked, ChatServer, ROLES, SIGN_IN_CHALLENGE_MS, SignIns, accountId, decodeSignedMemberProof, encodeAddress,
+  encodeSignedMemberProof, fromHex, loginMessage, rightsOf, sealedOrigin, signInAnswer, signMemberProof, toHex, MEMBER_PROOF_LIFE_MS,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { OWNER, appKey, chain, fakeChain, spec } from "./chat-helpers.mjs";
@@ -224,6 +224,27 @@ test("a node that does not answer leaves a team proof unchecked: the page is tol
       return real(method, params);
     };
     await assert.rejects(signIns.check(body), ChatMemberUnchecked);
+  } finally {
+    await close();
+  }
+});
+
+test("a node down before the registry is read leaves the proof unchecked too, never a failure of the server", async () => {
+  const fake = teamChain();
+  let t = Date.now();
+  const { chat, signIns, events, close } = await server(fake, () => t);
+  try {
+    // The node goes down after the server started, and the status it read is no longer fresh: the record cannot be read.
+    fake.state.down = true;
+    t += 60_000;
+    const c = signIns.challenge();
+    await assert.rejects(signIns.check(login(c, { at: t, member: proofOf(DEV, { expires: t + 7 * 86_400_000 }) })), ChatMemberUnchecked);
+    await assert.rejects(chat.member(decodeSignedMemberProof(fromHex(proofOf(DEV, { expires: t + 7 * 86_400_000 }))), grainKey), ChatMemberUnchecked);
+    assert.ok(events.some((e) => e.event === "chat_signin_member_unchecked" && e.level === "warn"));
+    // Back up, the same proof checks.
+    fake.state.down = false;
+    const s = r(await signIns.check(login(signIns.challenge(), { at: t, member: proofOf(DEV, { expires: t + 7 * 86_400_000 }) })));
+    assert.equal(s.rights, "developer");
   } finally {
     await close();
   }

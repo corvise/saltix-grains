@@ -3,6 +3,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { accountId } from "./address.js";
+import { verifyEd25519 } from "./keys.js";
 import { type NodeLike, nodeCall } from "./node.js";
 import { minimumTxFee, signTx, type TxFields } from "./tx.js";
 
@@ -75,7 +76,7 @@ export function sponsorCertProblem(hex: string, sponsorAccount: string, genesisH
   const { cert, signature } = decoded;
   if (toHex(accountId(fromHex(cert.sponsor, 32))) !== sponsorAccount) return "sponsor";
   if ((cert.services & SERVICE.messages) === 0) return "services";
-  return ed25519.verify(fromHex(signature, 64), sponsorCertMessage(cert, genesisHash), fromHex(cert.sponsor, 32)) ? null : "signature";
+  return verifyEd25519(fromHex(cert.sponsor, 32), sponsorCertMessage(cert, genesisHash), fromHex(signature, 64)) ? null : "signature";
 }
 
 /**

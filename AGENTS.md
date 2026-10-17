@@ -85,7 +85,9 @@ and what it keeps about a user and for how long (required when `grain.json` asks
 English and Russian. `grain lint` fails without it and checks every rule; it warns about a permission nothing in the
 app's sources uses: drop it. `grain profile` sets it in the registry (a QR code for the owner's Saltix, or `--key` on
 the test network). How to write one: [docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson). Websites
-and DApps use the same standard to sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`).
+and DApps use the same standard to sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`). A Connect
+grant is for display only: a bearer artefact that answers no server's challenge, so a server never takes it as a login
+([docs/connect.md](docs/connect.md#5-a-grant-is-for-display-never-a-servers-login)).
 
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
@@ -122,7 +124,8 @@ UI; a private app never loads for them at all, since Saltix reads the registry f
   `null` for anyone else; Saltix 0.1.53 and older attach nothing at all.
 - **The server** answers with `SignIns` and `signInAnswer` (`@saltix/grain-server`): rights `owner`, `developer`,
   `viewer`, `user` or `none` from the registry, a session only for those the app is for, and every request checked
-  again by them.
+  again by them. `ChatMemberUnchecked` (the node did not answer, for the registry or the account's keys) is a 503: the
+  page tries again; never a refusal, never a 500.
 - **`gateOf(signIn, TEAM)`** decides: the app (`open`), a refusal page (`refused`: whom it is for, that its owner can
   invite them), "update Saltix" (`update`: an older Saltix cannot prove membership, so never say it is not for them),
   a sign-in button (`declined`), try again (`failed`), open it in Saltix (`outside`).
@@ -196,6 +199,10 @@ today (so does the simulator). A page that checks first shows a splash of its ow
   `scripts/sync-vectors.sh <a Saltix checkout>` (`vectors/SOURCE` names the commit). The SDKs reproduce them byte for
   byte, refusals included; a format changes in the specs first, never here.
 - **`npm ci && npm test`** is what CI runs: it builds every package and the simulator, then runs each package's tests.
+- **One Ed25519 check:** `verifyEd25519` (`packages/server/src/keys.ts`), the node's own `verify_strict` (no key or `R`
+  of small order, `s` reduced, `R` exactly `[s]B − [k]A`); never a library's `verify`, which takes signatures the node
+  refuses (`ed25519.test.mjs` holds every module to it). `@saltix/connect`'s check of a grant (`verifyGrant`) is the
+  reference the explorer's copy (corvise/saltix `explorer/src/connect/`) follows.
 - **Style:** English only, no emojis; comments say why, not what. Saltix is the only name (never an older one); users
   read *mini-apps*, code and specs say *grain*. Tests assert behaviour, refusals included; a critical check is
   mutation-tested. Logs carry event names and numbers, never keys, accounts, addresses or what users wrote.

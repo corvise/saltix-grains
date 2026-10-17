@@ -18,7 +18,7 @@ import { type NetworkName, accountId, decodeAddress } from "./address.js";
 import { Reader, Writer, compareUtf8, derive, fromHex, toHex } from "./bytes.js";
 import { type FileRef, MAX_FILE_BYTES, fileRefProblem, readFileRef, writeFileRef } from "./file.js";
 import { type InvoiceKeyCert, certMessage, decodeInvoice, readCertBody, readSignedInvoice, writeCertBody } from "./invoice.js";
-import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
+import { type DeviceKey, verifyByDeviceKey, verifyEd25519 } from "./keys.js";
 import { type SignedMemberProof, readSignedMemberProof, writeSignedMemberProof } from "./member.js";
 import { readPublishText } from "./publish.js";
 import { type SignedGrainStats, readSignedGrainStats, writeSignedGrainStats } from "./stats.js";
@@ -907,7 +907,7 @@ export function isPersonalAddressOf(address: string, key: string, network: Netwo
 
 function verifies(key: string, message: Uint8Array, signature: string): boolean {
   try {
-    return ed25519.verify(fromHex(signature, 64), message, fromHex(key, 32));
+    return verifyEd25519(fromHex(key, 32), message, fromHex(signature, 64));
   } catch {
     return false;
   }

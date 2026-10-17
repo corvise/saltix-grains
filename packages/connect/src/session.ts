@@ -204,7 +204,7 @@ export class ConnectSession<T> {
   }
 
   /** An unseen offer is replaced after its time, but only in front of the visitor: one in the background may be
-   * on its way to the wallet on this phone. */
+   * on its way to the wallet on this phone. While a grant is checked it waits: the check's refusal calls it again. */
   private expire(): void {
     if (this.seen || this.held || this.phase.kind !== "offer") return;
     if (!this.visible()) {
@@ -370,6 +370,9 @@ export class ConnectSession<T> {
       this.o.events.telemetry("connect_refused", { reason, signer: signerKind(grant.signer), ...(typeof kind === "string" ? { kind } : {}) });
       this.o.events.refused({ reason, at: this.now() });
       this.setPhase(back);
+      // The offer's two minutes may have passed while the grant was checked: its expiry found it `checking` and let it
+      // be, so it is due now, or the offer would stay to the slot's thirty.
+      if (back.kind === "offer" && this.now() >= back.expiresAt) this.expire();
     }
   }
 

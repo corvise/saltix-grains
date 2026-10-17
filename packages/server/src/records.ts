@@ -1,6 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromBase64, toBase64 } from "./bytes.js";
 import { type NetworkName, accountId, decodeAddress } from "./address.js";
+import { verifyEd25519 } from "./keys.js";
 
 /**
  * The relays' records (Saltix 09-relay §1), byte for byte the node's (vectors/relay-v1.json): what a
@@ -46,13 +47,7 @@ export interface AddressRecord {
 }
 
 const sign = (domain: string, payload: Uint8Array, secret: Uint8Array) => ed25519.sign(derive(domain, payload), secret);
-const verify = (domain: string, payload: Uint8Array, signature: Uint8Array, key: Uint8Array) => {
-  try {
-    return ed25519.verify(signature, derive(domain, payload), key);
-  } catch {
-    return false;
-  }
-};
+const verify = (domain: string, payload: Uint8Array, signature: Uint8Array, key: Uint8Array) => verifyEd25519(key, derive(domain, payload), signature);
 
 const bindingBody = (b: Omit<KeyBinding, "signature">) =>
   new Writer().fixed(b.accountKey, 32).fixed(b.messagingKey, 32).u32(b.keyEpoch).u64(b.devicesAfter).u64(b.issuedAt).done();
