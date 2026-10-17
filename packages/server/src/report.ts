@@ -1,12 +1,15 @@
 // Error reports for a grain's team (Saltix 24-app-studio §4): a card made for an AI agent to read. The owner opens the
 // app's console in Saltix, long-presses the report, copies it "for an AI agent" and pastes it into a coding agent. The
-// card says what failed (a status line), the error's name, message and top frame, the context (the command, the
-// request, the app's version, the time in UTC) as fields, and the stack as text, trimmed to fit a card. Nothing secret
+// card follows the card standard (docs/cards.md): a short status line says what failed ("Error · TypeError", at most
+// 60 characters, cut at a word), the error's name, message and top frame and the context (the command, the request,
+// the app's version, the time in UTC) are its fields, at most 8, and the rest of them, the full message and the stack
+// are its text, trimmed to fit a card. Nothing is left out: the copy for an agent reads every line of it. Nothing secret
 // goes in: developer keys, hex of 64 characters or more (keys, secrets, and also hashes and accounts, which cannot be
 // told apart by look) and whatever the server adds to remove are scrubbed first. Identical errors (the same name,
 // message and top frame) fold within `REPORT_FOLD_MS`: `ChatServer.report` sends one card and counts the rest.
 //
 // No Node APIs here: the simulator runs it in a browser.
+import { CARD_LIMITS } from "./card-lint.js";
 import { type StatusState } from "./chat.js";
 import { Card } from "./chat-card.js";
 
@@ -73,6 +76,18 @@ function cut(text: string, max: number): string {
   return chars.length <= max ? text : chars.slice(0, max - 1).join("") + "…";
 }
 
+/** At most `max` characters, cut with "…" after the last whole word that fits (mid-word only when one word is longer
+ *  than half of `max`). */
+function cutAtWord(text: string, max: number): string {
+  const chars = [...text];
+  if (chars.length <= max) return text;
+  const head = chars.slice(0, max - 1).join("");
+  // A word that ends right at the cut is whole; otherwise back to the space before the word it cut.
+  const space = /\s/u.test(chars[max - 1]!) ? head.length : head.search(/\s\S*$/u);
+  const kept = space >= (max - 1) / 2 ? head.slice(0, space) : head;
+  return kept.replace(/[\s,.;:·-]+$/u, "") + "…";
+}
+
 const isFrame = (line: string) => /^\s*at\s/.test(line);
 
 /** The frames of a V8 stack, each `at …`; any other engine's lines after the first. */
@@ -129,9 +144,23 @@ const LABELS: Record<string, string> = { command: "Command", request: "Request",
 const TEXT_MAX = 4_000;
 const VALUE_MAX = 200;
 
-/** The text block: the full message when the field cut it, then the stack, cut at a line to fit a card. */
-function textOf(f: ErrorFacts): string {
-  const head: string[] = [];
+/**
+ * The status line: what failed in a few words, as the card standard wants a title (`CARD_LIMITS.status`, cut at a
+ * word): "Error · " (or "Refused · " for a `ChatRefusal`) and the error's name — or its message, when the name says
+ * nothing ("Error") or it is a refusal, whose message is the words for the user. The name and the message in full are
+ * the card's fields and text.
+ */
+export function reportStatus(f: ErrorFacts): string {
+  const head = f.refusal ? "Refused" : "Error";
+  const name = oneLine(f.name);
+  const kind = f.refusal || name === "" || name === "Error" ? oneLine(f.message) || name : name;
+  return kind && kind !== head ? cutAtWord(`${head} · ${kind}`, CARD_LIMITS.status) : head;
+}
+
+/** The text block: the fields past the card's 8, the full message when the field cut it, then the stack, cut at a line
+ *  to fit a card (the fields never cut). */
+function textOf(f: ErrorFacts, more: ReadonlyArray<[string, string]>): string {
+  const head: string[] = more.map(([label, value]) => `${label}: ${value}`);
   if ([...oneLine(f.message)].length > VALUE_MAX || f.message.includes("\n")) head.push("Message:", lines(f.message));
   if (f.stack) head.push("Stack:", lines(f.stack));
   const all = head.join("\n").split("\n");
@@ -153,10 +182,11 @@ function textOf(f: ErrorFacts): string {
 }
 
 /**
- * The card a team gets for an error: a `failed` status (`refused` for a `ChatRefusal`) with the error's name and
- * message; fields for the app, the error, the message, where it happened, the context, the chat spec's version, the
- * time in UTC and, when folded errors came before it, how many and since when; the stack as text. Within a card's
- * bounds whatever the error says. `facts` are scrubbed already (`errorFacts`); the context is scrubbed here.
+ * The card a team gets for an error, by the card standard: a `failed` status (`refused` for a `ChatRefusal`) titled
+ * [reportStatus]; fields for the app, the error, the message, where it happened, the context, the chat spec's version,
+ * the time in UTC and, when folded errors came before it, how many and since when — the first 8 as fields, the others
+ * as the text's first lines — then the full message when its field cut it, and the stack. Within a card's bounds
+ * whatever the error says. `facts` are scrubbed already (`errorFacts`); the context is scrubbed here.
  */
 export function reportCard(
   facts: ErrorFacts,
@@ -192,8 +222,9 @@ export function reportCard(
     if (key in LABELS || v === undefined || v === null || String(v) === "") continue;
     rows.push([cut(oneLine(scrub(key)) || "?", 40), value(scrub(String(v)))]);
   }
-  const card = new Card().status(state, cut(oneLine(`${facts.name}: ${facts.message}`), VALUE_MAX)).fields(rows);
-  const text = textOf(facts);
+  // The standard's 8 rows of fields, in the order above; the rest lead the text, a line each as the copy writes fields.
+  const card = new Card().status(state, reportStatus(facts)).fields(rows.slice(0, CARD_LIMITS.fields));
+  const text = textOf(facts, rows.slice(CARD_LIMITS.fields));
   if (text.trim()) card.text(text);
   return card;
 }

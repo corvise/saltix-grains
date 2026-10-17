@@ -323,9 +323,12 @@ a card:
 
 | Block | What |
 |---|---|
-| Status | `failed` (`refused` for a `ChatRefusal`): `TypeError: Cannot read properties of undefined (reading 'site')` |
-| Fields | App, Error, Message, Where (the top frame), Command, Request, App version (`version` of the server or the context), Chat spec, Time (UTC), Occurrences (when folded), then the context's other keys, up to 16 rows |
-| Text | the full message when the field cut it, and the stack with its causes, cut at a line to fit 4 000 characters |
+| Status | `failed` (`refused` for a `ChatRefusal`), a title by the card standard (`reportStatus`): `Error · TypeError` — `Error · ` and the error's name, or its message when the name says nothing (a plain `Error`, a thrown string), `Refused · ` and the words of a refusal — at most 60 characters, cut at a word |
+| Fields | App, Error, Message, Where (the top frame), Command, Request, App version (`version` of the server or the context), Chat spec, Time (UTC), Occurrences (when folded), then the context's other keys, up to 16 rows in all: the first 8 as fields (the standard's most) |
+| Text | the rows past the 8th as `Label: value` lines, as the copy for an agent writes fields; then the full message when its field cut it, and the stack with its causes, cut at a line to fit 4 000 characters |
+
+The card keeps the card standard (docs/cards.md) — the server's lint (`card_standard`) never fires for it — and loses
+nothing: the error's name and message are the fields, and every line the copy for an AI agent reads is still there.
 
 - **Folding.** The same error (name, message and top frame) is reported once an hour: the ones in between are counted,
   and the next card says "×N since the last report". If they stop, the count goes out within 10 minutes after the hour

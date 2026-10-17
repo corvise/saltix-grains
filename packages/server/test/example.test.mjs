@@ -10,9 +10,9 @@ import { startChat } from "../../../examples/hello-grain/chat.mjs";
 const spec = new URL("../../../examples/hello-grain/chat.json", import.meta.url);
 
 test("every card hello-grain sends follows the card standard: a status first, when it has one", async () => {
-  // The team's error report for `fail` is the SDK's own card (report.ts), not the example's: off here, so the server's
-  // lint speaks of the example's cards alone.
-  const t = await testChat({ spec, start: (options) => startChat(options), options: { reportErrors: false } });
+  // `fail` also sends the team the SDK's own error report (report.ts): it follows the standard too, so the server's lint
+  // stays silent with it on.
+  const t = await testChat({ spec, start: (options) => startChat(options) });
   try {
     const replies = {
       hello: await t.ask("hello", { name: "Ann" }),
@@ -37,7 +37,10 @@ test("every card hello-grain sends follows the card standard: a status first, wh
     assert.equal(replies.report.working.length, 1, "a working status first, replaced by the answer");
     assert.equal(replies["report (a day to come)"].status.state, "refused");
     assert.equal(replies.fail.status.state, "failed");
-    assert.deepEqual(t.logs.filter((l) => l.event === "card_standard"), [], "the server's own lint found nothing");
+    // `fail`'s report went to the team (it is sent after the answer: waited for, a bounded while).
+    for (let i = 0; i < 50 && !t.logs.some((l) => l.event === "chat_error_reported"); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.ok(t.logs.some((l) => l.event === "chat_error_reported"), "fail's error reached the team");
+    assert.deepEqual(t.logs.filter((l) => l.event === "card_standard"), [], "the server's own lint found nothing, the report included");
   } finally {
     await t.close();
   }

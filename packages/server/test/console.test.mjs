@@ -11,8 +11,8 @@ import { ed25519 } from "@noble/curves/ed25519";
 import {
   ChatServer, ChatRefusal, ChatBudgetSpent, card, toHex, toBase64, fromHex, accountId, encodeAddress, signMemberProof, memoryChatStore,
   fileChatStore, ROLES, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, REPORT_FOLD_MS, scrubSecrets, errorFacts, errorFingerprint,
-  reportCard, chatMessageBoundsProblem, encodeChatFrame, signChatMessage, MAX_FRAME_BYTES, onTeam, teamMemberOf, needsTeamController,
-  readPublishText, publishLink, teamOnly, UNOWNED,
+  reportCard, reportStatus, chatMessageBoundsProblem, encodeChatFrame, signChatMessage, MAX_FRAME_BYTES, onTeam, teamMemberOf,
+  needsTeamController, readPublishText, publishLink, teamOnly, UNOWNED, assertCardStandard, lintCard, CARD_LIMITS,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import {
@@ -26,6 +26,19 @@ const USER = fromHex("55".repeat(32), 32);
 const STRANGER = fromHex("56".repeat(32), 32);
 const ownerAccount = toHex(accountId(fromHex(ownerKey.ed25519, 32)));
 const HEX64 = "ab".repeat(32);
+
+/** A report's rows as the copy for an agent reads them: its fields, then the text's `Label: value` lines before the
+ *  message and the stack (the fields past the card's 8). */
+function reportRows(blocks) {
+  const rows = blocks.flatMap((b) => ("fields" in b ? b.fields.rows : []));
+  const text = blocks.find((b) => "text" in b)?.text.text ?? "";
+  for (const line of text.split("\n")) {
+    if (line === "Message:" || line === "Stack:") break;
+    const m = /^([^:]{1,40}): (.*)$/.exec(line);
+    if (m) rows.push([m[1], m[2]]);
+  }
+  return Object.fromEntries(rows);
+}
 
 /** A server from the developer key on a development relay, reading `fake`'s chain, its log kept. */
 async function studio(fake, over = {}) {
@@ -129,9 +142,14 @@ test("a report card fits a card's bounds whatever the error says", () => {
   assert.ok(frame.length <= MAX_FRAME_BYTES);
   const [status, fields, text] = c.blocks;
   assert.equal(status.status.state, 3, "failed");
-  assert.ok([...status.status.text].length <= 200);
-  const rows = Object.fromEntries(fields.fields.rows);
-  assert.equal(fields.fields.rows.length, 16, "16 rows at most");
+  assert.ok([...status.status.text].length <= CARD_LIMITS.status, status.status.text);
+  // The card standard: a status first, at most 60 characters, at most 8 rows of fields; nothing it warns of.
+  assert.doesNotThrow(() => assertCardStandard(c), JSON.stringify(lintCard(c)));
+  assert.equal(fields.fields.rows.length, CARD_LIMITS.fields, "the standard's 8 rows of fields");
+  assert.deepEqual(fields.fields.rows.map(([l]) => l), ["App", "Error", "Message", "Where", "Command", "Request", "App version", "Chat spec"]);
+  // The rest lead the text, a line each, none lost: 16 rows in all as before, as the copy for an agent reads them.
+  const rows = reportRows(c.blocks);
+  assert.equal(Object.keys(rows).length, 16, "16 rows at most, the same as before");
   assert.equal(rows.App, "access");
   assert.equal(rows.Command, "/key");
   assert.equal(rows.Request, "ab".repeat(16));
@@ -140,16 +158,47 @@ test("a report card fits a card's bounds whatever the error says", () => {
   assert.equal(rows["Time (UTC)"], "2026-10-15T12:00:00.000Z");
   assert.equal(rows.Occurrences, "×7 since the last report, 2026-10-15T11:00:00.000Z");
   assert.ok(!JSON.stringify(fields).includes(HEX64), "context values scrubbed");
-  assert.match(text.text.text, /^Message:\n/);
+  assert.match(text.text.text, /^Time \(UTC\): 2026-10-15T12:00:00\.000Z\nOccurrences: ×7 since/);
+  assert.match(text.text.text, /\nMessage:\n/);
   assert.match(text.text.text, /\n… \d+ more lines$/, "cut at a line, saying how much is left");
   assert.ok([...text.text.text].length <= 4_000);
 
   // A refusal reported says refused; a card without a stack or a long message has no text block, and no occurrences.
   const r = reportCard(errorFacts(new ChatRefusal("no")), { slug: "access", at: 0 });
   assert.equal(r.blocks[0].status.state, 2);
+  assert.equal(r.blocks[0].status.text, "Refused · no");
   const plain = reportCard(errorFacts("short"), { slug: "access", at: 0 });
   assert.equal(plain.blocks.length, 2);
   assert.ok(!plain.blocks[1].fields.rows.some(([label]) => label === "Occurrences"));
+  assert.doesNotThrow(() => assertCardStandard(plain));
+});
+
+test("a report's status is a short title, cut at a word; the name and the message in full are the card's", () => {
+  // A named error: its name.
+  const typed = errorFacts(new TypeError("Cannot read properties of undefined (reading 'site')"));
+  assert.equal(reportStatus(typed), "Error · TypeError");
+  // A plain Error, a thrown string: the message says what it is, cut at a word within 60 characters.
+  const words = errorFacts(new Error("could not mint the access key because the node at the city did not answer in time"));
+  const s = reportStatus(words);
+  assert.equal(s, "Error · could not mint the access key because the node at…");
+  assert.ok([...s].length <= CARD_LIMITS.status);
+  assert.equal(reportStatus(errorFacts("short")), "Error · short");
+  // A word that ends right at the limit stays whole; a single word longer than half the limit is cut where it must be.
+  const whole = "abcd ".repeat(10) + "a bcdef";
+  assert.equal(reportStatus(errorFacts(new Error(whole))), "Error · abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd a…");
+  assert.equal(reportStatus(errorFacts(new Error("abcd ".repeat(10) + "abc def"))), "Error · abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd…");
+  const long = reportStatus(errorFacts(new Error("x".repeat(200))));
+  assert.equal([...long].length, CARD_LIMITS.status);
+  assert.ok(long.startsWith("Error · xxx") && long.endsWith("…"));
+  // A refusal: refused, and the words it gave the user; nothing to say: just the head.
+  assert.equal(reportStatus(errorFacts(new ChatRefusal("Not yours."))), "Refused · Not yours.");
+  assert.equal(reportStatus(errorFacts(new Error(""))), "Error");
+  // Newlines and controls never reach the title; the full message is still the card's.
+  const multi = new Error("first line\nsecond line");
+  assert.equal(reportStatus(errorFacts(multi)), "Error · first line second line");
+  const c = reportCard(errorFacts(new TypeError("Cannot read properties of undefined (reading 'site')")), { slug: "access", at: 0 });
+  assert.equal(reportRows(c.blocks).Message, "Cannot read properties of undefined (reading 'site')");
+  assert.equal(reportRows(c.blocks).Error, "TypeError");
 });
 
 test("the team: who the registry names, and where each member's chat is once their proof showed it", async () => {
@@ -386,15 +435,19 @@ test("a handler's error reaches the team as a card for an AI agent; the same err
     assert.equal(owner.problem(report), null);
     const [status, fields, stack] = report.message.blocks;
     assert.equal(status.status.state, 3);
-    assert.equal(status.status.text, "TypeError: Cannot read properties of undefined (reading 'site')");
-    const rows = Object.fromEntries(fields.fields.rows);
+    assert.equal(status.status.text, "Error · TypeError");
+    assert.equal(fields.fields.rows.length, 8, "the card standard's 8 rows; the ninth leads the text");
+    const rows = reportRows(report.message.blocks);
+    assert.equal(rows.Error, "TypeError");
+    assert.equal(rows.Message, "Cannot read properties of undefined (reading 'site')");
     assert.equal(rows.Command, "/key");
     assert.equal(rows.Request, r.request.id);
     assert.equal(rows["App version"], "1.4.2");
     assert.equal(rows["Chat spec"], "v1");
     assert.match(rows.Where, /^boom \(/);
     assert.equal(rows["Time (UTC)"], new Date(t).toISOString());
-    assert.match(stack.text.text, /^Stack:\nat boom/);
+    assert.match(stack.text.text, /^Time \(UTC\): .+\nStack:\nat boom/);
+    assert.ok(!events.some((e) => e.event === "card_standard"), `the server's lint is silent: ${JSON.stringify(events.filter((e) => e.event === "card_standard"))}`);
     assert.equal(user.frames.filter((f) => f.message?.message.answers === null).length, 0, "nothing reaches the user but the answer");
 
     // The same error again within the hour: folded, nothing sent.
@@ -413,9 +466,9 @@ test("a handler's error reaches the team as a card for an AI agent; the same err
     const next = await server.report(caught(() => boom()), { context: { command: "/key", shard: 3 } });
     assert.equal(next.folded, false);
     await owner.until(() => reports().length === 3);
-    const third = Object.fromEntries(reports()[2].message.blocks[1].fields.rows);
+    const third = reportRows(reports()[2].message.blocks);
     assert.equal(third.Occurrences, `×6 since the last report, ${new Date(t - REPORT_FOLD_MS).toISOString()}`);
-    assert.equal(third.shard, "3", "the context's further keys as fields");
+    assert.equal(third.shard, "3", "the context's further keys, past the fields in the text");
 
     // Refusals are answers, not errors; secrets never reach a card or the log.
     await ask(user, user.request("revoke", [["id", { text: "k-1" }]]));
@@ -451,7 +504,7 @@ test("folded errors are counted after the hour even when they stop", async () =>
     t = start + REPORT_FOLD_MS;
     assert.equal(await server.flushReports(), 1);
     await owner.until(() => unasked(owner).length === 2);
-    const rows = Object.fromEntries(unasked(owner)[1].message.blocks[1].fields.rows);
+    const rows = reportRows(unasked(owner)[1].message.blocks);
     assert.equal(rows.Occurrences, `×2 since the last report, ${new Date(start).toISOString()}`);
     assert.equal(await server.flushReports(), 0, "counted once");
     // The flush starts a new hour: the next one within it folds.

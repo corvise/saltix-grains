@@ -326,7 +326,7 @@ The owner long-presses a report in the app's console in Saltix and copies it **f
 ```text
 Saltix app console · <slug> · message <id> · <UTC time> · app version <the registry's manifest version>
 from <slug>, verified
-[failed] TypeError: Cannot read properties of undefined (reading 'length')
+[failed] Error · TypeError
 App: <slug>
 Error: TypeError
 Message: Cannot read properties of undefined (reading 'length')
@@ -336,11 +336,12 @@ Request: <request id>
 App version: <your program's version>
 Chat spec: v<version>
 Time (UTC): <time>
-<the stack, and the context you passed>
+<the rest of the context you passed, then the stack>
 Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
 ```
 
-1. Find the handler of **Command** and the line of **Where**; the stack is under the fields. The last line, the same in
+1. The first line is only a title (60 characters at most): **Error** and **Message** are the error in full. Find the
+   handler of **Command** and the line of **Where**; the stack is under the fields. The last line, the same in
    every copy, is the rule of an app's page ([AGENTS.md](../../AGENTS.md)): keep to it in any page you touch.
 2. The report never carries the user's arguments or text. Reproduce with a test over the arguments that could get
    there; add to `chat.report`'s `context` (or a `ChatRefusal` check) what the next report should say.
