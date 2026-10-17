@@ -9,17 +9,27 @@
  * - the CSS variables `--saltix-safe-*` and `--saltix-controls-*` set on the page's `:root`, as Saltix sets them (a page
  *   on another origin than the simulator's cannot be read: it stays inside the safe area, as in a wallet that cannot
  *   read it);
- * - the wallet's controls `⋯ | ✕`, a translucent capsule drawn to contrast with the page's header colour
- *   (`grain_setHeader`) or its own, at the place `frameFor` gives: the same function and numbers the page SDK documents,
- *   so what a developer sees here is where Saltix puts them;
+ * - the band, the margins and the bars' icons in the page's colours, in Saltix's order (`frameColors`, `pageColorOf`):
+ *   the band takes the colour the page gave with `grain_setHeader` (it holds until the next call), else its own; the
+ *   page's own is its first `theme-color` whose `media` matches and which is a valid, opaque colour, else the
+ *   background of its `<body>`, then `<html>`, else its canvas (by its `color-scheme`). It is read again when Saltix
+ *   reads it: as the head is parsed and whenever the head changes, when the document is loaded, when the theme changes
+ *   and when the system's dark preference does;
+ * - the wallet's controls `⋯ | ✕`, a translucent capsule drawn to contrast with the band's colour, at the place
+ *   `frameFor` gives: the same function and numbers the page SDK documents, so what a developer sees here is where
+ *   Saltix puts them;
  * - ✕ closes the app; the system's Back goes back in the page's history first, then closes it; ⋯ opens a mock of the
  *   wallet's sheet;
- * - the loading screen (the app's initial and name, a thin progress line at the very top) until `grain_ready`;
+ * - the loading screen (the app's initial and name, a thin progress line at the very top) while the page loads, gone
+ *   once it has loaded, as in Saltix: `grain_ready` neither holds nor hides it;
  * - devices to test at: a phone (360 × 780 with a punch-hole), one on its side (the cutout on the left), the Galaxy Z
  *   Fold's 475 × 751, 704 × 932 and 932 × 704, and an iPhone-like screen (393 × 852 with a Dynamic Island). A change
  *   of device resizes the page and sends it `insets`, as the wallet does when the window changes.
  */
-import { type Controls, type Frame, type SafeArea, type SystemInsets, LAYOUT_VARIABLES, frameFor, viewportFitCover, viewportOf } from "../packages/grain/src/index";
+import {
+  type Controls, type Frame, type PageLook, type SafeArea, type SystemInsets, LAYOUT_VARIABLES, frameColors, frameFor, pageColorOf, viewportFitCover,
+  viewportOf,
+} from "../packages/grain/src/index";
 
 /** A screen the simulator plays: its size and what of the system covers it, CSS px (dp, or points on an iPhone). */
 export interface Device {
@@ -88,12 +98,11 @@ export interface Phone {
   insets(): { safe_area: SafeArea; controls: Controls | null };
   /** The page asked for this header colour (`#rrggbb`). */
   setHeader(color: string): void;
-  /** The theme changed: the bars and the controls follow it unless the page set a header colour. */
+  /** The theme changed (or the app's name): repaint, and read the page's colour again once it has followed the theme,
+   *  as Saltix does on its `theme` event. */
   repaint(): void;
   /** The app is opening at the frame's current URL. */
   opened(): void;
-  /** The page says it is drawn (`grain_ready`). */
-  ready(): void;
   /** Close the app: ✕, Back past the page's history, or `grain_close`. */
   close(why: string): void;
   /** Where the wallet's own sheets are drawn, as a page inside the safe area is: below the controls' band, clear of the
@@ -103,18 +112,38 @@ export interface Phone {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-/** Whether `#rrggbb` is light enough for dark glyphs on it (relative luminance above one half, roughly). */
-function light(color: string): boolean {
-  const n = parseInt(color.slice(1), 16);
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140;
+let paint: CanvasRenderingContext2D | null = null;
+
+/** A CSS colour as `#rrggbb` when it is valid and opaque, else null, read by a canvas as the browser reads it: Saltix's
+ *  own way (saltix-wallet frame.js). An invalid colour leaves `fillStyle` as it was, so two starting points tell. */
+function opaque(value: string): string | null {
+  try {
+    paint ??= document.createElement("canvas").getContext("2d");
+    if (!paint) return null;
+    paint.fillStyle = "#000000";
+    paint.fillStyle = value;
+    const a = String(paint.fillStyle);
+    paint.fillStyle = "#ffffff";
+    paint.fillStyle = value;
+    return a === String(paint.fillStyle) && /^#[0-9a-f]{6}$/.test(a) ? a : null;
+  } catch {
+    return null;
+  }
 }
 
-/** A computed colour (`rgb(…)`, `rgba(…)`) as `#rrggbb` when it is opaque, else null. */
-function hex(css: string | null | undefined): string | null {
-  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec((css ?? "").trim());
-  if (!m || (m[4] !== undefined && Number(m[4]) < 1)) return null;
-  return "#" + [m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, "0")).join("");
+/** What Saltix reads of a page's document for its colour. */
+function lookOf(doc: Document): PageLook {
+  const view = doc.defaultView;
+  const matches = (media: string | null) => !media || (view?.matchMedia(media).matches ?? false);
+  const style = (element: Element | null, property: string) => (element && view ? view.getComputedStyle(element).getPropertyValue(property) : null);
+  return {
+    themeColors: Array.from(doc.querySelectorAll('meta[name="theme-color" i]'), (m) => ({ content: m.getAttribute("content"), matches: matches(m.getAttribute("media")) })),
+    body: doc.body !== null,
+    bodyBackground: style(doc.body, "background-color"),
+    rootBackground: style(doc.documentElement, "background-color"),
+    colorScheme: style(doc.documentElement, "color-scheme"),
+    prefersDark: view?.matchMedia("(prefers-color-scheme: dark)").matches ?? false,
+  };
 }
 
 export function setupPhone(host: PhoneHost): Phone {
@@ -130,8 +159,9 @@ export function setupPhone(host: PhoneHost): Phone {
   const sheet = $("sheet");
   const select = $<HTMLSelectElement>("size");
   let device = DEVICES[0]!;
+  // The colour the page gave with grain_setHeader: it holds until the next call, for as long as the app is open.
   let header: string | null = null;
-  // The page's frame as its document declares it, and its colour (theme-color or background), read from the page.
+  // The page's frame as its document declares it, and its own colour (`pageColorOf`), read from the page.
   let cover = false;
   let pageColor: string | null = null;
   // The top window's history once the app's first page loaded, and the Backs taken since: what is above it is the page's
@@ -139,7 +169,6 @@ export function setupPhone(host: PhoneHost): Phone {
   let base = history.length;
   let backs = 0;
   let counting = false;
-  let splashTimer: ReturnType<typeof setTimeout> | null = null;
 
   const frameNow = (): Frame => frameFor(systemOf(device), cover);
   const insets = () => {
@@ -175,13 +204,14 @@ export function setupPhone(host: PhoneHost): Phone {
   }
 
   function repaint(): void {
-    // The band and the margins take the page's colour; glyphs contrast with its header colour, else its own, else the
-    // theme's background.
-    const top = header ?? pageColor;
-    phone.style.background = pageColor ?? (host.theme() === "dark" ? "#0b1020" : "#f4f6fb");
-    band.style.background = top ?? phone.style.background;
-    const dark = top ? !light(top) : host.theme() === "dark";
-    phone.dataset.glyphs = dark ? "light" : "dark";
+    // Saltix's order (12-grains §7, `frameColors`): the band takes the header colour, else the page's; the margins the
+    // page's; where the page gave none, the wallet's own background and icons by its theme.
+    const colors = frameColors(header, pageColor);
+    const wallet = host.theme() === "dark" ? "#0b1020" : "#f4f6fb";
+    phone.style.background = colors.around ?? wallet;
+    band.style.background = colors.band ?? wallet;
+    phone.dataset.glyphs = (colors.topDark ?? host.theme() === "dark") ? "light" : "dark";
+    phone.dataset.navGlyphs = (colors.bottomDark ?? host.theme() === "dark") ? "light" : "dark";
     $("splash-name").textContent = host.name();
     $("splash-icon").textContent = host.name().slice(0, 1).toUpperCase();
     $("sheet-name").textContent = host.name();
@@ -231,9 +261,7 @@ export function setupPhone(host: PhoneHost): Phone {
     const meta = viewportOf(doc);
     if (meta === null && !doc.body && doc.readyState === "loading") return;
     const next = viewportFitCover(meta);
-    const body = doc.body ? hex(doc.defaultView?.getComputedStyle(doc.body).backgroundColor) : null;
-    const theme = doc.querySelector('meta[name="theme-color" i]')?.getAttribute("content") ?? null;
-    pageColor = (theme && /^#[0-9a-f]{6}$/i.test(theme) ? theme : null) ?? body;
+    pageColor = pageColorOf(lookOf(doc), opaque);
     if (next !== cover) {
       cover = next;
       place();
@@ -245,15 +273,40 @@ export function setupPhone(host: PhoneHost): Phone {
     }
   }
 
-  /** Follow the frame's document from as early as it can be read: its head as it is parsed, then its changes. */
+  /** Read again on the frame after next: after the page has followed what changed (its own `theme` handler, say). */
+  function soon(): void {
+    requestAnimationFrame(() => requestAnimationFrame(read));
+  }
+
+  /** Follow the frame's document from as early as it can be read, as Saltix's script does: every addition while it is
+   *  parsed until its body starts (the head has been read), then only its head's changes; and when it has loaded, the
+   *  theme changes (`repaint`) or the system's dark preference does. Nothing else: a background changed in the body
+   *  alone is seen by Saltix at the next of these, and here too. */
   function watch(): void {
     const doc = readable();
     if (!doc || doc === watched) return;
     watched = doc;
     observer?.disconnect();
-    observer = new MutationObserver(read);
-    observer.observe(doc, { childList: true, subtree: true, attributes: true, attributeFilter: ["content", "name", "media", "style", "class"] });
-    doc.addEventListener("DOMContentLoaded", read);
+    let onHead = false;
+    const parsed = () => {
+      read();
+      if (onHead || !doc.head) return;
+      observer?.disconnect();
+      onHead = true;
+      observer = new MutationObserver(soon);
+      observer.observe(doc.head, { childList: true, subtree: true, attributes: true, attributeFilter: ["content", "name", "media"] });
+    };
+    if (doc.body) parsed();
+    else {
+      observer = new MutationObserver(() => (doc.body ? parsed() : read()));
+      observer.observe(doc, { childList: true, subtree: true });
+    }
+    doc.addEventListener("DOMContentLoaded", parsed);
+    try {
+      doc.defaultView?.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", soon);
+    } catch {
+      // A document that went away under us.
+    }
     paintVariables();
     read();
   }
@@ -273,8 +326,6 @@ export function setupPhone(host: PhoneHost): Phone {
 
   function hideSplash(): void {
     splash.hidden = true;
-    if (splashTimer) clearTimeout(splashTimer);
-    splashTimer = null;
   }
 
   const api: Phone = {
@@ -283,7 +334,10 @@ export function setupPhone(host: PhoneHost): Phone {
       header = color;
       repaint();
     },
-    repaint,
+    repaint() {
+      repaint();
+      soon();
+    },
     opened() {
       header = null;
       counting = true;
@@ -293,7 +347,6 @@ export function setupPhone(host: PhoneHost): Phone {
       repaint();
       requestAnimationFrame(() => seek());
     },
-    ready: hideSplash,
     sheetFrame: () => ({ view: frameFor(systemOf(device), false).view, width: device.width, height: device.height }),
     close(why) {
       host.frame.src = "about:blank";
@@ -303,7 +356,7 @@ export function setupPhone(host: PhoneHost): Phone {
     },
   };
 
-  // A page that never says it is ready is shown once loaded, as a wallet would not keep its splash for ever.
+  // The splash goes once the page has loaded, as Saltix's does (12-grains §7): `grain_ready` neither holds nor hides it.
   host.frame.addEventListener("load", () => {
     if (counting) {
       counting = false;
@@ -315,7 +368,7 @@ export function setupPhone(host: PhoneHost): Phone {
     if (!readable() && host.frame.src !== "about:blank" && host.frame.src !== "") {
       host.log("frame: the page is on another origin than the simulator's: it stays inside the safe area, as in a wallet that cannot read it");
     }
-    if (!splash.hidden && !splashTimer) splashTimer = setTimeout(hideSplash, 2_500);
+    if (host.frame.src !== "about:blank" && host.frame.src !== "") hideSplash();
   });
 
   select.replaceChildren(...DEVICES.map((d) => Object.assign(document.createElement("option"), { value: d.id, textContent: d.label })));

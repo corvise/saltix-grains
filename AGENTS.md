@@ -31,7 +31,10 @@ That line closes every report Saltix copies for an AI agent. In full (Saltix spe
   `--saltix-safe-left` and `--saltix-safe-right` in pixels (`grain_info.safe_area`), kept current when the phone turns,
   unfolds or folds and when a keyboard opens. Pad by them; backgrounds may run under the bars. `grain.layout()` (from
   `@saltix/grain`) sets the same values where Saltix does not, and says on the console when a page asks for them
-  without declaring `viewport-fit=cover`.
+  without declaring `viewport-fit=cover`. Its values sit below Saltix's, in a stylesheet of the page's own, so Saltix's
+  always win, its later changes too, and `stop()` takes away only what `grain.layout()` set. **Never write these
+  variables into `:root`'s inline style** (`document.documentElement.style.setProperty`): an inline value beats
+  Saltix's and stays as it was when the phone turns, unfolds or opens a keyboard.
 - **The wallet's controls `⋯ | ✕` float in the top right corner**: over an edge-to-edge page, `grain_info.controls`
   and `--saltix-controls-top`, `--saltix-controls-right`, `--saltix-controls-width`, `--saltix-controls-height` (a box
   of 96 × 48, 8 px from the right inset and 4 px below the top one; CSS px equal dp); inside the safe area they sit in
@@ -137,8 +140,10 @@ This is everything Saltix tells a page (bridge version 3, Saltix 0.1.54; Saltix 
   {visible}`, `insets {safe_area, controls}`, and `relay {from, payload}` once the page opened the relay.
 - **CSS variables** on `:root`, in `px`, set by Saltix's own script before the page's first one runs and kept current:
   `--saltix-safe-top`, `--saltix-safe-right`, `--saltix-safe-bottom`, `--saltix-safe-left`, `--saltix-controls-top`,
-  `--saltix-controls-right`, `--saltix-controls-width`, `--saltix-controls-height`. They win over the page's own values
-  for the same names, so a page may define them as a plain browser's fallbacks, as `grain init`'s page does.
+  `--saltix-controls-right`, `--saltix-controls-width`, `--saltix-controls-height`. They win over the page's own
+  stylesheets' values for the same names, so a page may define them there as a plain browser's fallbacks, as `grain
+  init`'s page does (never in `:root`'s inline style, which would win over Saltix's), and over `grain.layout()`'s,
+  which count only where Saltix sets none.
 - **`window.saltix`** (`isSaltix`, `isGrain`, `bridge`, `request`, `on`, `off`), which `@saltix/grain` wraps;
   `inWallet()` says whether it is there.
 
@@ -149,14 +154,19 @@ and the `theme` event, not by `prefers-color-scheme`, which need not match the t
 websites.)
 
 **Saltix takes its colours from the page instead.** The page's colour is the first `<meta name="theme-color">` whose
-`media` matches, else the background of `<body>`, then `<html>`, else `#121212` for a page whose `color-scheme` is dark
-and white otherwise; give an opaque one. The room around a page inside the safe area and the navigation bar's icons
-follow it; the band, the status bar's icons and the controls follow `grain.setHeader`'s colour when the page gave one,
-else it too. Saltix reads it again whenever the page's head changes and when the theme does.
+`media` matches and which is a valid, opaque CSS colour (any other is passed over), else the background of `<body>`,
+then `<html>`, else `#121212` for a page whose `color-scheme` is dark and white otherwise; give an opaque one. The room
+around a page inside the safe area and the navigation bar's icons follow it; the band, the status bar's icons and the
+controls follow `grain.setHeader`'s colour when the page gave one (it holds until the next call, whatever the head says
+meanwhile), else it too. Saltix reads the page's colour as its head is parsed, again whenever the head changes, once
+the page has loaded, when the theme changes and when the system's dark preference does; not when a script changes the
+body's background alone: change the `theme-color` with it, or call `grain.setHeader`. `grain dev`'s simulator draws
+the band, the margins and the icons in the same order and reads the colour at the same moments (`pageColorOf`,
+`frameColors` in `@saltix/grain`).
 
 **The wallet's splash** (the app's icon and name over Saltix's background, a thin progress line at the top) shows while
-the page loads and goes once it has loaded: `grain.ready()` does not hold it, and Saltix ignores that call today. A page
-that checks first shows a splash of its own until its gate decides (above).
+the page loads and goes once it has loaded: `grain.ready()` neither holds nor hides it, and Saltix ignores that call
+today (so does the simulator). A page that checks first shows a splash of its own until its gate decides (above).
 
 ## Naming: apps and people
 

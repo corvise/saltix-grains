@@ -190,8 +190,9 @@ if (gate === "open") drawApp(); else drawRefusal(gate);
 `grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything in its HTML outside its
 splash, or marks no splash. `grain init` makes a page that does all of this (`SIGN_IN`, `FOR` in `public/app.js`).
 
-Saltix's own splash (the app's icon and name) covers the page only while it loads; `grain.ready()` does not hold it.
-From then on the page's `data-grain-splash` is all a user sees until the gate decides.
+Saltix's own splash (the app's icon and name) covers the page only while it loads; `grain.ready()` neither holds nor
+hides it (Saltix ignores it today, and so does the simulator). From then on the page's `data-grain-splash` is all a user
+sees until the gate decides.
 
 ## What a page gets from Saltix
 
@@ -200,12 +201,17 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
 - `grain.info()`: `slug`, `version`, `form`, `listing`, `host`, `host_version`, `bridge` (3), `language`, `theme`
   (`dark` or `light`), `safe_area`, `controls`, `network`, `start`. Events: `theme`, `visibility`, `insets`, `relay`.
 - Eight CSS variables on `:root`, in `px`: `--saltix-safe-top|right|bottom|left` and
-  `--saltix-controls-top|right|width|height`.
+  `--saltix-controls-top|right|width|height`. Saltix's win over the page's stylesheets and over `grain.layout()`'s,
+  which fills them in only where Saltix sets none and takes them away on `stop()`. Never write them into `:root`'s
+  inline style: an inline value beats Saltix's and stays stale when the phone turns.
 - **No design tokens**: no palette, accent, fonts, corners or spacing. Bring your own, light and dark, and switch by
   `grain_info.theme` and the `theme` event (`prefers-color-scheme` need not match the theme chosen in Saltix).
 - **Saltix takes its colours from the page**: its band, the status bar's icons and its controls follow
-  `grain.setHeader`'s colour, else the page's own: its `theme-color` (the first whose `media` matches), else its
-  background, which the room around the page and the navigation bar's icons follow too. Give opaque colours.
+  `grain.setHeader`'s colour (until the next call), else the page's own: its `theme-color` (the first whose `media`
+  matches and which is an opaque colour), else its background, which the room around the page and the navigation bar's
+  icons follow too. Give opaque colours. Saltix reads them again when the head changes, once the page has loaded and
+  when the theme changes, not when a script changes the body's background alone: change the `theme-color` with it, or
+  call `grain.setHeader`. The simulator in `grain dev` follows the same order at the same moments.
 - **No one's name**: a user is a grain key ([the rules](#the-rules-every-app-follows), *People's names*).
 
 ## The rules every app follows
@@ -243,11 +249,12 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   safe area, below the band that holds its controls (⋯ | ✕, the capsule): a page that says nothing needs nothing.
   Draw edge to edge only by declaring `viewport-fit=cover` in the viewport meta, and then keep text inside
   `--saltix-safe-*` and nothing tappable under `--saltix-controls-*` (Saltix sets them on `:root`). The rules in full
-  are in `AGENTS.md`; `grain lint` warns about a page that declares it and reads no inset. Saltix gives no colours or
-  other design tokens: bring your own for both themes and switch by `grain_info.theme` and the `theme` event.
-- **Cards** follow the card design standard ([cards.md](cards.md)): a status first, at most 6 actions, labels of at
-  most 18 characters, the first `run` primary, destructive commands named so. Check each with `assertCardStandard(card,
-  spec)` in the tests.
+  are in `AGENTS.md`; `grain lint` warns about a page that declares it and reads no inset. Never write those variables
+  into `:root`'s inline style: it beats Saltix's own values. Saltix gives no colours or other design tokens: bring your
+  own for both themes and switch by `grain_info.theme` and the `theme` event.
+- **Cards** follow the card design standard ([cards.md](cards.md)): a status first (build the card with it first, even
+  when its text depends on what comes after), at most 6 actions, labels of at most 18 characters, the first `run`
+  primary, destructive commands named so. Check each with `assertCardStandard(card, spec)` in the tests.
 - **Bundles**: `grain bundle` makes the same bytes from the same files on any computer (files stored, never deflated,
   at most 20 MiB): rebuild it in CI and fail when `grain.json` changes (`git diff --exit-code grain.json`); never edit
   `entry.sealed` by hand.

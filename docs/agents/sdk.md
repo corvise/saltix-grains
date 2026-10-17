@@ -7,7 +7,7 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 
 | Where | What |
 |---|---|
-| `packages/grain/src/index.ts` | `@saltix/grain`, the page's side of the bridge, one module (`grain init` copies it into `public/`) |
+| `packages/grain/src/index.ts` | `@saltix/grain`, the page's side of the bridge, one module (`grain init` copies it into `public/`); `layoutSheet`, where `grain.layout()` keeps its CSS variables below the wallet's; and the wallet's rules the simulator plays by (`frameFor`, `controlsFor`, `pageColorOf`, `frameColors`) |
 | `packages/server/src/` | `@saltix/grain-server`; `index.ts` re-exports every module below |
 | `manifest.ts`, `registry.ts`, `tx.ts`, `handle.ts` | the manifest, the registry's calls (`signGrainTx`, `grainCallProblem`), transactions v3, usernames |
 | `chat.ts`, `chat-card.ts` | the chat's formats (specs, requests, messages, member proofs) and the card builder |
@@ -22,10 +22,10 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `publish.ts`, `publish-link.ts`, `inflate.ts`, `keys.ts`, `address.ts`, `bytes.ts` | publishing links, raw DEFLATE, device keys, Address v1, encoding |
 | `packages/cli/src/main.ts` | `grain`: the help and every command's dispatch |
 | `packages/cli/src/` others | `network.ts` (where a command reaches the network: public relays, `--relay`, `--node`), `faucet.ts`, `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `connect.ts` (`connect.json`, and `grain lint`'s checks of it, the icon and permissions nothing uses), `profile.ts` (`grain profile`, `grain connect-profile`), `bundle.ts`, `registry.ts` (publish, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `chat.ts` (chat-spec, cert), `sponsor.ts` |
-| `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
+| `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
 | `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
 | `scripts/sync-vectors.sh` | copies the protocol's golden vectors from a Saltix checkout; `vectors/SOURCE` names its commit |
-| `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key) |
+| `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key); `packages/server/test/example.test.mjs` runs its chat on `testChat` and holds every card to the card standard |
 | `docs/` | `first-app.md`, `chats.md`, `cards.md` (and its pictures in `cards/`), `payments.md`, `connect.md`, `devex.md` (the developer experience and its roadmap), and these pages |
 
 ## Commands
@@ -51,6 +51,17 @@ Tests import `dist/`: build the package before running its tests by path, and ag
   requests say how many mutants were killed).
 - **A test that starts a server or a process bounds every wait** (as `wallet.until` in
   `packages/server/test/chat-helpers.mjs` does): a broken change must fail the test, not hang CI.
+- **The simulator plays Saltix by Saltix's own code.** What it draws (the frame, the band's colours, the icons'
+  contrast, the splash) follows the wallet's (saltix-wallet `assets/grain/frame.js`, `AppFrame` and `GrainScreen` in
+  its Android app); each rule it needs is a pure function in `@saltix/grain` (`frameFor`, `controlsFor`,
+  `pageColorOf`, `frameColors`) with its test in `packages/grain/test/grain.test.mjs`, never logic inline in
+  `simulator/`, which no test reaches. When Saltix changes, change the function and its test to match first.
+- **`grain.layout()` never writes `:root`'s inline style.** Saltix sets the variables itself, in a sheet that wins over
+  the page's stylesheets (12-grains §5); the SDK's go in `layoutSheet`, below it, and `stop()` removes them and nothing
+  else. `grain.test.mjs` models the cascade (inline, adopted sheets, `<style>`) with Saltix's frame script in place: a
+  change there keeps the wallet's values winning, the later ones too.
+- **The example keeps the rules it teaches.** `examples/hello-grain` is what developers copy: every card it sends passes
+  `assertCardStandard` (`example.test.mjs`), and a command added there gets a case in that test.
 - **No secrets** in code, tests, fixtures or logs: tests use fixed fake keys (`"61".repeat(32)`), never a real
   developer key; `examples/**/*.key` and `*.store.json` are ignored. Scan the staged diff before committing.
 - **Logs** carry event names and numbers, never keys, arguments, what users wrote or who is on a team.

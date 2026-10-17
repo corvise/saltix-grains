@@ -82,8 +82,8 @@ const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 
 // Edge to edge (index.html declares viewport-fit=cover): the safe area and the wallet's controls as CSS variables, kept
-// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too; this is for older ones
-// and plain browsers.
+// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too, and its values win over
+// these: this is for older ones, a web wallet and plain browsers.
 grain.layout();
 
 // Check first, render after (AGENTS.md): index.html shows only its splash until the gate below decides, then the app or
@@ -141,15 +141,19 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
 
 - **Inside the safe area, by default.** A page that says nothing is drawn below the status bar, the cutout and a band
   that holds the controls, above the navigation bar or gesture area and the keyboard. Nothing of the system or the
-  wallet is ever over it; the band takes the page's colour (\`grain.setHeader\`, else the first
-  \`<meta name="theme-color">\` whose \`media\` matches, else the background of \`<body>\`, then \`<html>\`). Such a page
-  needs nothing else.
+  wallet is ever over it; the band takes the page's colour (\`grain.setHeader\`, until the next call, else the first
+  \`<meta name="theme-color">\` whose \`media\` matches and which is an opaque colour, else the background of
+  \`<body>\`, then \`<html>\`). Saltix reads it again when the head changes, once the page has loaded and when the theme
+  changes, not when a script changes the body's background alone: change the \`theme-color\` with it, or call
+  \`grain.setHeader\`. Such a page needs nothing else.
 - **Edge to edge only with \`viewport-fit=cover\`**: \`<meta name="viewport" content="width=device-width,
   initial-scale=1, viewport-fit=cover">\`. The page is then drawn under the status bar and the navigation bar, and must
   keep its text and controls inside the safe area itself: Saltix sets, on \`:root\`, \`--saltix-safe-top\`,
   \`--saltix-safe-bottom\`, \`--saltix-safe-left\` and \`--saltix-safe-right\` in pixels (\`grain_info.safe_area\`) and keeps
   them current when the phone turns, unfolds or folds, and when a keyboard opens. Pad by them; backgrounds may run
-  under the bars. \`grain.layout()\` (from \`@saltix/grain\`) sets the same values where Saltix does not.
+  under the bars. \`grain.layout()\` (from \`@saltix/grain\`) sets the same values where Saltix does not, below Saltix's
+  own, and takes them away on \`stop()\`. Never write these variables into \`:root\`'s inline style: an inline value
+  beats Saltix's and stays stale when the phone turns.
 - **The wallet's controls \`⋯ | ✕\` float in the top right corner**, over an edge-to-edge page: \`grain_info.controls\`,
   and \`--saltix-controls-top\`, \`--saltix-controls-right\`, \`--saltix-controls-width\`, \`--saltix-controls-height\`
   (a 96 × 48 box, 8 px from the right inset and 4 px below the top one; 0 inside the safe area, where they sit in the
@@ -157,6 +161,9 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
   (\`padding-right: calc(var(--saltix-controls-right) + var(--saltix-controls-width) + 8px)\`), or the bar starts below
   them (\`top: calc(var(--saltix-controls-top) + var(--saltix-controls-height))\`).
 - **No close button of your own.** ✕ and the system's Back close the app; Back goes through your page's history first.
+- Saltix's splash (the app's icon and name) shows while the page loads and goes once it has loaded: \`grain.ready()\`
+  neither holds nor hides it (Saltix ignores it today). A page that checks first shows its own splash until its gate
+  decides (rule 10).
 - \`grain.setHeader("#rrggbb")\` names the colour at the top of your page: the wallet draws the band, the status bar's
   icons and its controls to contrast with it. It holds until the next call: call it again when your theme changes.
 - **Saltix gives a page no design tokens**: no colours, fonts, corners or spacing of its own, and no variables but the
@@ -228,7 +235,8 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
    owner and nobody else; wallets refuse any other payee. Deliver only once \`chat.paymentOf\` finds the payment on chain
    with the confirmations you need, never on the page's or the user's word. Saltix 0.1.53 and older cannot pay such an
    invoice: say in the card what to do if the payment sheet does not open (update Saltix).
-7. **Cards follow the card design standard** ([its rules](${CARDS_GUIDE})), as every Saltix draws them: a status first,
+7. **Cards follow the card design standard** ([its rules](${CARDS_GUIDE})), as every Saltix draws them: a status first
+   (build the card with it first, even when its text depends on what comes after),
    at most 6 actions, labels of at most 18 characters, the first \`run\` primary, destructive commands named so
    (\`revoke_key\`, \`delete…\`). Check each card a handler returns with \`assertCardStandard(card, spec)\` in the tests.
 8. **Test every command end to end** with \`testChat\` (\`@saltix/grain-server/testing\`): it runs the handlers on a

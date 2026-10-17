@@ -188,7 +188,8 @@ async function handle(origin: string, method: string, params: Record<string, unk
       await chat.open(typeof params.cert === "string" ? params.cert : undefined, typeof params.spec === "string" ? params.spec : undefined);
       return null;
     case "grain_ready":
-      phone.ready();
+      // Saltix ignores it today (12-grains §7): its splash shows while the page loads and goes once it has loaded.
+      write("grain_ready: nothing to do; the splash went when the page loaded, as in Saltix");
       return null;
     case "grain_close":
       phone.close("grain_close");

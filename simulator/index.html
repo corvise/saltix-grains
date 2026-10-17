@@ -27,6 +27,9 @@
     .phone .sys-nav[data-kind="taskbar"] span::before { content: "▦ ◉ ◈ ◆"; font-size: 14px; }
     .phone[data-glyphs="light"] .sys-bar { color: #fff; }
     .phone[data-glyphs="dark"] .sys-bar { color: #0b1020; }
+    /* The navigation bar's icons contrast with the page's own colour, the status bar's with the band's (12-grains §7). */
+    .phone[data-nav-glyphs="light"] .sys-nav { color: #fff; }
+    .phone[data-nav-glyphs="dark"] .sys-nav { color: #0b1020; }
     .phone .sys-controls { position: absolute; display: flex; flex-direction: row; padding: 0; border: 0; background: none; gap: 0; box-sizing: border-box; }
     .phone .sys-controls::before { content: ""; position: absolute; inset: 8px 4px; border-radius: 16px; backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5); }
     .phone[data-glyphs="light"] .sys-controls::before { background: rgba(14, 18, 32, .42); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .22); }
@@ -176,7 +179,7 @@
     </div>
     <p style="font-size:12px;color:#9fb0d8;margin:0;max-width:390px">As Saltix frames every app: inside the safe area, below the status bar and a band that holds the wallet's ⋯ | ✕, unless the page declares <code>viewport-fit=cover</code>; then edge to edge, told <code>safe_area</code> and <code>controls</code> (and <code>--saltix-safe-*</code>, <code>--saltix-controls-*</code>). Keep tappable things out of that box; test at the Galaxy Z Fold's sizes and the iPhone-like screen, light and dark (AGENTS.md).</p>
     <p class="frame-mode" id="frame-mode"></p>
-    <div class="phone" id="phone" data-glyphs="light">
+    <div class="phone" id="phone" data-glyphs="light" data-nav-glyphs="light">
       <div class="sys-band" id="band"></div>
       <iframe id="grain" name="saltix-simulator" title="grain"></iframe>
       <div class="sys-cutout" id="cutout" hidden></div>

@@ -7,8 +7,8 @@ const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringi
 const run = (id, fn) => document.getElementById(id).addEventListener("click", () => fn().catch((e) => show(`${e.code ?? ""} ${e.message}`)));
 
 // Edge to edge (index.html declares viewport-fit=cover): the safe area and the wallet's controls as CSS variables, kept
-// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too; this is for older ones
-// and plain browsers.
+// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too, and its values win over
+// these: this is for older ones, a web wallet and plain browsers.
 grain.layout();
 
 if (!inWallet()) {
