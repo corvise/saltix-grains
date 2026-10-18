@@ -2,7 +2,7 @@
 // an account without taking a node's word for it: a Connect page's grant (19-connect §5 rule 5) and a site's Connect
 // profile (19-connect §11.3, `checkProfileOwner`). From the origin the address commits to, the network's genesis hash
 // and its first policy, every event is replayed against the controller the earlier ones made. The same rules as the
-// node's `check_log`; a port of the explorer's `explorer/src/connect/keylog.ts`, held to the same vectors.
+// node's `check_log`; a port of Saltix's explorer's, held to the same vectors.
 //
 // Only what moves the controller is read in full: the sender, the account actions and the proof. Any other action of an
 // event is a payment whose proof holds the root (it is an event only because the root moved), so it is passed over: the

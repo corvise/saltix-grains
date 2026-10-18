@@ -5,7 +5,7 @@ shows a screen. This page is the whole path, the rules every app follows, and wh
 
 ## The developer key is a secret
 
-`saltix-app:1:<hrp>:<genesis>:<slug>:<secret>` (Saltix 24-app-studio §3): the network's address prefix (`dsalt` on the
+`saltix-app:1:<hrp>:<genesis>:<slug>:<secret>` (Saltix 24-app-studio [§3](../protocol/app-studio.md#3-the-developer-key)): the network's address prefix (`dsalt` on the
 test network), the first 8 bytes of its genesis hash, the app's slug, and the server key's Ed25519 secret. Whoever holds
 it speaks for the app until the owner replaces it.
 
@@ -74,7 +74,7 @@ What users can send, declared ahead; the wallet draws each command's form and ch
 
 ## The Connect profile: `connect.json`
 
-The first time someone opens your app, Saltix shows its **Connect sheet** (Saltix specs/19-connect.md §12): "Saltix
+The first time someone opens your app, Saltix shows its **Connect sheet** (Saltix 19-connect [§12](../protocol/connect.md#12-the-connect-sheet)): "Saltix
 Connect" on top, your app's icon, name and owner, then **In its own words**: your profile. Below it, "To continue, sign
 in" with a row for each permission the manifest asks for, and Continue. `connect.json` is that profile: the JSON form's
 `profile` object without `owner` and `revision`, which are filled in when it is set.
@@ -163,8 +163,8 @@ chat.text((ask) => card().text("Pick Plan below."));
 ## A page for some people only: check first, then render
 
 A public app for a limited circle shows strangers a refusal page without any of its UI; a private app's page never even
-loads for them (Saltix reads the registry first and shows only that the app is private). Saltix specs/12-grains.md
-§5.1a. On a first open Saltix Connect's sheet comes first; then your page loads, and its gate follows:
+loads for them (Saltix reads the registry first and shows only that the app is private). Saltix 12-grains
+[§5.1a](../protocol/grains.md#51a-the-teams-sign-in-check-first-render-after). On a first open Saltix Connect's sheet comes first; then your page loads, and its gate follows:
 
 1. **The HTML shows a splash and nothing else**: the app's icon and name in an element marked `data-grain-splash`,
    the app's UI `hidden` (or not drawn yet). Never a skeleton of the UI: its layout already says what the app does.
@@ -231,7 +231,7 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   page ([above](#a-page-for-some-people-only-check-first-then-render)). The server checks the session's rights on every
   request.
 - **People's names**: Saltix gives an app nobody's name, neither the profile name an account sets for itself (Saltix
-  09-relay §1.5) nor its username. A user is their grain key, a pseudonym of this app alone (`ask.key`, the page's
+  [09-relay §1.5](../protocol/basics.md#peoples-names)) nor its username. A user is their grain key, a pseudonym of this app alone (`ask.key`, the page's
   `grain.login`); only the team and a private app's members are known as accounts (`ask.member`, `SignIns`), and a
   page gets an address only from `grain.requestAddress` (the `address` permission) or `grain.pickContact`.
   Never show a key as a name. To show people to each other, show the name each typed in the app (its own data: say so

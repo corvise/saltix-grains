@@ -1,6 +1,6 @@
 # Payments
 
-How an app takes a payment (Saltix `specs/12-grains.md` §5.2). The user always pays in the wallet's own sheet: it shows
+How an app takes a payment (Saltix 12-grains [§5.2](protocol/grains.md#52-payments)). The user always pays in the wallet's own sheet: it shows
 your app, the amount, the payee and your text, and the user approves with the PIN or biometrics (or one tap within the
 daily sum they allowed for your app, SALT only). Your server never touches the user's keys. It signs an **invoice**,
 and later finds the payment on chain by the invoice's **reference**.

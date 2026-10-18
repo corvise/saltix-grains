@@ -1,7 +1,7 @@
 {
   "name": "@saltix/grain-cli",
   "version": "0.1.0",
-  "description": "The grain command line: make, serve, check, sign, register and retire grains (Saltix specs/12-grains.md)",
+  "description": "The grain command line: make, serve, check, sign, register and retire grains (Saltix 12-grains, docs/protocol/grains.md)",
   "license": "MIT",
   "type": "module",
   "bin": {

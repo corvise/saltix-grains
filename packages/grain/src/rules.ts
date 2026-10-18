@@ -1,5 +1,5 @@
-// The wallet's side of the bridge as Saltix applies it (Saltix 12-grains §5, §7, §8; saltix-wallet GrainBridge.kt,
-// GrainContainer.kt, GrainStorage.kt, SealedSite.kt): what needs a tap of the user, what the manifest must ask for, who
+// The wallet's side of the bridge as Saltix applies it (Saltix 12-grains §5, §7, §8, docs/protocol/grains.md; as its
+// Android app's bridge, container, storage and sealed site do): what needs a tap of the user, what the manifest must ask for, who
 // may open the app's page, how often each method may be asked, how long an answer or an event may be, what storage
 // keeps, and how a sealed grain is served. The simulator plays by these, so that a page meets Saltix's refusals on a
 // computer first; a page never needs them (`@saltix/grain/rules`, not part of `index.js`).

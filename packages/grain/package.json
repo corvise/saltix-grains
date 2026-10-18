@@ -1,7 +1,7 @@
 {
   "name": "@saltix/grain",
   "version": "0.1.0",
-  "description": "The bridge between a grain and the Saltix wallet it runs in (specs/12-grains.md §5)",
+  "description": "The bridge between a grain and the Saltix wallet it runs in (Saltix 12-grains §5, docs/protocol/grains.md)",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

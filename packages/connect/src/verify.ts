@@ -2,8 +2,8 @@
 // the page's node (`account_log`), checked offline under the network's genesis hash and the first account policy, both
 // read from the node's status (`node_status`) for this grant. What the page keeps comes back.
 //
-// This module is the page's check, and the reference for every copy of it: the explorer's `/explorer/me`
-// (corvise/saltix `explorer/src/connect/`) follows it rule for rule — what is refused, what is only unchecked, and
+// This module is the page's check, and the reference for every copy of it: Saltix's explorer (`/explorer/me`) follows
+// it rule for rule — what is refused, what is only unchecked, and
 // when the node is asked again.
 import { type NetworkName, encodeAddress, fromHex, policyOf, toHex } from "@saltix/grain-server/web";
 import { b64url } from "./codec.js";

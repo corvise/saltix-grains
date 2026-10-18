@@ -115,7 +115,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 let paint: CanvasRenderingContext2D | null = null;
 
 /** A CSS colour as `#rrggbb` when it is valid and opaque, else null, read by a canvas as the browser reads it: Saltix's
- *  own way (saltix-wallet frame.js). An invalid colour leaves `fillStyle` as it was, so two starting points tell. */
+ *  own way (its frame script). An invalid colour leaves `fillStyle` as it was, so two starting points tell. */
 function opaque(value: string): string | null {
   try {
     paint ??= document.createElement("canvas").getContext("2d");

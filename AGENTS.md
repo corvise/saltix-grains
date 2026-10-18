@@ -2,7 +2,7 @@
 
 Rules for coding agents, and the people working with them: building an app for Saltix with these SDKs, and working on
 this repository (saltix-grains: the grain SDKs, the simulator and the `grain` command line). `CLAUDE.md` points here.
-Three pages go on from it:
+Three pages go on from it, and the protocol has pages of its own:
 
 - [docs/agents/app.md](docs/agents/app.md): building an app, from a developer key to an app that runs, is tested and
   ships; the rules every app follows; how to act on an error report pasted from Saltix's console.
@@ -13,12 +13,18 @@ Three pages go on from it:
   `assertCardStandard`. The SDK's own cards keep it too: an error report (`chat.report`) is titled "Error · TypeError"
   (at most 60 characters, cut at a word), has at most 8 rows of fields, and carries the rest — the other fields, the
   full message, the stack — in its text, so the copy for an AI agent loses nothing.
+- [docs/protocol/](docs/protocol/README.md): the Saltix protocol as an app needs it, the reference under every rule
+  here: the manifest, the bridge and the page's frame, sign-in and member proofs, invoices, chats and cards, the app
+  studio and developer keys, Saltix Connect and its profile, relays, the wallet interface, addresses and amounts. Each
+  page names the specification it reflects (`12-grains §5.4` is [grains.md § 5.4](docs/protocol/grains.md#54-relays-real-time-between-users))
+  and the protocol commit it was read at. The protocol's own repository is not public: read these pages, and the
+  golden vectors in [vectors/](vectors/README.md), which are its bytes and win over any page.
 
 ## Building an app: safe by default, full screen only with viewport-fit=cover
 
 Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).
 
-That line closes every report Saltix copies for an AI agent. In full (Saltix specs/12-grains.md §5, §7, bridge version 3):
+That line closes every report Saltix copies for an AI agent. In full (Saltix 12-grains [§5](docs/protocol/grains.md#5-the-bridge), [§7](docs/protocol/grains.md#7-security-of-the-container), bridge version 3):
 
 - **Saltix opens every app as a full app**, its controls `⋯ | ✕` floating in the top right corner, and lays the page out
   as browsers do.
@@ -78,7 +84,7 @@ The `grain` command line needs no node: registry commands and `grain faucet` (te
 public relays, each pinned by its certificate; `--node URL` is for a node of your own.
 
 **Every app ships a complete Connect profile, and asks only for what it uses.** The first time someone opens an app,
-Saltix shows its Connect sheet (Saltix specs/19-connect.md §12): "Saltix Connect", the app's identity, its profile "in
+Saltix shows its Connect sheet (Saltix 19-connect [§12](docs/protocol/connect.md#12-the-connect-sheet)): "Saltix Connect", the app's identity, its profile "in
 its own words", then a row for each permission the manifest asks for, and Continue. The profile is `connect.json`
 (`grain init` writes one): a tagline that says what the app is, what it does, highlights that are facts (not slogans),
 and what it keeps about a user and for how long (required when `grain.json` asks for `address` or `storage`), in
@@ -93,7 +99,7 @@ A chat-only app has no page: Saltix draws its home from the chat spec. Its serve
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
 
 **Payments** go through the wallet's own sheet, and a developer key's invoice pays the app's owner only (Saltix
-specs/12-grains.md §5.2): `chat.invoice({ amount: "2.5", memo })` signs one to the owner the registry names, a card's
+12-grains [§5.2](docs/protocol/grains.md#52-payments)): `chat.invoice({ amount: "2.5", memo })` signs one to the owner the registry names, a card's
 `invoice` block carries it (a page hands it to `grain.pay`), and `chat.paymentOf` finds the payment on chain. Never
 deliver on the page's or the user's word, and never put another payee in an invoice: wallets refuse it (`payee`).
 Saltix 0.1.54 pays a developer key's invoice and 0.1.53 and older cannot, so say in the card what to do if the sheet does
@@ -113,7 +119,7 @@ with a real developer key.
 ## Building an app: check first, then render
 
 A page that is for some people only (its team, a private circle) shows nothing of itself before it knows who signed in
-(Saltix specs/12-grains.md §5.1a). A public app for a limited circle shows strangers a refusal page without any of its
+(Saltix 12-grains [§5.1a](docs/protocol/grains.md#51a-the-teams-sign-in-check-first-render-after)). A public app for a limited circle shows strangers a refusal page without any of its
 UI; a private app never loads for them at all, since Saltix reads the registry first.
 
 - On a first open Saltix Connect's sheet comes first; then the page loads. **Until its sign-in resolves it shows only a
@@ -135,7 +141,7 @@ UI; a private app never loads for them at all, since Saltix reads the registry f
 
 ## Building an app: what a page gets from Saltix, and what it does not
 
-This is everything Saltix tells a page (bridge version 3, Saltix 0.1.54; Saltix specs/12-grains.md §5, §7):
+This is everything Saltix tells a page (bridge version 3, Saltix 0.1.54; Saltix 12-grains [§5](docs/protocol/grains.md#5-the-bridge), [§7](docs/protocol/grains.md#7-security-of-the-container)):
 
 - **`grain.info()`** (`grain_info`): `slug`, `version` (the manifest's), `form` (`hosted` or `sealed`), `listing`
   (`verified`, `listed` or `unlisted`), `host` (`saltix`) and `host_version`, `bridge` (3), `language` (Saltix's own:
@@ -187,8 +193,8 @@ today (so does the simulator). A page that checks first shows a splash of its ow
 - **An app** is its slug (3–32 of `[a-z0-9-]`, fixed, never used again once retired), its manifest's `name` in each
   language (English required), and optionally a Saltix username bound to it (`grain bind --handle @name`), which opens
   its chat. Saltix never shows a name alone: the slug and its mark go with it, and a slug that reads like a known one
-  (`0`/`o`, `1`/`l`/`i`, `rn`/`m`, `vv`/`w`, hyphens) carries a warning (22-grain-chats §5).
-- **People.** Accounts have a profile name of their own (a first and a last name, Saltix 09-relay §1.5) and may hold
+  (`0`/`o`, `1`/`l`/`i`, `rn`/`m`, `vv`/`w`, hyphens) carries a warning ([22-grain-chats §5](docs/protocol/grain-chats.md#5-in-the-wallet)).
+- **People.** Accounts have a profile name of their own (a first and a last name, Saltix [09-relay §1.5](docs/protocol/basics.md#peoples-names)) and may hold
   usernames, but Saltix gives an app neither: a user is their grain key, a pseudonym of this app alone (`ask.key`,
   `grain.login`); only the team and a private app's members are known as accounts (`ask.member`, `SignIns`), and a page
   gets an address only from `grain.requestAddress()` (the `address` permission, the user's yes) or
@@ -201,20 +207,24 @@ today (so does the simulator). A page that checks first shows a splash of its ow
 
 [docs/agents/sdk.md](docs/agents/sdk.md) is the whole of it. In short:
 
-- **The protocol is corvise/saltix's.** Its `specs/` are the source of truth, and its golden vectors are copied here by
-  `scripts/sync-vectors.sh <a Saltix checkout>` (`vectors/SOURCE` names the commit and each file's blob id, which CI
-  holds them to: `node scripts/check-vectors.mjs`). The SDKs reproduce them byte for byte, refusals included; a format
-  changes in the specs first, never here.
+- **The protocol is Saltix's, not this repository's.** Its specifications live in the protocol's repository, which is
+  not public before the main network launches; [docs/protocol/](docs/protocol/README.md) is this repository's account
+  of everything an app needs from them, each page naming the specification and commit it reflects. Its golden vectors
+  are copied here unchanged by `scripts/sync-vectors.sh <a protocol checkout>` (`vectors/SOURCE` names the commit and
+  each file's blob id, which CI holds them to: `node scripts/check-vectors.mjs`). The SDKs reproduce them byte for
+  byte, refusals included; a format changes in the protocol first, never here, and its page in `docs/protocol/` moves
+  with it.
 - **`npm ci && npm test`** is what CI runs (after `node scripts/check-vectors.mjs`): it builds every package and the
   simulator, then runs each package's tests.
 - **One Ed25519 check:** `verifyEd25519` (`packages/server/src/keys.ts`), the node's own `verify_strict` (no key or `R`
   of small order, `s` reduced, `R` exactly `[s]B − [k]A`); never a library's `verify`, which takes signatures the node
   refuses (`ed25519.test.mjs` holds every module to it). `@saltix/connect`'s check of a grant (`verifyGrant`) is the
-  reference the explorer's copy (corvise/saltix `explorer/src/connect/`) follows.
+  reference Saltix's explorer follows.
 - **Style:** English only, no emojis; comments say why, not what. Saltix is the only name (never an older one); users
   read *mini-apps*, code and specs say *grain*. Tests assert behaviour, refusals included; a critical check is
   mutation-tested. Logs carry event names and numbers, never keys, accounts, addresses or what users wrote.
-- **Every change** adds a line to `CHANGELOG.md` under `[Unreleased]` and keeps the README and `docs/` in step;
+- **Every change** adds a line to `CHANGELOG.md` under `[Unreleased]` and keeps the README and `docs/` in step (links
+  and anchors included: `protocol-docs.test.mjs` follows every one, and refuses a link into the private repositories);
   Conventional Commits, `!` and a `BREAKING CHANGE:` footer for a format change, through a pull request.
 - **A change a developer meets** (a command, a rule, what the bridge gives, a template) extends this `AGENTS.md`,
   [docs/agents/](docs/agents/README.md) and every project's `AGENTS.md` and `CLAUDE.md` (`packages/cli/src/template.ts`:

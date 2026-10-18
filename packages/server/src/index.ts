@@ -1,5 +1,5 @@
 /**
- * `@saltix/grain-server`: the server side of a grain (Saltix specs/12-grains.md, 22-grain-chats.md, 24-app-studio.md)
+ * `@saltix/grain-server`: the server side of a grain (Saltix 12-grains, 22-grain-chats, 24-app-studio: docs/protocol/)
  * — check sign-ins, make and sign invoices, find their payments on chain, sign the manifest and the Connect profile
  * (19-connect §11), the registry's calls,
  * write to users through the relays (frames and notifications), and talk with them in the grain's chat

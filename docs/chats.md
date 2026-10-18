@@ -1,7 +1,7 @@
 # Grain chats
 
-A grain can talk with its users in a chat (Saltix [22-grain-chats](https://github.com/corvise/saltix/blob/main/specs/22-grain-chats.md),
-[24-app-studio](https://github.com/corvise/saltix/blob/main/specs/24-app-studio.md)). The user sends **typed actions**
+A grain can talk with its users in a chat (Saltix [22-grain-chats](protocol/grain-chats.md),
+[24-app-studio](protocol/app-studio.md)). The user sends **typed actions**
 that your chat spec declares; your server answers with **signed cards** that the wallet draws itself. It is end to end:
 no relay and no wallet provider reads it. The user speaks under their grain key, the same pseudonym your page sees at
 `grain.login`, never under their account. A grain may be a chat and nothing else (`Entry::Chat`): no page, no origin,
@@ -18,7 +18,7 @@ What makes it unlike other messengers' bots:
 
 ## Setting up
 
-A server key speaks for the grain in either of two ways (22-grain-chats §1):
+A server key speaks for the grain in either of two ways ([22-grain-chats §1](protocol/grain-chats.md#1-parties-and-identities)):
 
 - **Registered**: the grain's registry record names it (`ConfigureGrain`, at most 4 keys). No certificate and no expiry:
   the owner replaces or revokes it, and wallets refuse it from the block that does. It also signs the chat spec while
@@ -69,7 +69,7 @@ grain chat-spec --cert cert.json   # chat.json → chat.signed.json, the documen
 1. Write `chat.json` (below) next to `grain.json`.
 2. `grain chat-spec` checks it (the fault is named: `command key, parameter site: …`), checks its slug and the key file
    against `grain.json`, and signs it with the owner key. A spec that changed needs a higher `version`: a wallet
-   replaces the spec it holds only with a higher version (Saltix 22-grain-chats §2), keeps its own for the same one and
+   replaces the spec it holds only with a higher version (Saltix [22-grain-chats §2](protocol/grain-chats.md#2-the-chat-spec)), keeps its own for the same one and
    refuses a lower one.
 3. Serve `{spec, cert}` at `https://<origins[0]>/.well-known/saltix-grain-chat` (a sealed grain: its first `connect`
    origin). `ChatServer.serveDocument` or `chatDocumentResponse` does it from the running server, with the current
@@ -235,7 +235,7 @@ answer went out, comes again and is answered then. `memoryChatStore` (the defaul
 `fileChatStore(path)` keeps the record in a file; a larger grain implements `ChatStore` over its database.
 
 **Writing unasked.** `chat.notify(user, card)` writes a message that answers no request, and
-`chat.notification(user, {title, body, start})` sends a grain notification (12-grains §5.5) signed by the server key.
+`chat.notification(user, {title, body, start})` sends a grain notification ([12-grains §5.5](protocol/grains.md#55-notifications)) signed by the server key.
 Both count against **10 per user in any 24 hours** (100 to a member of the app's team) and throw `ChatBudgetSpent` past
 it. `chat.replace(sent, card)`
 updates a message in place: while the request it answered lives, the update answers it too; after that it counts as
@@ -253,7 +253,7 @@ An app is public (anyone) or private (its owner and members, at most 64), as its
 
 The wallet of a member adds a **member proof** to every request to a private app: the account, the grain key it uses in
 this app, an end at most 30 days ahead, signed by a key that speaks for the account (its own key, or a device of a
-managed account; `SignedMemberProof`, 24-app-studio §2a). A public app is sent one only by its own team (the
+managed account; `SignedMemberProof`, [24-app-studio §2a](protocol/app-studio.md#2a-access-private-or-public-and-members)). A public app is sent one only by its own team (the
 [console](#your-apps-console)), and never learns who its users are. The server takes a request to a private app only if
 `admits` holds:
 
@@ -267,14 +267,14 @@ record) or the account's shard's tip moves, so removing a member or a device tak
 A proof that cannot pass whatever the account's keys are (another app's, expired, a stranger's, a bad signature) costs
 the node nothing. The handler of an admitted request sees `ask.member`: `{ account, roles }`.
 
-The same proof comes with the sign-in to the app's page (`grain_login`'s `member`, Saltix 12-grains §5.1a), so a page
+The same proof comes with the sign-in to the app's page (`grain_login`'s `member`, Saltix [12-grains §5.1a](protocol/grains.md#51a-the-teams-sign-in-check-first-render-after)), so a page
 knows its team and a private app's members before it shows them anything: `SignIns` (`SignIns.of(chat)`) checks it with
 `ChatServer.member(proof, key)`, as a request's, and answers with the rights `owner`, `developer`, `viewer`, `user` or
 `none` ([docs/agents/app.md](agents/app.md#a-page-for-some-people-only-check-first-then-render)).
 
 ## Your app's console
 
-In Saltix, the chat of an app whose **team** you are on is the app's **console** (24-app-studio §4). The team is the
+In Saltix, the chat of an app whose **team** you are on is the app's **console** ([24-app-studio §4](protocol/app-studio.md#4-in-saltix-my-apps)). The team is the
 app's owner and the members with the *developer* or *viewer* role; a member who only uses a private app is not on it.
 Errors and feedback reach the team there, and Saltix writes its own notices beside them (the app created, keys made or
 replaced, the program's first answer, silent for 2 days, new ratings, members, access). Long-press a report → **Copy
@@ -308,7 +308,7 @@ chat.command("stats", (ask) => {
 
 **How the app reaches the team.** A user of a public app is a key the app cannot tie to an account. The team's wallets
 therefore introduce themselves to their own app, public or private, with a **hello** ([below](#the-teams-wallets-say-hello)),
-and send the same member proof with every request (22-grain-chats §3, §3a); the server keeps each member's address in
+and send the same member proof with every request ([22-grain-chats §3](protocol/grain-chats.md#3-requests-what-the-user-sends), §3a); the server keeps each member's address in
 the app from either (`ChatStore.team`, so a `fileChatStore` keeps it across restarts). A member whose wallet has not said
 hello (a Saltix from before it) nor written to the app cannot be reached: `notifyTeam` counts them as `unreachable`. A
 member the registry drops is forgotten at the next `team()`. Proofs from anyone else are ignored and cost the node
@@ -346,8 +346,8 @@ nothing: the error's name and message are the fields, and every line the copy fo
 
 ### The team's wallets say hello
 
-Nobody on the team has to write to their own app first. A team member's Saltix introduces itself (Saltix 22-grain-chats
-§3a) when the app is made, when the account joins the team and when the app is opened: it sends a **hello**
+Nobody on the team has to write to their own app first. A team member's Saltix introduces itself (Saltix
+[22-grain-chats §3a](protocol/grain-chats.md#3a-the-hello-the-team-introduces-itself)) when the app is made, when the account joins the team and when the app is opened: it sends a **hello**
 (`ChatFrame::Hello`, tag 4), its member proof for this grain and the wallet's grain key, signed by that key. Nothing of
 it shows in the chat, and a user's wallet never sends one, so a public app still never learns who its users are. The
 server does it all on its own:
@@ -388,7 +388,7 @@ server is dropped (`chat_frame_dropped`).
 ### Updates the owner approves in the console
 
 A new screen, a new bundle, a new name: each is a new manifest, and only the owner's phone signs one (`UpdateGrain`,
-Saltix 12-grains §10). The program proposes it where the owner already is, in the console (22-grain-chats §4):
+Saltix [12-grains §10](protocol/grains.md#10-for-developers)). The program proposes it where the owner already is, in the console ([22-grain-chats §4](protocol/grain-chats.md#4-messages-what-the-app-sends)):
 
 ```ts
 // The registry's manifest (chat.registered()), one version up, with the screen's sealed entry: the owner and owner key
@@ -421,7 +421,7 @@ distinct users who sent a request in the last day and the last 30 days, and the 
 well-known document (`stats`) and go to each user once a day before an answer (`ChatFrame::Stats`), since a chat-only app
 has no origin. Each signing also goes to the server's relay (`relay.reportStats`, a `grain_stats` frame, sent again
 whenever the server registers): the relay's node checks them against the registry and gossips them, so every node
-answers `grain_stats` for the marketplace and the explorer (Saltix 22-grain-chats §4); the `stats` event of the
+answers `grain_stats` for the marketplace and the explorer (Saltix [22-grain-chats §4](protocol/grain-chats.md#4-messages-what-the-app-sends)); the `stats` event of the
 `RelayClient` says whether the node took them, and the log says `relay_stats_taken` or `relay_stats_refused` with the
 reason. Nothing goes on chain. **A private app's numbers are not published**: while the registry says the app is private
 (read every few minutes and at a request's new beacon block), the server hands none to its relay, sends none again

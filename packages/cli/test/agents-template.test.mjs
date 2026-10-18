@@ -3,9 +3,9 @@
 // and the SDK's guide have it, so the three never drift apart.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY } from "@saltix/grain-server";
-import { APP_GUIDE, CARDS_GUIDE, FULL_SCREEN_RULE, agentsMd, appRules } from "../dist/template.js";
+import { APP_GUIDE, CARDS_GUIDE, FULL_SCREEN_RULE, PROTOCOL_DOCS, agentsMd, appRules, chatReadme, readme } from "../dist/template.js";
 import { chatServer } from "../dist/chat-template.js";
 
 const guide = readFileSync(new URL("../../../docs/agents/app.md", import.meta.url), "utf8");
@@ -26,6 +26,18 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
   assert.equal([...appRules.matchAll(/^\d+\. \*\*/gm)].length, 11);
+});
+
+test("a project's AGENTS.md and README send a reader to the SDK's protocol pages, never to the protocol's repository", () => {
+  // The protocol's repository is private: a project links the SDK's public account of it, page by page.
+  assert.equal(PROTOCOL_DOCS, "https://github.com/corvise/saltix-grains/blob/main/docs/protocol");
+  const page = (text) => [...text.matchAll(/\]\(https:\/\/github\.com\/corvise\/saltix-grains\/blob\/main\/(docs\/protocol\/[A-Za-z-]+\.md)\)/g)].map((m) => m[1]);
+  const named = [...page(agentsMd("coach", false)), ...page(agentsMd("coach", true)), ...page(readme("dice")), ...page(chatReadme("coach"))];
+  assert.ok(named.includes("docs/protocol/README.md") && named.includes("docs/protocol/grain-chats.md"), named.join(" "));
+  for (const path of named) assert.ok(existsSync(new URL(`../../../${path}`, import.meta.url)), `${path} is not in the SDK`);
+  for (const text of [agentsMd("coach", true), readme("dice"), chatReadme("coach")]) {
+    assert.doesNotMatch(text, /specs\/\d\d-|github\.com\/corvise\/saltix\//);
+  }
 });
 
 test("the anchor the rules link to is the guide's heading", () => {

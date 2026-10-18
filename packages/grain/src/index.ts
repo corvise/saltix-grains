@@ -1,6 +1,6 @@
 /**
  * `@saltix/grain`: the bridge between a grain and the Saltix wallet it runs in
- * (Saltix specs/12-grains.md §5, bridge version 1; the chat, 22-grain-chats §5, version 2; the page's frame, its
+ * (Saltix 12-grains §5, docs/protocol/grains.md: bridge version 1; the chat, 22-grain-chats §5, version 2; the page's frame, its
  * insets and the wallet's controls, and the app's own manage page, version 3: `grain.layout()`, `grain.manage.open()`).
  *
  * In a wallet the page has `window.saltix`, defined before its scripts run; in the simulator
@@ -158,7 +158,7 @@ export function frameFor(system: SystemInsets, cover: boolean): Frame {
 
 // ── the colours around a page (12-grains §7), for tools that play the wallet: the same order as Saltix's ──
 
-/** What Saltix reads of a page for its colour (saltix-wallet `assets/grain/frame.js`), as plain values. */
+/** What Saltix reads of a page for its colour (its frame script, 12-grains §7), as plain values. */
 export interface PageLook {
   /** The page's `<meta name="theme-color">` elements in document order: their `content`, and whether their `media`
    *  matches (true for one without a `media`). */
@@ -218,7 +218,7 @@ function isDark(color: string): boolean {
 }
 
 /**
- * The wallet's colours around a page, as Saltix draws them (saltix-wallet `AppFrame`): `header` is the colour the page
+ * The wallet's colours around a page, as Saltix draws them (its Android app's frame): `header` is the colour the page
  * last gave with `grain_setHeader` (it holds until the next call, whatever the page's head says meanwhile), `page` its
  * own colour (`pageColorOf`), each `#rrggbb` or null.
  */

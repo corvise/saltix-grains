@@ -11,7 +11,12 @@ checking first and rendering after, naming apps and people, and how this reposit
 - [Cards](cards.md): the card design standard as rules: a status first, at most 6 actions, short labels, destructive
   names, choices and polls, answering every tap, and `assertCardStandard` in the app's tests.
 
-The specifications are the source of truth: corvise/saltix `specs/` 12-grains (manifest, bridge, bundles, publishing),
-22-grain-chats (specs, requests, cards, the console), 24-app-studio (developer keys, private apps, members), 19-connect
-(the Connect profile and sheet, Sign in with Saltix), 09-relay (relays, files, an account's profile name §1.5). When a
-page here and a spec disagree, the spec wins and the page is a bug.
+The protocol is the source of truth, and [docs/protocol/](../protocol/README.md) holds what an app needs of it, under
+the specifications' names and section numbers: [grains](../protocol/grains.md) (12-grains: manifest, bridge, bundles,
+publishing), [grain chats](../protocol/grain-chats.md) (22-grain-chats: specs, requests, cards, the console),
+[app studio](../protocol/app-studio.md) (24-app-studio: developer keys, private apps, members),
+[connect](../protocol/connect.md) (19-connect: the Connect profile and sheet, Sign in with Saltix),
+[relays](../protocol/relays.md) (09-relay: relays, files), [the wallet interface](../protocol/wallet-interface.md) and
+[the basics](../protocol/basics.md) (addresses, amounts, keys, people's names). When a page here and a protocol page
+disagree, the protocol page wins and this page is a bug; when a protocol page and a golden vector disagree, the vector
+wins.

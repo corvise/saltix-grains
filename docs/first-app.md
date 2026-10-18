@@ -3,8 +3,7 @@
 An app in Saltix can be a chat: users talk to it in the wallet, it answers with cards it signs. You make the app in
 Saltix, take the **developer key** it gives you, and run a server with it. The key is the server's whole configuration:
 it names the app, its network and the server key the registry trusts (Saltix
-[24-app-studio](https://github.com/corvise/saltix/blob/main/specs/24-app-studio.md)). There is nothing to host, no
-domain and no certificate.
+[24-app-studio](protocol/app-studio.md#3-the-developer-key)). There is nothing to host, no domain and no certificate.
 
 What you need: Saltix on your phone with some SALT for the deposit (the test network's faucet gives it), Node 20 or
 newer, and a checkout of this repository.
@@ -181,7 +180,7 @@ proof. The same error is reported once an hour, with a count; the team gets at m
 ## Designing for Saltix
 
 An app with a screen of its own (a page: `grain init`, then `grain dev`) opens as a full app, with Saltix's controls
-`⋯ | ✕` floating in its top right corner, and its page laid out as browsers lay out a web page (Saltix 12-grains §7):
+`⋯ | ✕` floating in its top right corner, and its page laid out as browsers lay out a web page (Saltix [12-grains §7](protocol/grains.md#7-security-of-the-container)):
 **safe by default; full screen only with viewport-fit=cover and the insets.** One line says it, the one Saltix ends
 **Copy for an AI agent** with:
 
