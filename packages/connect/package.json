@@ -1,7 +1,7 @@
 {
   "name": "@saltix/connect",
   "version": "0.1.0",
-  "description": "Sign in with Saltix on a website or DApp: the page's side of Saltix Connect, its button and dialog (Saltix specs/19-connect.md)",
+  "description": "Sign in with Saltix on a website or DApp: the page's side of Saltix Connect, its button and dialog (Saltix 19-connect, docs/protocol/connect.md)",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

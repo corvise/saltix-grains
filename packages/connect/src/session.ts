@@ -1,6 +1,5 @@
 /*
- * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5), a port of the explorer's
- * `explorer/src/connect/session.ts`: a slot at a relay, the offer for the QR code and the link, the wallet's notice that
+ * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5), a port of the explorer's own session: a slot at a relay, the offer for the QR code and the link, the wallet's notice that
  * it saw the offer, and the grant, checked before the page takes it.
  *
  *   opening ──► offer ──► seen ──► checking ──► connected

@@ -1,7 +1,7 @@
 # Cards: what an agent builds
 
 The rules for every card an app's server sends. The full guide, with pictures, is [docs/cards.md](../cards.md); the
-standard itself is Saltix 22-grain-chats §5a. Saltix draws every card by it, and so does the simulator.
+standard itself is Saltix [22-grain-chats §5a](../protocol/grain-chats.md#5a-the-card-standard). Saltix draws every card by it, and so does the simulator.
 
 ## Rules
 

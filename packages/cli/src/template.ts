@@ -202,6 +202,8 @@ const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\
 export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
 /** The card design standard's rules for a coding agent, by its address. */
 export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/cards.md";
+/** The SDK's pages on the Saltix protocol, as an app needs it (the protocol's own repository is not public). */
+export const PROTOCOL_DOCS = "https://github.com/corvise/saltix-grains/blob/main/docs/protocol";
 
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
@@ -269,8 +271,9 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
 export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
 
-Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (Saltix
-specs/12-grains.md${chat ? ", 22-grain-chats.md and 24-app-studio.md" : ""}). \`CLAUDE.md\` points here. The whole path, from a developer
+Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (the protocol:
+[grains](${PROTOCOL_DOCS}/grains.md)${chat ? `, [grain chats](${PROTOCOL_DOCS}/grain-chats.md) and [the app studio](${PROTOCOL_DOCS}/app-studio.md)` : ""}, in the SDK's
+[docs/protocol/](${PROTOCOL_DOCS}/README.md)). \`CLAUDE.md\` points here. The whole path, from a developer
 key to an app that runs, is tested and ships, and what to do with an error report from Saltix's console:
 [the SDK's page for a coding agent](${APP_GUIDE}).
 
@@ -328,7 +331,7 @@ node_modules/
 
 export const readme = (slug: string) => `# ${slug}
 
-A grain: an app that opens inside a Saltix wallet (Saltix specs/12-grains.md).
+A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [docs/protocol/grains.md](${PROTOCOL_DOCS}/grains.md)).
 
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
   debug Saltix (the emulator reaches this computer at 10.0.2.2), or the simulator it prints in a browser.
@@ -411,7 +414,8 @@ export function connectJson(slug: string, name: string, chat: boolean): string {
 
 export const chatReadme = (slug: string) => `# ${slug}
 
-A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix specs/24-app-studio.md).
+A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix 24-app-studio: the SDK's
+[docs/protocol/app-studio.md](${PROTOCOL_DOCS}/app-studio.md)).
 
 - **Run it:** put the developer key in \`app.key\` (\`(umask 077 && pbpaste > app.key)\`; never on the command line,
   shells keep their history), then \`npm install\` and \`npm start\`: \`server.mjs\` is the server, its log one JSON line

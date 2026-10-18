@@ -4,6 +4,20 @@
 
 ### Added
 
+- **The protocol, as an app needs it, in the SDK** (`docs/protocol/`): the repository is public and the protocol's own
+  is not until the main network launches, so the app-facing parts of its specifications are written here under their
+  names and section numbers, each page naming the protocol commit it was read at: [grains](docs/protocol/grains.md)
+  (12-grains: the manifest, the registry's grain calls, the bridge and the page's frame, sign-in and the team's member
+  proof, invoices, storage, relays and notifications, the container, bundles, publishing),
+  [grain chats](docs/protocol/grain-chats.md) (22-grain-chats), [the app studio](docs/protocol/app-studio.md)
+  (24-app-studio), [Saltix Connect](docs/protocol/connect.md) (19-connect), [relays](docs/protocol/relays.md) (the client
+  protocol a server speaks, files, sponsors), the [wallet interface](docs/protocol/wallet-interface.md) and the
+  [basics](docs/protocol/basics.md) (encodings, domains, keys, addresses, amounts, transactions, usernames, protocol
+  versions). [vectors/README.md](vectors/README.md) says what each golden vector holds: the protocol's own bytes. Every
+  link to the protocol's private repository (and to the wallet's) is gone from the README, `AGENTS.md`, `CLAUDE.md`,
+  `docs/`, the packages' descriptions and comments and the projects `grain init` makes, which now link the SDK's pages
+  (`PROTOCOL_DOCS`). `protocol-docs.test.mjs` follows every link and anchor of every page and refuses a link into the
+  private repositories or a spec file a reader cannot open.
 - **Check first, render after** (Saltix 12-grains §5.1a): a page signs in and learns what the account may do before it
   shows anything. `grain.signIn({ url })` (`@saltix/grain`) posts to the server's `challenge` and `session` routes and
   forwards Saltix's login with its `member` as it came (the account's member proof for the app's team and a private
@@ -46,7 +60,7 @@
   phone "Open Saltix"); `readSiteProfile` reads a site's `/.well-known/saltix-connect` as a wallet does. Also one
   self-contained ES module, `dist/saltix-connect.js`, for a site without a bundler.
 - **The Connect profile** (Saltix 19-connect §11, 12-grains §3 and §10; vectors `connect-v1.json` and
-  `connect-profiles-v1.json` synced from corvise/saltix#224): `@saltix/grain-server` reads, writes, signs and checks a
+  `connect-profiles-v1.json` synced from the protocol's pull request 224): `@saltix/grain-server` reads, writes, signs and checks a
   service's own signed words about itself (`profile.ts`: `profileProblem` with the node's reasons, `encodeProfile`,
   `decodeSignedProfile` canonical only, `profileFromJson`/`signedProfileFromJson`/`profileToJson`, `signProfile`,
   `verifyProfile`, `checkGrainProfile`, `checkSiteProfile`, `checkProfileOwner`, `httpsLinkOk`, `supportOk`), the
@@ -55,7 +69,7 @@
   (`keylog.ts`: `checkLog`, `keySpeaksFor`), a port of the explorer's. `@saltix/grain-server/web` exports what runs in a
   web page. Ed25519 signatures are now verified strictly, as the node does (`verifyEd25519`; a small-order key or a
   non-canonical encoding verifies nothing), and a Borsh string keeps a leading U+FEFF, as the node reads it.
-- **The card design standard** (Saltix 22-grain-chats §4, §5a; vectors synced from corvise/saltix#221): `card().code(text)`
+- **The card design standard** (Saltix 22-grain-chats §4, §5a; vectors synced from the protocol's pull request 221): `card().code(text)`
   and `card().poll(question, command, options, {chosen, closed, tally})` (blocks 6 and 7, typed by the spec when sent:
   `Card.typedBlocks`), `ask.update(card)` to answer a tap in place of the card tapped (a poll's new counts), the
   standard's rules (`cardLayout`, `isDestructive`, `pollLook`, `shares`, `perRow`, `isToken`, `isImage`, `isWide`,
@@ -290,7 +304,7 @@
   `npx grain` said "could not determine executable to run" until a second `npm install`). Before the build it says to
   build. A project outside the checkout installs the tool with `npm install --save-dev <checkout>/packages/cli`.
 
-- **A spec changed under its version stops the server** (Saltix 22-grain-chats §2, corvise/saltix#222: a wallet
+- **A spec changed under its version stops the server** (Saltix 22-grain-chats §2, the protocol's pull request 222: a wallet
   replaces the spec it holds only with a higher version). `ChatServer` keeps the highest spec it served in its store
   (`ChatStore.served`/`setServed`, the version and `chatSpecHash`, SHA-256 of the spec's Borsh; `fileChatStore` and
   `memoryChatStore` keep it) and refuses to start on a spec changed under that version or below it

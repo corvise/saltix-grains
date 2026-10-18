@@ -100,10 +100,11 @@ await t.close();
 
 ### 3. The SDK as versioned packages
 
-The packages are not on npm and the repository is private; Saltix's site says the kit "is shared on request". A project
-outside the checkout installs it by path (`npm install <checkout>/packages/server`), so it breaks when the checkout moves,
-and the program that runs Saltix's own apps (saltix-wallet `server/access-grain`) vendors the built `dist/` with a
-sync script. Every package is version 0.1.0.
+The packages are not on npm. The repository is public since 2026-10-19 (the protocol's own stays private until the
+main network launches, so the SDK carries its account of the protocol in `docs/protocol/`). A project outside the
+checkout installs the packages by path (`npm install <checkout>/packages/server`), so it breaks when the checkout moves,
+and the program that runs Saltix's own apps vendors the built `dist/` with a sync script. Every package is version
+0.1.0.
 
 - Release the three packages with versions (semver: a format change is a major version while 0.x is the minor), each
   release's CHANGELOG section, and a tag. Where: npm under `@saltix` if the SDK may be public; otherwise tarballs at
@@ -111,7 +112,7 @@ sync script. Every package is version 0.1.0.
   GitHub Packages.
 - `grain init` already writes the dependency as `^<version>` when the tool itself came from a registry (#20).
 - `ChatServer` logs the SDK's version at start; error reports name it.
-- **Effort** M (a CI release job). **Depends on** the owner's decision: public or not.
+- **Effort** M (a CI release job). **Depends on** the owner's decision of where to publish them.
 
 ### 4. The command line without a node
 
@@ -142,7 +143,7 @@ change under the same version refused at start).
   (`chat_spec_changed_under_version`) when the spec differs under the same version; `grain chat-spec` lints it too.
 - **Effort** S. 22-grain-chats §2 says a wallet takes a version "at least" the one it holds, Saltix only a higher one:
   one of the two should change (see "For the owner" below).
-- **Built** (2026-10-16): the spec says "higher" (corvise/saltix#222); `ChatServer` keeps the highest spec served in its
+- **Built** (2026-10-16): the spec says "higher" (the protocol's pull request 222); `ChatServer` keeps the highest spec served in its
   store and refuses one changed under it or below it (`ChatSpecVersionError`), the template's server exits with 78
   (`setupCannotWork`). `grain chat-spec` does not read a server's store, so it does not lint this.
 
@@ -281,11 +282,12 @@ hash compared with `grain.json`'s.
 ## For the owner: what needs the protocol or Saltix
 
 - **The spec's version rule** (decided): 22-grain-chats §2 now says a wallet replaces a spec only with a higher
-  version (corvise/saltix#222), as Saltix does; the SDK's guard of 5 holds a server to it.
+  version (the protocol's pull request 222), as Saltix does; the SDK's guard of 5 holds a server to it.
 - **Long-lived public files for bundles** (6): a file class on relays or the durable tier kept while a live manifest
   names it (09-relay §10.5, 10-storage, 12-grains §8).
 - **Node builds for macOS** (12): a local devnet on a developer's own computer.
-- **Saltix's developer pages** (saltix.io/developers, in saltix-wallet's `site/`): rewritten to what exists (the studio
-  and the developer key, the console, the home and the capsule rule, payments with a developer key) in
-  corvise/saltix-wallet#276. The kit stays private, shared through support, until Distribution (3) is decided.
-- **Distribution** (3): whether the SDK and its docs may be public.
+- **Saltix's developer pages** (saltix.io/developers): rewritten to what exists (the studio and the developer key, the
+  console, the home and the capsule rule, payments with a developer key).
+- **Distribution** (3, decided 2026-10-19): the SDK and its docs are public, the protocol's specifications are not
+  until the main network launches; `docs/protocol/` holds what apps need of them. Where the packages are published is
+  still open.

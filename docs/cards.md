@@ -1,7 +1,7 @@
 # Card design standard
 
 Every Saltix draws an app's chat message the same way (Saltix
-[22-grain-chats §5a](https://github.com/corvise/saltix/blob/main/specs/22-grain-chats.md)), so you design a card once
+[22-grain-chats §5a](protocol/grain-chats.md#5a-the-card-standard)), so you design a card once
 and it looks the same on a phone, on a foldable and in the app's own screen. This page is the standard: what each block
 is for, how many actions a card takes and how they are laid out, which emphasis to choose, and what to avoid. `lintCard`
 checks a card against it, and the simulator draws by it. The pictures are Saltix's own rendering (its card component,

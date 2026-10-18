@@ -2,8 +2,8 @@
  * `@saltix/connect`: "Sign in with Saltix" for websites and DApps (Saltix 19-connect §2–§5, §13). The page's side of
  * Saltix Connect — the session's keys, the link slot through relays the page reaches, the offer as a QR code and a link,
  * the grant's checks (the account's key event log included), the connection kept for 30 days — with the button and the
- * dialog of the standard. Framework-free, for the browser. A port of the explorer's tested `explorer/src/connect/`,
- * byte for byte vectors/connect-v1.json. A site's own Connect profile is signed once by its operator with
+ * dialog of the standard. Framework-free, for the browser. A port of Saltix's explorer's tested Connect code, byte for
+ * byte vectors/connect-v1.json; docs/protocol/connect.md is the protocol it follows. A site's own Connect profile is signed once by its operator with
  * `grain connect-profile` (the server SDK's `signProfile`), never in a page; `readSiteProfile` checks it as a wallet does.
  */
 export * from "./client.js";

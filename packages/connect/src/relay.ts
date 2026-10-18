@@ -1,8 +1,7 @@
 // The page's connection to a relay for Saltix Connect (Saltix 09-relay §3, §10.3): a WebSocket of JSON frames, the
 // relay's `hello` first. Relays serve their clients over TLS with self-signed certificates that apps pin (09-relay
 // §10.1); a browser cannot pin, so a page reaches them through a WebSocket path of its own site that pins them (as
-// saltix.io's `/explorer/r/1..3/`), or through a public gateway once one exists. A port of the explorer's
-// `explorer/src/connect/relay.ts`.
+// saltix.io's `/explorer/r/1..3/`), or through a public gateway once one exists. A port of the explorer's own.
 import { fromB64Loose } from "./codec.js";
 
 export type Frame = { type: string; [field: string]: unknown };

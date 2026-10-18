@@ -1,7 +1,7 @@
 # Sign in with Saltix: websites and DApps
 
 A DEX, a shop or any DApp signs its users in with **Saltix Connect**, the same standard Saltix's mini-apps use (Saltix
-[19-connect](https://github.com/corvise/saltix/blob/main/specs/19-connect.md) §2–§5, §11–§13). The page learns which
+[19-connect](protocol/connect.md) §2–§5, §11–§13). The page learns which
 account its visitor holds, proven by that account's key on the visitor's phone. Nothing secret leaves the phone, and
 connecting grants the page nothing: everything it then shows is public on the chain, and every action stays a
 transaction the visitor signs in Saltix.
@@ -9,8 +9,8 @@ transaction the visitor signs in Saltix.
 `@saltix/connect` (`packages/connect`) is the page's side: the session, the offer as a QR code and a link, the grant's
 checks (the account's key event log included), the connection kept for 30 days, the **Sign in with Saltix** button and
 its dialog. The site's own profile is signed once, offline, with `grain connect-profile`. This package's check of a grant
-(`verifyGrant`, `checkGrant`, `checkAccount`, and when the node is asked again) is the reference: the explorer's
-`/explorer/me` (corvise/saltix `explorer/src/connect/`), where it began, follows it rule for rule.
+(`verifyGrant`, `checkGrant`, `checkAccount`, and when the node is asked again) is the reference: Saltix's explorer
+(`/explorer/me`), where it began, follows it rule for rule.
 
 ## The flow, end to end
 
@@ -39,7 +39,7 @@ its dialog. The site's own profile is signed once, offline, with `grain connect-
    unchecked. Then the page keeps `{account, address, grant}` in this origin's `localStorage` for 30 days or until the
    visitor disconnects.
 7. **The page reads public data** through a node (`account_get`, `account_history`, `book_links`…) with that account
-   first, and asks Saltix to sign every action (19-connect §7): the page never signs.
+   first, and asks Saltix to sign every action ([19-connect §7](protocol/connect.md#7-actions)): the page never signs.
 
 Anyone who saw the QR code could deliver a grant of their own account to the slot: the page always shows which account
 it now shows. The grant proves the account to one page session, for display; it is never a server's login
@@ -144,10 +144,10 @@ signs the origin, so the account claims the site.
 
 ## 3. The relay and the node: paths of your own site
 
-**Relays use self-signed certificates, which apps pin** by the SHA-256 their relay records publish (Saltix 09-relay
-§10.1). A browser cannot pin a certificate, so a page cannot open `wss://relay:30335/` itself. The site passes a
-WebSocket path of its own to one relay each, and its proxy pins the relay's certificate: saltix.io does it for the
-explorer at `/explorer/r/1/`, `/r/2/`, `/r/3/` (corvise/saltix `docs/explorer.md`, "The way to the relays"). A public
+**Relays use self-signed certificates, which apps pin** by the SHA-256 their relay records publish (Saltix
+[09-relay §10.1](protocol/relays.md#relay-records-and-certificate-pinning)). A browser cannot pin a certificate, so a page
+cannot open `wss://relay:30335/` itself. The site passes a WebSocket path of its own to one relay each, and its proxy
+pins the relay's certificate: saltix.io does it for the explorer at `/explorer/r/1/`, `/r/2/`, `/r/3/`. A public
 gateway with a certificate browsers trust may come later; until then every site brings its own path. With nginx:
 
 ```nginx
@@ -178,7 +178,7 @@ location = /saltix/r/1/ {
 - **The node**: the page asks `node_status` (the network, its genesis and its first account policy) and `account_log`
   (an account's key event log), plus whatever public data it shows. Pass a path to a node of your own
   (`location = /saltix/rpc { proxy_pass http://127.0.0.1:30334/; }`, a node's wallet interface listens on loopback),
-  or to a relay's gateway (`POST /rpc` on its client port, 09-relay §10.7) through the same pinned proxy; and let
+  or to a relay's gateway (`POST /rpc` on its client port, [09-relay §10.7](protocol/relays.md#the-wallet-interface-at-a-relay)) through the same pinned proxy; and let
   through only the read-only methods the page calls, as the explorer's origin does.
 - The page and its relay must be of one network: a relay whose hello names another network kind is refused, and so is
   a node of another network or genesis.
@@ -195,7 +195,7 @@ location = /saltix/r/1/ {
 ## 5. A grant is for display, never a server's login
 
 The grant shows the page which account its visitor holds; that is all it is for. Use it to show the account and its
-public data, and ask Saltix to sign every action (19-connect §7).
+public data, and ask Saltix to sign every action ([19-connect §7](protocol/connect.md#7-actions)).
 
 - **It is a bearer artefact.** Whoever holds its bytes holds everything it proves: any script of the origin (it sits in
   `localStorage`), a browser extension, any server or log the page sent it to, and the other end of a QR code someone
@@ -207,7 +207,7 @@ public data, and ask Saltix to sign every action (19-connect §7).
 - **A server's own login needs its own design**, which Saltix Connect does not have yet: the server gives a fresh
   random nonce, bound to its origin and spent once; the wallet signs that nonce with a key of the account; the server
   checks the signature and the account's key event log itself, within a short window, before it opens a session. A
-  mini-app's server has exactly that already: `grain.signIn` and `SignIns` (12-grains §5.1: a challenge the server gives
+  mini-app's server has exactly that already: `grain.signIn` and `SignIns` ([12-grains §5.1](protocol/grains.md#51-identity): a challenge the server gives
   and spends once). A website's server waits for the same in Connect's spec; until then it keeps no session by a grant.
 
 ## Numbers

@@ -1,6 +1,6 @@
 // A page's offer (Saltix 19-connect §3): its slot at a relay, its session's keys, its origin and its name, as the QR
 // code's text and as the link that opens Saltix on the phone the page is on. The rules are `saltix-types` `connect`'s,
-// and vectors/connect-v1.json holds offers refused for each. A port of the explorer's `explorer/src/connect/offer.ts`.
+// and vectors/connect-v1.json holds offers refused for each. A port of the explorer's own.
 import { connectOriginOk, refusedChar } from "@saltix/grain-server/web";
 import { b64url, fromB64url } from "./codec.js";
 

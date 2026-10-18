@@ -1,7 +1,7 @@
 // The wallet's answer to a Connect offer (Saltix 19-connect §4–§5): `ConnectSeen`, then a `ConnectGrant` — a
 // `ConnectLogin` naming this page's network, origin, slot and session key, signed by a key of the account. The page
 // takes a grant only when every rule of §5 holds; `saltix-types` `connect` has the same checks, and
-// vectors/connect-v1.json pins both to the same bytes and reasons. A port of the explorer's `explorer/src/connect/grant.ts`.
+// vectors/connect-v1.json pins both to the same bytes and reasons. A port of the explorer's own.
 import {
   type AccountPolicy, type CheckedLog, type DeviceKey, Reader, Writer, derive, keySpeaksFor, readDeviceKey, verifyByDeviceKey, toHex,
   writeDeviceKey,

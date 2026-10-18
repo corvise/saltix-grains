@@ -1,13 +1,15 @@
 # Working on the SDK, for a coding agent
 
 This repository holds the SDKs a Saltix app is built with: the page's bridge, the server's side, the `grain` command line
-and the simulator. It follows the protocol (corvise/saltix `specs/`); it never defines a format itself.
+and the simulator. It follows the protocol and never defines a format itself. The protocol's specifications live in its
+own repository, not public before the main network launches; [docs/protocol/](../protocol/README.md) is this
+repository's account of what apps need of them, and the golden vectors in `vectors/` are its bytes.
 
 ## Map
 
 | Where | What |
 |---|---|
-| `packages/grain/src/rules.ts` | `@saltix/grain/rules`, the wallet's bridge rules the simulator plays by (from saltix-wallet `GrainBridge.kt`, `GrainContainer.kt`, `GrainStorage.kt`, `SealedSite.kt`): `tapRule`, `permissionRule`, `manageRule`, `BridgeLimiter` (a bucket per known method only), `bridgeAnswer` and `bridgeEvent` (64 KiB), `storageRule`, `sealedCsp`; tested in `packages/grain/test/rules.test.mjs`; never part of a page's `index.js` |
+| `packages/grain/src/rules.ts` | `@saltix/grain/rules`, the wallet's bridge rules the simulator plays by (as Saltix's Android app applies them: its bridge, container, storage and sealed site): `tapRule`, `permissionRule`, `manageRule`, `BridgeLimiter` (a bucket per known method only), `bridgeAnswer` and `bridgeEvent` (64 KiB), `storageRule`, `sealedCsp`; tested in `packages/grain/test/rules.test.mjs`; never part of a page's `index.js` |
 | `packages/grain/src/index.ts` | `@saltix/grain`, the page's side of the bridge, one module (`grain init` copies it into `public/`); `layoutSheet`, where `grain.layout()` keeps its CSS variables below the wallet's; and the wallet's rules the simulator plays by (`frameFor`, `controlsFor`, `pageColorOf`, `frameColors`) |
 | `packages/server/src/` | `@saltix/grain-server`; `index.ts` re-exports every module below |
 | `manifest.ts`, `registry.ts`, `tx.ts`, `handle.ts` | the manifest, the registry's calls (`signGrainTx`, `grainCallProblem`), transactions v3, usernames |
@@ -18,16 +20,16 @@ and the simulator. It follows the protocol (corvise/saltix `specs/`); it never d
 | `app-key.ts`, `network.ts` | the developer key; the public relays and the chain view a server reads |
 | `relay.ts`, `records.ts`, `seal.ts`, `upload.ts`, `file.ts` | `RelayClient`, relay records, sealed frames, files next to the relay |
 | `login.ts`, `sign-in.ts`, `invoice.ts`, `notification.ts`, `sponsor.ts`, `node.ts` | sign-ins (a page's, with the team's member proof and its rights: `SignIns`), invoices, notifications, sponsors, a node's wallet interface |
-| `profile.ts`, `profile-link.ts`, `keylog.ts`, `web.ts` | the Connect profile (19-connect §11: format, checks with the node's reasons, JSON form, signing, the profile link's reader; its writer needs zlib), key event logs checked offline (a port of the explorer's), and `@saltix/grain-server/web`, the modules that run in a web page |
-| `packages/connect/src/` | `@saltix/connect`, Sign in with Saltix for websites ([../connect.md](../connect.md)): `client.ts` (`createConnect`), `session.ts`, `offer.ts`, `grant.ts`, `seal.ts`, `relay.ts`, `store.ts`, `verify.ts` (the page's check of a grant: the reference the explorer's `explorer/src/connect/` follows), `button.ts`, `dialog.ts`, `connect.css`, `site.ts` (`readSiteProfile`); built also as one module, `dist/saltix-connect.js` |
+| `profile.ts`, `profile-link.ts`, `keylog.ts`, `web.ts` | the Connect profile (19-connect §11: format, checks with the node's reasons, JSON form, signing, the profile link's reader; its writer needs zlib), key event logs checked offline (the node's rules, as Saltix's explorer checks them), and `@saltix/grain-server/web`, the modules that run in a web page |
+| `packages/connect/src/` | `@saltix/connect`, Sign in with Saltix for websites ([../connect.md](../connect.md)): `client.ts` (`createConnect`), `session.ts`, `offer.ts`, `grant.ts`, `seal.ts`, `relay.ts`, `store.ts`, `verify.ts` (the page's check of a grant: the reference Saltix's explorer follows), `button.ts`, `dialog.ts`, `connect.css`, `site.ts` (`readSiteProfile`); built also as one module, `dist/saltix-connect.js` |
 | `publish.ts`, `publish-link.ts`, `inflate.ts`, `keys.ts`, `address.ts`, `bytes.ts` | publishing links, raw DEFLATE, device keys and the one Ed25519 check (`verifyEd25519`), Address v1, encoding |
 | `packages/cli/src/main.ts` | `grain`: the help and every command's dispatch |
 | `packages/cli/src/` others | `network.ts` (where a command reaches the network: public relays, `--relay`, `--node`), `faucet.ts`, `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `connect.ts` (`connect.json`, and `grain lint`'s checks of it, the icon and permissions nothing uses), `profile.ts` (`grain profile`, `grain connect-profile`), `bundle.ts`, `registry.ts` (publish, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `send.ts` (an account's registry calls one at a time: each waits until it landed, and one the pool refuses for an earlier pending call is built again), `chat.ts` (chat-spec, cert), `sponsor.ts` |
 | `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
 | `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
-| `scripts/sync-vectors.sh`, `scripts/check-vectors.mjs` | copies the protocol's golden vectors from a Saltix checkout, `vectors/SOURCE` naming its commit and each file's blob id; the check CI runs that every file is those bytes |
+| `scripts/sync-vectors.sh`, `scripts/check-vectors.mjs` | copies the protocol's golden vectors from a checkout of the protocol's repository, `vectors/SOURCE` naming its commit and each file's blob id; the check CI runs that every file is those bytes; `vectors/README.md` says what each file holds |
 | `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key); `packages/server/test/example.test.mjs` runs its chat on `testChat` and holds every card to the card standard |
-| `docs/` | `first-app.md`, `chats.md`, `cards.md` (and its pictures in `cards/`), `payments.md`, `connect.md`, `devex.md` (the developer experience and its roadmap), and these pages |
+| `docs/` | `first-app.md`, `chats.md`, `cards.md` (and its pictures in `cards/`), `payments.md`, `connect.md`, `devex.md` (the developer experience and its roadmap), these pages, and `docs/protocol/` (the protocol as an app needs it, page by specification; `packages/cli/test/protocol-docs.test.mjs` follows every link and anchor of every page and refuses a link into the private repositories) |
 
 ## Commands
 
@@ -44,11 +46,17 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 
 ## Rules of the repository
 
-- **Formats come from the protocol.** A change to a format starts in corvise/saltix's `specs/` and its vectors; here,
-  `scripts/sync-vectors.sh <saltix checkout>` (a clean one: it records the commit and each file's git blob id in
-  `vectors/SOURCE`), then the code until `vectors.test.mjs` and `chat.test.mjs` pass. Never edit a vector by hand: CI runs
-  `node scripts/check-vectors.mjs`, which holds every file to its id in `SOURCE`; with `--saltix <checkout>` it also says
-  which files the protocol changed since, time to sync.
+- **Formats come from the protocol.** A change to a format starts in the protocol's specifications and vectors; here,
+  a maintainer with a checkout of the protocol's repository runs `scripts/sync-vectors.sh <checkout>` (a clean one: it
+  records the commit and each file's git blob id in `vectors/SOURCE`), then changes the code until `vectors.test.mjs`
+  and `chat.test.mjs` pass. Never edit a vector by hand: CI runs `node scripts/check-vectors.mjs`, which holds every
+  file to its id in `SOURCE`; with `--saltix <checkout>` it also says which files the protocol changed since, time to
+  sync.
+- **The protocol's pages move with it.** `docs/protocol/` keeps each specification's section numbers and names the
+  protocol commit its text was read at (`As of corvise/saltix <commit>`). A sync or a change that reaches apps updates
+  the page and that line in the same pull request, re-read against the specification: what an app needs, never the
+  chain's internals, nodes', relays' or wallets' own workings, or anything about servers. They link nothing in the
+  private repositories.
 - **Tests assert behaviour**, refusals included. A check that guards money, keys or what a wallet trusts is
   mutation-tested: break it in `dist/*.js`, run its test file, see it fail, restore and rebuild (the CHANGELOG and pull
   requests say how many mutants were killed).
@@ -57,19 +65,19 @@ Tests import `dist/`: build the package before running its tests by path, and ag
   reduced, non-canonical encodings). A library's `verify` is permissive (RFC 8032's cofactored equation; a key of small
   order "signs" every message): no module calls one, and the test fails if one does.
 - **The page's check of a Connect grant is the reference.** `@saltix/connect`'s `verifyGrant` and `retryable` decide
-  what is refused, what is only unchecked and when the node is asked again; the explorer's `explorer/src/connect/`
-  (corvise/saltix) follows them, and a change here is synced there in a pull request of its own.
+  what is refused, what is only unchecked and when the node is asked again; Saltix's explorer, which lives with the
+  protocol, follows them, and a change here is synced there in a pull request of its own.
 - **A test that starts a server or a process bounds every wait** (as `wallet.until` in
   `packages/server/test/chat-helpers.mjs` does): a broken change must fail the test, not hang CI.
 - **The simulator plays Saltix by Saltix's own code.** What it draws (the frame, the band's colours, the icons'
-  contrast, the splash) follows the wallet's (saltix-wallet `assets/grain/frame.js`, `AppFrame` and `GrainScreen` in
-  its Android app), and so does what it answers (`GrainBridge.kt`: taps, permissions, the team, rate limits, storage,
-  64 KiB a message, a sealed grain's origin and policy); each rule it needs is a pure function in `@saltix/grain`
+  contrast, the splash) follows the wallet's (its frame script and its Android app's frame and grain screen), and so
+  does what it answers (the Android app's bridge: taps, permissions, the team, rate limits, storage, 64 KiB a message,
+  a sealed grain's origin and policy); each rule it needs is a pure function in `@saltix/grain`
   (`frameFor`, `controlsFor`, `pageColorOf`, `frameColors`; `@saltix/grain/rules` for the bridge's) with its test in
   `packages/grain/test/`, never logic inline in `simulator/`, which no test reaches. When Saltix changes, change the
   function and its test to match first.
 - **`grain.layout()` never writes `:root`'s inline style.** Saltix sets the variables itself, in a sheet that wins over
-  the page's stylesheets (12-grains §5); the SDK's go in `layoutSheet`, below it, and `stop()` removes them and nothing
+  the page's stylesheets ([12-grains §5](../protocol/grains.md#5-the-bridge)); the SDK's go in `layoutSheet`, below it, and `stop()` removes them and nothing
   else. `grain.test.mjs` models the cascade (inline, adopted sheets, `<style>`) with Saltix's frame script in place: a
   change there keeps the wallet's values winning, the later ones too.
 - **The example keeps the rules it teaches.** `examples/hello-grain` is what developers copy: every card it sends passes
@@ -89,8 +97,7 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 1. A branch from `main`: `feat/…`, `fix/…`, `docs/…`.
 2. Conventional Commits in English, scope the package (`server`, `grain`, `connect`, `cli`, `simulator`, `docs`); a
    format change is `feat(server)!:` with a `BREAKING CHANGE:` footer.
-3. `npm test` passes; CI (`.github/workflows/ci.yml`: `npm ci && npm test` on Node 22 on the project's own runner, and
-   the bundle's bytes again on Node 24 and 20) passes on the pull request.
-4. Squash merge. The program that runs Saltix's own apps by their developer keys (Saltix Pass; saltix-wallet
-   `server/access-grain`, named for the retired access grain) vendors the built server SDK with its sync script
-   (saltix-wallet scripts/sync-grain-sdk.sh): a change it needs is synced there in a pull request of its own.
+3. `npm test` passes; CI (`.github/workflows/ci.yml`: `node scripts/check-vectors.mjs` and `npm ci && npm test` on
+   Node 22 on GitHub's runners, and the bundle's bytes again on Node 24 and 20) passes on the pull request.
+4. Squash merge. The program that runs Saltix's own apps by their developer keys (Saltix Pass) vendors the built
+   server SDK: a change it needs is synced there in a pull request of its own.
