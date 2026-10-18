@@ -2,9 +2,12 @@ name: ci
 on:
   push: { branches: [main] }
   pull_request:
+# GitHub's own runners: the repository is public, and a pull request from a fork must never run on a machine of ours.
+permissions:
+  contents: read
 jobs:
   test:
-    runs-on: [self-hosted, test4]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
