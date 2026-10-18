@@ -32,7 +32,7 @@ public when it is ready (step 4).
 ## 2. Run the example with your key (3 minutes)
 
 ```sh
-git clone git@github.com:corvise/saltix-grains.git && cd saltix-grains
+git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains
 npm install && npm run build                # the SDK and the grain command line
 (umask 077 && pbpaste > app.key)            # the key from the clipboard into an owner-only file (Linux: xclip -o)
 npm run example

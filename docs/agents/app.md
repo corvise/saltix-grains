@@ -20,7 +20,7 @@ it speaks for the app until the owner replaces it.
 ## Set up
 
 ```sh
-git clone git@github.com:corvise/saltix-grains.git && cd saltix-grains
+git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains
 npm ci && npm run build
 npx grain init ../<slug> --chat --slug <slug>    # grain.json, chat.json, connect.json, chat.mjs, server.mjs, test/, AGENTS.md…
 cd ../<slug> && npm install                      # the SDK, from the checkout: it is not on npm yet
