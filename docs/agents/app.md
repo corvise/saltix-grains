@@ -1,7 +1,9 @@
 # Building an app, for a coding agent
 
-You were asked to build an app (a grain) that answers in its chat in Saltix, and maybe shows a screen. This page is the
-whole path, the rules every app follows, and what to do with an error report.
+You were asked to build an app (a grain), maybe with Saltix's brief for a coding agent, that answers in its chat in
+Saltix, shows a page, or both. [How a mini-app works](../how-it-works.md) comes first: what runs where, whether the app
+needs a program at all (a page alone needs none), and the lifecycle as one checklist. This page is the whole path, the
+rules every app follows, and what to do with an error report.
 
 ## Start here: pair the server, never ask for a key
 
@@ -48,6 +50,11 @@ it speaks for the app until the owner replaces it.
   (a systemd credential). If the person pastes it to you anyway, write it
   with `(umask 077 && cat > app.key)` or an editor, never repeat it back, and say that `grain pair` would have kept it
   off the chat.
+- Saltix's **Copy brief for a coding agent** gives you the app's name, slug, form and network and the first steps, never
+  a key ([the brief](../first-app.md#building-with-a-coding-agent)).
+- **One app, one key, one program.** The key is one app's, and one program runs with it: that app's own project. Never
+  run the SDK's example (`npm run example`) or another program with the key of an app that already has one, and never
+  reuse another app's key or slug: two programs on one key both answer in its chat.
 - Never put it on a command line (shells keep their history), in a log, a test, a commit, an issue, a chat or an error
   report. `.gitignore` keeps every `*.key` out of git; check `git status` before committing anyway.
 - `npx grain app-key --file app.key` prints its public parts (network, genesis, slug, public key, address) and whether
@@ -59,13 +66,13 @@ it speaks for the app until the owner replaces it.
 git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains
 npm ci && npm run build
 npx grain init ../<slug> --chat --slug <slug>    # grain.json, chat.json, connect.json, chat.mjs, server.mjs, test/, AGENTS.md…
-cd ../<slug> && npm install                      # the SDK, from the checkout: it is not on npm yet
+cd ../<slug> && npm install                      # the SDK and the grain command, from the checkout: not on npm yet
 npx grain status                                 # unpaired
 npx grain pair                                   # the QR code for the owner's Saltix (above); waits, writes app.key
 npm start
 ```
 
-`npm start` logs one JSON line per event. `{"event":"ready","slug":…,"address":…,"network":"devnet","spec":2}` means
+`npm start` logs one JSON line per event. `{"event":"ready","slug":…,"address":…,"network":"devnet","spec":4}` means
 the app answers. It exits with **78** when it has no key (not paired yet: `chat_unpaired`, run `grain pair`), when
 `app.key` is readable by others (`chat_key_exposed`), when the key cannot work (another network's, replaced, revoked,
 the app retired) or when `chat.json` changed under a version it served (`setupCannotWork`: an `AppKeyError` or a
@@ -357,11 +364,16 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   RestartPreventExitStatus=78
   ```
 
-  `server.mjs` reads `chat.json` and its version from beside itself, so it runs from any directory, without npm.
+  `server.mjs` reads `chat.json` and its version from beside itself, so it runs from any directory, without npm. It
+  needs the project's `node_modules`, which link the SDK from the checkout beside it (`../saltix-grains`) while the SDK
+  is not on npm: put both on the server side by side, as on your computer. It talks only outbound, to the relays: no
+  domain, open port or certificate ([run the program](../how-it-works.md#run-the-program)). One program per key: stop
+  the one on your computer first.
 - **A new command or text**: change `chat.json`, raise `version`, restart. Each user gets the new spec before their
   next answer.
 - **A new name, icon or screen** is a new manifest, which only the owner's phone signs: `await chat.proposeUpdate(next)`
-  sends it to the owner's console as **Review and approve**; or the owner scans `grain publish`'s QR code.
+  sends it to the owner's console as **Review and approve**; or the owner scans `grain publish --wallet`'s QR code
+  ([publishing a page](../how-it-works.md#publish-a-page)).
 - **Public**: the app starts private (its owner and members). The owner makes it public in Saltix (My apps → the app),
   or `grain access --public` with `owner.key` on the test network.
 

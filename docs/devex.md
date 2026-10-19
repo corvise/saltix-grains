@@ -36,6 +36,9 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | Logs | `ChatServer` logs nothing unless given `log`, and keeps its state in memory unless given a store | roadmap 13 |
 | Keys | the developer key travelled from the phone to the server: a clipboard, a chat, an agent's prompt; an agent asked the user to paste it | fixed: `grain pair` (Saltix 24-app-studio §3a): the key is made where it runs and Saltix pairs it by a QR code; agents start from `grain status` |
 | Diagnosis | what went wrong in a developer's session was known only from what they remembered | started: every command logs its steps to `.grain/log.jsonl` ([below](#the-steps-log)); `grain doctor` |
+| Agent's start (2026-10-19) | an agent handed a developer key alone found nothing about Saltix; with a brief it built a page-only game, could not publish it without hosting of its own, ran the example's chat on another app's key, and did not know what needs a server | [how-it-works.md](how-it-works.md), the brief Saltix copies, one app one key, pairing (`grain pair`, above); the network hosting bundles is coming (roadmap 6) |
+| Example, then project | `npm run example` serves spec version 3 under the app's key, and the project `grain init --chat` made started at 2, which a wallet holding 3 refuses: the app's own commands never reached Saltix | fixed: a project starts at 4 |
+| `npx grain` in a project | a project did not depend on the command line, so `npx grain …` there fell through to the npm registry's unrelated package named `grain` | fixed: every project `grain init` makes links it from the checkout |
 
 ## The roadmap
 
@@ -162,6 +165,9 @@ certificate is self-signed (pinned through its record), and a manifest's sources
 - Lasting (L, protocol): a public file kept while a live manifest names its hash, on the relays or the durable tier
   (10-storage), with sources such as `saltix-file:<relay record>/<id>` that wallets resolve through the relay list.
 - **Depends on** a protocol decision for the lasting form.
+- **State (2026-10-19)**: the lasting form is being specified in the protocol (bundles kept as named blobs by the storage
+  cities, fetched by hash); then `grain publish` uploads the bundle from the developer's computer and the owner approves
+  by QR. Until it lands, [how-it-works.md](how-it-works.md#publish-a-page) has today's path.
 
 ### 7. Bundle bytes independent of zlib
 

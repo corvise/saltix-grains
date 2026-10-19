@@ -35,7 +35,8 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain help [command]                     this, or one command's part of it (also: grain <command> --help)
   grain init [dir] [--slug S] [--name N] [--chat]
                                            a new grain: grain.json, connect.json, owner.key, public/; --chat a
-                                           chat-only one (no page: grain.json, connect.json and chat.json)
+                                           chat-only one (no page: grain.json, connect.json and chat.json); both
+                                           with a package.json whose npm install links the grain command
   grain dev [--port 8090] [--app-key F]    serve public/ with the manifest signed for this computer, and the
                                            simulator: your page framed as Saltix frames it, with the wallet's
                                            controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704, held
@@ -229,7 +230,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         writeFileSync(join(dir, "chat.mjs"), chatTemplate.chatHandlers(slug));
         mkdirSync(join(dir, "test"), { recursive: true });
         writeFileSync(join(dir, "test", "chat.test.mjs"), chatTemplate.chatTest(slug));
-        writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir)));
+        writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir), chatTemplate.cliDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
         console.log(`next: npm install, then grain pair in ${dir}: scan its QR code with your Saltix, which makes the app ` +
@@ -244,8 +245,10 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const bridge = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain"));
       copyFileSync(bridge, join(dir, "public", "grain.js"));
       writeFileSync(join(dir, "README.md"), template.readme(slug));
+      // The grain command in the project itself: `npx grain` there runs this tool, never a registry's package of that name.
+      writeFileSync(join(dir, "package.json"), chatTemplate.pagePackageJson(slug, chatTemplate.cliDependency(dir)));
       console.log(`a grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
-      console.log("next: grain dev");
+      console.log(`next: npm install in ${dir} (it links the grain command), then npx grain dev`);
       log.step("init", "ok", "page");
       return 0;
     }

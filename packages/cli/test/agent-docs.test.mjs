@@ -37,6 +37,18 @@ test("every grain command and npm script they name exists", () => {
   assert.ok(named >= 5, "the pages name the commands they use");
 });
 
+test("the guides a reader starts from name only commands that exist", () => {
+  for (const file of ["AGENTS.md", "README.md", "docs/how-it-works.md", "docs/first-app.md"]) {
+    const text = readFileSync(join(root, file), "utf8");
+    let named = 0;
+    for (const [, command] of text.matchAll(/(?:npx |`)grain ([a-z][a-z-]*)/g)) {
+      named++;
+      assert.ok(commands.has(command), `${file} names grain ${command}, which the help does not list`);
+    }
+    assert.ok(named > 0, `${file} names the commands it uses`);
+  }
+});
+
 test("the map names files that are there", () => {
   const sdk = pages.find((p) => p.name === "sdk.md").text;
   for (const [, path] of sdk.matchAll(/`((?:packages|scripts|simulator|examples|docs)\/[^`\s*…]*)`/g)) {

@@ -15,11 +15,20 @@ export const APP_KEY_ENV = "SALTIX_APP_KEY";
 
 const ownAccount = (secret: Uint8Array) => toHex(accountId(fromHex(publicKeyOf(secret), 32)));
 
+/**
+ * Why a key file may not act for `slug`, whose registry owner is `owner`: often an app made in Saltix, whose owner is the
+ * phone's account, while `grain init` made an owner.key of its own beside it. `--wallet` asks the owner's Saltix instead.
+ */
+export function notYours(slug: string, owner: string, then: string): string {
+  return `${slug}: registered by another owner (${owner}) than the key file's account: an app made in Saltix is its owner's ` +
+    `phone's, so add --wallet (the owner confirms in Saltix); ${then}`;
+}
+
 /** A grain the key file's account owns and that is live: what the owner's calls need. */
 export async function ownGrain(node: NodeLike, slug: string, secret: Uint8Array): Promise<RegisteredGrain> {
   const g = await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
-  if (g.owner !== ownAccount(secret)) throw new Error(`${slug}: registered by another owner (${g.owner})`);
+  if (g.owner !== ownAccount(secret)) throw new Error(notYours(slug, g.owner, "otherwise it is not yours to change"));
   if (g.retired !== null) throw new Error(`${slug}: retired at slot ${g.retired}`);
   if (g.servers === undefined) throw new Error("the node predates the app studio (24-app-studio): it shows no server keys");
   return g;

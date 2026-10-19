@@ -7,6 +7,7 @@ import {
 } from "@saltix/grain-server";
 import { publishLink } from "./publish.js";
 import { publicKeyOf } from "./project.js";
+import { notYours } from "./studio.js";
 
 export interface Signing {
   /** Where the network's wallet interface is: your node's URL, or the relays' gateways (`reachOf`). */
@@ -47,7 +48,7 @@ export async function publishCall(signed: SignedManifest, node: NodeLike, secret
   if (now === null) {
     call = { register: signed, deposit };
   } else if (now.owner !== mine) {
-    throw new Error(`${m.slug}: registered by another owner (${now.owner}); pick another slug`);
+    throw new Error(notYours(m.slug, now.owner, "otherwise pick another slug"));
   } else if (now.retired !== null) {
     throw new Error(`${m.slug}: retired at slot ${now.retired}; a retired slug is never used again`);
   } else if (m.version <= now.version) {
