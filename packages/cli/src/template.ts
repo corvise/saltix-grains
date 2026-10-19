@@ -178,7 +178,9 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
   about a bar pinned to the top of such a page that keeps clear of nothing (\`full-screen-top-bar\`).
 `;
 
-const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
+const PAGE_COMMANDS = `- \`npx grain status\` first, every session, and \`npx grain doctor\`: where the project stands and the next step. An
+  app's server (its chat, invoices, a sign-in) runs with a key \`npx grain pair\` pairs by a QR code (rule 1).
+- \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
   the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered, and warnings about the page and
   permissions nothing uses.
@@ -187,7 +189,10 @@ const PAGE_COMMANDS = `- \`npx grain dev\`: serves \`public/\` and prints the si
   each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
 - \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way.`;
 
-const CHAT_COMMANDS = `- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the developer key (below); its log is one JSON line per
+const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the server is paired with its app, and what to run next.
+  \`npx grain pair\` pairs it (rule 1): a QR code the app owner's Saltix scans; the key is made here and never leaves.
+  \`npx grain doctor\` checks the rest and names the next step.
+- \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the paired key (rule 1); its log is one JSON line per
   event, and \`{"event":"ready",…}\` means the app answers.
 - \`npm test\`: \`test/chat.test.mjs\`, the commands end to end with \`testChat\` from \`@saltix/grain-server/testing\` (a
   development relay and registry and a development key, nothing real); add a test for each command you add.
@@ -207,14 +212,19 @@ export const PROTOCOL_DOCS = "https://github.com/corvise/saltix-grains/blob/main
 
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
- * --chat` makes (\`server.mjs\`) have them: the developer key, the spec's version, the unasked budget, state, the
+ * --chat` makes (\`server.mjs\`) have them: the server's key, paired and never copied, the spec's version, the unasked budget, state, the
  * exit status of a key that cannot work, payments, the card design standard, tests, the Connect profile, checking
  * first, then rendering, and naming people.
  */
-export const appRules = `1. **The developer key is a secret.** The server reads it from \`SALTIX_APP_KEY\`, the file \`SALTIX_APP_KEY_FILE\` names
-   (a systemd credential) or \`app.key\` (owner-only), never from the command line, which shells keep. Never log, print,
-   commit or report it, nor \`owner.key\`, \`server.key\` or any other key; if it is pasted to you, write it with
-   \`(umask 077 && cat > app.key)\` and never repeat it back.
+export const appRules = `1. **The server's key is made where it runs and never leaves it.** Start every session with \`grain status\`. When it
+   is not \`paired\`, run \`grain pair\` (in the background, or \`grain pair --no-wait\` and then \`grain pair\`), show
+   the user its QR code (the terminal's, or \`.grain/pair.html\`) and wait: the user scans it with Saltix, checks the
+   6-digit code and confirms there, and \`grain pair\` writes \`app.key\` once the registry names the key. Never ask the
+   user to paste, type or send a key. The server reads \`app.key\` (owner-only), \`SALTIX_APP_KEY\` or the file
+   \`SALTIX_APP_KEY_FILE\` names (a systemd credential), never from the command line, which shells keep, and refuses to
+   start without one (\`chat_unpaired\`). Never log, print, commit or report a key, nor \`owner.key\` or \`server.key\`.
+   Only for a host where no command runs does a developer key made in Saltix stand in: if one is pasted to you, write it
+   with \`(umask 077 && cat > app.key)\` and never repeat it back.
 2. **Raise \`chat.json\`'s \`version\` with every change of it.** Saltix takes a spec only when its version is higher than
    the one it holds (an app made in Saltix starts at 1, so a server with its developer key serves 2 or more, and refuses
    to start on 1: \`chat_spec_version_starter\`): a spec changed under the same version reaches nobody, and nothing
@@ -227,8 +237,8 @@ export const appRules = `1. **The developer key is a secret.** The server reads 
 4. **Persistent state goes in \`STATE_DIRECTORY\`**, which systemd sets with \`StateDirectory=\`: \`server.mjs\` keeps its
    store (\`chat.store.json\`: the requests answered, the budget, the team's consoles) there, and in the directory it
    was started from without one. \`ChatServer\`'s default store keeps them in memory only, and a restart forgets them.
-5. **Exit with status 78 when the key cannot work**, or the setup otherwise cannot as it stands: the registry does not
-   name the key (replaced, revoked, the app retired, not registered), it is not a developer key, it is another network's
+5. **Exit with status 78 when the key cannot work**, or the setup otherwise cannot as it stands: there is no key (not
+   paired yet: \`chat_unpaired\`, run \`grain pair\`), the registry does not name the key (replaced, revoked, the app retired, not registered), it is not a developer key, it is another network's
    (the test network was reset), or \`chat.json\` changed under a version served. \`server.mjs\` does, at start
    (\`setupCannotWork(e)\`: an \`AppKeyError\` or a \`ChatSetupError\`) and from \`ChatServer\`'s \`onStop\`, and exits with 1
    for anything else; a unit with \`RestartPreventExitStatus=78\` then does not restart a server that restarting cannot
@@ -273,9 +283,18 @@ export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
 
 Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (the protocol:
 [grains](${PROTOCOL_DOCS}/grains.md)${chat ? `, [grain chats](${PROTOCOL_DOCS}/grain-chats.md) and [the app studio](${PROTOCOL_DOCS}/app-studio.md)` : ""}, in the SDK's
-[docs/protocol/](${PROTOCOL_DOCS}/README.md)). \`CLAUDE.md\` points here. The whole path, from a developer
-key to an app that runs, is tested and ships, and what to do with an error report from Saltix's console:
+[docs/protocol/](${PROTOCOL_DOCS}/README.md)). \`CLAUDE.md\` points here. The whole path, from pairing the server
+to an app that runs, is tested and ships, and what to do with an error report from Saltix's console:
 [the SDK's page for a coding agent](${APP_GUIDE}).
+
+## Start here, every session
+
+1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
+2. \`npx grain pair\`: it prints a QR code (and writes \`.grain/pair.html\`). Show it to the user and say: scan it with
+   Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same 6-digit code, confirm with
+   the PIN. It waits, answers the phone, and once the registry names the key writes \`app.key\` and \`app.json\`. Run it
+   in the background, or \`npx grain pair --no-wait\` to show the code and then \`npx grain pair\` to wait.
+3. \`npx grain doctor\`: what is left, and the exact next step.
 
 ## The one rule to keep
 
@@ -295,7 +314,9 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 - \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).
 - \`bundle.zip\`, once the app is sealed (\`npx grain bundle\`): the same bytes from the same files on any computer (files
   stored, at most 20 MiB). Rebuild it in CI and fail when \`grain.json\` changes; never edit \`entry.sealed\` by hand.`}
-- \`owner.key\` (and \`server.key\`, \`app.key\` once made): secrets. Never commit, print, log or paste them.
+- \`owner.key\` (and \`server.key\`, \`app.key\` once \`grain pair\` wrote it, \`.grain/pair.key\` while it waits): secrets.
+  Never commit, print, log or paste them. \`app.json\` (the app, its network, the key's public half) is not.
+- \`.grain/\`: \`grain pair\`'s state and the steps' log (\`log.jsonl\`: codes and timings, nothing secret), out of git.
 
 ## Commands
 
@@ -327,6 +348,8 @@ signed.json
 *.key
 bundle.zip
 node_modules/
+# grain pair's state (a key not paired yet, the offer's page) and the steps' log.
+.grain/
 `;
 
 export const readme = (slug: string) => `# ${slug}
@@ -417,10 +440,12 @@ export const chatReadme = (slug: string) => `# ${slug}
 A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix 24-app-studio: the SDK's
 [docs/protocol/app-studio.md](${PROTOCOL_DOCS}/app-studio.md)).
 
-- **Run it:** put the developer key in \`app.key\` (\`(umask 077 && pbpaste > app.key)\`; never on the command line,
-  shells keep their history), then \`npm install\` and \`npm start\`: \`server.mjs\` is the server, its log one JSON line
-  per event. It exits with 78 when the key cannot work (replaced, revoked, the app retired, another network's): make a
-  new developer key in Saltix, since restarting does not help. Under systemd: the key as a credential
+- **Run it:** \`npm install\`, then \`grain pair\` here: scan its QR code with your Saltix, which pairs this server with
+  ${slug} (or makes the app); the key is made here and never leaves this computer, and \`grain pair\` writes \`app.key\`
+  (owner-only) once the registry names it. Then \`npm start\`: \`server.mjs\` is the server, its log one JSON line per
+  event. It exits with 78 when it has no key (run \`grain pair\`) or the key cannot work (replaced, revoked, the app
+  retired, another network's: \`grain pair --new\`), since restarting does not help. \`grain status\` says where it
+  stands. Where no command runs, a developer key made in Saltix stands in (\`SALTIX_APP_KEY\`, never on a command line). Under systemd: the key as a credential
   (\`LoadCredential=app-key:…\`, \`Environment=SALTIX_APP_KEY_FILE=%d/app-key\`), \`StateDirectory=\` for its store, and
   \`RestartPreventExitStatus=78\`.
 - **Add a command:** declare it in \`chat.json\`, add its handler in \`chat.mjs\` and its test in \`test/chat.test.mjs\`

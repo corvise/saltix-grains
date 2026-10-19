@@ -11,7 +11,7 @@ export class UsageError extends Error {
 }
 
 /** Flags that take no value: whatever follows one is the next word, never its value. */
-export const SWITCHES: ReadonlySet<string> = new Set(["chat", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline"]);
+export const SWITCHES: ReadonlySet<string> = new Set(["chat", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline", "new", "json"]);
 
 /** Where a command reaches the network: its public relays (`--network`), relays named (`--relay`), or your node. */
 const NET = ["network", "relay", "node"];
@@ -41,6 +41,9 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   rate: ["slug", "score", "review", ...KEYED],
   bind: ["handle", "slug", "clear", ...OWNER],
   "app-key": ["file", ...NET, "offline", "slug", "server", "out"],
+  pair: ["slug", "name", "new", "wait", "no-wait", "timeout", ...NET],
+  status: ["json", ...NET],
+  doctor: ["json", ...NET],
   sponsor: ["exchange", "amount", ...SIGNED],
   faucet: ["key", "address", "wait", "timeout", ...NET],
   profile: ["profile", "clear", "manifest", ...OWNER],

@@ -4,6 +4,36 @@
 
 ### Added
 
+- **Pairing a server by QR code** (Saltix 24-app-studio §3a): no key is copied any more. `grain pair` makes the server's
+  Ed25519 key on the computer that runs it (`.grain/pair.key`, owner-only, never printed or logged), shows its offer as
+  a terminal QR code (colours set on a terminal; plain half blocks elsewhere, for an agent's output), a link
+  `salt:grain-pair?o=…`, `.grain/pair.html` and a 6-digit code; answers the owner's Saltix through the relays (one app
+  and one owner per offer, with the key's proof for them; `other_app`, `used`, `not_owner`… otherwise); watches the
+  registry until it names the key (`--timeout`, resumed by running it again), then writes `app.key` (owner-only) and
+  `app.json` and keeps `app.key`, `*.key` and `.grain/` out of git. `--new` pairs a new key (rotation); `--no-wait` shows
+  the offer and returns, for an agent that must show it before it waits. `@saltix/grain-server`: the formats
+  (`makeOffer`, `encodeOffer`/`decodeOffer`, `offerLink`/`parseOfferLink`, `offerProblem`, `offerCode`/`offerCodeText`,
+  `offerAddress`, `keyFingerprint`, `encodePairFrame`/`decodePairFrame`, `judgePair`, `answerPair`, `checkPairAnswer`,
+  `signServerKeyProof`/`verifyServerKeyProof`), held byte for byte to `vectors/server-pairing-v1.json`, refusals
+  included.
+- **`grain status`** (paired, pairing, unpaired, revoked, replaced, retired, unregistered, other_network, invalid,
+  unknown, and the command to run next; `--json`; exit 0 only when paired) and **`grain doctor`** (`.gitignore`, the
+  key, its file's mode, `chat.json`'s version, `npm install`, the bundle, what the registry holds, the Connect profile,
+  then the exact next step).
+- **The steps' log**: every command run in an app's project appends its steps to `.grain/log.jsonl` (the command, the
+  step, its outcome, a stable reason code, the milliseconds, the network's kind; never a key, an address, a slug, a path
+  or anything typed: codes only, enforced before writing). The codes: [docs/devex.md](docs/devex.md#the-steps-log).
+  `SALTIX_GRAIN_LOG=off` turns it off.
+- **A server refuses to start unpaired**: `appKeyFromEnvironment` (`SALTIX_APP_KEY`, `SALTIX_APP_KEY_FILE`, or `app.key`)
+  throws `ChatSetupError` `chat_unpaired` (exit 78) saying to run `grain pair`, and `chat_key_exposed` for a key file
+  others may read; the server `grain init --chat` makes and `examples/hello-grain` use it. The registry's refusals now
+  say `grain pair --new` instead of "make a new developer key".
+- **`ConfigureGrain` of protocol version 2** (tag 39, `configureProven`: each key with its proof), byte for byte to the
+  vectors' `configure-v2`; no network runs version 2 yet.
+- The agents' rules start from `grain status` → `grain pair` → show the QR code and wait, and never ask the user to paste
+  a key (rule 1 of every project's `AGENTS.md`, its "Start here, every session", `docs/agents/app.md`, the README,
+  `docs/first-app.md`); the developer key stays as the fallback for a host where no command runs.
+
 - **The protocol, as an app needs it, in the SDK** (`docs/protocol/`): the repository is public and the protocol's own
   is not until the main network launches, so the app-facing parts of its specifications are written here under their
   names and section numbers, each page naming the protocol commit it was read at: [grains](docs/protocol/grains.md)
@@ -92,6 +122,8 @@
 
 ### Changed
 
+- **Vectors synced** from the protocol's pairing change (`573525d`): `server-pairing-v1.json` is new; `grains-v1.json`
+  gains `configure-v2`; `grain-chats-v1.json`'s member proof allows 5 minutes of clock skew in its own case.
 - **The docs match the code and Saltix 0.1.54** (2026-10-17): `AGENTS.md`, `docs/agents/` and every project's
   `AGENTS.md` say what a page gets from Saltix (`grain_info`, four events, eight CSS variables, no design tokens; Saltix
   takes its band's colour from the page) and how to name apps and people (an eleventh rule: Saltix gives an app nobody's

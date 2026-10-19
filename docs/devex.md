@@ -34,6 +34,8 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | roadmap 6; the bytes fixed, #27 |
 | Payments | a server running from a developer key could not sign invoices | done: it signs invoices to the owner (`chat.invoice`, [payments.md](payments.md)) |
 | Logs | `ChatServer` logs nothing unless given `log`, and keeps its state in memory unless given a store | roadmap 13 |
+| Keys | the developer key travelled from the phone to the server: a clipboard, a chat, an agent's prompt; an agent asked the user to paste it | fixed: `grain pair` (Saltix 24-app-studio §3a): the key is made where it runs and Saltix pairs it by a QR code; agents start from `grain status` |
+| Diagnosis | what went wrong in a developer's session was known only from what they remembered | started: every command logs its steps to `.grain/log.jsonl` ([below](#the-steps-log)); `grain doctor` |
 
 ## The roadmap
 
@@ -48,15 +50,16 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | 7 | **Bundle bytes independent of zlib** | The same files may make another hash on another Node | S | a version bump for published bundles |
 | 8 | **One command to deploy the server** | Every app rebuilds the systemd unit, credentials and restart rules | M | 3 |
 | 9 | **Payments for apps made in Saltix** (done) | A developer key could not sign invoices | S (SDK) + M (Saltix) | decided: invoices to the owner |
-| 10 | **An app doctor** | "Why does my app not answer?" has eight possible answers today | M | 4 |
+| 10 | **An app doctor** (started: `grain doctor`) | "Why does my app not answer?" has eight possible answers today | M | 4 |
 | 11 | **Typed handlers from the spec** | A number argument is a `bigint`, a flag may be missing: found at run time | S–M | — |
 | 12 | **A payments sandbox and a funded key** | Invoices and `findPayment` need a node and test SALT | M | 4; macOS nodes for a local devnet |
 | 13 | **Logs and state that are right by default** | A server without `log` is silent; without `store` it forgets on restart | S | — |
 | 14 | **Spec versioning and migration** | Removing a command breaks `run` buttons on old cards | M | 5 |
-| 15 | **A key rotation guide and tool** | Replacing a key stops the server; there is a way without a gap, undocumented | S (guide) / M (tool) | 4 |
+| 15 | **A key rotation guide and tool** (a paired key: `grain pair --new`) | Replacing a key stops the server; there is a way without a gap, undocumented | S (guide) / M (tool) | 4 |
 | 16 | **Templates by app type** | A sealed screen beside a chat, paid actions, notifications: each rebuilt by hand | M each | 2, 6 |
 | 17 | **Docs checked against the code** | Docs drifted (port, network kind, commands) | S | — |
 | 18 | **A CI workflow in every project** | `npm test`, `grain lint`, the spec's lint and the bundle's hash on every push | S | 2, 7 |
+| 19 | **Pairing by QR code and the steps' log** (done in the SDK; Saltix's sheet follows) | No key is copied; a session's steps can be read back | M | Saltix: the pairing sheet (24-app-studio §3a) |
 
 ### 1. A local loop for your own chat
 
@@ -209,6 +212,10 @@ hash does not match its sources, a certificate about to end.
 
 - `grain doctor` (the developer key from `SALTIX_APP_KEY` or `--file`): checks each, through the public relays, and says
   what to do for each failure, in the order a newcomer meets them. A JSON form for agents.
+- **Started** (2026-10-19): `grain doctor [--json]` checks the project, `.gitignore`, the key (`grain status`'s states),
+  the key file's mode, `chat.json`'s version, `npm install`, the bundle's hash, what the registry holds and the Connect
+  profile, and ends with the next step. Still to come: the key not first in the list, a private app's members, the
+  relay registration, numbers reported, a certificate about to end.
 - **Effort** M. **Depends on** 4.
 
 ### 11. Typed handlers from the spec
@@ -278,6 +285,40 @@ name taken by the command) would hold them all.
 hash compared with `grain.json`'s.
 
 - **Effort** S. **Depends on** 2, 7.
+
+## The steps' log
+
+Every `grain` command run in an app's project (a directory with `grain.json`, `chat.json`, `app.key` or `.grain/`)
+appends its steps to `.grain/log.jsonl`, one JSON line each, so that a session can be read back: where a developer (or
+their agent) got stuck, how long the pairing took, which refusal came first. It stays on the computer; attach it to a
+report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves to `log.1.jsonl`.
+
+```json
+{"at":"2026-10-19T12:00:03.120Z","tool":"0.1.0","run":"9f2c01ab","command":"pair","step":"request","outcome":"ok","reason":"accepted","ms":41250,"network":"devnet"}
+```
+
+- `run` ties the lines of one command together; `ms` counts from its start; `network` is the network's kind once the
+  command reached one.
+- **Never in it:** a key, an address, an account, a slug, a path, an argument, a name or anything typed. `step` and
+  `reason` are codes (`[a-z][a-z0-9_]*`, at most 48 characters); anything else is written as `other` before it reaches
+  the file (`devlog.ts`).
+- `outcome`: `ok`, `waiting`, `refused`, `failed` or `timeout`.
+
+| Step | Reasons |
+|---|---|
+| `init` | `chat`, `page`: the project made |
+| `rotate` | `asked` (`--new`), or why `app.key` stopped working: `revoked`, `replaced`, `retired`, `unregistered`, `other_network` |
+| `paired_already` | `app.key` is named: nothing to do |
+| `key_made`, `key_reused` | a new key in `.grain/pair.key`, or the one an earlier offer made |
+| `offer_made`, `offer_shown_again` | a new offer, or the one still living |
+| `offer` | `no_wait` (`--no-wait`: shown, not waited for); `offer_expired` (timeout: nobody asked in 30 minutes) |
+| `relay` | `ok`, or `network_unreachable`: no relay took the key's registration |
+| `request` | the answer to a request: `accepted`, `used`, `expired`, `unknown`, `other_app`, `not_owner`; a frame that was not a request: `frame_not_pairing`, `frame_malformed`, `frame_slug`, `frame_unread` |
+| `registry` | timeout: `answered_not_named` (Saltix was answered, its transaction has not named the key: a managed owner's delay, a cancelled PIN) or `not_asked` |
+| `paired` | `app.key` and `app.json` written |
+| `status` | the state: `paired`, `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
+| `doctor` | the first thing to do: `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `bundle`, `published`, `connect_profile` |
+| `end` | the exit: `ok`, or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `node_refused`, `network_unreachable`, `fs_<code>`, `exit_<n>` or `error` |
 
 ## For the owner: what needs the protocol or Saltix
 

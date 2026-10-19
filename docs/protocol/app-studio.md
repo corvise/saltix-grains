@@ -1,11 +1,12 @@
 # App studio: anyone makes an app in Saltix
 
 > Reflects Saltix 24-app-studio (approved 2026-10-15; the launch, the app's home, the console, invites, Awaiting you
-> and the Connect profile, 2026-10-15 to 2026-10-16; server keys that prove their holder, protocol version 2), as of
-> corvise/saltix `7d3744c5` (2026-10-19). Section numbers are the specification's.
+> and the Connect profile, 2026-10-15 to 2026-10-16; server keys that prove their holder, protocol version 2; pairing a
+> server by QR code, 2026-10-19), as of corvise/saltix `573525d8` (2026-10-19). Section numbers are the specification's.
 
-Anyone makes an app in Saltix's **My apps**: names it, binds a username, gets a **developer key** for whoever builds
-it (or a coding agent), and opens its console at once. [docs/first-app.md](../first-app.md) walks through it; this page
+Anyone makes an app in Saltix's **My apps**: names it, binds a username, pairs the computer that runs its program by a
+QR code (the server key is made there and never leaves it) or, where no command runs, gets a **developer key**, and
+opens its console at once. [docs/first-app.md](../first-app.md) walks through it; this page
 is what lies under it: the registry's calls, the developer key, access and invites, and what Saltix does with an app.
 
 ## 1. What it adds
@@ -18,6 +19,7 @@ is what lies under it: the registry's calls, the developer key, access and invit
 | A grain is found by its slug | also by a **username** bound to it: `@name` opens its chat |
 | Every slug's deposit is 100 SALT | the deposit depends on the slug's length (§5) |
 | An invoice needs the owner key or a certificate | a registered server key signs invoices too, payable only to the grain's owner ([grains §5.2](grains.md#52-payments)) |
+| A key made on the phone is copied to the server | the server's computer makes its key and **pairs** it by a QR code (§3a): the key never leaves it |
 
 Certificates keep working for invoices, notifications and chats; a registered key is the better way for a server that
 runs for months.
@@ -164,6 +166,53 @@ saltix-app:1:<hrp>:<genesis>:<slug>:<secret>
 The SDK: `AppKey.parse` (strict; its errors never quote the text), `AppKey.of`, `isFor`, `describe`; `grain app-key`.
 `vectors/grains-v1.json` (`app_key`).
 
+Since 2026-10-19 the developer key is the fallback for a host where no command runs: a program's computer pairs a key of
+its own (§3a), and `app.key` then holds that key in this same form.
+
+## 3a. Pairing a server by QR code
+
+The key is born on the computer that runs the app's program, and its secret never leaves it. The computer shows an
+**offer**; the owner's Saltix scans it, checks with the computer through the relays, and names the key in the registry.
+
+```text
+PairingOffer { version: u8 (1), hrp: String, genesis: [u8; 8], key: [u8; 32], nonce: [u8; 16],
+               slug: Option<String>, name: String, created_at: u64, expires_at: u64 }     Borsh, Unix ms
+link = "salt:grain-pair?o=" base64url-without-padding(Borsh(PairingOffer))
+code = the first 4 bytes of BLAKE3-derive_key("Saltix grain pairing code v1", Borsh(offer)), big-endian, mod 1 000 000
+```
+
+- `hrp` and `genesis` name the network as the developer key does; `key` is the server key's public half; `nonce` is
+  random, the offer's id; `slug` the app the project is set up for (none: the owner picks one, or makes one); `name`
+  what to call a new app (at most 32 characters, none of Unicode `Cc`, `Cf`, U+2028, U+2029; may be empty). It lives
+  at most 30 minutes (`PAIR_OFFER_LIFE`); a wallet takes one made at most 5 minutes ahead of its clock.
+- **Nothing in it is secret, and nothing in it is signed.** The computer proves it holds the key in its answer, with the
+  proof a version 2 `ConfigureGrain` needs, which names the app and the owner: a signature made before it knew them
+  could be copied by anyone into a call of their own.
+- **The code** (six digits, shown `482 913`) is on both screens: Saltix asks the owner to pair only if they match, so
+  a stranger's offer ("scan this to set up your app") is told apart. A key's **fingerprint**, wherever keys are told
+  apart, is its first 4 bytes in lower-case hex.
+- A paired key is a registered server key like any other (§2): it speaks in the app's chat, signs its price-free
+  specs, its notifications and invoices payable to the owner only. It never controls the app or moves money.
+
+**The exchange.** `"SGP1" ‖ Borsh(PairFrame)`, sealed as grain frames are and kept in the mailbox: the owner's grain
+alias in the app sends `PairRequest { offer: [u8; 16] (the nonce), slug, owner: [u8; 32] }` to the offer key's
+personal address, and the computer answers `PairAnswer { offer, slug, owner, result: u8, proof: Option<[u8; 64]> }`,
+results `0 accepted` (with the key's `ServerKeyProof.proof` for that slug and owner, §2), `1 used`, `2 expired`,
+`3 unknown`, `4 other_app`, `5 not_owner`. The computer answers in this order: another offer's nonce, `unknown`;
+answered already, `accepted` again for the same slug and owner and `used` for any other; expired; the offer names a
+slug and the request another, `other_app`; the registry holds the slug for another account, or retired, `not_owner`;
+else `accepted`. A reader refuses another magic, trailing bytes, an unknown tag or result, a slug that is no app's, and
+a proof with any result but `accepted` (or none with it). Saltix takes an answer only for its request in flight, an
+accepted one only with a proof that verifies; it waits 2 minutes (`PAIR_ANSWER_WAIT`). Then the PIN and
+`ConfigureGrain`: **Add this server** puts the key first, where the app's chat goes; **Use only this server** names it
+alone. An app the owner does not have yet is made in the same confirmation, private, named by the offer's name.
+
+The SDK: `makeOffer`, `encodeOffer`/`decodeOffer`, `offerLink`/`parseOfferLink`, `offerProblem`, `offerCode`,
+`offerCodeText`, `offerAddress`, `keyFingerprint`, `encodePairFrame`/`decodePairFrame`, `judgePair`, `answerPair`,
+`checkPairAnswer`, `signServerKeyProof`/`verifyServerKeyProof`; `grain pair`, `grain status`, `grain doctor`
+([docs/first-app.md](../first-app.md)); `appKeyFromEnvironment`, a server's refusal to start unpaired
+(`chat_unpaired`). `vectors/server-pairing-v1.json`.
+
 ## 4. In Saltix: My apps
 
 What a developer can rely on of how Saltix presents an app.
@@ -171,11 +220,13 @@ What a developer can rely on of how Saltix presents an app.
 - **New app**, step by step, each step saying what it costs before the user signs: a name (at most 32 characters); the
   slug, checked as typed (free, taken, retired) with its deposit; a username (none, one the account holds, or a new one
   minted on the spot); a category, a description (200 characters) and the **Connect profile**, previewed exactly as a
-  user will see it ([connect §11](connect.md#11-the-connect-profile)). **Create** makes a fresh server key on the
-  phone and a chat-only manifest, then sends `RegisterGrain`, `SetGrainAccess` (for a private app), `ConfigureGrain`
-  with the key and the category, and `SetGrainProfile` (revision 1); then signs, with the owner key, a starting chat
-  spec of **version 1** with an intro and no commands (a developer's spec starts at version 2, since a wallet takes
-  only a higher version); then binds the username. The developer key is shown once at the end.
+  user will see it ([connect §11](connect.md#11-the-connect-profile)). **Create** makes a chat-only manifest (no
+  server key on the phone, since 2026-10-19), then sends `RegisterGrain`, `SetGrainAccess` (for a private app),
+  `ConfigureGrain` with the category (and a paired key, when the app is made from a pairing offer), and
+  `SetGrainProfile` (revision 1); then signs, with the owner key, a starting chat spec of **version 1** with an intro
+  and no commands (a developer's spec starts at version 2, since a wallet takes only a higher version); then binds the
+  username. At the end: **Pair a server** (`grain pair` on the program's computer, §3a), or, for a host where no
+  command runs, a developer key made then and shown once.
 - **An app being made is locked** until every step is in the registry: its page and a launch show only the steps'
   states, and no developer key, console or members.
 - **A tap launches, a long press manages.** A launch opens the first that applies: the creation's steps; a notice that
@@ -299,6 +350,9 @@ The wallet interface: `grain_get` and `grain_list` show `ratings {count, sum, ci
 | Deposit | 100 / 30 / 10 SALT for slugs of 3–5 / 6–7 / 8+ characters |
 | Categories | 0–9 |
 | Developer key | `saltix-app:1:<hrp>:<16 hex>:<slug>:<64 hex>` |
+| `PAIR_OFFER_LIFE` | 30 minutes; a wallet takes an offer made at most 5 minutes ahead of its clock (`PAIR_SKEW`) |
+| `PAIR_ANSWER_WAIT` | 2 minutes |
+| A pairing offer | `salt:grain-pair?o=<base64url of Borsh(PairingOffer)>`; a 6-digit code; a new app's name at most 32 characters |
 
 ## 9. Wire shapes
 

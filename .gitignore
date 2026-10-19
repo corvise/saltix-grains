@@ -8,3 +8,7 @@ examples/**/*.store.json
 examples/**/app.key
 /app.key
 /chat.store.json
+# grain pair in the checkout (npm run example): its state, the steps' log, any key, and app.json
+.grain/
+*.key
+/app.json

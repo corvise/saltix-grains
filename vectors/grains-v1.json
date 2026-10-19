@@ -309,7 +309,7 @@
     "grain messaging key: X25519 secret derive_key(\"Saltix grain messaging key v1\", secret || slug); frames to a grain alias are base64url(nonce 24 || NaCl crypto_box) between messaging keys",
     "notification: the owner or the certified server key signs derive_key(\"Saltix grain notification v1\", genesis_hash || Borsh(GrainNotification)); SignedGrainNotification is Borsh {notification, cert: Option<InvoiceKeyCert>, signature}",
     "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least the slug's deposit (deposits below), kept up to 100 SALT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner, and its owner_key speaks for it (13-accounts §5); ids as in transaction-v3.json",
-    "app studio (24-app-studio): Entry tag 2 Chat (no fields; JSON {\"chat\": {}}), notifications only; ConfigureGrain tag 34 {slug, servers: Vec<[u8;32]> (0-4, valid Ed25519, distinct, each one live grain's only), category: u8 (0-9)}; SetGrainAccess tag 36 {slug, public: bool, members: Vec<(AccountId, u8 roles: 1 user, 2 developer, 4 viewer)> (0-64, distinct, not the owner)}; RateGrain tag 37 {slug, score: u8 (1-5, 0 withdraws), review: String (at most 140 characters, no control characters)} by any account but the owner; BindHandle tag 35 is in handles-v1.json",
+    "app studio (24-app-studio): Entry tag 2 Chat (no fields; JSON {\"chat\": {}}), notifications only; ConfigureGrain tag 34 {slug, servers: Vec<[u8;32]> (0-4, valid Ed25519, distinct, each one live grain's only), category: u8 (0-9)}, protocol version 1 only; ConfigureGrain tag 39 {slug, servers: Vec<ServerKeyProof {key [32], proof [64]}>, category: u8}, from protocol version 2: each key signs (strict Ed25519) derive_key(\"Saltix grain server v1\", Borsh((genesis_hash [32], slug: String, owner: AccountId [32]))) for the call's sender as owner (signed_payload_hex is that Borsh); SetGrainAccess tag 36 {slug, public: bool, members: Vec<(AccountId, u8 roles: 1 user, 2 developer, 4 viewer)> (0-64, distinct, not the owner)}; RateGrain tag 37 {slug, score: u8 (1-5, 0 withdraws), review: String (at most 140 characters, no control characters)} by any account but the owner; BindHandle tag 35 is in handles-v1.json",
     "a registered server key signs a notification with cert None, as the owner key does: a wallet checks it against the owner key and the server keys of the grain's registry record (by-registered-key, registered_servers)",
     "a registered server key signs an invoice with cert None too, and only to the grain's owner (invoices.registered): a wallet reads the grain's registry record at its canonical beacon block, refuses any invoice of a retired grain (retired), tries the owner key, then each key the record names (signature when none verifies), and takes a server key's invoice only when to is the record's owner (payee); a certified key's invoice is checked as before, any payee",
     "developer key: saltix-app:1:<hrp>:<first 8 bytes of the genesis hash, hex>:<slug>:<the server key's Ed25519 secret, hex>, lower case, nothing else"
@@ -516,10 +516,12 @@
         "call": {
           "call": "configure_grain",
           "category": 4,
+          "protocol": "version 1 only",
           "servers": [
             "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367"
           ],
-          "slug": "chess"
+          "slug": "chess",
+          "tag": 34
         },
         "fee": "150000",
         "id_hex": "5d2fbe0796f8a93db990254aab3a392624e55c4325008d4a934d44e8a266cf0a",
@@ -527,6 +529,30 @@
         "nonce": "4",
         "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367040000000000000000001f17e5cd6e89016895ce71751cbc39ca6ad123bd37e7f4ad47af9b608408b312a94c438faad9a47725a1012984b6aa6f962718bd4aca872cdfa7f739f8a99204",
         "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367040000000000000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "configure_grain",
+          "category": 4,
+          "protocol": "from version 2",
+          "servers": [
+            {
+              "key": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
+              "proof": "0050e1ca8ee0a265146503000db57b3f4d931d8455df5887c6e6850b81e76f8fb9062333b95f8bccb4f95e8e20ee30c985cc1f8b9cd6b19cf3156447fc119408",
+              "signed_payload_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a050000006368657373fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9"
+            }
+          ],
+          "slug": "chess",
+          "tag": 39
+        },
+        "fee": "150000",
+        "id_hex": "c4fec81b16327d1826f24ae0aa90ca4a849fdc18794cd72ffd7cd0638e9538aa",
+        "name": "configure-v2",
+        "nonce": "4",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012705000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a99873670050e1ca8ee0a265146503000db57b3f4d931d8455df5887c6e6850b81e76f8fb9062333b95f8bccb4f95e8e20ee30c985cc1f8b9cd6b19cf3156447fc1194080400000000000000000048661c43f2ad43bfc74bb7574819bee6ef2c7c313a2072804588e5e1a47e9556a422ea898e9b2629db07615ba25d79c8dbf497db4cee32932830f2cc055ff70f",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012705000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a99873670050e1ca8ee0a265146503000db57b3f4d931d8455df5887c6e6850b81e76f8fb9062333b95f8bccb4f95e8e20ee30c985cc1f8b9cd6b19cf3156447fc119408040000000000000000",
         "valid_until_slot": "100000"
       },
       {
