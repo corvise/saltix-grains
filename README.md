@@ -1,5 +1,9 @@
 # saltix-grains
 
+Got a key starting with `saltix-app:1:`? It is a Saltix mini-app developer key — start with
+[docs/how-it-works.md](docs/how-it-works.md) and [AGENTS.md](AGENTS.md#start-here-saltixs-brief-or-a-developer-key);
+keep the key in `app.key`, never in a chat or a commit.
+
 SDKs and tools for **grains**, apps that open inside Saltix wallets (*mini-apps*, as Saltix calls them in its Apps
 tab; *grain* is the protocol's word). The rules are the protocol's, and **[docs/protocol/](docs/protocol/README.md)**
 holds everything an app needs of them: [grains](docs/protocol/grains.md) (12-grains),
@@ -9,8 +13,11 @@ holds everything an app needs of them: [grains](docs/protocol/grains.md) (12-gra
 keys). A grain uses the wallet's identity, payments, storage and relays, and never holds the wallet's keys. It may be a
 page, or a chat and nothing else.
 
-**[Your first app in ten minutes](docs/first-app.md)**: `grain pair` shows a QR code, your Saltix scans it and makes (or
-pairs) the app, `npm start`. The server's key is made on your computer and never leaves it: nothing to copy.
+**[How a mini-app works](docs/how-it-works.md)**: what runs where, whether your app needs a server (a page alone needs
+none; a program connects out to the relays, with no domain, open port or certificate), and every step to a published
+app as one checklist. **[Your first app in ten minutes](docs/first-app.md)**: `grain pair` shows a QR code, your Saltix
+scans it and makes (or pairs) the app, `npm start`. The server's key is made on your computer and never leaves it:
+nothing to copy.
 
 **Every app ships a Connect profile, and asks only for what it uses**: `connect.json`, the app's own words that Saltix's
 Connect sheet shows before anyone signs in (Saltix 19-connect [§11](docs/protocol/connect.md#11-the-connect-profile)–[§12](docs/protocol/connect.md#12-the-connect-sheet)); `grain lint` fails without it
@@ -30,6 +37,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: a preview of Saltix's Connect sheet from `connect.json` before the app opens, the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
+| [`docs/how-it-works.md`](docs/how-it-works.md) | read first: the pieces of a mini-app and what runs where, *Do I need a server?*, the lifecycle as one checklist (one app, one key; connect; build; the standards; the simulator; publish; run the program; updates and key rotation), publishing a page, running the program |
 | [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing an app's page |
 | [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's page (safe by default, full screen with `viewport-fit=cover`), what a page gets from Saltix (and that it gets no design tokens), checking first, naming apps and people, and work on this repository; `CLAUDE.md` points to it; [`docs/agents/`](docs/agents/README.md) goes on from it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
@@ -54,8 +62,8 @@ and judgments of `vectors/server-pairing-v1.json` byte for byte, refusals includ
 ```sh
 npm install
 npm run dev            # builds, then serves the simulator and hello-grain on :8090
-npx grain pair         # pairs this checkout's server key with your app in Saltix (a QR code; app.key once named)
-npm run example        # hello-grain's chat as your app's server, from app.key (or SALTIX_APP_KEY)
+npx grain pair         # pairs this checkout's server key with an app in Saltix (a QR code; app.key once named)
+npm run example        # hello-grain's chat as that app's server, from app.key (or SALTIX_APP_KEY)
 ```
 
 - **In a desktop browser:** open `http://localhost:8090/` (the simulator), press *Load a manifest*,
@@ -92,32 +100,35 @@ a developer key names the genesis it was made on, and the SDK refuses a key of a
 
 ## The command line
 
-In the checkout, `npx grain …` runs it once `npm install` and `npm run build` have run. For a project of your own
-elsewhere, install the tool and the server SDK from the checkout (they are not on npm yet), then `npx grain …` there:
+In the checkout, `npx grain …` runs it once `npm install` and `npm run build` have run. A project `grain init` makes
+beside the checkout depends on the tool (and a chat's on the server SDK) by their paths there, since they are not on npm
+yet: `npm install` in the project links them, and `npx grain …` there runs this tool. For a project of your own made
+otherwise, install them from the checkout first (never run `npx grain` where the tool is not installed: npx would fetch
+the npm registry's unrelated package of that name):
 
 ```sh
 npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/server
 ```
 
 ```sh
-npx grain init dice --name "Dice roll"   # grain.json, connect.json, owner.key (owner-only), public/ with the bridge, AGENTS.md
-cd dice && npx grain dev                  # serves public/, the manifest signed for this computer, and the simulator
+npx grain init ../dice --name "Dice roll"   # grain.json, connect.json, owner.key (owner-only), public/ with the bridge, AGENTS.md, package.json
+cd ../dice && npm install && npx grain dev   # links the grain command; serves public/, the signed manifest and the simulator
 npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕
 npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
 npx grain sign                            # signed.json: serve it at /.well-known/saltix-grain
 npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
                                           # a sealed grain: public/ as one ZIP named by its hash
-npx grain publish                         # a QR code: the owner's Saltix registers it (the network quotes the deposit)
+npx grain publish --wallet                # a QR code: the owner's Saltix registers it or its new version (the deposit quoted)
 npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
 npx grain publish --key owner.key        # or sign with a key file (test networks): returns once it landed
-npx grain profile                         # a QR code: the owner's Saltix sets the Connect profile (connect.json)
+npx grain profile --wallet                # a QR code: the owner's Saltix sets the Connect profile (connect.json)
 npx grain profile --key owner.key        # or sign it with a key file (test networks); --clear removes it
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
                                           # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
 npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
 npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
-npx grain init coach --chat               # a chat-only grain: grain.json, chat.json, server.mjs (npm start), no page
+npx grain init ../coach --chat            # a chat-only grain: grain.json, chat.json, server.mjs (npm start), no page
 npx grain status                          # is this project's server paired with its app? and what to run next
 npx grain pair                            # a QR code for the owner's Saltix: pairs this computer's own server key
 npx grain pair --no-wait                  # the offer only (a coding agent shows it), then grain pair to wait
@@ -163,7 +174,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   area (`cover-without-insets`), or such an app pins a fixed or sticky bar to the top whose rule uses none of
   `--saltix-safe-top`, `--saltix-controls-*` or `env(safe-area-inset-top)` (`full-screen-top-bar`): heuristics, never
   errors. A page without `viewport-fit=cover` needs neither: Saltix keeps it inside the safe area.
-- `publish` without a key file shows `salt:grain-publish?m=…` as a QR code (Saltix [12-grains §10](docs/protocol/grains.md#10-for-developers)):
+- `publish` with `--wallet`, or without a key file, shows `salt:grain-publish?m=…` as a QR code (Saltix [12-grains §10](docs/protocol/grains.md#10-for-developers)):
   scan it with the owner's Saltix, which fills in its account's key, checks the manifest and the
   registry, shows the grain and the deposit and, after the PIN, signs and registers it (or records
   a newer version). The tool waits for the registry and writes `signed.json`, the form your origin

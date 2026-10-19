@@ -2,7 +2,9 @@
 
 Rules for coding agents, and the people working with them: building an app for Saltix with these SDKs, and working on
 this repository (saltix-grains: the grain SDKs, the simulator and the `grain` command line). `CLAUDE.md` points here.
-Three pages go on from it, and the protocol has pages of its own:
+Read [docs/how-it-works.md](docs/how-it-works.md) first: what a mini-app is made of, what runs where, whether an app
+needs a server, and every step from an empty folder to a published app as one checklist. Three pages go on from this
+file, and the protocol has pages of its own:
 
 - [docs/agents/app.md](docs/agents/app.md): building an app, from pairing its server (`grain status`, then `grain pair`:
   a QR code the owner's Saltix scans; never ask anyone to paste a key) to an app that runs, is tested and
@@ -20,6 +22,55 @@ Three pages go on from it, and the protocol has pages of its own:
   page names the specification it reflects (`12-grains §5.4` is [grains.md § 5.4](docs/protocol/grains.md#54-relays-real-time-between-users))
   and the protocol commit it was read at. The protocol's own repository is not public: read these pages, and the
   golden vectors in [vectors/](vectors/README.md), which are its bytes and win over any page.
+
+## Start here: Saltix's brief, or a developer key
+
+Saltix offers **Copy brief for a coding agent** beside each app's key: the app's name, slug, form and network and these
+steps, in English, with a line saying which language to answer the person in, and never a key
+([the brief](docs/first-app.md#building-with-a-coding-agent)). A string that starts with `saltix-app:1:` is a Saltix
+mini-app's **developer key** (Saltix 24-app-studio [§3](docs/protocol/app-studio.md#3-the-developer-key)). Whichever
+you were given, an app is waiting for you:
+
+1. **Read [docs/how-it-works.md](docs/how-it-works.md)**, then come back. Whether the app needs a program at all is
+   its table [Do I need a server?](docs/how-it-works.md#do-i-need-a-server), in short:
+
+   | The app | A program? |
+   |---|---|
+   | a page that works on its own (a game, a tool; what it keeps per user in `grain.storage`) | no |
+   | users who have it open together, live (`grain.relay` frames between them) | no |
+   | a chat; payments it delivers on; state shared between users; notifications while it is closed; a page for some people only | yes: `ChatServer`, which connects out to the relays (no domain, open port or certificate) |
+
+2. **Get the SDK and make the app's own project beside it**:
+   `git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build`, then
+   `npx grain init ../<slug> --chat --slug <slug>` (a page: without `--chat`) and `cd ../<slug> && npm install`, which
+   links the SDK and the `grain` command from the checkout (the SDK is not on npm yet).
+3. **Pair it, every session from `grain status`** (Saltix 24-app-studio
+   [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). `npx grain status`: `paired`, go on. Anything
+   else: `npx grain pair` (in the background, or `npx grain pair --no-wait` and then `npx grain pair` to wait).
+   **Show the person its QR code (the terminal's, or `.grain/pair.html`) and the 6-digit code, and wait**: they scan it
+   with Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same code, keep **Add this
+   server** and confirm with the PIN. `grain pair` writes `app.key` and `app.json` once the registry names the key; the
+   key is made on this computer and never leaves it. Then `npx grain doctor` names what is left. **Never ask the person
+   to paste, type or send a key.**
+4. **A developer key is only for a host where no command runs.** If one reaches you anyway, read only its public parts:
+   `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network (`dsalt`: Saltix's test network, of the devnet
+   kind; `tsalt`: a testnet; `salt`: the main network), `genesis` the first 8 bytes of its genesis hash in hex, `slug`
+   the app (`salt:grain/<slug>`). The last part, 64 hex characters, is the secret: never print, repeat, log or quote it,
+   nor the whole key; `npx grain app-key --file app.key --offline` prints the public parts, never `cat` the file. A key
+   pasted into the chat is in the conversation's history now: write it to `app.key` with `(umask 077 && cat > app.key)`
+   without repeating it, and once the app runs ask the person to pair this project instead (`grain pair --new`, then
+   **Use only this server**) or to replace the key in Saltix (a long press on the app, then Program, **Replace key**).
+5. **One app, one key, one program.** The key is this app's alone and runs one program: the app's own project. Never
+   run the SDK's example (`npm run example`) or any other program with the key of an app that already has a program,
+   and never reuse another app's key or slug: two programs on one key both answer in its chat. The example is an app of
+   its own.
+6. **Keep keys out of git.** `grain pair` and `grain init` write a `.gitignore` that names `app.key`, every `*.key` and
+   `.grain/`; before the first commit, see that `git status` shows no key file.
+7. **Run it**: `npm start` in the project logs `{"event":"ready",…}`; in Saltix the app's home (tap the app in My apps)
+   shows its command **Say hello**, and the answer is a card marked "from <slug>, verified". Then ask the person what the
+   app should do. [docs/agents/app.md](docs/agents/app.md) is the whole path from there, and
+   [the lifecycle](docs/how-it-works.md#the-lifecycle-as-one-checklist) every step to a published app: one app per
+   project, pair, build, the standards, the simulator, publish, run the program, updates and key rotation.
 
 ## Building an app: safe by default, full screen only with viewport-fit=cover
 

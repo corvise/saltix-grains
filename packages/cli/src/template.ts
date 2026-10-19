@@ -178,22 +178,26 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
   about a bar pinned to the top of such a page that keeps clear of nothing (\`full-screen-top-bar\`).
 `;
 
-const PAGE_COMMANDS = `- \`npx grain status\` first, every session, and \`npx grain doctor\`: where the project stands and the next step. An
+const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (and the SDK) from the saltix-grains checkout beside
+  this project, so \`npx grain …\` here runs it, never the npm registry's unrelated package of that name.
+- \`npx grain status\` first, every session, and \`npx grain doctor\`: where the project stands and the next step. An
   app's server (its chat, invoices, a sign-in) runs with a key \`npx grain pair\` pairs by a QR code (rule 1).
 - \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
   the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered, and warnings about the page and
   permissions nothing uses.
-- \`npx grain publish\`: a QR code the owner's Saltix registers the app from (or \`--key owner.key\` on the test network,
-  after \`npx grain faucet --wait\` for test SALT). Registry commands reach the test network through its public relays,
-  each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+- \`npx grain publish --wallet\`: a QR code the owner's Saltix registers the app or its new version from (an app made in
+  Saltix is its owner's phone's); without \`--wallet\` it signs with \`owner.key\` on the test network, after
+  \`npx grain faucet --wait\` for test SALT. Registry commands reach the test network through its public relays, each
+  pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
 - \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way.`;
 
 const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the server is paired with its app, and what to run next.
   \`npx grain pair\` pairs it (rule 1): a QR code the app owner's Saltix scans; the key is made here and never leaves.
   \`npx grain doctor\` checks the rest and names the next step.
 - \`npm install\`, then \`npm start\`: runs \`server.mjs\` with the paired key (rule 1); its log is one JSON line per
-  event, and \`{"event":"ready",…}\` means the app answers.
+  event, and \`{"event":"ready",…}\` means the app answers. \`npm install\` also links the \`grain\` command from the
+  saltix-grains checkout beside this project, so \`npx grain …\` here runs it.
 - \`npm test\`: \`test/chat.test.mjs\`, the commands end to end with \`testChat\` from \`@saltix/grain-server/testing\` (a
   development relay and registry and a development key, nothing real); add a test for each command you add.
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered; \`npx grain profile\` sets the
@@ -203,6 +207,8 @@ const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the 
   Every registry command and \`npx grain faucet\` (test SALT) reach the test network through its public relays, each
   pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.`;
 
+/** The SDK's page to read first: what runs where, whether an app needs a server, the lifecycle as one checklist. */
+export const HOW_IT_WORKS = "https://github.com/corvise/saltix-grains/blob/main/docs/how-it-works.md";
 /** Where the SDK's page for a coding agent building an app is: a project has no copy of it. */
 export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
 /** The card design standard's rules for a coding agent, by its address. */
@@ -224,7 +230,10 @@ export const appRules = `1. **The server's key is made where it runs and never l
    \`SALTIX_APP_KEY_FILE\` names (a systemd credential), never from the command line, which shells keep, and refuses to
    start without one (\`chat_unpaired\`). Never log, print, commit or report a key, nor \`owner.key\` or \`server.key\`.
    Only for a host where no command runs does a developer key made in Saltix stand in: if one is pasted to you, write it
-   with \`(umask 077 && cat > app.key)\` and never repeat it back.
+   with \`(umask 077 && cat > app.key)\`, never repeat it back, and ask them to replace it in Saltix once it runs: it is
+   in the chat's history now. **One app, one key, one program**: the key is this app's alone and runs this project's
+   server only. Never run the SDK's example or another program with it beside this one, and never put another app's key
+   or slug here: two programs on one key both answer in its chat.
 2. **Raise \`chat.json\`'s \`version\` with every change of it.** Saltix takes a spec only when its version is higher than
    the one it holds (an app made in Saltix starts at 1, so a server with its developer key serves 2 or more, and refuses
    to start on 1: \`chat_spec_version_starter\`): a spec changed under the same version reaches nobody, and nothing
@@ -289,6 +298,9 @@ to an app that runs, is tested and ships, and what to do with an error report fr
 
 ## Start here, every session
 
+[How a Saltix mini-app works](${HOW_IT_WORKS}): what runs where, whether this app needs a server at all, and every step
+from here to a published app, as one checklist. Then:
+
 1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
 2. \`npx grain pair\`: it prints a QR code (and writes \`.grain/pair.html\`). Show it to the user and say: scan it with
    Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same 6-digit code, confirm with
@@ -305,7 +317,8 @@ ${FULL_SCREEN_RULE}
 - \`connect.json\`: the app's Connect profile, what Saltix shows before anyone signs in (rule 9 below); \`npx grain
   profile\` sets it.
 ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): no page; Saltix draws its home from \`chat.json\`.
-- \`chat.json\`: the chat spec: the commands users run (version 2, above the 1 an app made in Saltix starts with).
+- \`chat.json\`: the chat spec: the commands users run (version 4: above the 1 an app made in Saltix starts with and
+  the 3 the SDK's example serves, since a wallet takes only a higher version).
 - \`server.mjs\`: the chat's server, \`ChatServer\` from \`@saltix/grain-server\`, run by the developer key Saltix gave.
   \`package.json\`: \`npm start\` runs it.
 - \`chat.mjs\`: the handlers, one for each command, which \`server.mjs\` and the tests (\`test/\`, \`npm test\`) both run.
@@ -356,6 +369,8 @@ export const readme = (slug: string) => `# ${slug}
 
 A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [docs/protocol/grains.md](${PROTOCOL_DOCS}/grains.md)).
 
+- **How it works**, whether the app needs a server (a page alone needs none) and how a page is published:
+  [docs/how-it-works.md](${HOW_IT_WORKS}). \`npm install\` first: it links the \`grain\` command from the checkout.
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
   debug Saltix (the emulator reaches this computer at 10.0.2.2), or the simulator it prints in a browser.
 - Saltix lays the page inside the safe area unless it declares \`viewport-fit=cover\` (this one does): \`AGENTS.md\` says
@@ -374,11 +389,18 @@ A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
 `;
 
-/** A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. Version 2: an app
- *  made in Saltix starts with a spec of version 1 that its owner key signed, and a wallet takes only a higher one. */
+/**
+ * A chat-only grain's starting spec (Saltix 22-grain-chats §2): an intro and one command to build on. A wallet takes a
+ * spec only when its version is higher than the one it holds, and refuses a lower one: an app made in Saltix holds a
+ * spec of version 1 its owner key signed, and the SDK's example (\`npm run example\`) serves version 3 under the same
+ * key. So the project starts at 4, above both, and its first answer reaches a wallet that ran the example.
+ */
+export const CHAT_SPEC_FIRST_VERSION = 4;
+
+/** \`chat.json\` of a new chat-only grain, at \`CHAT_SPEC_FIRST_VERSION\`. */
 export const chatJson = (slug: string, name: string) => JSON.stringify({
   slug,
-  version: 2,
+  version: CHAT_SPEC_FIRST_VERSION,
   intro: { en: `${name}: a chat-only app in Saltix.` },
   commands: [
     { name: "hello", title: { en: "Say hello" }, help: { en: "A greeting" }, params: [{ name: "name", title: { en: "Your name" }, kind: { text: { max: 32 } } }] },
@@ -440,7 +462,8 @@ export const chatReadme = (slug: string) => `# ${slug}
 A chat-only grain: an app users talk to in Saltix, with no page and nothing to host (Saltix 24-app-studio: the SDK's
 [docs/protocol/app-studio.md](${PROTOCOL_DOCS}/app-studio.md)).
 
-- **Run it:** \`npm install\`, then \`grain pair\` here: scan its QR code with your Saltix, which pairs this server with
+- **How it works**, what needs a program and the lifecycle as one checklist: [docs/how-it-works.md](${HOW_IT_WORKS}).
+- **Run it:** \`npm install\` (it links the SDK and the \`grain\` command from the checkout), then \`grain pair\` here: scan its QR code with your Saltix, which pairs this server with
   ${slug} (or makes the app); the key is made here and never leaves this computer, and \`grain pair\` writes \`app.key\`
   (owner-only) once the registry names it. Then \`npm start\`: \`server.mjs\` is the server, its log one JSON line per
   event. It exits with 78 when it has no key (run \`grain pair\`) or the key cannot work (replaced, revoked, the app

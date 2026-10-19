@@ -34,6 +34,26 @@
   a key (rule 1 of every project's `AGENTS.md`, its "Start here, every session", `docs/agents/app.md`, the README,
   `docs/first-app.md`); the developer key stays as the fallback for a host where no command runs.
 
+- **How a mini-app works, on one page, read first** (`docs/how-it-works.md`): the pieces (Saltix, the registry the
+  owner's phone signs, the page in a WebView with the bridge, the chat, the program that connects out to the relays with
+  no domain, open port or certificate, its paired key, the relays) and what runs where; **Do I need a server?** (a page
+  alone, or users together live, need none; a chat, payments, shared state, notifications and a page for some people
+  only need a program); **the lifecycle as one checklist** (one app, one project, one key; set up and pair; build; the
+  standards; try it; publish; run the program; updates and key rotation); publishing a page today (a sealed bundle at
+  any HTTPS URL, `grain publish --wallet`) and what is coming (the network hosting the bundle); running the program on a
+  computer or a small server. The README's first line tells whoever holds a `saltix-app:1:` key where to start (this
+  page and `AGENTS.md`) and that the key belongs in `app.key`, never in a chat or a commit; `AGENTS.md`, `docs/agents/`
+  and every project's *Start here, every session* send a reader there first.
+- **`AGENTS.md` starts with what an agent given Saltix's brief or a developer key does**: how it works and its table,
+  the key's public parts only, the app's own project beside the checkout, pairing (`grain status`, `grain pair`: show the
+  QR code or `.grain/pair.html` and the 6-digit code and wait, `grain doctor`), never asking for a key, **one app, one
+  key, one program** (never the example or a second program on an app's key, never another app's key or slug), git, a
+  key pasted anyway, `npm start` and the first answer. `docs/first-app.md`'s *Building with a coding agent* carries the
+  brief Saltix copies beside a developer key (**Copy brief for a coding agent**, word for word with placeholders, never a
+  key), what the person and the agent each do, the first test and a leaked key; rule 1 of every project's `AGENTS.md`
+  says one app, one key, one program. `docs.test.mjs` holds the README's line, the first steps, the brief and
+  how-it-works' tables and checklist to their words; `agent-docs.test.mjs` holds every `grain` command that `AGENTS.md`,
+  the README, how-it-works and the first app name, as well as `docs/agents/`, to the help.
 - **The protocol, as an app needs it, in the SDK** (`docs/protocol/`): the repository is public and the protocol's own
   is not until the main network launches, so the app-facing parts of its specifications are written here under their
   names and section numbers, each page naming the protocol commit it was read at: [grains](docs/protocol/grains.md)
@@ -218,6 +238,14 @@
 
 ### Fixed
 
+- **A chat project's spec starts at version 4**, above the 1 Saltix signs when it makes an app and the 3 the example
+  serves: after `npm run example` on an app's key, a project that started at 2 was refused by the wallet holding 3, so
+  its commands never reached Saltix (`CHAT_SPEC_FIRST_VERSION`, tested against the example's spec).
+- **Every project `grain init` makes links the `grain` command**: a chat's `package.json` depends on the command line
+  beside the server SDK, and a page project gets a `package.json` of its own, so `npx grain …` in a project runs this
+  tool after `npm install` instead of falling through to the npm registry's unrelated package named `grain`.
+- **A slug registered by another account** (an app made in Saltix, beside the `owner.key` `grain init` made) says to
+  add `--wallet`, so the owner's Saltix signs.
 - **The simulator plays by Saltix's rules** (`@saltix/grain/rules`, from the wallet's own `GrainBridge.kt`,
   `GrainContainer.kt`, `GrainStorage.kt`, `SealedSite.kt`, each a tested pure function): a payment, the app's chat, its
   page in the wallet and asking again for the address or notifications need a tap of the user within 5 seconds (the page

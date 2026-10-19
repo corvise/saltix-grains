@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY } from "@saltix/grain-server";
-import { APP_GUIDE, CARDS_GUIDE, FULL_SCREEN_RULE, PROTOCOL_DOCS, agentsMd, appRules, chatReadme, readme } from "../dist/template.js";
+import { APP_GUIDE, CARDS_GUIDE, FULL_SCREEN_RULE, HOW_IT_WORKS, PROTOCOL_DOCS, agentsMd, appRules, chatReadme, readme } from "../dist/template.js";
 import { chatServer } from "../dist/chat-template.js";
 
 const guide = readFileSync(new URL("../../../docs/agents/app.md", import.meta.url), "utf8");
@@ -21,7 +21,14 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
     assert.ok(text.includes(appRules), "the eleven rules");
     assert.ok(text.includes("`connect.json`"), "the Connect profile is in the project");
     assert.ok(text.includes("--saltix-controls-width"), "and the full-screen ones");
+    // Where to start: how it works (by its address), then the steps, never a key pasted.
+    const start = text.slice(text.indexOf("## Start here"), text.indexOf("## The one rule to keep"));
+    assert.ok(start.includes(`](${HOW_IT_WORKS})`), "how a mini-app works, first");
+    assert.ok(start.indexOf(`](${HOW_IT_WORKS})`) < start.indexOf("1. `npx grain status`"), "before the steps");
+    assert.match(start, /never a key pasted by the user/);
   }
+  assert.equal(HOW_IT_WORKS, "https://github.com/corvise/saltix-grains/blob/main/docs/how-it-works.md");
+  assert.ok(existsSync(new URL("../../../docs/how-it-works.md", import.meta.url)), "and the SDK has that page");
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
@@ -64,6 +71,13 @@ test("(a) the key: where server.mjs reads it, where the guide keeps it, never on
   assert.match(appRules, /Never ask the\s+user to paste, type or send a key/);
   assert.match(guide, /Never ask the user to paste/);
   assert.match(agentsMd("coach", true), /## Start here, every session/);
+  // One app, one key, one program: never the example or a second program on a key, never another app's key or slug.
+  assert.match(appRules, /\*\*One app, one key, one program\*\*/);
+  assert.match(guide, /\*\*One app, one key, one program\.\*\*/);
+  for (const text of [appRules, guide]) {
+    assert.match(text.replace(/\s+/g, " "), /Never run the SDK's example( \(`npm run example`\))? or another program with/);
+    assert.match(text.replace(/\s+/g, " "), /two programs on one key both answer in its chat/);
+  }
 });
 
 test("(b) the spec's version: raised with every change, as the guide says", () => {

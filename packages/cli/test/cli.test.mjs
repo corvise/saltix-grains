@@ -95,7 +95,8 @@ test("publish registers a new slug and updates the owner's", async () => {
   mine.close();
 
   const theirs = await fakeNode({ grain: grain({ owner: "99".repeat(32) }) });
-  await assert.rejects(publish(sign(manifest({ version: 2 }), secret), secret, signing(theirs.url)), /another owner/);
+  // Another account's slug: often an app made in Saltix, whose owner is the phone, beside the owner.key grain init made.
+  await assert.rejects(publish(sign(manifest({ version: 2 }), secret), secret, signing(theirs.url)), /another owner .*add --wallet/);
   theirs.close();
   const retired = await fakeNode({ grain: grain({ retired: 5 }) });
   await assert.rejects(publish(sign(manifest({ version: 2 }), secret), secret, signing(retired.url)), /never used again/);

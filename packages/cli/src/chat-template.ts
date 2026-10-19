@@ -1,22 +1,35 @@
-// What `grain init --chat` makes besides the spec: a server that runs the chat from its developer key, and the
-// package.json that starts it (Saltix 24-app-studio §3).
+// What `grain init` makes besides the manifest and the page: for a chat, a server that runs it from its developer key
+// (Saltix 24-app-studio §3); for either, the package.json that links the SDK and the `grain` command from the checkout.
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** How a project in \`dir\` depends on the server SDK this tool runs with: its version, when the tool came from a
- *  registry's package; else the checkout's package by its path, since the SDK is not on npm yet. */
-export function sdkDependency(dir: string): string {
-  const entry = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain-server"));
-  const root = dirname(dirname(entry));
+/** How a project in \`dir\` depends on the package whose root is \`root\`: its version, when it came from a registry's
+ *  package; else the checkout's package by its path, since the SDK is not on npm yet. */
+function dependencyOn(dir: string, root: string): string {
   if (root.split(sep).includes("node_modules")) {
     return "^" + (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
   }
   return "file:" + relative(dir, root).split(sep).join("/");
 }
 
-/** A chat-only grain's package.json: `npm start` runs its chat; `sdk` is how it depends on @saltix/grain-server. */
-export const chatPackageJson = (slug: string, sdk: string) => JSON.stringify({
+/** How a project in \`dir\` depends on the server SDK this tool runs with. */
+export function sdkDependency(dir: string): string {
+  const entry = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain-server"));
+  return dependencyOn(dir, dirname(dirname(entry)));
+}
+
+/**
+ * How a project in \`dir\` depends on this command line: so \`npx grain …\` in the project runs this tool, linked from
+ * the checkout, and never asks the npm registry for a package of that name (which is someone else's).
+ */
+export function cliDependency(dir: string): string {
+  return dependencyOn(dir, fileURLToPath(new URL("..", import.meta.url)).replace(/[\\/]$/, ""));
+}
+
+/** A chat-only grain's package.json: \`npm start\` runs its chat; \`sdk\` is how it depends on @saltix/grain-server and
+ *  \`cli\` on the \`grain\` command line. */
+export const chatPackageJson = (slug: string, sdk: string, cli: string) => JSON.stringify({
   name: slug,
   version: "0.1.0",
   private: true,
@@ -24,6 +37,18 @@ export const chatPackageJson = (slug: string, sdk: string) => JSON.stringify({
   scripts: { start: "node server.mjs", test: "node --test --test-force-exit \"test/*.test.mjs\"" },
   engines: { node: ">=20" },
   dependencies: { "@saltix/grain-server": sdk },
+  devDependencies: { "@saltix/grain-cli": cli },
+}, null, 2) + "\n";
+
+/** A page grain's package.json: nothing to run but the \`grain\` command line (\`cli\`), so \`npx grain dev\` and the rest
+ *  run this tool in the project. */
+export const pagePackageJson = (slug: string, cli: string) => JSON.stringify({
+  name: slug,
+  version: "0.1.0",
+  private: true,
+  scripts: { dev: "grain dev", lint: "grain lint" },
+  engines: { node: ">=20" },
+  devDependencies: { "@saltix/grain-cli": cli },
 }, null, 2) + "\n";
 
 /** A chat-only grain's server: the developer key is its whole configuration (Saltix 24-app-studio §3). */

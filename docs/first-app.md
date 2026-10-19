@@ -7,7 +7,9 @@ your computer and never leaves it: there is nothing to copy, paste or send (Salt
 certificate.
 
 What you need: Saltix on your phone with some SALT for the deposit (the test network's faucet gives it), Node 20 or
-newer, and a checkout of this repository.
+newer, and a checkout of this repository. How the pieces fit, and whether your app needs a server at all (a page alone
+needs none): [How a mini-app works](how-it-works.md). Building it with a coding agent? Saltix copies a brief for it:
+[Building with a coding agent](#building-with-a-coding-agent).
 
 ## 1. A project, paired with its app (3 minutes)
 
@@ -73,7 +75,7 @@ npm start
 ```
 
 ```text
-{"at":"…","level":"info","event":"ready","slug":"your-app","address":"dsalt1q…","network":"devnet","spec":2}
+{"at":"…","level":"info","event":"ready","slug":"your-app","address":"dsalt1q…","network":"devnet","spec":4}
 ```
 
 `server.mjs` reads `app.key` (or `SALTIX_APP_KEY`), finds the network's public relays, checks that the registry names
@@ -87,12 +89,17 @@ its commands as buttons and the answers as cards (long-press manages the app ins
 your app's **console**. Pick **Say hello**: the answer is a card marked "from your-app, verified", because the registry
 names the key that signed it.
 
-The example in the checkout runs the same way: `npx grain pair` there, then `npm run example`
+The example in the checkout is an app of its own: `npx grain pair --name "Hello example"` there, and in Saltix pick
+**New app** (never your app: one app, one program), then `npm run example`
 ([`examples/hello-grain/server.mjs`](../examples/hello-grain/server.mjs)), with **A key** (a secret, masked until you
 tap it), **A report** (a CSV file next to the relay) and **Fail on purpose** (below).
 
 `owner.key`, which `grain init` also makes, is the command line's own owner key, for registering from a computer on a
 test network; an app made in Saltix has its owner on your phone and never uses it.
+
+Never run the example, or any second program, with the key of an app that already has a program: two programs on one
+key both answer in its chat, and the example's spec (version 3) sits below your project's (4, `grain init`'s), so a
+wallet that holds yours refuses it.
 
 ## 3. Add a command (3 minutes)
 
@@ -102,7 +109,7 @@ the wallet draws the form and checks it before anything leaves the phone ([docs/
 ```json
 {
   "slug": "your-app",
-  "version": 2,
+  "version": 5,
   "intro": { "en": "Rolls dice for you." },
   "commands": [
     {
@@ -147,7 +154,8 @@ Every request names the user's language (`ask.lang`: `en`, `ru`, …, or `""` wh
 when you can, and in English otherwise.
 
 The spec is signed by your server key, which may sign a spec while every command is free. A wallet keeps the highest
-version it has seen: start above the spec Saltix signed when it made the app, and raise `version` with every change.
+version it has seen and refuses a lower one: `grain init` starts at 4, above the spec Saltix signed when it made the
+app (1) and the example's (3), and you raise `version` with every change.
 Each user gets the new spec before their next answer. The server remembers the spec it served (in `chat.store.json`)
 and will not start on a `chat.json` changed under the same version: it says `raise "version" above N`.
 
@@ -182,6 +190,73 @@ grain profile --key owner.key                                     # the Connect 
 grain status                                                       # the server's key: paired? what next?
 grain doctor                                                       # everything else, and the exact next step
 ```
+
+## Building with a coding agent
+
+Wherever Saltix shows an app's key it offers **Copy brief for a coding agent**: on New app's last step, on the app's
+page (its key, and How to build it while no program has answered), on its home, on a developer's key in their chat,
+and on the console's notices of the app made and of a key added or replaced (from the Saltix release after 0.1.59).
+Paste the brief into Claude Code or another agent in an empty folder. It is everything the agent needs to start, in English, with one line asking it to answer you
+in the language your Saltix is in, and never the key, so it is safe in a chat. This is the brief of a chat-only app on
+the test network; Saltix fills in the name, the slug, the network's genesis and what the app is for, and an app with a
+page of its own gets its page's rule, `grain init` without `--chat` and `npx grain dev` in place of `npm start`:
+
+```text
+Brief for a coding agent: build the Saltix mini-app "{name}" ({slug}).
+Answer me in English: it is the language of my Saltix app.
+
+Saltix is a wallet and messenger on its own blockchain network (https://saltix.io). A mini-app opens inside Saltix: a page of its own (HTML in Saltix's WebView, talking to Saltix through the @saltix/grain bridge), a chat whose answers are cards signed by the app's program, or both. A page alone needs no server. A chat, payments and state shared between users need a program built on the SDK: it connects out to the network's relays, so it needs no domain, open port or certificate, and runs on this computer or any small server.
+
+The app
+- Name: {name}
+- Slug: {slug} (its address: salt:grain/{slug})
+- Form: chat only for now: Saltix draws its home from the chat spec (chat.json); a page of its own comes with a new version of its manifest, which I approve in Saltix
+- Network: the Saltix test network (devnet kind: addresses dsalt1…, genesis {genesis}); it is reset now and then, and a key made before a reset stops working
+- About: {what it is for}
+
+SDK: https://github.com/corvise/saltix-grains (public). Read first: docs/how-it-works.md (what runs where, whether this app needs a server, every step to a published app), then AGENTS.md and docs/first-app.md. To start:
+  git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains
+  npm install && npm run build
+  npx grain init ../{slug} --chat --slug {slug} && cd ../{slug} && npm install
+
+Then pair the project with the app; no key ever passes through this chat. Run `npx grain status` first: it says what is connected and the next step. Then `npx grain pair` (or `npx grain pair --no-wait`, then `npx grain pair` to wait): it makes the program's key on this computer, never printed, and shows a QR code (also in .grain/pair.html) and a six-digit code. Show me the QR code and the code, then wait: I scan it with Saltix, check the code and confirm, and it writes app.key once the app names the key. Then `npx grain doctor` names anything left. Never ask me to paste, type or send a key: a developer key (saltix-app:1:…) is only for a host where no command runs.
+
+One app, one key, one program: the key is {slug}'s alone. Never run the SDK's example or another program with it, and never use another app's key or slug here: two programs on one key both answer in its chat.
+
+Then `npm start`. It works when its log shows the "ready" event and the app's home in Saltix (tap the app in My apps) shows Say hello, whose answer is marked "from {slug}, verified". Then ask me what the app should do.
+
+Stuck? `npx grain doctor`, docs/first-app.md ("When it does not start"), docs/agents/app.md, and the app's console in Saltix (its chat): errors arrive there as reports (long-press one, then Copy for an AI agent).
+```
+
+**What you do.** Paste the brief and let the agent set up the checkout and the app's own project beside it
+(`../{slug}`). Then it pairs the project with your app: it runs `grain status`, then `grain pair`, and shows you a QR
+code (in its output, or `.grain/pair.html` in a browser) and a 6-digit code. Scan it with Saltix (the phone's camera, or
+**My apps → Pair a server**), check that Saltix shows the same code, keep **Add this server** and confirm with your PIN
+([step 1](#1-a-project-paired-with-its-app-3-minutes) has the screens). The key is made on your computer and never
+goes through the agent's chat; `grain pair` writes `app.key` once the registry names it, and `grain doctor` says what
+is left. Only for a host where no command runs does a developer key stand in (**Copy key** in Saltix, then
+`(umask 077 && pbpaste > app.key)` there yourself).
+
+**What the agent does.** It clones the SDK, reads [How a mini-app works](how-it-works.md) and
+[AGENTS.md](../AGENTS.md#start-here-saltixs-brief-or-a-developer-key), whose first section is for an agent given the
+brief or a key, makes the app's own project with `grain init`, pairs it (`grain status`, `grain pair`, `grain doctor`),
+runs `npm start`, asks you to try the app, and then asks you what the app should do. It never asks you for a key, and
+never runs the SDK's example with your app's key: the project is the app's one program.
+
+**The first test.** In Saltix, tap the app in My apps: its home shows the project's command, **Say hello**, with a
+**Your name** field. Type a name: the answer comes as a card marked "from your-app, verified", saying "Hello, {name}!",
+and the console notes that the program answered for the first time. A first change worth making is that answer: edit
+it, raise `chat.json`'s `version`, start the program again and see the new card arrive. An app with a page starts with
+`grain init` (without `--chat`) and `npx grain dev`, which shows the page as Saltix frames it; publishing it is
+[Publish a page](how-it-works.md#publish-a-page).
+
+**A key that leaked.** A key that went into a chat (the agent's too), a log, an issue or a commit is replaced, not
+hidden. A paired key: `npx grain pair --new` on the computer, then **Use only this server** in Saltix; no key travels. A
+developer key: in Saltix, a long press on the app, then Program, **Replace key**. Either way the old key stops working
+at the block that takes the change, and a server still running with it stops with exit status 78
+(`the owner replaced this server key`); requests sent meanwhile wait in its mailbox. Nothing else changes: the app, its
+address, members, chat and deposit stay. A key in git's history stays there: replacing it is the fix, not rewriting the
+history.
 
 ## When something fails, you hear of it
 

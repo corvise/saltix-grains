@@ -510,7 +510,8 @@ loading the chat and on joining, and the simulator's log says when the app welco
 purpose**: the answer says "failed", and the error report arrives as a message to the team. `CHAT_NODE=<a devnet node's
 wallet interface>` runs the chat on that node's relays under a certificate instead, for a debug Saltix on that devnet.
 
-`npm run example` runs the same chat as your app's server from your developer key (`SALTIX_APP_KEY`, or `app.key`).
+`npm run example` runs the same chat as an app's server from the checkout's `app.key` (`grain pair` there, or
+`SALTIX_APP_KEY`): an app of its own, never beside another program on the same key (both would answer).
 
 ## Testing a chat
 

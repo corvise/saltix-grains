@@ -2,7 +2,9 @@
 
 `AGENTS.md` at the repository's root (which `CLAUDE.md` points to) holds the rules every agent follows here: an app's
 page (safe by default, full screen only with `viewport-fit=cover`), what a page gets from Saltix (no design tokens),
-checking first and rendering after, naming apps and people, and how this repository works. These pages go on from it:
+checking first and rendering after, naming apps and people, and how this repository works. Before any of it,
+[How a mini-app works](../how-it-works.md): what runs where, whether an app needs a server (a page alone needs none),
+and the lifecycle as one checklist. These pages go on from it:
 
 - [Building an app](app.md): from `grain status` and `grain pair` (the server's key is paired by a QR code, never
   copied) to an app that runs, is tested and ships; the Connect profile; the rules every app follows; how to act on an

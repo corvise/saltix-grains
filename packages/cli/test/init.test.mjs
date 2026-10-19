@@ -12,9 +12,11 @@ import {
   AppKey, RelayClient, chatMessageProblem, chatSpecFromJson, decodeChatFrame, derive, encodeChatFrame, newChatId, signChatRequest, toHex,
 } from "@saltix/grain-server";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
+import { CHAT_SPEC_FIRST_VERSION, chatJson } from "../dist/template.js";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const sdk = fileURLToPath(new URL("../../server", import.meta.url));
+const cli = fileURLToPath(new URL("..", import.meta.url));
 const grain = (args, cwd) => spawnSync("node", [main, ...args], { cwd, encoding: "utf8", timeout: 10_000 });
 const GENESIS = "6d".repeat(32);
 
@@ -42,6 +44,30 @@ test("every key file stays out of git, whatever its name", () => {
     assert.equal(spawnSync("git", ["-C", dir, "check-ignore", "-q", f]).status, 0, `${f} is ignored`);
   }
   assert.notEqual(spawnSync("git", ["-C", dir, "check-ignore", "-q", "grain.json"]).status, 0, "the manifest is not");
+});
+
+test("a page project links the grain command too, so npx grain there runs this tool", () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "grain-page-")), "dice");
+  const made = grain(["init", dir, "--name", "Dice"], tmpdir());
+  assert.equal(made.status, 0, made.stderr);
+  assert.match(made.stdout, /next: npm install in .*dice \(it links the grain command\), then npx grain dev/);
+  const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  assert.equal(pkg.name, "dice");
+  assert.equal(pkg.private, true, "never published by mistake");
+  assert.deepEqual(pkg.scripts, { dev: "grain dev", lint: "grain lint" });
+  const tool = pkg.devDependencies["@saltix/grain-cli"];
+  assert.match(tool, /^file:/);
+  assert.equal(readFileSync(join(dir, tool.slice(5), "package.json"), "utf8"), readFileSync(join(cli, "package.json"), "utf8"));
+  assert.ok(!existsSync(join(dir, "public", "package.json")), "nothing of it goes into the page's files");
+});
+
+test("a chat project's spec starts above every spec Saltix or the SDK's example served under the app's key", () => {
+  // A wallet refuses a spec below the one it holds: after `npm run example` (its chat.json) the app's own project must
+  // still reach it, and above the starting spec of version 1 Saltix signs when it makes the app.
+  const example = JSON.parse(readFileSync(new URL("../../../examples/hello-grain/chat.json", import.meta.url), "utf8"));
+  assert.ok(CHAT_SPEC_FIRST_VERSION > example.version, `the template's ${CHAT_SPEC_FIRST_VERSION}, the example's ${example.version}`);
+  assert.ok(CHAT_SPEC_FIRST_VERSION > 1);
+  assert.equal(JSON.parse(chatJson("coach", "Coach")).version, CHAT_SPEC_FIRST_VERSION);
 });
 
 /** A node's wallet interface over HTTP: the grain's record names `servers()`, and its relays are `relay`. */
@@ -122,6 +148,10 @@ test("a chat-only grain's server starts from its developer key alone and answers
   const dep = pkg.dependencies["@saltix/grain-server"];
   assert.match(dep, /^file:/);
   assert.equal(readFileSync(join(dir, dep.slice(5), "package.json"), "utf8"), readFileSync(join(sdk, "package.json"), "utf8"));
+  // And this command line, so `npx grain …` in the project runs it, never the npm registry's package named grain.
+  const tool = pkg.devDependencies["@saltix/grain-cli"];
+  assert.match(tool, /^file:/);
+  assert.equal(readFileSync(join(dir, tool.slice(5), "package.json"), "utf8"), readFileSync(join(cli, "package.json"), "utf8"));
   // What npm install makes of it, without the network.
   mkdirSync(join(dir, "node_modules", "@saltix"), { recursive: true });
   symlinkSync(sdk, join(dir, "node_modules", "@saltix", "grain-server"));
@@ -174,8 +204,8 @@ test("a chat-only grain's server starts from its developer key alone and answers
   const server = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY_FILE: join(elsewhere, "credential"), STATE_DIRECTORY: state }, elsewhere);
   t.after(() => server.child.kill());
   const ready = await server.until("ready");
-  // Above the spec of version 1 Saltix signs when it makes an app: a wallet takes only a higher one.
-  assert.deepEqual([ready.slug, ready.address, ready.network, ready.spec], ["coach", key.address, "devnet", 2]);
+  // Above the spec of version 1 Saltix signs when it makes an app, and the example's: a wallet takes only a higher one.
+  assert.deepEqual([ready.slug, ready.address, ready.network, ready.spec], ["coach", key.address, "devnet", 4]);
 
   // A wallet: the user's grain key in the app, a request for hello, the signed card it gets.
   const user = new Uint8Array(32).fill(7);
@@ -208,18 +238,18 @@ test("a chat-only grain's server starts from its developer key alone and answers
   assert.ok(existsSync(join(state, "chat.store.json")), "the store is in the state directory");
   assert.ok(!existsSync(join(elsewhere, "chat.store.json")) && !existsSync(join(dir, "chat.store.json")));
 
-  // chat.json changed without raising its version: 78 and what to do, since no wallet that holds version 2 would get it.
+  // chat.json changed without raising its version: 78 and what to do, since no wallet that holds version 4 would get it.
   const json = JSON.parse(readFileSync(join(dir, "chat.json"), "utf8"));
   json.intro.en = "Coach: plans a workout.";
   writeFileSync(join(dir, "chat.json"), JSON.stringify(json));
   const supervised = { NODE_RPC: node.url, SALTIX_APP_KEY_FILE: join(elsewhere, "credential"), STATE_DIRECTORY: state };
   const unraised = start(dir, supervised, elsewhere);
   assert.equal(await unraised.exited, 78);
-  assert.match((await unraised.until("not_started")).error, /chat\.json changed but keeps version 2: raise "version" above 2/);
-  writeFileSync(join(dir, "chat.json"), JSON.stringify({ ...json, version: 3 }));
+  assert.match((await unraised.until("not_started")).error, /chat\.json changed but keeps version 4: raise "version" above 4/);
+  writeFileSync(join(dir, "chat.json"), JSON.stringify({ ...json, version: 5 }));
   const raised = start(dir, supervised, elsewhere);
   t.after(() => raised.child.kill());
-  assert.equal((await raised.until("ready")).spec, 3);
+  assert.equal((await raised.until("ready")).spec, 5);
   raised.child.kill("SIGTERM");
   assert.equal(await raised.exited, 0);
 
