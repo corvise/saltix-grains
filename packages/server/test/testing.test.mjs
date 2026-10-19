@@ -2,14 +2,14 @@
 // registry, wallets that check every card as Saltix does, the owner and members with proofs, strangers without.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { testChat } from "@saltix/grain-server/testing";
 import { createDevRegistry } from "@saltix/grain-server/dev";
 import {
   ChatRefusal, RelayClient, card, chatSpecFromJson, encodeChatFrame, newChatId, signChatMessage, ROLES, fromHex, toHex,
 } from "../dist/index.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const en = (text) => ({ en: text });
 const SPEC = {
@@ -127,7 +127,7 @@ test("unasked messages reach a user who connected; a card from anyone but the ap
 });
 
 test("the spec from chat.json, and a server started by the app's own start function", async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "harness-"));
+  const dir = scratch("harness-");
   writeFileSync(join(dir, "chat.json"), JSON.stringify(SPEC));
   const started = [];
   const chat = await testChat({

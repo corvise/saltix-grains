@@ -13,6 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci
+      # Temporary files in a directory of the job's own, which the last step checks is left empty (scripts/ci-tmp.sh):
+      # every test removes what it makes (scripts/scratch.mjs).
+      - name: The job's temporary directory
+        run: scripts/ci-tmp.sh start
       # The golden vectors are the protocol's bytes: each file's git blob id is the one vectors/SOURCE records at the
       # corvise/saltix commit it names (scripts/sync-vectors.sh writes both).
       - run: node scripts/check-vectors.mjs
@@ -25,3 +29,5 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: node --test --test-force-exit --test-name-pattern "any Node" packages/cli/test/bundle.test.mjs
+      - name: The tests left no temporary files
+        run: scripts/ci-tmp.sh check

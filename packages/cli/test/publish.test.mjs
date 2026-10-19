@@ -8,8 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -20,6 +19,7 @@ import { DevLog, reasonOf } from "../dist/devlog.js";
 import { BLOB_WORDS, PublishError, formOf, nodeNow, publishApp } from "../dist/publish-flow.js";
 import { doctor } from "../dist/status.js";
 import { isRelaySource } from "../dist/sources.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -38,7 +38,7 @@ const RELAYS = [1, 2, 3, 4].map((n) => ({
 
 /** A project as `grain init` makes one, with a game's page in public/ and the standard icon. */
 function project({ version = 1, entry, paired = true } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "grain-publish-"));
+  const dir = scratch("grain-publish-");
   mkdirSync(join(dir, "public", "js"), { recursive: true });
   writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space</title><script src=\"js/game.js\"></script>");
   writeFileSync(join(dir, "public", "js", "game.js"), "addEventListener('load',()=>window.saltix?.grain_ready?.())");

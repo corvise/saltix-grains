@@ -4,13 +4,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, decodeSignedProfile, fromHex, toHex } from "@saltix/grain-server";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const secret = fromHex("61".repeat(32), 32);
@@ -83,7 +83,7 @@ function profileOf(b) {
 
 /** A project of `grain init` with its owner key. */
 function project() {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-serial-")), "dice");
+  const dir = join(scratch("grain-serial-"), "dice");
   const made = spawnSync("node", [main, "init", dir, "--slug", "dice", "--name", "Dice roll"], { encoding: "utf8", timeout: 20_000 });
   assert.equal(made.status, 0, made.stderr);
   writeFileSync(join(dir, "owner.key"), "61".repeat(32) + "\n", { mode: 0o600 });

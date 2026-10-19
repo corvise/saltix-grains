@@ -13,6 +13,7 @@ import {
   signGrainStats, grainStatsToSign, grainStatsProblem, STATS_MAX_AGE_MS, MEMBER_PROOF_LIFE_MS, UsageWindow, USAGE_WINDOW_MS,
   memoryChatStore, fileChatStore, AppKey, AppKeyError, MEMBER_PROOF_AHEAD_MS, MESSAGE_AHEAD_MS, memberProofTimely,
 } from "../dist/index.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const NOW = 1_800_000_000_000;
 const DAY = 86_400_000;
@@ -182,10 +183,8 @@ test("a store keeps the numbers' window, and forgets it as it goes", async () =>
   store.seen("bob", NOW + DAY);
   assert.deepEqual(store.usage(NOW + DAY), { users_1d: 1, users_30d: 2, requests_30d: 2 });
   assert.deepEqual(store.usage(NOW + USAGE_WINDOW_MS + 3_600_000), { users_1d: 0, users_30d: 1, requests_30d: 1 });
-  const { mkdtempSync } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const path = join(mkdtempSync(join(tmpdir(), "usage-")), "chat.store.json");
+  const path = join(scratch("usage-"), "chat.store.json");
   const file = fileChatStore(path);
   file.seen("alice", NOW);
   file.seen("bob", NOW + 2 * DAY);

@@ -2,8 +2,7 @@
 // document a grain serves, and the server key certified for at most 31 days.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -13,6 +12,7 @@ import {
 } from "@saltix/grain-server";
 import { lintChatSpec, signedChatDocument, issueCert, explainChatSpec } from "../dist/chat.js";
 import { readKey } from "../dist/project.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const secret = fromHex("61".repeat(32), 32);
 const owner = toHex(ed25519.getPublicKey(secret));
@@ -47,7 +47,7 @@ test("lint locates what is out of bounds and says what a wallet would miss", () 
 });
 
 test("the document is signed by the owner key, and a changed spec needs a higher version", () => {
-  const dir = mkdtempSync(join(tmpdir(), "chat-spec-"));
+  const dir = scratch("chat-spec-");
   const out = join(dir, "chat.signed.json");
   const spec = chatSpecFromJson(json());
   const doc = signedChatDocument(spec, secret, null, out);
@@ -81,7 +81,7 @@ test("a certificate is the owner key's for the server key, 31 days at most for c
 });
 
 test("the commands make a server key, its certificate and the document to serve", () => {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-chat-")), "dice");
+  const dir = join(scratch("grain-chat-"), "dice");
   const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
   const grain = (...args) => execFileSync("node", [main, ...args], { cwd: dir, stdio: "pipe" }).toString();
   execFileSync("node", [main, "init", dir, "--name", "Dice"], { stdio: "pipe" });

@@ -1,14 +1,14 @@
 // `grain dev`: a clear word when its port is taken, and no serving of a chat-only grain, which has no page.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, fromHex, toHex } from "@saltix/grain-server";
 import { serve } from "../dist/dev.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const secret = fromHex("62".repeat(32), 32);
@@ -20,7 +20,7 @@ const manifest = (entry) => ({
 const hosted = () => manifest({ hosted: { url: "https://dice.example/", origins: ["https://dice.example"] } });
 
 test("a taken port is said in words, with what to do", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-dev-port-"));
+  const dir = scratch("grain-dev-port-");
   mkdirSync(join(dir, "public"));
   const first = await serve(dir, hosted, secret, 0, "127.0.0.1");
   const port = first.address().port;
@@ -32,7 +32,7 @@ test("a taken port is said in words, with what to do", async () => {
 });
 
 test("grain dev refuses a chat-only grain instead of serving nothing forever", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-dev-chat-"));
+  const dir = scratch("grain-dev-chat-");
   writeFileSync(join(dir, "grain.json"), JSON.stringify(manifest({ chat: {} })));
   writeFileSync(join(dir, "owner.key"), "62".repeat(32) + "\n", { mode: 0o600 });
   const r = spawnSync("node", [main, "dev", "--port", "0"], { cwd: dir, encoding: "utf8", timeout: 10_000 });
@@ -42,7 +42,7 @@ test("grain dev refuses a chat-only grain instead of serving nothing forever", (
 });
 
 test("grain dev serves the project's connect.json for the simulator's Connect sheet, and the simulator draws it", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-dev-connect-"));
+  const dir = scratch("grain-dev-connect-");
   mkdirSync(join(dir, "public"));
   const server = await serve(dir, hosted, secret, 0, "127.0.0.1");
   const url = `http://127.0.0.1:${server.address().port}/_connect.json`;
@@ -70,7 +70,7 @@ test("grain dev serves the project's connect.json for the simulator's Connect sh
 const sealedOf = (connect) => manifest({ sealed: { bundle: "22".repeat(32), size: 10, sources: ["https://cdn.dice.example/b.zip"], start: "index.html", connect } });
 
 test("grain dev keeps a development registry: the simulator's team and members, and a node's interface for the app's server", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-dev-registry-"));
+  const dir = scratch("grain-dev-registry-");
   mkdirSync(join(dir, "public"));
   const server = await serve(dir, hosted, secret, 0, "127.0.0.1");
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -116,7 +116,7 @@ test("grain dev keeps a development registry: the simulator's team and members, 
 
 test("a sealed grain's pages carry Saltix's Content-Security-Policy; a hosted grain's are the page's own", async () => {
   const { sealedCsp } = await import("@saltix/grain/rules");
-  const dir = mkdtempSync(join(tmpdir(), "grain-dev-csp-"));
+  const dir = scratch("grain-dev-csp-");
   mkdirSync(join(dir, "public"));
   writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title>");
   const sealedServer = await serve(dir, () => sealedOf(["https://api.dice.example"]), secret, 0, "127.0.0.1");

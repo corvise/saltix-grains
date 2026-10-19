@@ -2,12 +2,13 @@
 // `--name value` or `--name=value`, and a flag or a command it does not know refused, never taken as a silent default.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { FLAGS, SWITCHES, UsageError, entriesOf, flagsNamed, helpFor, parse } from "../dist/args.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 /** `grain …` in `cwd`, killed after 10 s so that a command that serves forever fails the test instead of hanging it. */
@@ -75,7 +76,7 @@ test("the help names every command, and every flag a command's help names is one
 
 test("--help on any command prints its help, exits 0 and leaves the directory as it was", () => {
   for (const command of Object.keys(FLAGS)) {
-    const dir = mkdtempSync(join(tmpdir(), "grain-help-"));
+    const dir = scratch("grain-help-");
     const r = grain([command, "--help"], dir);
     assert.equal(r.signal, null, `grain ${command} --help returned`);
     assert.equal(r.code, 0, `${command}: ${r.stderr}`);
@@ -86,7 +87,7 @@ test("--help on any command prints its help, exits 0 and leaves the directory as
 });
 
 test("misuse exits 2 and says what to do; --version names the tool's version", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-misuse-"));
+  const dir = scratch("grain-misuse-");
   const typo = grain(["init", "dice", "--nmae", "Dice"], dir);
   assert.equal(typo.code, 2);
   assert.match(typo.stderr, /grain init takes no --nmae/);

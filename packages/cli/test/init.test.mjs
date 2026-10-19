@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -13,6 +13,7 @@ import {
 } from "@saltix/grain-server";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { CHAT_SPEC_FIRST_VERSION, chatJson } from "../dist/template.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const sdk = fileURLToPath(new URL("../../server", import.meta.url));
@@ -21,7 +22,7 @@ const grain = (args, cwd) => spawnSync("node", [main, ...args], { cwd, encoding:
 const GENESIS = "6d".repeat(32);
 
 test("a slug the registry would refuse stops init before anything is made", () => {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-slug-")), "t1");
+  const dir = join(scratch("grain-slug-"), "t1");
   mkdirSync(dir);
   const fromDir = grain(["init"], dir);
   assert.equal(fromDir.status, 1);
@@ -34,7 +35,7 @@ test("a slug the registry would refuse stops init before anything is made", () =
 });
 
 test("every key file stays out of git, whatever its name", () => {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-ignore-")), "dice");
+  const dir = join(scratch("grain-ignore-"), "dice");
   assert.equal(grain(["init", dir], tmpdir()).status, 0);
   const ignored = readFileSync(join(dir, ".gitignore"), "utf8").split("\n");
   for (const line of ["*.key", "node_modules/", "bundle.zip", "*.store.json", "signed.json"]) assert.ok(ignored.includes(line), line);
@@ -47,7 +48,7 @@ test("every key file stays out of git, whatever its name", () => {
 });
 
 test("a page project links the grain command too, so npx grain there runs this tool", () => {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-page-")), "dice");
+  const dir = join(scratch("grain-page-"), "dice");
   const made = grain(["init", dir, "--name", "Dice"], tmpdir());
   assert.equal(made.status, 0, made.stderr);
   assert.match(made.stdout, /next: npm install in .*dice \(it links the grain command\), then npx grain dev/);
@@ -131,7 +132,7 @@ function start(dir, env, cwd = dir) {
 }
 
 test("a chat-only grain's server starts from its developer key alone and answers its chat", async (t) => {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-chat-")), "coach");
+  const dir = join(scratch("grain-chat-"), "coach");
   const made = grain(["init", dir, "--chat", "--name", "Coach"], tmpdir());
   assert.equal(made.status, 0, made.stderr);
   for (const f of ["grain.json", "chat.json", "server.mjs", "chat.mjs", "test/chat.test.mjs", "package.json", "README.md", ".gitignore", "owner.key"]) {
@@ -186,7 +187,7 @@ test("a chat-only grain's server starts from its developer key alone and answers
   assert.equal(await none.exited, 78);
   assert.match((await none.until("not_started")).error, /not paired with an app.*Run grain pair here/);
   // The key in the environment, as a secret store hands it over.
-  const viaEnv = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: key.reveal(), STATE_DIRECTORY: mkdtempSync(join(tmpdir(), "grain-env-")) });
+  const viaEnv = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: key.reveal(), STATE_DIRECTORY: scratch("grain-env-") });
   assert.equal((await viaEnv.until("ready")).address, key.address);
   viaEnv.child.kill("SIGTERM");
   assert.equal(await viaEnv.exited, 0);
@@ -198,8 +199,8 @@ test("a chat-only grain's server starts from its developer key alone and answers
   chmodSync(join(dir, "app.key"), 0o600);
 
   // As a supervisor runs it: started elsewhere, the key in a credential file, its state in a directory of its own.
-  const elsewhere = mkdtempSync(join(tmpdir(), "grain-run-"));
-  const state = mkdtempSync(join(tmpdir(), "grain-state-"));
+  const elsewhere = scratch("grain-run-");
+  const state = scratch("grain-state-");
   writeFileSync(join(elsewhere, "credential"), key.reveal(), { mode: 0o600 });
   const server = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY_FILE: join(elsewhere, "credential"), STATE_DIRECTORY: state }, elsewhere);
   t.after(() => server.child.kill());

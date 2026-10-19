@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer, request } from "node:http";
-import { mkdtempSync, mkdirSync, statSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -16,6 +16,7 @@ import { lintPages, TOP_BAR_RULE, COVER_RULE, GATE_RULE, shownBeforeSignIn } fro
 import { FULL_SCREEN_RULE } from "../dist/template.js";
 import { publishLink, publishLinkManifest } from "../dist/publish.js";
 import { encodeManifest } from "@saltix/grain-server";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const secret = fromHex("61".repeat(32), 32);
 const owner = toHex(ed25519.getPublicKey(secret));
@@ -120,7 +121,7 @@ test("retire closes the owner's slug", async () => {
 });
 
 test("grain dev serves public/ and the manifest for the asking origin only", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-dev-"));
+  const dir = scratch("grain-dev-");
   mkdirSync(join(dir, "public"));
   writeFileSync(join(dir, "public", "index.html"), "<h1>hi</h1>");
   writeFileSync(join(dir, "secret.txt"), "no");
@@ -162,7 +163,7 @@ test("grain dev serves public/ and the manifest for the asking origin only", asy
 
 /** A `public/` with these files. */
 function pages(files) {
-  const dir = mkdtempSync(join(tmpdir(), "grain-pages-"));
+  const dir = scratch("grain-pages-");
   for (const [name, text] of Object.entries(files)) {
     mkdirSync(join(dir, name, ".."), { recursive: true });
     writeFileSync(join(dir, name), text);
@@ -274,7 +275,7 @@ test("lint: a page that signs in shows only its splash until the gate decides (c
 });
 
 test("init makes a project the owner alone can sign for", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-init-"));
+  const dir = scratch("grain-init-");
   const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
   execFileSync("node", [main, "init", join(dir, "dice"), "--name", "Dice"], { stdio: "pipe" });
   for (const f of ["grain.json", "owner.key", "public/index.html", "public/app.js", "public/grain.js", ".gitignore", "AGENTS.md", "CLAUDE.md"]) {

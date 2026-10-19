@@ -1,8 +1,7 @@
 // grain bundle and grain dev for sealed grains: one ZIP for the same files, named by its hash in the manifest.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, readFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
@@ -10,9 +9,10 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, bundleHash, checkBundle, fromHex, toHex, verifyManifest } from "@saltix/grain-server";
 import { STORED, makeBundle, sealed } from "../dist/bundle.js";
 import { serve, DEV_BUNDLE } from "../dist/dev.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 function grainDir() {
-  const dir = mkdtempSync(join(tmpdir(), "grain-bundle-"));
+  const dir = scratch("grain-bundle-");
   mkdirSync(join(dir, "public", "js"), { recursive: true });
   writeFileSync(join(dir, "public", "index.html"), "<h1>notes</h1>".repeat(50));
   writeFileSync(join(dir, "public", "js", "app.js"), "console.log(1)");
@@ -54,7 +54,7 @@ test("the same files make the same bundle, whatever their times", () => {
 
 /** A fixed tree: a page, a script in a folder, every byte value, a name with a space, and a hidden file left out. */
 function fixedTree() {
-  const dir = mkdtempSync(join(tmpdir(), "grain-fixed-"));
+  const dir = scratch("grain-fixed-");
   mkdirSync(join(dir, "js"));
   mkdirSync(join(dir, "img"));
   writeFileSync(join(dir, "index.html"), "<!doctype html>\n<h1>Notes</h1>\n".repeat(40));
@@ -118,7 +118,7 @@ test("a bundle's bytes depend on its files only: every entry stored, the same ha
 });
 
 test("files past 20 MiB are refused, however well they would compress", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-large-"));
+  const dir = scratch("grain-large-");
   writeFileSync(join(dir, "zeros.bin"), Buffer.alloc(20 * 1024 * 1024 + 1));
   assert.throws(() => makeBundle(dir), /holds at most that \(20 MiB\)/);
   writeFileSync(join(dir, "zeros.bin"), Buffer.alloc(20 * 1024 * 1024 - 200));
@@ -176,7 +176,7 @@ test("the agents' rules say how a bundle is checked: rebuilt in CI, grain.json u
 
 test("grain bundle writes the protocol's bundle byte for byte, and the network's bundle check takes it (vectors/images-v1.json)", () => {
   const v = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
-  const dir = mkdtempSync(join(tmpdir(), "grain-vector-"));
+  const dir = scratch("grain-vector-");
   for (const f of v.bundles.made_from) {
     mkdirSync(join(dir, ...f.name.split("/").slice(0, -1)), { recursive: true });
     writeFileSync(join(dir, ...f.name.split("/")), f.text);

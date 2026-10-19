@@ -5,12 +5,12 @@ import assert from "node:assert/strict";
 import { createServer } from "node:https";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   RelayGateways, PUBLIC_RELAYS, ChainView, RpcError, relaysOf, usableEndpoint, publicGateways, nodeCall, grainGet, FAUCET,
 } from "../dist/index.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const relay = (n) => ({ url: `wss://10.0.0.${n}:30335/`, cert_sha256: String(n).repeat(64).slice(0, 64) });
 const json = (value) => ({ status: 200, body: Buffer.from(JSON.stringify(value)) });
@@ -173,7 +173,7 @@ function hasOpenssl() {
 }
 
 test("a gateway is trusted by its certificate's hash alone: another certificate is sent nothing", { skip: !hasOpenssl() && "no openssl" }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "gateway-tls-"));
+  const dir = scratch("gateway-tls-");
   execFileSync("openssl", ["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1", "-subj", "/CN=relay",
     "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stdio: "pipe" });
   const pin = createHash("sha256").update(execFileSync("openssl", ["x509", "-in", join(dir, "cert.pem"), "-outform", "DER"])).digest("hex");

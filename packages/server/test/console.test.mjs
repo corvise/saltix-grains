@@ -4,8 +4,7 @@
 // hour.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
@@ -19,6 +18,7 @@ import { createDevRegistry } from "../dist/dev.js";
 import {
   DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep, manifest,
 } from "./chat-helpers.mjs";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const accountOf = (secret) => toHex(accountId(ed25519.getPublicKey(secret)));
 const DEV = fromHex("53".repeat(32), 32);
@@ -581,22 +581,18 @@ test("reports are off on request, and never throw where the team cannot be found
 });
 
 test("the team's addresses survive a restart in a file store", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "console-"));
+  const dir = scratch("console-");
   const fake = teamChain();
   const t = Date.now();
-  try {
-    const first = await studio(fake, { now: () => t, store: fileChatStore(join(dir, "chat.json")) });
-    first.server.command("idle", () => card().text("idle"));
-    const owner = await wallet(first.relay, 0x7f, first.server.address, [serverKey]);
-    await ask(owner, proved(owner, OWNER, t));
-    owner.client.close();
-    await first.close();
-    const second = await studio(fake, { now: () => t, store: fileChatStore(join(dir, "chat.json")) });
-    assert.equal((await second.server.team())[0].address, encodeAddress("devnet", accountId(fromHex(owner.key, 32))));
-    await second.close();
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  const first = await studio(fake, { now: () => t, store: fileChatStore(join(dir, "chat.json")) });
+  first.server.command("idle", () => card().text("idle"));
+  const owner = await wallet(first.relay, 0x7f, first.server.address, [serverKey]);
+  await ask(owner, proved(owner, OWNER, t));
+  owner.client.close();
+  await first.close();
+  const second = await studio(fake, { now: () => t, store: fileChatStore(join(dir, "chat.json")) });
+  assert.equal((await second.server.team())[0].address, encodeAddress("devnet", accountId(fromHex(owner.key, 32))));
+  await second.close();
 });
 
 test("the team's checks, as functions", () => {

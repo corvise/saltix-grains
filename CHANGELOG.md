@@ -283,6 +283,11 @@
 
 ### Fixed
 
+- **Tests leave nothing in the temporary directory.** 146 directories a run (projects, bundles, keys, stores) stayed
+  behind, filling developers' temporary directories and any shared runner's: every test now takes its directories
+  from `scratch()` (`scripts/scratch.mjs`), removed after the file's last test, failed ones included. CI runs the tests
+  with `TMPDIR` in a directory of the job's own and fails if they leave anything there (`scripts/ci-tmp.sh`); `tsc`'s
+  module compile cache goes beside it (`NODE_COMPILE_CACHE`).
 - **A chat project's spec starts at version 4**, above the 1 Saltix signs when it makes an app and the 3 the example
   serves: after `npm run example` on an app's key, a project that started at 2 was refused by the wallet holding 3, so
   its commands never reached Saltix (`CHAT_SPEC_FIRST_VERSION`, tested against the example's spec).

@@ -6,14 +6,14 @@ import assert from "node:assert/strict";
 import { createServer } from "node:https";
 import { createHash } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, encodeAddress, fromHex, toHex, PUBLIC_RELAYS, RelayGateways } from "@saltix/grain-server";
 import { reachOf, relayOf } from "../dist/network.js";
 import { UsageError } from "../dist/args.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const GENESIS = "5a".repeat(32);
@@ -33,7 +33,7 @@ const tls = { skip: !hasOpenssl() && "no openssl" };
 
 /** A relay's gateway: the wallet interface from `state` over TLS with a certificate of its own, and what it was asked. */
 async function gateway(state) {
-  const dir = mkdtempSync(join(tmpdir(), "grain-gateway-"));
+  const dir = scratch("grain-gateway-");
   execFileSync("openssl", ["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1", "-subj", "/CN=relay",
     "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stdio: "pipe" });
   const pin = createHash("sha256").update(execFileSync("openssl", ["x509", "-in", join(dir, "cert.pem"), "-outform", "DER"])).digest("hex");
@@ -71,7 +71,7 @@ const grain = (args, cwd) => new Promise((resolve) => {
 });
 
 const project = () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-net-"));
+  const dir = scratch("grain-net-");
   writeFileSync(join(dir, "owner.key"), toHex(secret) + "\n", { mode: 0o600 });
   return dir;
 };
@@ -116,7 +116,7 @@ test("grain faucet asks for test SALT for the key file's account, says a refusal
   const other = await grain(["faucet", "--address", encodeAddress("testnet", accountId(ed25519.getPublicKey(secret))), "--relay", g.relay], dir);
   assert.equal(other.code, 1);
   assert.match(other.stderr, /an address of testnet, and the network answering is devnet/);
-  const keyless = await grain(["faucet", "--relay", g.relay], mkdtempSync(join(tmpdir(), "grain-empty-")));
+  const keyless = await grain(["faucet", "--relay", g.relay], scratch("grain-empty-"));
   assert.equal(keyless.code, 1);
   assert.match(keyless.stderr, /owner\.key/);
 });
