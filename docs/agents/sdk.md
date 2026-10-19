@@ -136,8 +136,9 @@ What the SDK decided, and why, where a choice was made; the newest first. A chan
     without a phone. Rejected: `unpaired`, exit 1 (an agent told to start with `grain status` was sent to pair a page).
   - **`grain dev --check`** drives the simulator in the developer's own Chrome, Chromium, Edge or Brave
     (`CHROME_PATH`), headless, over `--remote-debugging-pipe`, with a profile and a temporary directory it removes
-    after; the simulator measures (`window.saltixSimulator`), `judge` decides, tested on its own. Without a sandbox only
-    where the system gives none. Rejected: Puppeteer or Playwright (a browser download in every install); a debugging
+    after (the temporary one short, in the system's: a browser on Linux keeps a socket there, whose path has at most
+    108 bytes); the simulator measures (`window.saltixSimulator`), `judge` decides, tested on its own. Without a sandbox
+    only where the system gives none. CI runs it in GitHub's Ubuntu image's Chrome. Rejected: Puppeteer or Playwright (a browser download in every install); a debugging
     port (a port open on the computer, and Node 20 has no WebSocket).
   - **`grain icon --monogram`**: one or two letters from a stroke font of the SDK's own, so the bytes are the same on any
     computer. Rejected: a font file or a text-drawing package (another system draws other bytes; a native dependency).
