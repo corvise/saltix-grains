@@ -2,11 +2,11 @@
 // commit it names (scripts/sync-vectors.sh), and scripts/check-vectors.mjs, which CI runs, refuses anything else.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { blobId, readSource, vectorProblems } from "../../../scripts/check-vectors.mjs";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const vectors = fileURLToPath(new URL("../../../vectors/", import.meta.url));
 
@@ -20,7 +20,7 @@ test("every vector here is the file SOURCE names at its commit, and SOURCE names
 });
 
 test("a vector edited by hand, one SOURCE does not name, or one missing, is refused", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vectors-"));
+  const dir = scratch("vectors-");
   cpSync(vectors, dir, { recursive: true });
   const file = join(dir, "grains-v1.json");
   const bytes = readFileSync(file);

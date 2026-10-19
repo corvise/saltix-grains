@@ -30,6 +30,7 @@ repository's account of what apps need of them, and the golden vectors in `vecto
 | `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
 | `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
 | `scripts/sync-vectors.sh`, `scripts/check-vectors.mjs` | copies the protocol's golden vectors from a checkout of the protocol's repository, `vectors/SOURCE` naming its commit and each file's blob id; the check CI runs that every file is those bytes; `vectors/README.md` says what each file holds |
+| `scripts/scratch.mjs`, `scripts/ci-tmp.sh` | a test file's directories (`scratch(prefix)`: under the system's temporary directory, removed after the file's last test, a failed one's too); CI's check that the tests left nothing in the job's own temporary directory |
 | `examples/hello-grain/` | the example: a page, its server and a chat (`npm run example` runs the chat from a developer key); `packages/server/test/example.test.mjs` runs its chat on `testChat` and holds every card to the card standard |
 | `docs/` | `how-it-works.md` (read first: the pieces, *Do I need a server?*, the lifecycle; `docs.test.mjs` holds its tables and checklist, `agent-docs.test.mjs` lets it and the other guides name a command not built yet only as coming), `first-app.md` (with the brief Saltix copies for a coding agent, word for word as the wallet's test holds it), `chats.md`, `cards.md` (and its pictures in `cards/`), `payments.md`, `connect.md`, `devex.md` (the developer experience and its roadmap), these pages, and `docs/protocol/` (the protocol as an app needs it, page by specification; `packages/cli/test/protocol-docs.test.mjs` follows every link and anchor of every page and refuses a link into the private repositories) |
 
@@ -69,6 +70,12 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 - **The page's check of a Connect grant is the reference.** `@saltix/connect`'s `verifyGrant` and `retryable` decide
   what is refused, what is only unchecked and when the node is asked again; Saltix's explorer, which lives with the
   protocol, follows them, and a change here is synced there in a pull request of its own.
+- **A test removes what it makes.** A directory, a project or a key file comes from `scratch()` in
+  `scripts/scratch.mjs`, never from `mkdtempSync` itself, and goes after the file's last test, failed ones included. CI
+  runs the tests with `TMPDIR` in a directory of the job's own and fails if they leave anything there
+  (`scripts/ci-tmp.sh`): a developer's temporary directory, and a self-hosted runner's shared one, never fill up run
+  after run. Rejected: comparing listings of `/tmp` before and after (another job's files would count), and removing at
+  a test's end (a failing test never gets there).
 - **A test that starts a server or a process bounds every wait** (as `wallet.until` in
   `packages/server/test/chat-helpers.mjs` does): a broken change must fail the test, not hang CI.
 - **The simulator plays Saltix by Saltix's own code.** What it draws (the frame, the band's colours, the icons'

@@ -3,8 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
@@ -15,6 +14,7 @@ import {
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { DAY, OWNER, SERVER, appKey, chain, fakeChain, ownerKey, quiet, spec, signedSpec, cert, options, serverOn, wallet, sleep } from "./chat-helpers.mjs";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 test("a server starts only with a spec and a certificate a wallet takes", async () => {
   const relay = await createDevRelay();
@@ -44,7 +44,7 @@ test("a server starts only with a spec and a certificate a wallet takes", async 
 
 test("a spec changed under the version it served stops the server at start; a higher version starts it", async () => {
   const relay = await createDevRelay();
-  const path = join(mkdtempSync(join(tmpdir(), "chat-served-")), "chat.store.json");
+  const path = join(scratch("chat-served-"), "chat.store.json");
   const logged = [];
   const start = (s) => ChatServer.start(options(relay, { spec: s, store: fileChatStore(path), log: (level, event, meta) => logged.push({ level, event, meta }) }));
   const registered = () => relay.sent.filter((f) => f.type === "register").length;

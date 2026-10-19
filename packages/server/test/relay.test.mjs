@@ -2,11 +2,10 @@
 // vectors/grains-v1.json, sealed frames, and the client against a relay that checks what it gets.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:https";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
@@ -19,6 +18,7 @@ import {
   encodeNotification, notificationMessage, signNotification, decodeNotification, notificationProblem,
   RelayClient, usableEndpoint,
 } from "../dist/index.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const relayVectors = JSON.parse(readFileSync(new URL("../../../vectors/relay-v1.json", import.meta.url), "utf8")).vectors;
 const grains = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
@@ -262,7 +262,7 @@ test("only wss, or plain ws on loopback, is dialed", () => {
 });
 
 test("a self-signed relay is trusted by its certificate's hash", { skip: !hasOpenssl() && "no openssl" }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "relay-tls-"));
+  const dir = scratch("relay-tls-");
   execFileSync("openssl", ["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1", "-subj", "/CN=relay",
     "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stdio: "pipe" });
   const der = execFileSync("openssl", ["x509", "-in", join(dir, "cert.pem"), "-outform", "DER"]);

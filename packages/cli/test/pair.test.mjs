@@ -5,8 +5,7 @@
 // `status` reads at every stage.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
@@ -18,6 +17,7 @@ import { createDevRelay } from "@saltix/grain-server/dev";
 import { pair, terminalQr, ensureGitignore, nameForOffer } from "../dist/pair.js";
 import { keyState, doctor } from "../dist/status.js";
 import { DevLog, reasonOf } from "../dist/devlog.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const GENESIS = "5a".repeat(32);
 const OWNER = toHex(accountId(ed25519.getPublicKey(fromHex("41".repeat(32), 32))));
@@ -53,7 +53,7 @@ const record = (slug, owner, servers, over = {}) => ({
 });
 
 function project(manifest = { slug: "access", name: { en: "Access keys" } }) {
-  const dir = mkdtempSync(join(tmpdir(), "grain-pair-"));
+  const dir = scratch("grain-pair-");
   if (manifest) writeFileSync(join(dir, "grain.json"), JSON.stringify(manifest));
   return dir;
 }

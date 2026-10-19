@@ -2,11 +2,11 @@
 // runs the built command line and says what to do while it is not built.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const bin = fileURLToPath(new URL("../bin/grain.js", import.meta.url));
 const run = (file, args = []) => spawnSync("node", [file, ...args], { encoding: "utf8", timeout: 10_000 });
@@ -23,7 +23,7 @@ test("npm links a command that is in the repository, not one the build makes", (
 });
 
 test("before the build it says to build; a fault inside the built tool is not taken for that", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-bin-"));
+  const dir = scratch("grain-bin-");
   writeFileSync(join(dir, "package.json"), '{"type": "module"}\n');
   mkdirSync(join(dir, "bin"));
   copyFileSync(bin, join(dir, "bin", "grain.js"));

@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, writeFileSync, statSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, statSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -14,6 +14,7 @@ import { AppKey, accountId, encodeAddress, toHex, fromHex, signManifest } from "
 import { publish } from "../dist/registry.js";
 import { accessCall, bindCall, configureCall, membersOf, rateCall, readAppKey, serverKeyOf, waitForRegistry, describeAppKey } from "../dist/studio.js";
 import { sendSettled } from "../dist/send.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 /** Send `call` once the pool takes it (`--no-wait`). */
 const sendCall = (call, secret, s) => sendSettled(async () => call, secret, s, { wait: false });
@@ -101,7 +102,7 @@ test("configure names the server keys and the category, the owner's live grain o
   assert.equal(node.submitted.length, 1);
   node.close();
   // A server key from its key file.
-  const dir = mkdtempSync(join(tmpdir(), "configure-"));
+  const dir = scratch("configure-");
   writeFileSync(join(dir, "server.key"), "63".repeat(32) + "\n", { mode: 0o600 });
   assert.equal(serverKeyOf(join(dir, "server.key")), server);
   assert.equal(serverKeyOf(server.toUpperCase()), server);
@@ -153,7 +154,7 @@ test("without a key file, the tool says what to do in Saltix and waits for the r
   assert.equal(await waitForRegistry(node.url, call, 0), false, "not yet");
   node.state.grain = grain({ servers: [server], category: 4 });
   assert.equal(await waitForRegistry(node.url, call, 1_000, 10), true);
-  const dir = mkdtempSync(join(tmpdir(), "wallet-way-"));
+  const dir = scratch("wallet-way-");
   const out = await run(["configure", "--slug", "chess-bot", "--server", server, "--category", "games", "--node", node.url, "--timeout", "1"], dir);
   assert.match(out.stdout, /My apps → chess-bot → Developer key/);
   assert.match(out.stdout, /the registry has it/);
@@ -173,7 +174,7 @@ const run = (args, cwd, env = {}, input) => new Promise((resolve) => {
 
 test("a developer key's public parts, never its secret, and never from the command line", async () => {
   const code = "saltix-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:" + "63".repeat(32);
-  const dir = mkdtempSync(join(tmpdir(), "app-key-"));
+  const dir = scratch("app-key-");
   const shown = await run(["app-key", "--offline"], dir, { SALTIX_APP_KEY: code });
   assert.equal(shown.code, 0);
   const parts = JSON.parse(shown.stdout);
@@ -206,7 +207,7 @@ test("a developer key's public parts, never its secret, and never from the comma
 });
 
 test("app-key make writes the developer key owner-only, and says when the registry does not name it yet", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "app-key-make-"));
+  const dir = scratch("app-key-make-");
   writeFileSync(join(dir, "server.key"), "63".repeat(32) + "\n", { mode: 0o600 });
   const node = await fakeNode({ grain: grain({ slug: "chess", servers: [] }) });
   const made = await run(["app-key", "make", "--slug", "chess", "--node", node.url], dir);
@@ -222,7 +223,7 @@ test("app-key make writes the developer key owner-only, and says when the regist
 });
 
 test("init --chat makes a chat-only grain with a spec to build on", async () => {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-chat-init-")), "coach");
+  const dir = join(scratch("grain-chat-init-"), "coach");
   const made = await run(["init", dir, "--name", "Coach", "--chat"], tmpdir());
   assert.equal(made.code, 0, made.stderr);
   const m = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));

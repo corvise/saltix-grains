@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -17,6 +17,7 @@ import {
 import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, pngSize, profileOfProject } from "../dist/connect.js";
 import { connectJson } from "../dist/template.js";
 import { servedSiteRevision, siteProfile } from "../dist/profile.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const grain = (args, cwd) => spawnSync("node", [main, ...args], { cwd, encoding: "utf8", timeout: 20_000 });
@@ -26,7 +27,7 @@ const GENESIS = "5a".repeat(32);
 
 /** A new project of `grain init`, page or chat-only. */
 function project(chat = false, slug = "dice") {
-  const dir = join(mkdtempSync(join(tmpdir(), "grain-connect-")), slug);
+  const dir = join(scratch("grain-connect-"), slug);
   const made = grain(["init", dir, "--slug", slug, "--name", "Dice roll", ...(chat ? ["--chat"] : [])], tmpdir());
   assert.equal(made.status, 0, made.stderr);
   return dir;
@@ -343,7 +344,7 @@ test("grain show checks the registry's profile as a wallet does", async () => {
 });
 
 test("grain connect-profile: a website's profile signed by its operator, for /.well-known/saltix-connect", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-site-"));
+  const dir = scratch("grain-site-");
   writeFileSync(join(dir, "site.key"), "64".repeat(32) + "\n", { mode: 0o600 });
   const site = JSON.parse(connectJson("dex", "Example DEX", false));
   delete site.subject;

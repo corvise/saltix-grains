@@ -6,8 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -16,6 +15,7 @@ import { PNG } from "pngjs";
 import { checkImage, crc32, iconHash } from "@saltix/grain-server";
 import { EDGE_BAND, KEYLINE_RADIUS, checkIcon, iconPreview, makeIcon, parseColour, runIcon } from "../dist/icon.js";
 import { PictureError, decodePicture } from "../dist/image.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -310,7 +310,7 @@ test("the preview: the icon in the rounded-square mask at 24, 40, 56 and 96 dp o
 });
 
 test("grain icon <picture> --out icon.png: written, named in grain.json, its hash first; grain icon <icon.png> checks it", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-icon-"));
+  const dir = scratch("grain-icon-");
   writeFileSync(join(dir, "grain.json"), JSON.stringify({ slug: "space-game", version: 1, icon: "00".repeat(32) }, null, 2));
   writeFileSync(join(dir, "logo.png"), asPng(600, 400, logo(600, 400)));
   const lines = [];

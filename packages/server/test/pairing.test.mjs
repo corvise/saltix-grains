@@ -3,8 +3,7 @@
 // vectors/server-pairing-v1.json; and where a server finds its key, refusing to start without one.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
@@ -12,6 +11,7 @@ import {
   decodePairFrame, encodeOffer, encodePairFrame, fromHex, judgePair, keyFingerprint, makeOffer, offerAddress, offerCode,
   offerCodeText, offerLink, offerProblem, parseOfferLink, serverKeyProofPayload, setupCannotWork, toHex, verifyServerKeyProof,
 } from "../dist/index.js";
+import { scratch } from "../../../scripts/scratch.mjs";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/server-pairing-v1.json", import.meta.url), "utf8"));
 const chain = { network: v.chain.network, genesis: v.chain.genesis_hash_hex };
@@ -109,7 +109,7 @@ test("every refusal of the reference is refused for the same reason", () => {
 });
 
 test("a server finds its key, or refuses to start and says to run grain pair", () => {
-  const dir = mkdtempSync(join(tmpdir(), "grain-key-"));
+  const dir = scratch("grain-key-");
   // None at all: unpaired, exit 78, and the message says what to do.
   const unpaired = (e) => e instanceof ChatSetupError && e.code === "chat_unpaired" && e.exitCode === EXIT_CONFIG && setupCannotWork(e);
   assert.throws(() => appKeyFromEnvironment({ dir, env: {} }), (e) => unpaired(e) && /Run grain pair here/.test(e.message));
