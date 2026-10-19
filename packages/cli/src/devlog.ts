@@ -90,11 +90,12 @@ export class DevLog {
 
 /** A stable reason code for an error a command ended with: its `problem` or `code` when it has one, else its kind. */
 export function reasonOf(error: unknown): string {
-  const e = error as { name?: string; problem?: string; code?: string | number; message?: string };
+  const e = error as { name?: string; problem?: string; code?: string | number; message?: string; step?: string; reason?: string };
   if (e?.name === "UsageError") return "usage";
   if (e?.name === "AppKeyError" && e.problem) return `app_key_${e.problem}`;
   if (e?.name === "PairingError" && e.problem) return `pairing_${e.problem}`;
   if ((e?.name === "ChatSetupError" || e?.name === "ChatKeyNotRegistered") && typeof e.code === "string") return e.code;
+  if (e?.name === "PublishError" && e.step && e.reason) return `${e.step}_${e.reason}`;
   if (e?.name === "RpcError") return "node_refused";
   if (typeof e?.message === "string" && /no relay answered|no relay took|ECONNREFUSED|ENOTFOUND|fetch failed/.test(e.message)) return "network_unreachable";
   if (typeof e?.code === "string" && /^E[A-Z]+$/.test(e.code)) return `fs_${e.code.toLowerCase()}`;

@@ -31,12 +31,13 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | SDK | not on npm, the repository private; Saltix's own apps' program vendors `dist/` | roadmap 3 |
 | `--node` | every registry command needs a node's plain-HTTP interface; the node is published for Linux x86-64 only; the test network's nodes are not reachable that way | fixed, #31 (the public relays, `grain faucet`) |
 | Spec changes | a `chat.json` changed under the same version starts fine and reaches nobody | fixed, #28 (78, `ChatSpecVersionError`) |
-| Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | roadmap 6; the bytes fixed, #27 |
+| Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | fixed: `grain publish` puts the bundle into the network itself (6); the bytes fixed, #27 |
+| Icons | an icon had to be a 256 × 256 PNG made by hand; nothing said how wallets draw it | fixed: `grain icon` makes one to Saltix's standard from any picture, with a preview ([icons.md](icons.md)) |
 | Payments | a server running from a developer key could not sign invoices | done: it signs invoices to the owner (`chat.invoice`, [payments.md](payments.md)) |
 | Logs | `ChatServer` logs nothing unless given `log`, and keeps its state in memory unless given a store | roadmap 13 |
 | Keys | the developer key travelled from the phone to the server: a clipboard, a chat, an agent's prompt; an agent asked the user to paste it | fixed: `grain pair` (Saltix 24-app-studio §3a): the key is made where it runs and Saltix pairs it by a QR code; agents start from `grain status` |
 | Diagnosis | what went wrong in a developer's session was known only from what they remembered | started: every command logs its steps to `.grain/log.jsonl` ([below](#the-steps-log)); `grain doctor` |
-| Agent's start (2026-10-19) | an agent handed a developer key alone found nothing about Saltix; with a brief it built a page-only game, could not publish it without hosting of its own, ran the example's chat on another app's key, and did not know what needs a server | [how-it-works.md](how-it-works.md), the brief Saltix copies, one app one key, pairing (`grain pair`, above); the network hosting bundles is coming (roadmap 6) |
+| Agent's start (2026-10-19) | an agent handed a developer key alone found nothing about Saltix; with a brief it built a page-only game, could not publish it without hosting of its own, ran the example's chat on another app's key, and did not know what needs a server | [how-it-works.md](how-it-works.md), the brief Saltix copies, one app one key, pairing (`grain pair`, above); `grain publish` puts a page into the network itself, no hosting (roadmap 6) |
 | Example, then project | `npm run example` serves spec version 3 under the app's key, and the project `grain init --chat` made started at 2, which a wallet holding 3 refuses: the app's own commands never reached Saltix | fixed: a project starts at 4 |
 | `npx grain` in a project | a project did not depend on the command line, so `npx grain …` there fell through to the npm registry's unrelated package named `grain` | fixed: every project `grain init` makes links it from the checkout |
 
@@ -49,7 +50,7 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | 3 | **The SDK as versioned packages** | Nobody outside can install it; the in-house app vendors `dist/` | M | the owner: public or not |
 | 4 | **The command line without a node** | No macOS node, no public plain-HTTP node: `--node` blocks every registry command | M | — |
 | 5 | **A spec changed under its version is refused** | It silently reaches nobody | S | — |
-| 6 | **Bundles hosted without your own server** | A sealed screen needs an https host today | M (interim) / L | protocol: long-lived public files |
+| 6 | **Bundles hosted without your own server** (done) | A sealed screen needed an https host | L | protocol: named blobs (32-images) |
 | 7 | **Bundle bytes independent of zlib** | The same files may make another hash on another Node | S | a version bump for published bundles |
 | 8 | **One command to deploy the server** | Every app rebuilds the systemd unit, credentials and restart rules | M | 3 |
 | 9 | **Payments for apps made in Saltix** (done) | A developer key could not sign invoices | S (SDK) + M (Saltix) | decided: invoices to the owner |
@@ -165,9 +166,13 @@ certificate is self-signed (pinned through its record), and a manifest's sources
 - Lasting (L, protocol): a public file kept while a live manifest names its hash, on the relays or the durable tier
   (10-storage), with sources such as `saltix-file:<relay record>/<id>` that wallets resolve through the relay list.
 - **Depends on** a protocol decision for the lasting form.
-- **State (2026-10-19)**: the lasting form is being specified in the protocol (bundles kept as named blobs by the storage
-  cities, fetched by hash); then `grain publish` uploads the bundle from the developer's computer and the owner approves
-  by QR. Until it lands, [how-it-works.md](how-it-works.md#publish-a-page) has today's path.
+- **Built** (2026-10-19, with the protocol's 32-images): the network keeps a sealed grain's bundle (16 MiB at most) as a
+  named blob at its keepers, and `grain publish` puts it there from the developer's computer, in pieces of 256 KiB at a
+  relay's gateway, resumed after a break and waiting out a busy node; with `grain pair`'s key before the owner signs (the
+  network holds it pending for a day on the key's statement), without one once the registry names it. A sealed manifest
+  needs no source from protocol version 2; before it `grain publish` names the network's own copies at up to 3 relays.
+  Wallets fetch it from their own relay. `grain icon` makes the icon, which goes up once the registry names it.
+  `grain doctor` says where a publish stands.
 
 ### 7. Bundle bytes independent of zlib
 
@@ -323,8 +328,19 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 | `registry` | timeout: `answered_not_named` (Saltix was answered, its transaction has not named the key: a managed owner's delay, a cancelled PIN) or `not_asked` |
 | `paired` | `app.key` and `app.json` written |
 | `status` | the state: `paired`, `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
-| `doctor` | the first thing to do: `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `bundle`, `published`, `connect_profile` |
-| `end` | the exit: `ok`, or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `node_refused`, `network_unreachable`, `fs_<code>`, `exit_<n>` or `error` |
+| `doctor` | the first thing to do: `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `bundle`, `upload`, `published`, `icon`, `connect_profile` |
+| `doctor_publish` | where a page's publish stands: `not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, `published` |
+| `network` | `grain publish` reached the network: `protocol_<n>`, the protocol version it runs |
+| `bundle` | `built`; failures end the command (`bundle_no_public`, `bundle_refused`, `bundle_too_large`) |
+| `sources` | the manifest's sources: `network` (protocol version 2: none), `relays` (before it: the network's own copies), `own` (the developer's hosts) |
+| `version` | `raised`: the registry held this version or above, so the next one is published |
+| `upload` | `pending` (held on the server key's statement), `named` (the registry names it), `held` (the network had it); `waiting` with `offset` (resumed), `busy`, `rate_limited`, `unreachable`, `not_named` (the node a block behind), or `after_registry_<why>` (no key vouches: `unpaired`, `revoked`, `replaced`, `other_network`, `other_app`, `unregistered`, `invalid`); `refused` with the node's reason (`kind`, `not_named`, `size`, `format`, `method`, `files`, `name`, `unpacked`, `hash`, `slug`, `key`, `time`, `signature`, `busy`, `pending`, `full`, `store`, `rate_limited`) or the SDK's (`check`, `stuck`, `unreachable`) |
+| `sign` | `key_file`: signed with `owner.key` here |
+| `link` | `shown`: the publishing link's QR code is shown (`waiting`) |
+| `registry` (publish) | `published`, `published_before` (a run that finishes); `timeout` with `not_signed` or `not_landed`; `waiting` with `no_wait` |
+| `icon` | `uploaded`, `held`, `none` (the manifest names no icon); `refused` with `file_missing` or the node's reason |
+| `published` | the publish is done: `sealed`, `hosted` or `chat` |
+| `end` | the exit: `ok`, or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `<step>_<reason>` of a publish that stopped (`upload_busy`, `form_hosted_entry`, `sign_no_salt`, `key_key_file_mode`, …), `node_refused`, `network_unreachable`, `fs_<code>`, `exit_<n>` or `error` |
 
 ## For the owner: what needs the protocol or Saltix
 

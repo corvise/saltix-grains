@@ -18,6 +18,7 @@ is a bug to report, unless the page follows a protocol change newer than the vec
 |---|---|---|
 | [Basics](basics.md) | encodings, hashing under domains, signatures and device keys, networks, addresses, amounts and units, transactions an app's tools sign, usernames, protocol versions | 01-foundation, 03-ledger, 13-accounts, 21-names, 23-upgrades (parts) |
 | [Grains](grains.md) | the manifest and its JSON form, the registry's grain calls, links, the bridge, the page's frame, sign-in and the team's member proof, invoices, storage, relays and notifications for grains, permissions, the container, sealed bundles, publishing | 12-grains |
+| [Images](images.md) | named blobs: the image check and the bundle check, the mini-app icon standard (the master, the mask, the zones, the monogram), the light on an icon's edge, uploading an icon and a sealed bundle into the network (the server key's statement, the pieces, the refusals), fetching them, and the one rule that is consensus | 32-images |
 | [Grain chats](grain-chats.md) | the chat spec, requests and member proofs, the team's hello and welcome, signed messages and their blocks and actions, frames, reported numbers, the card standard | 22-grain-chats |
 | [App studio](app-studio.md) | registered server keys, chat-only grains, usernames bound to apps, private apps and roles, invites, pairing a server by QR code, the developer key, the console, deposits, categories, ratings and reported numbers | 24-app-studio |
 | [Saltix Connect](connect.md) | a page's session and offer, the login and grant, sealing, the page's checks, the Connect profile of a mini-app or a site, the Connect sheet, Sign in with Saltix | 19-connect |
@@ -25,7 +26,7 @@ is a bug to report, unless the page follows a protocol change newer than the vec
 | [Wallet interface](wallet-interface.md) | the JSON-RPC methods an app or its server calls, at a node or a relay's gateway | 08-node §6, 09-relay §10.7 |
 | [Golden vectors](../../vectors/README.md) | what each vector file holds and how to use it | every file's own `spec` field |
 
-The four pages named after a specification keep its section numbers (`grains.md` § 5.4 is 12-grains §5.4), so a
+The five pages named after a specification keep its section numbers (`grains.md` § 5.4 is 12-grains §5.4), so a
 reference such as "22-grain-chats §3a" in the SDK's code, its docs or a vector's `spec` field leads to the same place
 here. Sections that concern no app (the chain's rules, nodes, relays' internals) are left out, so the numbers have gaps.
 

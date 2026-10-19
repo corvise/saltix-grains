@@ -8,7 +8,8 @@ SDKs and tools for **grains**, apps that open inside Saltix wallets (*mini-apps*
 tab; *grain* is the protocol's word). The rules are the protocol's, and **[docs/protocol/](docs/protocol/README.md)**
 holds everything an app needs of them: [grains](docs/protocol/grains.md) (12-grains),
 [grain chats](docs/protocol/grain-chats.md) (22-grain-chats), [the app studio](docs/protocol/app-studio.md)
-(24-app-studio), [Saltix Connect](docs/protocol/connect.md) (19-connect), [relays](docs/protocol/relays.md), the
+(24-app-studio), [Saltix Connect](docs/protocol/connect.md) (19-connect), [images](docs/protocol/images.md)
+(32-images: icons, and bundles the network keeps), [relays](docs/protocol/relays.md), the
 [wallet interface](docs/protocol/wallet-interface.md) and the [basics](docs/protocol/basics.md) (addresses, amounts,
 keys). A grain uses the wallet's identity, payments, storage and relays, and never holds the wallet's keys. It may be a
 page, or a chat and nothing else.
@@ -18,6 +19,11 @@ none; a program connects out to the relays, with no domain, open port or certifi
 app as one checklist. **[Your first app in ten minutes](docs/first-app.md)**: `grain pair` shows a QR code, your Saltix
 scans it and makes (or pairs) the app, `npm start`. The server's key is made on your computer and never leaves it:
 nothing to copy.
+
+**A page needs no server and no hosting**: `grain publish` seals `public/` into a bundle and puts it straight into the
+Saltix network, onto the servers that keep it, from your computer; the owner's Saltix signs the version from a QR code
+([Publish a page](docs/first-app.md#publish-a-page-straight-into-the-network)). Its icon follows one standard, and
+`grain icon` makes one from any picture ([docs/icons.md](docs/icons.md)).
 
 **Every app ships a Connect profile, and asks only for what it uses**: `connect.json`, the app's own words that Saltix's
 Connect sheet shows before anyone signs in (Saltix 19-connect [§11](docs/protocol/connect.md#11-the-connect-profile)–[§12](docs/protocol/connect.md#12-the-connect-sheet)); `grain lint` fails without it
@@ -43,6 +49,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 | [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
 | [`docs/connect.md`](docs/connect.md) | Sign in with Saltix on a website or DApp: the site's Connect profile, the button, the QR code or the link, the Connect sheet, the grant checked, the relay path a page needs |
+| [`docs/icons.md`](docs/icons.md) | an app's icon: the standard (512 × 512, opaque, sRGB, 64 KiB, the rounded-square mask, the keyline circle), what `grain icon` makes from any picture, its checks and preview, and how it goes into the network |
 | [`docs/cards.md`](docs/cards.md) | the card design standard: how every Saltix draws a card (the capsule, the action bar, emphasis, polls, states after a tap), what each block is for, do's and don'ts, and the lint |
 | [`docs/protocol/`](docs/protocol/README.md) | the Saltix protocol as an app needs it, page by specification (12-grains, 22-grain-chats, 24-app-studio, 19-connect, relays, the wallet interface, the basics), each naming the protocol commit it reflects: the formats, the bridge, what wallets check and refuse |
 | [`vectors/`](vectors/README.md) | the protocol's golden vectors, its own bytes copied unchanged, and what each file holds |
@@ -51,9 +58,11 @@ The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones inclu
 the registry transactions of [12-grains](docs/protocol/grains.md) and [24-app-studio](docs/protocol/app-studio.md), deposits, the developer key), the addresses of
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
 chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
-apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json` and the
-Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json` and the pairing offers, frames
-and judgments of `vectors/server-pairing-v1.json` byte for byte, refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
+apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json`, the
+Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json`, the pairing offers, frames
+and judgments of `vectors/server-pairing-v1.json` and the named blobs of `vectors/images-v1.json` (the image and bundle
+checks, a bundle as `grain bundle` writes it, the server key's statement for an upload, the frames) byte for byte,
+refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
 `vectors/SOURCE` names the protocol commit and each file's blob id, which CI holds them to
 (`node scripts/check-vectors.mjs`).
 
@@ -97,6 +106,8 @@ a developer key names the genesis it was made on, and the SDK refuses a key of a
   through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`.
 - **Test SALT**: `grain faucet` asks the test network's faucet for owner.key's account (or `--address`), once every 5
   minutes; `--wait` until it is there. Then `grain publish --key owner.key` can pay the deposit.
+- **Uploads go through the same relays**: `grain publish` puts a page's bundle and its icon into the network through
+  the relay that answers (its gateway's `blob_put`), and the network carries them on to the servers that keep them.
 
 ## The command line
 
@@ -114,11 +125,15 @@ npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/s
 npx grain init ../dice --name "Dice roll"   # grain.json, connect.json, owner.key (owner-only), public/ with the bridge, AGENTS.md, package.json
 cd ../dice && npm install && npx grain dev   # links the grain command; serves public/, the signed manifest and the simulator
 npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕
-npx grain icon icon.png                   # the hash grain.json names its 256x256 icon by
-npx grain sign                            # signed.json: serve it at /.well-known/saltix-grain
-npx grain bundle --sources https://cdn.example/dice-2.zip --connect https://api.dice.example
-                                          # a sealed grain: public/ as one ZIP named by its hash
-npx grain publish --wallet                # a QR code: the owner's Saltix registers it or its new version (the deposit quoted)
+npx grain icon logo.png --out icon.png    # a 512x512 icon to the standard from any picture; grain.json names it
+npx grain icon icon.png                   # an icon checked as wallets check it, and its hash
+npx grain publish                         # public/ sealed and put into the network, then a QR code: the owner's
+                                          # Saltix signs the version (the network quotes a new slug's deposit);
+                                          # --wallet asks the owner's Saltix even with an owner.key here
+npx grain publish --no-wait               # the same, returning once the QR code is shown; again later to finish
+npx grain bundle --connect https://api.dice.example   # seal public/ yourself, and name the origins it may reach
+npx grain sign                            # signed.json, for a page at your own origin (/.well-known/saltix-grain)
+npx grain publish --hosted                # that page, hosted by you, instead of the network
 npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
 npx grain publish --key owner.key        # or sign with a key file (test networks): returns once it landed
 npx grain profile --wallet                # a QR code: the owner's Saltix sets the Connect profile (connect.json)
@@ -147,7 +162,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain help <command>` (or `grain <command> --help`, `-h`) prints that command's part of the help and runs nothing;
   `grain --version` names the tool's version. A flag's value is the next word or comes after `=` (`--node=URL`); a
   switch (`--chat`, `--wallet`, `--wait`, `--no-wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`, `--new`,
-  `--json`)
+  `--json`, `--hosted`, `--fix`)
   takes none, so `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never
   ignored.
 - A registry call signed with a key file (`publish`, `retire`, `configure`, `access`, `rate`, `bind`, `profile`)
@@ -174,11 +189,23 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   area (`cover-without-insets`), or such an app pins a fixed or sticky bar to the top whose rule uses none of
   `--saltix-safe-top`, `--saltix-controls-*` or `env(safe-area-inset-top)` (`full-screen-top-bar`): heuristics, never
   errors. A page without `viewport-fit=cover` needs neither: Saltix keeps it inside the safe area.
-- `publish` with `--wallet`, or without a key file, shows `salt:grain-publish?m=…` as a QR code (Saltix [12-grains §10](docs/protocol/grains.md#10-for-developers)):
-  scan it with the owner's Saltix, which fills in its account's key, checks the manifest and the
-  registry, shows the grain and the deposit and, after the PIN, signs and registers it (or records
-  a newer version). The tool waits for the registry and writes `signed.json`, the form your origin
-  serves. The owner's key never leaves the phone.
+- `grain publish` puts an app's page straight into the network (Saltix [12-grains §10](docs/protocol/grains.md#10-for-developers),
+  [32-images §7](docs/protocol/images.md#7-uploading)): it seals `public/` (the bundle check every node runs, run here
+  first), names the bundle's sources by the network's protocol (none from version 2; before it, the network's own copies
+  at up to 3 relays of its relay list), and with a server key the registry names for the app (`grain pair`'s `app.key`,
+  `--app-key`, or `SALTIX_APP_KEY`) uploads the bundle at once on that key's statement, in pieces, resuming where the
+  node stands after a break and waiting out a busy one: the network holds it pending for a day, so the owner signs
+  whenever they like and your computer need not stay on. Without one (a first version), it uploads the bundle once the
+  registry names it. Then the icon. Run again, it goes on from where it stopped; a version not above the registry's is
+  raised to the next. A refusal is said in words with what to do, and logged by its reason. `--hosted` publishes a page
+  at your own https origin instead (`grain init`'s placeholder origin `*.example` is sealed); a chat-only app is
+  published as it is.
+- `publish` with `--wallet`, or without a key file, shows `salt:grain-publish?m=…` as a QR code (and
+  `.grain/publish.html`): scan it with the
+  owner's Saltix, which fills in its account's key, checks the manifest and the registry, shows the grain and the deposit
+  and, after the PIN, signs and registers it (or records a newer version). The tool waits for the registry and writes
+  `signed.json`. The owner's key never leaves the phone; an app made in Saltix is its owner's phone's, so with an
+  `owner.key` of another account the tool asks Saltix too.
 - With `owner.key` (or `--key`), for devnets and the test network: it asks the registry for the slug —
   unregistered → `RegisterGrain` with the deposit; the owner's with a lower version → `UpdateGrain`;
   anything else is refused before a transaction is made — checks the balance, signs and submits
@@ -188,7 +215,8 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   fails without it, and checks every rule of the format with the field and its limit (a tagline of 1–80 characters in
   one line, about up to 600, up to 4 highlights of 60, a privacy summary of up to 300, required when the manifest asks
   for `address` or `storage`; `https://` links; support an `https://` link, a `mailto:` address or `@name`; at most
-  8 192 bytes in Borsh), the icon file (`icon.png` or `public/icon.png`: a 256×256 PNG whose hash `grain.json` names),
+  8 192 bytes in Borsh), the icon file (`icon.png` or `public/icon.png`: one every wallet takes, whose hash `grain.json`
+  names, with the standard's warnings: [docs/icons.md](docs/icons.md)),
   and warns about an empty about, English alone, a link too long for a QR code (2 048 characters: set it in the app
   studio, or with a key file) and each permission nothing in the app's sources uses (`address` without
   `requestAddress`, `storage` without `grain.storage`…).
@@ -225,8 +253,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain status` prints `paired`, `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`,
   `other_network`, `invalid` or `unknown`, one line on why, and the command to run next (`--json` for a program; exit 0
   only when paired). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
-  `chat.json`'s version, `npm install`, the bundle, what the registry holds, the Connect profile) and ends with the
-  exact next step. Both only read.
+  `chat.json`'s version, `npm install`, a page's bundle and where its publish stands, `not_uploaded`, `pending`,
+  `waiting_for_owner`, `pending_expired` or `published`, what the registry holds, the icon, the Connect profile) and
+  ends with the exact next step; a page alone needs no paired key. Both only read.
 - Every command run in an app's project appends its steps to `.grain/log.jsonl` ([docs/devex.md](docs/devex.md#the-steps-log)):
   the command, the step, its outcome, a reason code, the milliseconds, the network's kind; never a key, an address, a
   slug, a path or anything typed. `SALTIX_GRAIN_LOG=off` turns it off.
@@ -234,12 +263,17 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
   (through the network's public relays, or `--node`).
 - `grain bundle` seals `public/` (Saltix [12-grains §8](docs/protocol/grains.md#8-sealed-bundles)): one ZIP of its files — sorted, no times, every file stored as
-  it is (never deflated), so the same files make the same bytes on any computer and any Node — at most 20 MiB of files,
-  and `grain.json` names its hash, size,
-  `sources` (where you upload `bundle.zip`), `start` and the `connect` origins the grain may reach.
-  Wallets download it, check the hash and serve it from the phone at `https://<slug>.grain.invalid`,
-  with the network limited to `connect`. A sealed grain's `grain dev` makes the bundle for every
-  manifest it serves and serves it at `/_bundle.zip`, so a debug Saltix runs it as it will run.
+  it is (never deflated), so the same files make the same bytes on any computer and any Node — in the form the network
+  keeps (the bundle check), and `grain.json` names its hash, size, `start` and the `connect` origins the grain may
+  reach; `--sources` only for hosts of your own (a bundle over 16 MiB, which the network does not keep). `grain publish`
+  bundles too. Wallets fetch it from their own relay, check it and serve it from the phone at
+  `https://<slug>.grain.invalid`, with the network limited to `connect`. A sealed grain's `grain dev` makes the bundle
+  for every manifest it serves and serves it at `/_bundle.zip`, so a debug Saltix runs it as it will run.
+- `grain icon <picture> --out icon.png` makes a 512 × 512 icon to Saltix's standard from any PNG or JPEG (fitted by
+  `--fit crop|contain|mark`, flattened onto `--background` or the picture's own ground, converted to sRGB, stripped of
+  metadata, a palette when that is what fits 64 KiB), prints its hash first, checks it, writes a preview of it in the
+  mask at 24, 40, 56 and 96 dp on dark and light, and names it in `grain.json`; `grain icon icon.png` checks one
+  ([docs/icons.md](docs/icons.md)).
 
 ## The page
 

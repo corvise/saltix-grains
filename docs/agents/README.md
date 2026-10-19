@@ -7,8 +7,9 @@ checking first and rendering after, naming apps and people, and how this reposit
 and the lifecycle as one checklist. These pages go on from it:
 
 - [Building an app](app.md): from `grain status` and `grain pair` (the server's key is paired by a QR code, never
-  copied) to an app that runs, is tested and ships; the Connect profile; the rules every app follows; how to act on an
-  error report pasted from Saltix's console.
+  copied) to an app that runs, is tested and ships; the Connect profile; publishing a page into the network
+  (`grain publish`, no hosting) and its icon (`grain icon`); the rules every app follows; how to act on an error report
+  pasted from Saltix's console.
 - [Working on the SDK](sdk.md): this repository's map, its commands and tests, the golden vectors, and how a change
   lands.
 - [Cards](cards.md): the card design standard as rules: a status first, at most 6 actions, short labels, destructive
@@ -19,6 +20,7 @@ the specifications' names and section numbers: [grains](../protocol/grains.md) (
 publishing), [grain chats](../protocol/grain-chats.md) (22-grain-chats: specs, requests, cards, the console),
 [app studio](../protocol/app-studio.md) (24-app-studio: pairing a server, developer keys, private apps, members),
 [connect](../protocol/connect.md) (19-connect: the Connect profile and sheet, Sign in with Saltix),
+[images](../protocol/images.md) (32-images: the icon standard, bundles the network keeps and their upload),
 [relays](../protocol/relays.md) (09-relay: relays, files), [the wallet interface](../protocol/wallet-interface.md) and
 [the basics](../protocol/basics.md) (addresses, amounts, keys, people's names). When a page here and a protocol page
 disagree, the protocol page wins and this page is a bug; when a protocol page and a golden vector disagree, the vector

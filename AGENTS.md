@@ -115,9 +115,26 @@ That line closes every report Saltix copies for an AI agent. In full (Saltix 12-
   (`cover-without-insets`), and about a bar pinned to the top of such a page whose rule keeps clear of nothing
   (`full-screen-top-bar`).
 
-A sealed app's bundle (`grain bundle`) is the same bytes from the same files on any computer and any Node (files
-stored, never deflated, at most 20 MiB): rebuild it in CI and fail when `grain.json` changes; never edit
-`entry.sealed` by hand.
+A sealed app's bundle (`grain bundle`, and `grain publish`, which bundles first) is the same bytes from the same files on
+any computer and any Node (files stored, never deflated, in the form every node checks; at most 16 MiB for the network to
+keep it): rebuild it in CI and fail when `grain.json` changes; never edit `entry.sealed` by hand.
+
+**A page needs no server and no hosting: `grain publish` puts it into the Saltix network.** It seals `public/`, checks
+it as every node does, and uploads it from this computer straight into the network (Saltix 32-images
+[§7.3](docs/protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)), then shows the QR code the
+owner's Saltix signs the version from, waits for the registry, and uploads the icon. With `grain pair`'s `app.key` the
+bundle goes up before the owner signs (held pending for a day); without one, after. Never set up hosting, a CDN, a
+domain or a certificate for a page, and never ask the user for one; never pass `--sources` unless the user hosts the
+bundle on purpose. `grain publish --no-wait` returns once the QR code is shown: show it (or `.grain/publish.html`) to
+the user, then run `grain publish` again after they confirmed; it finishes what is left and raises a version the
+registry already holds. `grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`,
+`pending_expired`, `published`); a refusal says what to do. `--hosted` only for a page the user hosts at their own
+origin.
+
+**The icon** is a 512 × 512 opaque PNG, sRGB, no metadata, at most 64 KiB, its mark inside the keyline circle
+(5/12 of the side from the centre), the background full bleed (Saltix cuts the rounded square, corners 0.26 of the side):
+make it with `grain icon <picture> --out icon.png` from any PNG or JPEG (it names it in `grain.json`), look at the
+preview it writes, and never draw rounded corners, transparency or a border yourself ([docs/icons.md](docs/icons.md)).
 
 A top bar that keeps clear on an edge-to-edge page, as the page `grain init` makes has it:
 

@@ -103,12 +103,12 @@ export async function submit(call: GrainCall, secret: Uint8Array, s: Signing): P
   return { call: kind, id: answer.id, fee, amount };
 }
 
-/** Wait until the registry shows `done`, at most `ms`. */
-export async function waitFor(node: NodeLike, slug: string, done: (g: RegisteredGrain | null) => boolean, ms: number): Promise<boolean> {
+/** Wait until the registry shows `done`, at most `ms`, asking every `every` ms. */
+export async function waitFor(node: NodeLike, slug: string, done: (g: RegisteredGrain | null) => boolean, ms: number, every = 3000): Promise<boolean> {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     if (done(await grainGet(node, slug))) return true;
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, every));
   }
   return false;
 }
@@ -123,11 +123,11 @@ export async function walletLink(m: Manifest, node: NodeLike): Promise<string> {
 }
 
 /** The signed manifest once the registry holds `m` as a wallet published it (any owner key); null after `ms`. */
-export async function waitForPublished(node: NodeLike, m: Manifest, ms: number): Promise<SignedManifest | null> {
+export async function waitForPublished(node: NodeLike, m: Manifest, ms: number, every?: number): Promise<SignedManifest | null> {
   let found: SignedManifest | null = null;
   await waitFor(node, m.slug, (g) => {
     if (g?.manifest && g.retired === null && sameManifest(g.manifest.manifest, m)) found = g.manifest;
     return found !== null;
-  }, ms);
+  }, ms, every);
   return found;
 }

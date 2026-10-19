@@ -2,14 +2,16 @@
 // names, no times, no extra fields, every file stored as it is — so its hash names exactly what the owner signed, on
 // any computer and any Node. Nothing is compressed: a deflater's output is its own (Node's zlib changes between
 // releases), so two builds of the same files could name two hashes. Wallets download a bundle once; the host may
-// compress it on the wire (HTTP gzip) without touching its bytes.
+// compress it on the wire (HTTP gzip) without touching its bytes. It is exactly the form the network keeps (the bundle
+// check, 32-images §2a), which `grain publish` puts into the network itself.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { bundleHash, type Manifest } from "@saltix/grain-server";
+import { MAX_BUNDLE_BYTES, MAX_BUNDLE_FILES, MAX_BUNDLE_UNPACKED, type Manifest, bundleHash, checkBundle, crc32 } from "@saltix/grain-server";
 
-/** A bundle is at most this large (12-grains §11), and unpacks to at most MAX_UNPACKED (§8: what every wallet takes). */
-export const MAX_BUNDLE = 20 * 1024 * 1024;
-export const MAX_UNPACKED = 64 * 1024 * 1024;
+/** A bundle is at most this large (12-grains §11), and unpacks to at most MAX_UNPACKED (§8: what every wallet takes). The
+ *  network keeps one of at most 16 MiB (`MAX_NETWORK_BUNDLE_BYTES`); a larger one needs sources of its own. */
+export const MAX_BUNDLE = MAX_BUNDLE_BYTES;
+export const MAX_UNPACKED = MAX_BUNDLE_UNPACKED;
 /** Names a bundle may hold: what a wallet unpacks (Saltix `GrainBundles`). */
 const NAME = /^[A-Za-z0-9._ ~@+-]+(\/[A-Za-z0-9._ ~@+-]+)*$/;
 
@@ -19,22 +21,6 @@ export interface Bundle {
   hash: string;
   size: number;
   files: string[];
-}
-
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-function crc32(data: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const b of data) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
 }
 
 /** Every file under `dir` but hidden ones, as bundle names (`/`-separated), sorted. */
@@ -60,7 +46,7 @@ export const STORED = 0;
 export function makeBundle(dir: string): Bundle {
   const files = filesUnder(dir);
   if (files.length === 0) throw new Error(`${dir}: no files to bundle`);
-  if (files.length > 4096) throw new Error(`${dir}: ${files.length} files; a bundle holds at most 4096`);
+  if (files.length > MAX_BUNDLE_FILES) throw new Error(`${dir}: ${files.length} files; a bundle holds at most ${MAX_BUNDLE_FILES}`);
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
   let offset = 0;
@@ -116,14 +102,18 @@ export function makeBundle(dir: string): Bundle {
   end.writeUInt32LE(offset, 16);
   const zip = new Uint8Array(Buffer.concat([...locals, central, end]));
   if (zip.length > MAX_BUNDLE) throw new Error(`the bundle is ${zip.length} bytes; at most ${MAX_BUNDLE}`);
+  // What every node and wallet runs on it (32-images §2a): this writer's own output always passes.
+  const checked = checkBundle(zip, MAX_BUNDLE);
+  if (!checked.ok) throw new Error(`the bundle fails the bundle check (${checked.reason}): a bug in grain bundle, please report it`);
   return { zip, hash: bundleHash(zip), size: zip.length, files };
 }
 
-/** `m` with its entry sealed to `bundle`: sources, start and connect from `options`, else from its sealed entry. */
+/** `m` with its entry sealed to `bundle`: sources, start and connect from `options`, else from its sealed entry. No
+ *  sources: the network keeps the bundle (`grain publish` names relays' copies where the network's protocol needs one). */
 export function sealed(m: Manifest, bundle: Bundle, options: { sources?: string[]; start?: string; connect?: string[] }): Manifest {
   const before = "sealed" in m.entry ? m.entry.sealed : null;
   const sources = options.sources ?? before?.sources ?? [];
-  if (sources.length === 0) throw new Error("--sources: the https URLs the bundle is served at (upload bundle.zip there)");
+  if (sources.length > 8) throw new Error("--sources: at most 8");
   const start = options.start ?? before?.start ?? "index.html";
   if (!bundle.files.includes(start)) throw new Error(`start: ${start} is not in the bundle`);
   return {

@@ -4,6 +4,45 @@
 
 ### Added
 
+- **`grain publish` puts a page straight into the Saltix network** (Saltix 32-images §7.3, 12-grains §8, §10): no
+  server, host, domain or certificate of the developer's. It seals `public/` (the bundle check every node runs, run here
+  first), names the sources by the network's protocol (`node_status.protocol.version`: none from version 2; before it
+  the network's own copies, `https://<relay>/_blob/grain_bundle/<hash>` at up to 3 relays of its relay list, those
+  offering space first by the bundle's placement), and uploads the bundle in pieces of 256 KiB at a relay's gateway
+  (`blob_put`): with `grain pair`'s `app.key` (or `--app-key`, `SALTIX_APP_KEY`) at once, on the server key's
+  `SignedBundleUpload` statement, so the network holds it pending for a day and the owner signs whenever they like;
+  without one, once the registry names it. Then the publishing QR code (and `.grain/publish.html`) or `owner.key`, the
+  registry watched, and the icon uploaded unless the network holds it. Progress on a terminal or in quarters for an
+  agent; `offset` resumed from `received` (from 0 after a failover), `busy` and `rate_limited` waited out, a network
+  that does not answer tried again, every refusal said in words with what to do. Run again it finishes what a break left;
+  a version not above the registry's is raised to the next; `--no-wait` returns once the QR code is shown. `--hosted`
+  publishes a page at the developer's own origin; `grain init`'s placeholder origin is sealed; a chat-only app as it is.
+  An `owner.key` of another account than the registry's owner (an app made in Saltix) asks the owner's Saltix instead.
+  Every step goes to `.grain/log.jsonl` with stable reasons, and where the publish stands to `.grain/publish.json`.
+- **`grain icon`** makes a 512 × 512 icon to Saltix's standard (32-images §3) from any PNG or JPEG: fitted (`--fit
+  crop|contain|mark`, a logo's mark inside the keyline circle by default), flattened onto `--background` or the
+  picture's own ground, converted to sRGB (ICC matrix-and-curves profiles, a PNG's gamma), turned by EXIF, resampled
+  with a Lanczos filter, written with only the chunks the image check takes, in true colour or a palette when that is
+  what fits 64 KiB; it prints the hash first, checks §3.4 (256 × 256 taken with a warning, the mark outside the keyline
+  circle, a small mark, a pure white or black ground), writes a preview of the icon in the rounded-square mask at 24, 40,
+  56 and 96 dp on dark and light with its zones, and names it in `grain.json`. `grain lint` holds the project's icon to
+  the same checks. [docs/icons.md](docs/icons.md).
+- **`grain doctor` knows where a page's publish stands**: `not_uploaded`, `pending`, `waiting_for_owner`,
+  `pending_expired`, `published` (`--json`: `publish`), whether the network holds the bundle and the icon, and that a
+  page alone needs no paired key.
+- **`@saltix/grain-server`: named blobs** (`named.ts`, `bundle-upload.ts`, `blobs.ts`): the image check and the bundle
+  check (`checkImage`, `checkBundle`, `namedProblem`, `namedHash`, `monogramColour`), the server key's statement
+  (`signBundleUpload`, `encodeSignedBundleUpload`/`decodeSignedBundleUpload`, `bundleUploadProblem`), and putting blobs
+  into the network (`putBundle`, `putIcon`, `getBlob`, `blobHeld`, `BlobRefused`), held byte for byte to
+  `vectors/images-v1.json`, refusals included. `chat.proposeUpdate(next, { bundle })` puts a sealed update's bundle into
+  the network before the owner is asked. `manifestProblem` takes the protocol version (`NETWORK_BUNDLES`: a sealed
+  manifest may name no source from version 2). `@saltix/grain-server/dev`'s registry takes `blob_put` and `blob_get` as
+  a node does, and names relays with their keys and space. Mutation-tested: 22 of 22 mutants killed (the statement's
+  message, Borsh, domain, key, time and signature checks; the icon's byte bound, sides, squareness and alpha; `grain
+  icon`'s 64 KiB, 512 and keyline; the upload's resume, waits and statement; the publish's statement and sources rule).
+- `vectors/images-v1.json` synced (`scripts/sync-vectors.sh` copies it); `docs/protocol/images.md`, the protocol's
+  32-images as an app needs it.
+
 - **Pairing a server by QR code** (Saltix 24-app-studio §3a): no key is copied any more. `grain pair` makes the server's
   Ed25519 key on the computer that runs it (`.grain/pair.key`, owner-only, never printed or logged), shows its offer as
   a terminal QR code (colours set on a terminal; plain half blocks elsewhere, for an agent's output), a link
@@ -141,6 +180,12 @@
   money moves only in the wallet and only to the owner) and `docs/agents/app.md` say so.
 
 ### Changed
+
+- `grain bundle` needs no `--sources` (the network keeps the bundle); `--sources` only for hosts of the developer's own.
+  `grain icon <png>` checks the icon as wallets do before it prints the hash, and refuses one they refuse.
+- The icon standard is 512 × 512 (32-images §3): `grain lint`'s icon check is the image check, no longer "a 256 × 256
+  PNG".
+- The CLI depends on `pngjs` and `jpeg-js` (pure JavaScript) to read pictures.
 
 - **Vectors synced** from the protocol's pairing change (`573525d`): `server-pairing-v1.json` is new; `grains-v1.json`
   gains `configure-v2`; `grain-chats-v1.json`'s member proof allows 5 minutes of clock skew in its own case.

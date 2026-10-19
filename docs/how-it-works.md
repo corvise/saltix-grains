@@ -13,8 +13,8 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
                                       access, Connect profile, deposit
  users' phones                        relays: messages, mailboxes,  ◀──out, wss──  the app's program (optional):
  Saltix ── the app's page             files next to them                           ChatServer + app.key
-           in a WebView, the  ◀────── the page's files (sealed: checked
-           bridge to Saltix           by their hash) from where you host them
+           in a WebView, the  ◀────── the page's bundle, kept by the     ◀──────  grain publish, from your computer
+           bridge to Saltix           network, checked by its hash
 ```
 
 - **Saltix** is the wallet and messenger, on Android (and in a browser linked to the phone, web.saltix.io). It holds
@@ -35,8 +35,9 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
   [`@saltix/grain`](../packages/grain) wraps: the user's key in this app and its sign-in, payments through Saltix's own
   sheet, storage (1 MiB per user, encrypted, synced across the user's devices), frames to other users of the app through
   the relays, notifications, the safe area ([grains §5](protocol/grains.md#5-the-bridge)). Its files are either
-  **sealed** (one ZIP named by its hash, which Saltix downloads once, checks and serves from the phone, offline) or
-  **hosted** (pages from an HTTPS site you run, which may change them at any time; Saltix says so)
+  **sealed** (one ZIP named by its hash, which the network keeps once `grain publish` put it there, and which Saltix
+  downloads once from its own relay, checks and serves from the phone, offline) or **hosted** (pages from an HTTPS site
+  you run, which may change them at any time; Saltix says so)
   ([grains §1](protocol/grains.md#1-forms), [§8](protocol/grains.md#8-sealed-bundles)).
 - **The chat** (if the app has one) is the app in Saltix's messenger: users run the commands its spec declares
   (`chat.json`) and get cards back. A chat-only app has no page: Saltix draws its **home** from the spec. The team's
@@ -62,7 +63,7 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
 |---|---|---|
 | Saltix | users' phones (and a browser linked to one) | the user's keys; each app's storage for that user |
 | The page | inside Saltix, in a WebView | nothing secret: its code is public |
-| The page's files | a sealed bundle at a URL you choose; a hosted site you run (the network itself: coming, below) | nothing secret |
+| The page's files | a sealed bundle the network keeps (`grain publish` puts it there); or a hosted site you run | nothing secret |
 | The program | your computer or any server with outbound internet | its key (`app.key`, made there by `grain pair`), its store (`chat.store.json`) |
 | The registry | the chain | the manifest, server keys, access, Connect profile, deposit |
 | The relays | the network's nodes | messages on their way, mailboxes, files for 30 days |
@@ -82,8 +83,8 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
 
 **When a domain and a certificate do come in**: only when the page calls the program itself over HTTP
 (`grain.signIn({ url })`, `fetch`). That endpoint is an HTTPS origin you run, named in the manifest's `connect` (a
-sealed page reaches nothing else). A program that only answers the chat never needs one. A page-only app needs a place
-for its files, and nothing else: see [Publish](#publish-a-page) below.
+sealed page reaches nothing else). A program that only answers the chat never needs one. A page-only app needs nothing
+at all: `grain publish` puts its files into the network ([Publish](#publish-a-page) below).
 
 ## The lifecycle, as one checklist
 
@@ -109,8 +110,9 @@ for its files, and nothing else: see [Publish](#publish-a-page) below.
    `chat.mjs`, tested end to end with `testChat` (`npm test`) ([docs/agents/app.md](agents/app.md)). A page: `public/`,
    with `@saltix/grain` for the bridge. Both: a page beside the chat, which Saltix keeps.
 4. **Keep the standards.** `grain lint` checks the Connect profile (`connect.json`, English and Russian, only the
-   permissions the app uses), the icon (today a 256×256 PNG whose hash `grain.json` names, `grain icon`; a 512×512
-   opaque standard drawn in Saltix's rounded square is coming) and the page: inside the safe area unless it declares
+   permissions the app uses), the icon (512 × 512, opaque, at most 64 KiB, drawn in Saltix's rounded square; `grain icon
+   <picture> --out icon.png` makes one from any picture and names it, [icons](icons.md)) and the page: inside the safe
+   area unless it declares
    `viewport-fit=cover` ([AGENTS.md](../AGENTS.md)), and a page for some people only checks first, then renders. Every
    card keeps the [card standard](agents/cards.md), which `assertCardStandard` checks in the tests.
 5. **Try it.** A page: `npx grain dev` serves it with the simulator, which frames it as Saltix does at a phone's and the
@@ -118,7 +120,7 @@ for its files, and nothing else: see [Publish](#publish-a-page) below.
    prints. A chat: `npm start` in the project, then in Saltix tap the app in **My apps**: its home shows the commands,
    and an answer is marked "from <slug>, verified".
 6. **Publish.** A chat goes live as soon as its program runs: there is nothing to upload. A page is a new version of
-   the manifest, which the owner signs ([below](#publish-a-page)). Going **public** (from private) is the owner's, in
+   the manifest: `grain publish` puts its bundle into the network, and the owner signs it ([below](#publish-a-page)). Going **public** (from private) is the owner's, in
    Saltix or `grain access --public`.
 7. **Run the program where it stays up** (when the app has one): your computer while you test, then any small server
    with outbound internet, under a supervisor that does not restart it on exit status 78 (a key that cannot work).
@@ -133,30 +135,33 @@ for its files, and nothing else: see [Publish](#publish-a-page) below.
 
 ## Publish a page
 
-The owner's phone signs every version of the manifest; what differs is where the page's files come from.
-
-**Today: a sealed bundle at an HTTPS URL** (the recommended form). The bundle is named by its hash, so the host needs
-no trust: any HTTPS address that serves the file as it is will do (a static site, object storage, a release asset).
+The owner's phone signs every version of the manifest. **The network keeps the bundle**: `grain publish` seals
+`public/` and puts it from your computer straight into the Saltix network, onto the servers that keep it (storage cities
+and relays offering space), and every Saltix fetches it from its own relay by its hash (Saltix
+[32-images §7.3](protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)). No host, domain or
+certificate of your own, and no file to upload anywhere.
 
 ```sh
-npx grain show --slug <slug> --out registered.json   # the version and the manifest the registry holds now
-# grain.json: the same slug, a "version" above the registry's, the permissions the page uses
-npx grain lint
-npx grain bundle --sources https://files.example/<slug>-2.zip   # bundle.zip; grain.json names its hash and size
-# upload bundle.zip to exactly that URL
-npx grain publish --wallet                           # a QR code: the owner's Saltix shows the version and signs it
+npx grain lint                     # the manifest, the Connect profile, the icon, the page
+npx grain icon logo.png --out icon.png   # the icon, once (grain.json names it)
+npx grain publish                  # seal, check, upload into the network, then a QR code the owner's Saltix signs
 ```
 
-`--wallet` asks the owner's Saltix even when the project has an `owner.key` (`grain init` makes one, for apps registered
-from a computer on the test network). A program can propose the same update in the console instead:
-`chat.proposeUpdate(next)` sends **Review and approve** to the owner.
+- **With `app.key` paired** (`grain pair`), the bundle goes up before the owner signs, on the paired key's statement,
+  and the network holds it for a day: the owner scans the QR code whenever they like. Without it (an app's first
+  version), it goes up once the registry names the version, so the command keeps running until the owner signed.
+- **The sources** a manifest names are the SDK's to fill in: none on a network that runs protocol version 2; before it
+  (the test network runs version 1), copies the network itself serves at up to 3 relays of its relay list.
+- **`--no-wait`** returns once the QR code is shown (also `.grain/publish.html`); `grain publish` again finishes (the
+  bundle if it waited, the icon). A break, a busy node, a version the registry already holds: run it again.
+  `grain doctor` says where it stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, `published`).
+- An app made in Saltix is its owner's phone's, so `grain publish` asks the owner's Saltix even when the project has an
+  `owner.key`; `--wallet` says so outright. A program can propose the same update in the console instead:
+  `chat.proposeUpdate(next, { bundle })` puts the bundle into the network and sends **Review and approve** to the owner.
 
-**Today, too: hosted.** Your HTTPS site serves `public/` and the signed manifest at `/.well-known/saltix-grain`
-([README](../README.md#the-command-line)); it can change the page at any time, and Saltix tells users so.
-
-**Coming: the network hosts the bundle.** `grain publish` will upload the bundle from your computer into the network
-itself (the storage cities keep it, and Saltix fetches it by its hash), and the owner approves it by the same QR code: no
-host, domain or certificate of your own. Until `npx grain help` says `publish` uploads, the bundle needs a URL.
+**Hosted, if you want it.** Your HTTPS site serves `public/` and the signed manifest at `/.well-known/saltix-grain`
+([README](../README.md#the-command-line)), and `grain publish --hosted` registers it; it can change the page at any
+time, and Saltix tells users so.
 
 **While you develop**, `grain dev` serves the page from your computer to the simulator and to a debug Saltix in the
 emulator; a release Saltix never opens such a development origin.

@@ -152,30 +152,37 @@ test("lint warns, and passes: about empty, English only, owner or revision given
   assert.match(big.errors.join("\n"), /bytes in its Borsh form, at most 8192/);
 });
 
-test("lint checks the icon file a project keeps: a 256×256 PNG whose hash grain.json names", () => {
+test("lint checks the icon file a project keeps: one every wallet takes (32-images §2), whose hash grain.json names", () => {
   const dir = project();
-  const png = (w, h) => {
+  const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const standard = Buffer.from(vectors.images.find((i) => i.kind === "grain_icon" && i.width === 512).hex, "hex");
+  const legacy = Buffer.from(vectors.images.find((i) => i.kind === "grain_icon" && i.width === 256).hex, "hex");
+  const header = (w, h) => {
     const b = new Uint8Array(40);
     b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
     new DataView(b.buffer).setUint32(16, w);
     new DataView(b.buffer).setUint32(20, h);
     return b;
   };
-  assert.deepEqual(pngSize(png(256, 256)), { width: 256, height: 256 });
+  assert.deepEqual(pngSize(header(256, 256)), { width: 256, height: 256 });
   assert.equal(pngSize(new TextEncoder().encode("GIF89a, not a png at all")), null);
   const m = manifestOf(dir);
   assert.deepEqual(lintIcon(dir, m).errors, [], "no icon file: nothing to check");
-  writeFileSync(join(dir, "icon.png"), png(512, 512));
-  assert.match(lintIcon(dir, m).errors[0], /icon\.png: 512×512; Saltix shows a 256×256 PNG/);
+  writeFileSync(join(dir, "icon.png"), header(512, 512));
+  assert.match(lintIcon(dir, m).errors[0], /icon\.png: the image check: format/);
   writeFileSync(join(dir, "icon.png"), "GIF89a");
-  assert.match(lintIcon(dir, m).errors[0], /icon\.png: not a PNG/);
-  const icon = png(256, 256);
-  writeFileSync(join(dir, "icon.png"), icon);
-  assert.match(lintIcon(dir, m).errors[0], /icon\.png: its hash is [0-9a-f]{64}, but grain\.json's "icon" is 0{64} \(grain icon icon\.png gives the hash\)/);
-  assert.deepEqual(lintIcon(dir, { ...m, icon: iconHash(icon) }).errors, []);
+  assert.match(lintIcon(dir, m).errors[0], /icon\.png: the image check: format/);
+  writeFileSync(join(dir, "icon.png"), standard);
+  assert.match(lintIcon(dir, m).errors[0], /icon\.png: its hash is [0-9a-f]{64}, but grain\.json's "icon" is 0{64}/);
+  assert.deepEqual(lintIcon(dir, { ...m, icon: iconHash(standard) }).errors, []);
+  // 256 × 256, as manifests named before the standard: taken, with a warning.
+  writeFileSync(join(dir, "icon.png"), legacy);
+  const old = lintIcon(dir, { ...m, icon: iconHash(legacy) });
+  assert.deepEqual(old.errors, []);
+  assert.match(old.warnings.join("\n"), /256 × 256: wallets take it/);
   mkdirSync(join(dir, "public"), { recursive: true });
-  writeFileSync(join(dir, "public", "icon.png"), png(255, 256));
-  assert.match(lintIcon(dir, { ...m, icon: iconHash(icon) }).errors[0], /public\/icon\.png: 255×256/);
+  writeFileSync(join(dir, "public", "icon.png"), header(255, 256));
+  assert.match(lintIcon(dir, { ...m, icon: iconHash(legacy) }).errors[0], /public\/icon\.png: the image check/);
   const linted = grain(["lint"], dir);
   assert.equal(linted.status, 1, "the icon's errors stop registering");
 });
