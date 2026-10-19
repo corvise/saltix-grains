@@ -346,6 +346,29 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
 - **In Saltix**: run the server with the real developer key and use the app from the owner's phone: its chat is the
   app's console. Your own chat does not run in the simulator yet (it runs `examples/hello-grain`).
 
+## Publish a page, and its icon
+
+A page needs no server and no hosting (Saltix 32-images [§7.3](../protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)):
+`npx grain publish` seals `public/`, checks it as every node does, puts it from this computer into the network, shows
+the QR code the owner's Saltix signs the version from, waits for the registry and uploads the icon. Never set up a host,
+a CDN, a domain or a certificate for it, and never ask the user for one.
+
+1. `npx grain icon <picture> --out icon.png`: a 512 × 512 icon to the standard from any PNG or JPEG ([icons](../icons.md));
+   it names it in `grain.json`. Look at `.grain/icon-preview.png` (the icon in Saltix's rounded square at 24 to 96 dp):
+   if the mark does not read at 24 dp, make it bolder. Never draw rounded corners, transparency or a border.
+2. `npx grain status`: with `app.key` paired, the bundle goes up before the owner signs (held pending for a day); without
+   it, it goes up once the registry names the version, so the command must keep running until the owner signed.
+3. `npx grain publish --no-wait`: show the user its QR code (or `.grain/publish.html`) and say: scan it with Saltix, check
+   the app and the version, confirm with the PIN. Then `npx grain publish` again: it finishes (the bundle if it waited,
+   the icon) and ends with `is published`.
+4. `npx grain doctor` names what is left. Its `publish` state: `not_uploaded` (run `grain publish`), `pending` (the
+   bundle is in the network; show the QR code), `waiting_for_owner` (the user has the QR code), `pending_expired` (the
+   day passed: `grain publish` again), `published`.
+
+A refusal comes in words with the next step (`the bundle was refused: busy (…). Next: grain publish again in a few
+minutes`); act on the next step, never work around it. A version the registry holds already is raised to the next by
+`grain publish` itself. A page the user hosts at their own origin: `--hosted`.
+
 ## Ship
 
 - **Run it** where it stays up, under a supervisor that does not restart on exit 78. With systemd, as Saltix runs its
@@ -371,9 +394,10 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   the one on your computer first.
 - **A new command or text**: change `chat.json`, raise `version`, restart. Each user gets the new spec before their
   next answer.
-- **A new name, icon or screen** is a new manifest, which only the owner's phone signs: `await chat.proposeUpdate(next)`
-  sends it to the owner's console as **Review and approve**; or the owner scans `grain publish --wallet`'s QR code
-  ([publishing a page](../how-it-works.md#publish-a-page)).
+- **A new name, icon or screen** is a new manifest, which only the owner's phone signs: `npx grain publish` (above) puts
+  the new bundle into the network and shows the QR code the owner scans; or `await chat.proposeUpdate(next)` sends the
+  manifest to the owner's console as **Review and approve** (`chat.proposeUpdate(next, { bundle })` puts its bundle
+  into the network first, on the server key's statement) ([publishing a page](../how-it-works.md#publish-a-page)).
 - **Public**: the app starts private (its owner and members). The owner makes it public in Saltix (My apps → the app),
   or `grain access --public` with `owner.key` on the test network.
 

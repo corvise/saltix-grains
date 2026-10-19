@@ -45,7 +45,8 @@ test("a switch never takes the next word, and a value comes either way", () => {
 
 test("a flag a command does not take, a switch given a value and an unknown command are refused", () => {
   assert.throws(() => parse(["lint", "--manifst", "x.json"]), (e) => e instanceof UsageError && /takes no --manifst; it takes --manifest, --key/.test(e.message));
-  assert.throws(() => parse(["icon", "--out", "x"]), /takes no --out; it takes no flags/);
+  assert.throws(() => parse(["icon", "--key", "x"]), /takes no --key; it takes --out, --fit, --background, --preview, --fix, --manifest/);
+  assert.throws(() => parse(["version-of-nothing"]), /no command/);
   assert.throws(() => parse(["init", "--chat=yes"]), (e) => e instanceof UsageError && /switch/.test(e.message));
   assert.throws(() => parse(["frob"]), (e) => e instanceof UsageError && /no command "frob"/.test(e.message));
   // Each command's own flags: the owner's calls take what a signed call takes, and how to wait for Saltix.

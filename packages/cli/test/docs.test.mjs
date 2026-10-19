@@ -131,7 +131,9 @@ test("how-it-works.md: the pieces, whether an app needs a server, and the lifecy
   // What is not built yet says so.
   assert.match(list.replace(/\s+/g, " "), /by \*\*pairing\*\* \(Saltix 24-app-studio \[§3a\]/);
   assert.match(list.replace(/\s+/g, " "), /\*\*A developer key\*\* stands in only for a host where no command runs/);
-  assert.match(page.replace(/\s+/g, " "), /\*\*Coming: the network hosts the bundle\.\*\*/);
+  // A page needs no hosting: the network keeps its bundle, which grain publish puts there.
+  assert.match(page.replace(/\s+/g, " "), /\*\*The network keeps the bundle\*\*: `grain publish` seals `public\/` and puts it from your computer straight into the Saltix network/);
+  assert.doesNotMatch(page, /coming|will upload|needs a URL/i, "nothing about publishing is still to come");
   // Nothing private: no server's address, no real key.
   assert.doesNotMatch(page, /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, "no IP address");
   assert.doesNotMatch(page, /saltix-app:1:[a-z]+:[0-9a-f]/, "no developer key");

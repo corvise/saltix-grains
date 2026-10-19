@@ -1,8 +1,8 @@
 # Grains: apps inside wallets
 
 > Reflects Saltix 12-grains (approved 2026-10-05; bridge version 3, the page's frame, check-first sign-in, invoices
-> from a registered server key and the Connect profile, 2026-10-16), as of corvise/saltix `7d3744c5` (2026-10-19).
-> Section numbers are the specification's.
+> from a registered server key and the Connect profile, 2026-10-16; the icon standard and bundles the network keeps,
+> 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19). Section numbers are the specification's.
 
 A **grain** is an app that opens inside a Saltix wallet, from the Apps section, a chat or a link, with the wallet's
 identity, payments, storage and relays at hand and never its keys. Saltix calls grains *mini-apps* in what users read;
@@ -37,8 +37,8 @@ GrainManifest {
                                    devices, a phone's P-256 key among them
   name:        Map<lang, String>   1–16 languages, "en" among them; at most 32 characters each
   description: Map<lang, String>   at most 16 languages; at most 200 characters each
-  icon:        [u8; 32]            derive("Saltix grain icon v1", a 256×256 PNG), the PNG kept with the bundle or at
-                                   origins[0]
+  icon:        [u8; 32]            derive("Saltix grain icon v1", the icon: a 512×512 opaque PNG, images.md §3), a
+                                   named blob the network keeps; 32 zero bytes: none (the wallet draws the monogram)
   entry:       Entry
   permissions: u32                 a bit set of §6
   sponsor:     Option<[u8; 32]>    the account whose channel pays the grain's relay use (§5.4)
@@ -58,9 +58,14 @@ manifest id        = derive("Saltix grain manifest id v1", Borsh(manifest))
 - **An origin** is `https://host[:port]`: a lowercase host of `[a-z0-9.-]` (at most 253 bytes, not starting or ending
   with `.` or `-`), a port of 1–65535 if any, and nothing after it.
 - **Hosted**: 1–4 origins; `url` (https, at most 2 048 bytes) is at one of them.
-- **Sealed**: `size` from 1 byte to 20 MiB; `bundle` is §8's hash; 1–8 https `sources` of at most 2 048 bytes each;
-  `start` is a path inside the bundle of at most 256 bytes (`[A-Za-z0-9._/-]`, no leading `/`, no empty, `.` or `..`
-  part); at most 8 `connect` origins.
+- **Sealed**: `size` from 1 byte to 20 MiB; `bundle` is §8's hash; 1–8 https `sources` of at most 2 048 bytes each,
+  and from protocol version 2 0–8: a manifest with none names a bundle of at most 16 MiB, which the network keeps and
+  serves ([images §10](images.md#10-what-is-a-protocol-change)); `start` is a path inside the bundle of at most 256
+  bytes (`[A-Za-z0-9._/-]`, no leading `/`, no empty, `.` or `..` part); at most 8 `connect` origins.
+- **The icon** follows [images §3](images.md#3-the-mini-app-icon-standard): 512 × 512, opaque, sRGB, no metadata, at most
+  64 KiB (256 × 256 from manifests made before the standard), drawn in a rounded square with corners of 0.26 of the side.
+  Its bytes are a named blob: once the registry holds the manifest, the publisher uploads them (`blob_put`), every node
+  keeps them, and wallets fetch them by hash; they are no longer looked for in the bundle or at the origin.
 - **Chat**: nothing to host. `permissions` holds at most `notifications` (4): no page asks for anything else. Its chat
   is served from the server keys its registry record names (§3).
 - `permissions` holds only §6's bits.
@@ -499,19 +504,29 @@ permission nothing in the app's sources uses.
 
 ## 8. Sealed bundles
 
-A bundle is a ZIP of the grain's files, at most 20 MiB. `bundle = derive("Saltix grain bundle v1", its bytes)`;
-`sources` lists where to fetch it (HTTPS, or a relay's file store). The wallet downloads it from any source, checks the
-size and the hash, unpacks it into the grain's private directory and serves `start` from the virtual origin. A new
-version is a new manifest; the wallet shows what changed in permissions before running it.
+A bundle is a ZIP of the grain's files, at most 20 MiB. `bundle = derive("Saltix grain bundle v1", its bytes)`.
+
+**The network keeps it** ([images §6–§8](images.md#6-named-blobs)): a bundle of at most 16 MiB that a live grain's
+manifest names is a named blob, kept whole by its keepers (three storage cities and five relays offering space) and
+served by every relay (`GET /_blob/grain_bundle/<hash>` with `Range`, `blob_get`). The developer's machine puts it there
+itself with `blob_put`: before the owner signs the manifest, on the statement of a server key the grain's record names,
+which holds it for a day; or after the registry names it ([images §7.3](images.md#73-bundles-from-the-developers-machine-into-the-network)).
+`sources` lists where else to fetch it (HTTPS): fallbacks, and from protocol version 2 none at all.
+
+The wallet asks its own relay for the bundle first, then the sources; it checks the size, the hash and the bundle check
+([images §2a](images.md#2a-the-bundle-check)), unpacks it into the grain's private directory and serves `start` from the
+virtual origin. A new version is a new manifest; the wallet shows what changed in permissions before running it.
 
 So that a bundle one wallet runs every wallet runs, it holds at most 4 096 files and 64 MiB unpacked, with names of
-`/`-separated parts of `[A-Za-z0-9._ ~@+-]`, none `.` or `..`, each name once. A wallet refuses any other bundle whole.
-It serves every file with a Content-Security-Policy whose `connect-src` (and images and media) allows only the origin
-itself and the manifest's `connect` origins (`https://` and `wss://`), and refuses other requests. The manifest of a
-sealed grain opened by link is served at one of its sources' origins.
+`/`-separated parts of `[A-Za-z0-9._ ~@+-]`, none `.` or `..`, each name once, in the ZIP form the network keeps (no
+comment, one disk, no ZIP64, stored or deflated entries, none encrypted, the local records agreeing with the directory).
+A wallet refuses any other bundle whole. It serves every file with a Content-Security-Policy whose `connect-src` (and
+images and media) allows only the origin itself and the manifest's `connect` origins (`https://` and `wss://`), and
+refuses other requests.
 
 `grain bundle` makes the same bytes from the same files on any computer (sorted, no times, every file stored, never
-deflated) and fills in `bundle`, `size`, `sources`, `start` and `connect`.
+deflated) and fills in `bundle`, `size`, `start` and `connect`; `grain publish` does it too, then puts the bundle into the
+network.
 
 ## 9. Wallets
 
@@ -535,7 +550,7 @@ The protocol defines grains; each wallet decides how it lists them. Saltix:
 |---|---|
 | `@saltix/grain` | the bridge with types and events; `inWallet()`; outside a wallet, `walletLink()`, the link that opens the grain in one; `grain.layout()` |
 | `@saltix/grain-server` | checks sign-ins and invoices, finds payments on chain through a node, issues sponsor certificates, signs manifests, notifications and the registry's calls, writes to users through the relays, serves a chat |
-| `grain` command line | `init`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, … ([README](../../README.md#the-command-line)) |
+| `grain` command line | `init`, `dev`, `lint`, `icon` (an icon to the standard from any picture, [icons](../icons.md)), `sign`, `bundle`, `publish` (straight into the network), `retire`, `show`, `profile`, … ([README](../../README.md#the-command-line)) |
 | Simulator | the wallet's side of the bridge in a desktop browser, framed as a wallet frames a page (§7) |
 | Test network | its faucet (`grain faucet`), its registry |
 
@@ -553,6 +568,14 @@ deposit without leaving the phone:
    PIN (for a managed account its phrase too, or a quorum) signs the manifest and the transaction and submits it.
 4. The tool watches the registry until the slug holds the manifest it showed (equal but for `owner`, `owner_key` and
    `signature`), then writes the signed JSON form the grain's origin serves.
+
+**A sealed grain's bundle and the icon** ([images §7](images.md#7-uploading)): before step 1 the tool puts the bundle
+into the network itself (`blob_put` in pieces at a relay's gateway) with a statement signed by the computer's paired
+server key (`grain pair`; or a developer key), so the phone signs a manifest whose bundle the network already holds and
+the developer's computer need not stay on; without a server key yet (a first version), it uploads the bundle after
+step 4, once the registry names it. The icon goes up after step 4. No server of the developer's is needed: before
+protocol version 2 the manifest names, as its required sources, copies the network itself serves at a few relays of its
+relay list; from version 2 it names none.
 
 **From the app's console.** An app's program may propose its update in its chat instead: a card with a `Publish`
 action carries the same `<manifest>`, and only the grain's team's wallets show it; the owner's **Review and approve**
@@ -579,7 +602,8 @@ release wallet never does.
 | Deposit | 100 SALT for a slug of 3–5 characters, 30 for 6–7, 10 for 8 or more; returned 30 days after `RetireGrain` |
 | `GRAIN_RELEASE` | 2 592 000 slots (30 days) |
 | Storage per grain | 1 MiB; keys 1–128 bytes, values at most 60 KiB |
-| Bundle | 20 MiB; 4 096 files and 64 MiB unpacked |
+| Bundle | 20 MiB; 4 096 files and 64 MiB unpacked; 16 MiB for one the network keeps |
+| Icon | PNG, 512 × 512 (256 × 256 taken), at most 65 536 bytes, opaque |
 | Quick pay | at most 1 SALT a day per grain; the user may set less |
 | A bridge answer or event | 64 KiB |
 | A tap before `grain_pay`, `grain_chat_open`, `grain_manage_open` | within 5 seconds |

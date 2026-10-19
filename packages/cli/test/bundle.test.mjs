@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
-import { accountId, bundleHash, fromHex, toHex, verifyManifest } from "@saltix/grain-server";
+import { accountId, bundleHash, checkBundle, fromHex, toHex, verifyManifest } from "@saltix/grain-server";
 import { STORED, makeBundle, sealed } from "../dist/bundle.js";
 import { serve, DEV_BUNDLE } from "../dist/dev.js";
 
@@ -129,7 +129,9 @@ test("the manifest names the bundle, its sources, start and connect", () => {
   const dir = grainDir();
   const b = makeBundle(join(dir, "public"));
   const hosted = manifest({ hosted: { url: "https://notes.example/", origins: ["https://notes.example"] } });
-  assert.throws(() => sealed(hosted, b, {}), /--sources/);
+  // No source: the network keeps the bundle (grain publish names relays' copies where the protocol needs one).
+  assert.deepEqual(sealed(hosted, b, {}).entry.sealed.sources, []);
+  assert.throws(() => sealed(hosted, b, { sources: Array.from({ length: 9 }, (_, i) => `https://cdn${i}.example/n.zip`) }), /at most 8/);
   assert.throws(() => sealed(hosted, b, { sources: ["https://cdn.example/n.zip"], start: "main.html" }), /not in the bundle/);
   const m = sealed(hosted, b, { sources: ["https://cdn.example/n.zip"], connect: ["https://api.notes.example"] });
   assert.deepEqual(m.entry, { sealed: { bundle: b.hash, size: b.size, sources: ["https://cdn.example/n.zip"], start: "index.html", connect: ["https://api.notes.example"] } });
@@ -170,4 +172,19 @@ test("the agents' rules say how a bundle is checked: rebuilt in CI, grain.json u
     assert.match(text, /rebuild it in CI and fail when `grain\.json` changes/i);
     assert.match(text, /never edit\s+`entry\.sealed` by hand/);
   }
+});
+
+test("grain bundle writes the protocol's bundle byte for byte, and the network's bundle check takes it (vectors/images-v1.json)", () => {
+  const v = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const dir = mkdtempSync(join(tmpdir(), "grain-vector-"));
+  for (const f of v.bundles.made_from) {
+    mkdirSync(join(dir, ...f.name.split("/").slice(0, -1)), { recursive: true });
+    writeFileSync(join(dir, ...f.name.split("/")), f.text);
+  }
+  const made = makeBundle(dir);
+  const expected = v.bundles.made.find((b) => /grain bundle writes it/.test(b.name));
+  assert.equal(Buffer.from(made.zip).toString("hex"), expected.hex);
+  assert.equal(made.hash, expected.hash);
+  assert.equal(made.size, expected.bytes);
+  assert.deepEqual(checkBundle(made.zip), { ok: true, value: { files: expected.files, unpacked: expected.unpacked } });
 });

@@ -7,7 +7,9 @@
 //   `GET /_file/<id>`) and an app's numbers (`grain_stats`, the newest of each grain). Plain `ws://` and `http://`:
 //   loopback only.
 // - `createDevRegistry`: what a node's wallet interface says of one grain (`node_status`, `grain_get`, `account_get`,
-//   `relay_list`): its owner, server keys, access and team, changed in place, each change a new beacon block.
+//   `relay_list`): its owner, server keys, access and team, changed in place, each change a new beacon block; and a node's
+//   named blobs (`blob_put`, `blob_get`, 32-images §7–§8) as the node takes them: an icon the registry names, a bundle in
+//   pieces, named or held pending on a registered server key's statement, refused with the node's reasons.
 //
 //   const relay = await createDevRelay();                   // its own server on 127.0.0.1, a free port
 //   const relay = createDevRelay({ server, path: "/relay" }) // or beside your routes: call relay.handle(req, res)
@@ -18,8 +20,11 @@ import { randomBytes } from "node:crypto";
 import { type WebSocket, WebSocketServer } from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
 import { type NetworkName, accountId, encodeAddress } from "./address.js";
-import { Reader, derive, toHex } from "./bytes.js";
+import { Reader, derive, fromBase64, fromHex, toBase64, toHex } from "./bytes.js";
 import { verifyEd25519 } from "./keys.js";
+import { bundleUploadNames, bundleUploadProblem, decodeSignedBundleUpload, pendingUntil } from "./bundle-upload.js";
+import { BLOB_PIECE, NAMED_KINDS, type NamedKind, NO_ICON, namedHash, namedProblem } from "./named.js";
+import { RpcError } from "./node.js";
 import type { Controller } from "./member.js";
 import { type Manifest, type SignedManifest, signManifest } from "./manifest.js";
 import { decodeAddressRecord, fromBase64Url, recordProblem, toBase64Url } from "./records.js";
@@ -293,10 +298,32 @@ export interface DevRegistryOptions {
   /** Public (the default) or private. */
   public?: boolean;
   members?: DevMember[];
-  /** The relays `relay_list` names. */
-  relays?: RelayEndpoint[];
+  /** The relays `relay_list` names: endpoints of one relay, or relays with their node keys and the space they offer. */
+  relays?: RelayEndpoint[] | DevRelayEntry[];
   /** The manifest's name (`{ en }`), the slug by default. */
   name?: string;
+  /** The protocol version `node_status` names (23-upgrades §6): 1 by default, as the test network runs. */
+  protocol?: number;
+  /** False: nobody registered the slug yet, until `publish` (a wallet's `RegisterGrain`). */
+  registered?: boolean;
+  /** The clock statements are checked against (Unix ms). */
+  now?: () => number;
+}
+
+/** A relay as `relay_list` names it. */
+export interface DevRelayEntry {
+  key: string;
+  endpoints: RelayEndpoint[];
+  /** The space it offers for bundles and fragments, GiB (relay record v3), or null. */
+  store_gib: number | null;
+}
+
+/** A blob the development node holds. */
+export interface DevBlob {
+  kind: NamedKind;
+  bytes: Uint8Array;
+  /** Until when it is held on a statement's word while no manifest names it (Unix ms), or null. */
+  pendingUntil: number | null;
 }
 
 export interface DevRegistry {
@@ -319,6 +346,14 @@ export interface DevRegistry {
   setServers(servers: string[]): void;
   /** Retire the grain at a new block. */
   retire(): void;
+  /** The owner's wallet registers or updates the grain with `signed` (`RegisterGrain`, `UpdateGrain`), at a new block. */
+  publish(signed: SignedManifest): void;
+  /** The blobs the node holds, by hash. */
+  readonly blobs: Map<string, DevBlob>;
+  /** Bundles' uploads under way, by hash: the bytes the node holds of each. */
+  readonly uploads: Map<string, { size: number; received: number }>;
+  /** Answer a `blob_put` with this refusal instead (`{reason, received?}`), or let it through (undefined). */
+  blobPutHook: ((params: Record<string, unknown>) => { reason: string; received?: number } | undefined) | null;
 }
 
 /** A registry of one grain, as a node's wallet interface shows it, for development and tests. */
@@ -333,6 +368,12 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
   };
   const signed: SignedManifest = signManifest(manifest, o.ownerSecret);
   let height = 1;
+  let registered = o.registered ?? true;
+  const now = o.now ?? Date.now;
+  const blobs = new Map<string, DevBlob>();
+  const uploads = new Map<string, { size: number; parts: Uint8Array[]; received: number }>();
+  /** Until when a statement holds each bundle being uploaded on its word. */
+  const pendingFor = new Map<string, number>();
   const grain: RegisteredGrain = {
     slug: o.slug, owner, version: 1, id: toHex(randomBytes(32)), registered: 1,
     updated: 1, retired: null, deposit: "10000000000", manifest: signed, servers: [...o.servers], category: 9, public: o.public ?? true,
@@ -341,24 +382,142 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
   const controllers = new Map<string, Controller>();
   const calls: Record<string, number> = {};
   const status = () => ({
-    network, genesis, slot: height, beacon: { height, hash: height.toString(16).padStart(64, "0") },
+    network, genesis, genesis_time: Math.floor(now() / 1000) - height, slot: height,
+    beacon: { height, hash: height.toString(16).padStart(64, "0") },
     shards: [{ shard: "", hash: (height + 0x8000).toString(16).padStart(64, "0") }],
+    protocol: { version: o.protocol ?? 1, supported: [1, 2], next: null, outdated: null },
   });
+  const relayList = (): DevRelayEntry[] => {
+    const given = o.relays ?? [];
+    if (given.length > 0 && "endpoints" in given[0]!) return given as DevRelayEntry[];
+    return [{ key: "00".repeat(32), endpoints: given as RelayEndpoint[], store_gib: null }];
+  };
+  /** What the canonical registry names: the live grain's icon and sealed bundle. */
+  const live = () => (registered && grain.retired === null ? grain.manifest?.manifest ?? null : null);
+  const named = (kind: NamedKind, hash: string, size?: number): boolean => {
+    const m = live();
+    if (m === null) return false;
+    if (kind === "grain_icon") return m.icon !== NO_ICON && m.icon === hash;
+    return kind === "grain_bundle" && "sealed" in m.entry && m.entry.sealed.bundle === hash && (size === undefined || m.entry.sealed.size === size);
+  };
+  const refused = (what: string, reason: string, received?: number): never => {
+    throw new RpcError("blob_put", -32602, `the ${what} is refused: ${reason}`, received === undefined ? { reason } : { reason, received });
+  };
+  /** `blob_put` as a node answers it (32-images §7.1, §7.3). */
+  const blobPut = (p: Record<string, unknown>): Record<string, unknown> => {
+    const kind = p.kind as NamedKind;
+    if (kind !== "grain_icon" && kind !== "grain_bundle") return refused("image", "kind");
+    const hook = registry.blobPutHook?.(p);
+    if (hook) return refused(kind === "grain_bundle" ? "bundle" : "image", hook.reason, hook.received);
+    let data: Uint8Array;
+    try {
+      data = fromBase64(String(p.data));
+    } catch {
+      throw new RpcError("blob_put", -32602, "data: the bytes in base64");
+    }
+    if (kind === "grain_icon") {
+      if (data.length === 0 || data.length > NAMED_KINDS.grain_icon.maxBytes) return refused("image", "size");
+      const hash = namedHash(kind, data);
+      if (!named(kind, hash)) return refused("image", "not_named");
+      const problem = namedProblem(kind, data);
+      if (problem) return refused("image", problem);
+      blobs.set(hash, { kind, bytes: data, pendingUntil: null });
+      return { kind, hash, kept: true };
+    }
+    const hash = String(p.hash);
+    const size = Number(p.size);
+    const from = Number(p.from ?? 0);
+    if (!/^[0-9a-f]{64}$/.test(hash) || !Number.isSafeInteger(size) || !Number.isSafeInteger(from)) {
+      throw new RpcError("blob_put", -32602, "hash, size and from: the bundle's");
+    }
+    if (size === 0 || size > NAMED_KINDS.grain_bundle.maxBytes || data.length > BLOB_PIECE) return refused("bundle", "size");
+    const isNamed = named(kind, hash, size);
+    if (p.upload !== undefined && p.upload !== null && !isNamed) {
+      let statement;
+      try {
+        statement = decodeSignedBundleUpload(fromHex(String(p.upload)));
+      } catch {
+        throw new RpcError("blob_put", -32602, "upload: hex of a SignedBundleUpload");
+      }
+      const servers = registered && grain.retired === null && statement.upload.slug === grain.slug ? grain.servers ?? [] : null;
+      const problem = bundleUploadNames(statement, hash, size) ?? bundleUploadProblem(statement, genesis, servers, now());
+      if (problem) return refused("bundle", problem);
+      const held = blobs.get(hash);
+      if (held) {
+        // Held already: the statement extends what holds it.
+        held.pendingUntil = Math.max(held.pendingUntil ?? 0, pendingUntil(statement.upload));
+        uploads.delete(hash);
+        return { kind, hash, received: size, kept: true, pending: !isNamed };
+      }
+      pendingFor.set(hash, pendingUntil(statement.upload));
+    } else if (!isNamed && !blobs.has(hash)) {
+      return refused("bundle", "not_named");
+    }
+    const held = blobs.get(hash);
+    if (held) {
+      uploads.delete(hash);
+      return { kind, hash, received: size, kept: true, pending: !isNamed && held.pendingUntil !== null };
+    }
+    let upload = uploads.get(hash);
+    if (!upload) {
+      if (from !== 0) return refused("bundle", "offset", 0);
+      upload = { size, parts: [], received: 0 };
+      uploads.set(hash, upload);
+    } else if (upload.size !== size || from !== upload.received) {
+      return refused("bundle", "offset", upload.received);
+    }
+    if (upload.received + data.length > size) return refused("bundle", "offset", upload.received);
+    upload.parts.push(data);
+    upload.received += data.length;
+    if (upload.received < size) return { kind, hash, received: upload.received, kept: false };
+    uploads.delete(hash);
+    const whole = new Uint8Array(size);
+    let at = 0;
+    for (const part of upload.parts) {
+      whole.set(part, at);
+      at += part.length;
+    }
+    if (namedHash(kind, whole) !== hash) return refused("bundle", "hash");
+    const problem = namedProblem(kind, whole);
+    if (problem) return refused("bundle", problem);
+    blobs.set(hash, { kind, bytes: whole, pendingUntil: isNamed ? null : pendingFor.get(hash) ?? null });
+    return { kind, hash, received: size, kept: true, pending: !isNamed };
+  };
+  /** `blob_get` as a node answers it (32-images §8.1). */
+  const blobGet = (p: Record<string, unknown>): Record<string, unknown> => {
+    const kind = p.kind as NamedKind;
+    const hash = String(p.hash);
+    const held = blobs.get(hash);
+    if (!held || held.kind !== kind) return { blob: null, fetching: false };
+    const from = Number(p.from ?? 0);
+    const len = Math.min(Number(p.len ?? 1 << 20), 1 << 20);
+    if (kind !== "grain_bundle") return { blob: { kind, hash, type: NAMED_KINDS[kind].type, size: held.bytes.length, from: 0, data: toBase64(held.bytes) }, fetching: false };
+    if (from >= held.bytes.length) throw new RpcError("blob_get", -32602, "from: past the bundle's end");
+    const piece = held.bytes.subarray(from, from + len);
+    return { blob: { kind, hash, type: NAMED_KINDS[kind].type, size: held.bytes.length, from, data: toBase64(piece) }, fetching: false };
+  };
   const registry: DevRegistry = {
-    genesis, network, grain, controllers, calls,
+    genesis, network, grain, controllers, calls, blobs, blobPutHook: null,
+    get uploads() {
+      return new Map([...uploads].map(([hash, u]) => [hash, { size: u.size, received: u.received }]));
+    },
     async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
       calls[method] = (calls[method] ?? 0) + 1;
       switch (method) {
         case "node_status":
           return status() as T;
         case "grain_get":
-          return { grain: params.slug === o.slug ? structuredClone(grain) : null, deposit: "10000000000" } as T;
+          return { grain: params.slug === o.slug && registered ? structuredClone(grain) : null, deposit: "10000000000" } as T;
         case "account_get": {
           const account = String(params.address);
           return { account, shard: "", nonce: 0, salt: "0", work: "0", channels: [], controller: controllers.get(account) ?? null } as T;
         }
         case "relay_list":
-          return { relays: [{ endpoints: o.relays ?? [] }] } as T;
+          return { relays: relayList() } as T;
+        case "blob_put":
+          return blobPut(params) as T;
+        case "blob_get":
+          return blobGet(params) as T;
         default:
           throw new Error(`the development registry does not answer ${method}`);
       }
@@ -378,6 +537,21 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
     },
     retire() {
       grain.retired = height + 1;
+      registry.block();
+    },
+    publish(next) {
+      const m = next.manifest;
+      if (m.slug !== grain.slug) throw new Error(`the development registry holds ${grain.slug}, not ${m.slug}`);
+      if (registered && m.version <= grain.version) throw new Error(`version ${grain.version} is registered`);
+      if (!registered) {
+        registered = true;
+        grain.registered = height + 1;
+      }
+      grain.manifest = next;
+      grain.version = m.version;
+      grain.owner = m.owner;
+      // A bundle held pending is kept as any named one from now on.
+      for (const blob of blobs.values()) if (blob.kind === "grain_bundle" && "sealed" in m.entry && namedHash(blob.kind, blob.bytes) === m.entry.sealed.bundle) blob.pendingUntil = null;
       registry.block();
     },
   };

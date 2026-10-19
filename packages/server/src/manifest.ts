@@ -1,6 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, deviceKeyOf, readDeviceKey, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
+import { MAX_NETWORK_BUNDLE_BYTES } from "./named.js";
 
 export const PERMISSIONS = {
   storage: 1,
@@ -144,8 +145,16 @@ export const manifestMessage = (m: Manifest) => derive("Saltix grain manifest v1
 export const iconHash = (png: Uint8Array) => toHex(derive("Saltix grain icon v1", png));
 export const bundleHash = (zip: Uint8Array) => toHex(derive("Saltix grain bundle v1", zip));
 
-/** What is out of bounds in `m` (12-grains §2), or null. `dev` takes developer origins (`grain dev`). */
-export function manifestProblem(m: Manifest, dev = false): string | null {
+/** The protocol version from which a sealed manifest may name no source (12-grains §2, 32-images §10): the network keeps
+ *  its bundle, of at most 16 MiB. Before it, a sealed manifest names 1–8 sources. */
+export const NETWORK_BUNDLES = 2;
+
+/**
+ * What is out of bounds in `m` (12-grains §2), or null. `dev` takes developer origins (`grain dev`). `protocol` is the
+ * version of the blocks that would carry it: by default the newest rules, as a reader takes a manifest; a network
+ * before `NETWORK_BUNDLES` refuses a sealed manifest without a source (`sources`).
+ */
+export function manifestProblem(m: Manifest, dev = false, protocol = NETWORK_BUNDLES): string | null {
   if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(m.slug)) return "slug";
   if (!Number.isInteger(m.version) || m.version < 1 || m.version > 0xffffffff) return "version";
   if (typeof m.owner !== "string" || !/^[0-9a-f]{64}$/.test(m.owner)) return "owner";
@@ -163,7 +172,10 @@ export function manifestProblem(m: Manifest, dev = false): string | null {
   } else if ("sealed" in m.entry) {
     const e = m.entry.sealed;
     if (!(e.size >= 1 && e.size <= 20 * 1024 * 1024)) return "size";
-    if (e.sources.length < 1 || e.sources.length > 8 || !e.sources.every((s) => s.length <= 2048 && originOf(s, dev) !== null)) return "sources";
+    if ((e.sources.length === 0 && protocol < NETWORK_BUNDLES) || e.sources.length > 8 ||
+      !e.sources.every((s) => s.length <= 2048 && originOf(s, dev) !== null)) return "sources";
+    // With no source, the bundle is one the network keeps: at most 16 MiB (32-images §6.2).
+    if (e.sources.length === 0 && e.size > MAX_NETWORK_BUNDLE_BYTES) return "size";
     const parts = e.start.split("/");
     if (!/^[A-Za-z0-9._/-]{1,256}$/.test(e.start) || e.start.startsWith("/") || parts.some((p) => p === "" || p === "." || p === ".."))
       return "start";

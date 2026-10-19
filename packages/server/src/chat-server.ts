@@ -27,6 +27,9 @@ import type { FileRef } from "./file.js";
 import type { InvoiceKeyCert } from "./invoice.js";
 import type { DeviceKey } from "./keys.js";
 import type { Manifest } from "./manifest.js";
+import { putBundle } from "./blobs.js";
+import { signBundleUpload } from "./bundle-upload.js";
+import { namedHash } from "./named.js";
 import {
   type GrainAccess, type MemberProblem, type Rights, type SignedMemberProof, TEAM_ROLES, admits, holdsButSigner,
   introductionProblem, memberProofProblem, memberProofTimely, needsController, needsTeamController, onTeam, rightsOf, rolesOf, teamMemberOf,
@@ -322,6 +325,8 @@ export interface ReportOutcome extends TeamDelivery {
 export interface UpdateProposal extends TeamDelivery {
   version: number;
   owner: boolean;
+  /** The bundle put into the network first (`bundle`), and whether it is held pending on the server key's word. */
+  bundle?: { hash: string; pending: boolean };
 }
 
 /** Whether `m` plays one of `roles`. The owner plays "owner" only, whatever bits its roles have. */
@@ -1170,10 +1175,14 @@ export class ChatServer {
    * whether the owner's console got it. Until it has (the owner's wallet has not said hello nor written to the app yet,
    * or their day's budget is spent), propose again later. Throws for another grain's manifest, one the registry already holds or passed, a
    * card out of bounds, or roles without the owner. Saltix 0.1.51 and older drop such a card.
+   *
+   * `bundle`: a sealed manifest's bundle, put into the network first (32-images §7.3) on this server key's statement, so
+   * the owner approves a version whose bundle the network already holds for a day; a refusal is a `BlobRefused` and
+   * nothing is proposed.
    */
   async proposeUpdate(
     update: Manifest | string,
-    options: { text?: string; label?: string; roles?: readonly TeamRole[] } = {},
+    options: { text?: string; label?: string; roles?: readonly TeamRole[]; bundle?: Uint8Array } = {},
   ): Promise<UpdateProposal> {
     this.running();
     if (!this.view) throw new Error("an update is proposed against the registry: start the server from a developer key, or pass node");
@@ -1186,6 +1195,16 @@ export class ChatServer {
     if (manifest.version <= g.version) {
       throw new Error(`the registry holds ${this.slug} v${g.version}: propose a version above it (this one is ${manifest.version})`);
     }
+    let bundle: UpdateProposal["bundle"];
+    if (options.bundle) {
+      const hash = namedHash("grain_bundle", options.bundle);
+      if (!("sealed" in manifest.entry) || manifest.entry.sealed.bundle !== hash || manifest.entry.sealed.size !== options.bundle.length) {
+        throw new TypeError("bundle: not the bundle the manifest names (its hash and size)");
+      }
+      const statement = signBundleUpload(this.secret, this.chain.genesis, { slug: this.slug, bundle: hash, size: options.bundle.length, at: this.now() });
+      const put = await putBundle(this.view.node, options.bundle, { upload: statement, log: (level, event, meta) => this.log(level, event, meta) });
+      bundle = { hash, pending: put.pending };
+    }
     const name = manifest.name.en ?? this.slug;
     const text = options.text ?? `${name} has a new version (${manifest.version}). The owner approves it here.`;
     const card = new Card().text(text).publish(options.label ?? "Review the update", typeof update === "string" ? publishTextOf(update) : manifest);
@@ -1194,7 +1213,7 @@ export class ChatServer {
       version: manifest.version, ...delivery, owner,
       ...(owner ? {} : { hint: "the owner's console did not get it (the owner's wallet has not reached the app yet, or the day's budget is spent): propose it again later" }),
     });
-    return { ...delivery, version: manifest.version, owner };
+    return { ...delivery, version: manifest.version, owner, ...(bundle ? { bundle } : {}) };
   }
 
   /** Write `card` unasked to each member who plays one of `roles`: what was sent, and whether the owner got it. */

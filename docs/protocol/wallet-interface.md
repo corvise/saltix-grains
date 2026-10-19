@@ -1,13 +1,15 @@
 # The wallet interface
 
-> Reflects Saltix 08-node §6 and 09-relay §10.7, as of corvise/saltix `7d3744c5` (2026-10-19). Only the methods an
-> app, its server or its tools call; a node answers more (the explorer's reads, cities, books, licenses).
+> Reflects Saltix 08-node §6 and 09-relay §10.7 (with 32-images' `blob_put` and `blob_get`), as of corvise/saltix
+> `b9019fdf` (2026-10-19). Only the methods an app, its server or its tools call; a node answers more (the explorer's
+> reads, cities, books, licenses).
 
 A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line read the chain through.
 
 ## Transport
 
-- **JSON-RPC 2.0 over HTTP**: one request per body, `Content-Type: application/json`, a body of at most 64 KiB.
+- **JSON-RPC 2.0 over HTTP**: one request per body, `Content-Type: application/json`, a body of at most 64 KiB (512 KiB
+  for `blob_put`, whose piece is up to 256 KiB in base64).
 - **At a node of your own**: `POST /` at `--rpc`, `http://127.0.0.1:30334` by default, local only. The SDK's `--node URL`
   and `NODE_RPC` name it; reach a remote one through a tunnel, never by exposing it. A node's own interface also has
   WebSocket subscriptions (`GET /ws`: `subscribe {topic}` with `heads`, `account` or `transaction`), which no relay
@@ -47,6 +49,8 @@ or an account id in hex. A transaction is the hex of its signed Borsh.
 | `handle_get` | `name` (without `@`) or `number` (the digits after `+0`) | `handle` (or `null`): `kind`, `text`, `display`, `owner` (account id), `minted`, `price`, `primary`, `app` (the slug of the grain whose chat it opens, or `null`) |
 | `handle_search` | `query` (≤ 64 bytes), `kind`, `limit` (20, at most 50) | held handles that start with the query, each with `owner`, `owner_address`, `app`; `exact` |
 | `handle_of` | `address` | the account's primary `name` and `number`, or `null` each |
+| `blob_put` | an icon: `kind` (`grain_icon`), `data` (base64); a bundle's piece: `kind` (`grain_bundle`), `hash`, `size`, `from`, `data` (at most 262 144 bytes, base64), `upload` (hex of a server key's `SignedBundleUpload`, for a bundle no manifest names yet) | `{kind, hash, kept: true}` for an icon; `{kind, hash, received, kept: false}` while a bundle's pieces come, then `{kind, hash, received, kept: true, pending}`; a refusal is `-32602` with `data.reason` (and `data.received` for `offset`) ([images §7](images.md#7-uploading)) |
+| `blob_get` | `kind`, `hash`, `from`, `len` (a bundle's piece: 0 and 1 MiB by default) | `{blob, fetching}`: `blob` `{kind, hash, type, size, from, data}` (base64) when the node holds it, else `null`, `fetching` `true` while it fetches it ([images §8](images.md#8-fetching)) |
 
 **A history entry** has `kind`, `block`, `height`, `slot`, `confirmations`, `linked`, `linked_depth`, `final`, `asset`
 (`salt` or `work`) and `amount`. The kinds an app reads:

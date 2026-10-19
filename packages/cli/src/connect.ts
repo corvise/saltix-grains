@@ -6,13 +6,14 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import {
   type ConnectProfile, type Manifest, MAX_PROFILE_BYTES, MAX_PROFILE_LINK, PERMISSIONS, PROFILE_LIMITS, ProfileError, encodeProfile, httpsLinkOk,
-  iconHash, languageOk, profileFromJson, profileLink, profileProblem, refusedChar, supportOk,
+  languageOk, profileFromJson, profileLink, profileProblem, refusedChar, supportOk,
 } from "@saltix/grain-server";
+import { ICON_FILES, checkIcon } from "./icon.js";
 
 /** The project's Connect profile. */
 export const CONNECT_FILE = "connect.json";
-/** Where a project keeps the icon its manifest names (`grain icon`): beside `grain.json`, or with the page. */
-export const ICON_FILES = ["icon.png", "public/icon.png"];
+/** Where a project keeps the icon its manifest names (`grain icon`). */
+export { ICON_FILES } from "./icon.js";
 
 export interface Lint {
   errors: string[];
@@ -174,19 +175,19 @@ export function pngSize(bytes: Uint8Array): { width: number; height: number } | 
   return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
-/** The icon file a project keeps, when it has one: a 256 × 256 PNG whose hash `grain.json` names. */
+/** The icon file a project keeps, when it has one (Saltix 32-images §3.4): an icon every wallet takes (the image check:
+ *  512 × 512, or 256 × 256 with a warning) whose hash `grain.json` names, and the standard's warnings. */
 export function lintIcon(projectDir: string, m: Manifest): Lint {
   const errors: string[] = [];
+  const warnings: string[] = [];
   for (const name of ICON_FILES) {
     const path = join(projectDir, name);
     if (!existsSync(path)) continue;
-    const bytes = new Uint8Array(readFileSync(path));
-    const size = pngSize(bytes);
-    if (size === null) errors.push(`${name}: not a PNG; Saltix shows a 256×256 PNG`);
-    else if (size.width !== 256 || size.height !== 256) errors.push(`${name}: ${size.width}×${size.height}; Saltix shows a 256×256 PNG`);
-    else if (iconHash(bytes) !== m.icon) errors.push(`${name}: its hash is ${iconHash(bytes)}, but grain.json's "icon" is ${m.icon} (grain icon ${name} gives the hash)`);
+    const found = checkIcon(new Uint8Array(readFileSync(path)), m.icon);
+    errors.push(...found.errors.map((e) => `${name}: ${e}`));
+    warnings.push(...found.warnings.map((w) => `${name}: ${w}`));
   }
-  return { errors, warnings: [] };
+  return { errors, warnings };
 }
 
 /** What uses each permission (12-grains §6): the page's bridge calls, the server's notifications, the browser's camera,

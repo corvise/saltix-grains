@@ -88,7 +88,7 @@ export function lint(m: Manifest, ownerKey?: string): Lint {
     const size = encodeGrainTx({ sender, nonce: 0, fee: 0, validUntilSlot: 0 }, { register: signed }).length + 1 + 64;
     if (size > MAX_TX_SIZE) errors.push(`size: registering it takes a ${size}-byte transaction, a node takes at most ${MAX_TX_SIZE}; shorten the descriptions`);
   }
-  if (/^0+$/.test(m.icon ?? "")) warnings.push("icon: still zero; `grain icon <256x256.png>` gives its hash");
+  if (/^0+$/.test(m.icon ?? "")) warnings.push("icon: none yet (wallets draw a monogram); `grain icon <picture> --out icon.png` makes one to the standard and names it");
   if (!("ru" in (m.name ?? {}))) warnings.push("name: no Russian name (wallets show the English one)");
   return { errors, warnings };
 }

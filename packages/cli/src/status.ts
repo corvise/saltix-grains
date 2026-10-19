@@ -6,11 +6,14 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type NodeLike, type RegisteredGrain, bundleHash, decodeOffer, fromHex, grainGet, keyFingerprint,
+  AppKey, APP_KEY_FILE, type NodeLike, type RegisteredGrain, NO_ICON, blobHeld, decodeOffer, fromHex, grainGet, iconHash, keyFingerprint,
   nodeCall, registeredKeyStatus, toHex,
 } from "@saltix/grain-server";
+import { makeBundle } from "./bundle.js";
 import { GRAIN_DIR } from "./devlog.js";
+import { ICON_FILES, checkIcon } from "./icon.js";
 import { PAIR_KEY_FILE, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
+import { readPublishState } from "./publish-flow.js";
 
 /** Where a project's server stands with its app. */
 export type PairStatus =
@@ -114,12 +117,16 @@ export interface Finding {
   next?: string;
 }
 
+/** Where a page's publish stands (Saltix 32-images §7.3): its bundle not uploaded, held pending on a server key's word,
+ *  waiting for the owner's signature (the link shown), its day over, or published. */
+export type PublishStatus = "not_uploaded" | "pending" | "waiting_for_owner" | "pending_expired" | "published";
+
 /** Every check of `grain doctor`, in the order of the path to an app that runs. */
-export async function doctor(dir: string, node: NodeLike, flags = ""): Promise<{ state: KeyState; findings: Finding[] }> {
+export async function doctor(dir: string, node: NodeLike, flags = "", now = Date.now()): Promise<{ state: KeyState; findings: Finding[]; publish: PublishStatus | null }> {
   const findings: Finding[] = [];
   const manifestPath = join(dir, "grain.json");
   const chatPath = join(dir, "chat.json");
-  let manifest: { slug?: string; version?: number; entry?: Record<string, { bundle?: string }> } | null = null;
+  let manifest: { slug?: string; version?: number; icon?: string; entry?: Record<string, { bundle?: string; origins?: string[] }> } | null = null;
   if (existsSync(manifestPath)) {
     try {
       manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -137,7 +144,14 @@ export async function doctor(dir: string, node: NodeLike, flags = ""): Promise<{
     : { ok: false, what: "git", detail: ".gitignore does not keep app.key, *.key and .grain/ out of git", next: `grain pair${flags} (it adds them), or add them to .gitignore` });
 
   const state = await keyState(dir, node, flags);
-  findings.push({ ok: state.status === "paired", what: "key", detail: state.detail, ...(state.next ? { next: state.next } : {}) });
+  // A page alone needs no server: unpaired is fine (a paired key only lets grain publish put the bundle up before the
+  // owner signs). A key that stopped working still needs one.
+  const pageOnly = manifest?.entry !== undefined && !("chat" in manifest.entry) && !existsSync(chatPath);
+  if (pageOnly && state.status === "unpaired") {
+    findings.push({ ok: true, what: "key", detail: `not paired: a page needs no server (grain pair${flags} lets grain publish put its bundle into the network before the owner signs)` });
+  } else {
+    findings.push({ ok: state.status === "paired", what: "key", detail: state.detail, ...(state.next ? { next: state.next } : {}) });
+  }
 
   const appKeyPath = join(dir, APP_KEY_FILE);
   if (existsSync(appKeyPath) && process.platform !== "win32" && (statSync(appKeyPath).mode & 0o077) !== 0) {
@@ -163,17 +177,64 @@ export async function doctor(dir: string, node: NodeLike, flags = ""): Promise<{
     }
   }
 
+  // The registry's record of the app, whether or not this computer's key is paired.
+  let grain = state.grain;
+  if (grain === undefined && manifest?.slug && state.status !== "unknown") grain = await grainGet(node, manifest.slug).catch(() => undefined);
+  const page = manifest?.entry !== undefined && !chatOnly && !("chat" in manifest.entry);
+  const placeholder = (manifest?.entry?.hosted?.origins ?? []).length > 0 && manifest!.entry!.hosted!.origins!.every((o) => /\.example(:\d+)?$/.test(o));
   const sealed = manifest?.entry?.sealed;
-  if (sealed) {
-    const zip = join(dir, "bundle.zip");
-    if (!existsSync(zip)) findings.push({ ok: false, what: "bundle", detail: "bundle.zip is not built", next: "grain bundle" });
-    else if (bundleHash(new Uint8Array(readFileSync(zip))) !== sealed.bundle) {
-      findings.push({ ok: false, what: "bundle", detail: "bundle.zip is not the bundle grain.json names", next: "grain bundle (then raise grain.json's version and publish)" });
-    } else findings.push({ ok: true, what: "bundle", detail: "bundle.zip is the one grain.json names" });
+  let publish: PublishStatus | null = null;
+  if (page && (sealed || placeholder)) {
+    // The bundle grain.json names, and whether public/ still makes it.
+    let built: string | null = null;
+    try {
+      built = existsSync(join(dir, "public")) ? makeBundle(join(dir, "public")).hash : null;
+    } catch (e) {
+      findings.push({ ok: false, what: "bundle", detail: `public/ does not make a bundle (${(e as Error).message})`, next: "fix public/ (names, size), then grain publish" });
+    }
+    const held = grain?.manifest && "sealed" in grain.manifest.manifest.entry ? grain.manifest.manifest.entry.sealed.bundle : null;
+    const version = manifest?.version ?? 0;
+    if (!sealed) {
+      findings.push({ ok: true, what: "bundle", detail: "public/ is not sealed yet: grain publish seals it and puts it into the network" });
+    } else if (built !== null && built !== sealed.bundle) {
+      findings.push({
+        ok: true, what: "bundle",
+        detail: `public/ changed since grain.json's bundle: grain publish seals it again${grain && grain.version >= version ? ` (raise grain.json's version above ${grain.version} first)` : ""}`,
+      });
+    } else {
+      findings.push({ ok: true, what: "bundle", detail: "grain.json names the bundle public/ makes" });
+    }
+    // Where the publish stands: published, held pending (waiting for the owner, or not shown yet), its day over, or
+    // not uploaded at all.
+    const run = readPublishState(dir);
+    const ours = run && sealed && run.bundle === sealed.bundle && run.version === version && run.slug === manifest?.slug ? run : null;
+    const until = ours?.pending_until ? Date.parse(ours.pending_until) : null;
+    if (sealed && grain && grain.version === version && held === sealed.bundle) {
+      publish = "published";
+      const inNetwork = await blobHeld(node, "grain_bundle", sealed.bundle).catch(() => "absent" as const);
+      findings.push(inNetwork === "absent"
+        ? { ok: false, what: "upload", detail: "published, but the relay answering neither holds its bundle nor knows where it is", next: `grain publish${flags} (it puts the bundle up again)` }
+        : { ok: true, what: "upload", detail: "published: the network holds its bundle" });
+    } else if (ours?.uploaded_at && until !== null && until > now) {
+      publish = ours.link_shown_at ? "waiting_for_owner" : "pending";
+      findings.push({
+        ok: false, what: "upload",
+        detail: `the network holds the bundle pending until ${ours.pending_until}${ours.link_shown_at ? ": waiting for the owner to sign the publishing link" : ""}`,
+        next: ours.link_shown_at ? `the owner scans the QR code in Saltix (grain publish${flags} shows it again, and finishes once they did)` : `grain publish${flags}`,
+      });
+    } else if (ours?.uploaded_at && until !== null) {
+      publish = "pending_expired";
+      findings.push({ ok: false, what: "upload", detail: `the bundle's day in the network ended at ${ours.pending_until} before the owner signed`, next: `grain publish${flags} (it puts it up again)` });
+    } else if (ours?.link_shown_at) {
+      publish = "waiting_for_owner";
+      findings.push({ ok: false, what: "upload", detail: "waiting for the owner to sign the publishing link; the bundle goes up once the registry names it", next: `the owner scans the QR code in Saltix, while grain publish${flags} runs` });
+    } else {
+      publish = "not_uploaded";
+      findings.push({ ok: false, what: "upload", detail: "the bundle is not in the network yet", next: `grain publish${flags}` });
+    }
   }
 
-  const grain = state.grain;
-  if (state.status === "paired" && grain && manifest?.version !== undefined && !chatOnly) {
+  if (grain && manifest?.version !== undefined && !chatOnly && publish === null) {
     const held = grain.version;
     const registryChat = grain.manifest ? "chat" in grain.manifest.manifest.entry : false;
     if (registryChat || held < manifest.version) {
@@ -183,10 +244,28 @@ export async function doctor(dir: string, node: NodeLike, flags = ""): Promise<{
       });
     } else findings.push({ ok: true, what: "published", detail: `the registry holds version ${held}` });
   }
-  if (state.status === "paired" && grain) {
+
+  // The icon: the file grain.json names, to the standard, and in the network once published.
+  if (manifest && !chatOnly) {
+    const icon = manifest.icon ?? NO_ICON;
+    const file = ICON_FILES.find((f) => existsSync(join(dir, f)));
+    if (icon === NO_ICON) {
+      findings.push({ ok: true, what: "icon", detail: "none: wallets draw the app's monogram (grain icon <picture> --out icon.png makes one)" });
+    } else if (!file || iconHash(new Uint8Array(readFileSync(join(dir, file)))) !== icon) {
+      findings.push({ ok: false, what: "icon", detail: `no ${ICON_FILES.join(" or ")} here is the icon grain.json names`, next: "grain icon <picture> --out icon.png (it names the new one)" });
+    } else {
+      const lint = checkIcon(new Uint8Array(readFileSync(join(dir, file))), icon);
+      const published = grain && grain.manifest && grain.manifest.manifest.icon === icon;
+      const inNetwork = published ? await blobHeld(node, "grain_icon", icon).catch(() => "absent" as const) : null;
+      if (lint.errors.length > 0) findings.push({ ok: false, what: "icon", detail: lint.errors[0]!, next: `grain icon ${file} --out ${file}` });
+      else if (inNetwork === "absent") findings.push({ ok: false, what: "icon", detail: "the registry names it, but the network does not hold it: wallets draw the monogram", next: `grain publish${flags} (it uploads the icon)` });
+      else findings.push({ ok: true, what: "icon", detail: `${file}${lint.warnings.length > 0 ? `; ${lint.warnings.length} warning(s): grain icon ${file} says them` : ""}${inNetwork === "held" ? "; in the network" : ""}` });
+    }
+  }
+  if (grain && state.status !== "unknown") {
     findings.push(grain.profile
       ? { ok: true, what: "connect profile", detail: `revision ${grain.profile.profile.revision} in the registry` }
       : { ok: false, what: "connect profile", detail: "the registry holds no Connect profile: users see only the description", next: `grain profile${flags}` });
   }
-  return { state, findings };
+  return { state, findings, publish };
 }

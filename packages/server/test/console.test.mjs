@@ -4,7 +4,7 @@
 // hour.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
@@ -15,6 +15,7 @@ import {
   needsTeamController, readPublishText, publishLink, teamOnly, UNOWNED, assertCardStandard, lintCard, CARD_LIMITS,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
+import { createDevRegistry } from "../dist/dev.js";
 import {
   DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep, manifest,
 } from "./chat-helpers.mjs";
@@ -409,6 +410,42 @@ test("an update is proposed to the team in the console, for the owner to approve
     assert.equal(unasked(owner).length, 2, "the owner got the two proposals that went");
   } finally {
     for (const w of [owner, dev, viewer, stranger]) w.client.close();
+    await close();
+  }
+});
+
+test("an update proposed with its bundle: the bundle goes into the network first, on the server key's word", async () => {
+  const fake = teamChain();
+  // The network's blob store, as a node keeps it: statements checked against the registry's server keys.
+  const store = createDevRegistry({ slug: "access", ownerSecret: OWNER, servers: [serverKey], genesis: chain.genesis });
+  const answer = fake.wallet.call.bind(fake.wallet);
+  fake.wallet.call = (method, params) => (method.startsWith("blob_") ? store.call(method, params) : answer(method, params));
+  const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const zip = fromHex(vectors.bundles.made[0].hex);
+  const { relay, server, events, close } = await studio(fake);
+  const owner = await wallet(relay, 0x78, server.address, [serverKey]);
+  const next = {
+    ...manifest().manifest, version: 2, permissions: 0,
+    entry: { sealed: { bundle: vectors.bundles.made[0].hash, size: zip.length, sources: [], start: "index.html", connect: [] } },
+  };
+  try {
+    await ask(owner, proved(owner, OWNER, Date.now()));
+    const proposal = await server.proposeUpdate(next, { bundle: zip });
+    assert.deepEqual(proposal.bundle, { hash: vectors.bundles.made[0].hash, pending: true });
+    assert.equal(proposal.owner, true);
+    assert.ok(store.blobs.get(proposal.bundle.hash).pendingUntil > Date.now(), "held pending for its day");
+    assert.ok(events.some((e) => e.event === "blob_kept"));
+    // Not the manifest's bundle: refused before anything goes.
+    await assert.rejects(server.proposeUpdate(next, { bundle: zip.subarray(1) }), /not the bundle the manifest names/);
+    // A key the registry no longer names: the network refuses its word, and nothing is proposed.
+    store.setServers(["22".repeat(32)]);
+    const before = unasked(owner).length;
+    const other = { ...next, entry: { sealed: { ...next.entry.sealed } } };
+    store.blobs.clear();
+    await assert.rejects(server.proposeUpdate(other, { bundle: zip }), (e) => e.name === "BlobRefused" && e.reason === "key");
+    await owner.until(() => unasked(owner).length === before);
+  } finally {
+    owner.client.close();
     await close();
   }
 });

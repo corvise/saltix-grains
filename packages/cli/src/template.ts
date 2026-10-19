@@ -186,8 +186,15 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered, and warnings about the page and
   permissions nothing uses.
-- \`npx grain publish --wallet\`: a QR code the owner's Saltix registers the app or its new version from (an app made in
-  Saltix is its owner's phone's); without \`--wallet\` it signs with \`owner.key\` on the test network, after
+- \`npx grain icon <picture> --out icon.png\`: the app's icon to Saltix's standard from any PNG or JPEG (512 × 512,
+  opaque, at most 64 KiB, the mark inside the keyline circle); it names it in \`grain.json\`. Look at the preview it
+  writes (\`.grain/icon-preview.png\`); never draw rounded corners or transparency yourself.
+- \`npx grain publish\`: **a page needs no server and no hosting.** It seals \`public/\`, puts it into the Saltix network
+  from this computer (before the owner signs when \`app.key\` is paired), shows the QR code the owner's Saltix signs the
+  version from, waits for the registry and uploads the icon. \`--no-wait\` returns once the QR code is shown: show it to
+  the user (or \`.grain/publish.html\`), then \`npx grain publish\` again finishes. Never set up hosting, a domain or
+  \`--sources\` for it. An app made in Saltix is its owner's phone's: \`grain publish\` asks the owner's Saltix (\`--wallet\`
+  says so even with an \`owner.key\` here); a new slug may be signed with \`owner.key\` on the test network, after
   \`npx grain faucet --wait\` for test SALT. Registry commands reach the test network through its public relays, each
   pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
 - \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way.`;
@@ -325,11 +332,14 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 - If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the frame's rules
   below apply to it.` : `- \`public/\`: the page. \`public/grain.js\` is \`@saltix/grain\`, the wallet's bridge: do not edit it (\`grain init\` copies it).
 - \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).
-- \`bundle.zip\`, once the app is sealed (\`npx grain bundle\`): the same bytes from the same files on any computer (files
-  stored, at most 20 MiB). Rebuild it in CI and fail when \`grain.json\` changes; never edit \`entry.sealed\` by hand.`}
+- \`bundle.zip\`, once the app is sealed (\`npx grain publish\` seals it, as \`npx grain bundle\` does): the same bytes from
+  the same files on any computer (files stored, at most 16 MiB for the network to keep it).
+  Rebuild it in CI and fail when \`grain.json\` changes; never edit \`entry.sealed\` by hand.
+- \`icon.png\`: the app's icon (\`npx grain icon\`), the one \`grain.json\`'s \`icon\` names.`}
 - \`owner.key\` (and \`server.key\`, \`app.key\` once \`grain pair\` wrote it, \`.grain/pair.key\` while it waits): secrets.
   Never commit, print, log or paste them. \`app.json\` (the app, its network, the key's public half) is not.
-- \`.grain/\`: \`grain pair\`'s state and the steps' log (\`log.jsonl\`: codes and timings, nothing secret), out of git.
+- \`.grain/\`: \`grain pair\`'s and \`grain publish\`'s state, the icon's preview and the steps' log (\`log.jsonl\`: codes and
+  timings, nothing secret), out of git.
 
 ## Commands
 
@@ -379,12 +389,15 @@ A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [
 - Check first, render after: \`public/index.html\` shows only a splash (\`data-grain-splash\`) until \`public/app.js\`'s
   gate decides; set \`SIGN_IN\` to your server's sign-in and \`FOR\` to whom the app is for (\`AGENTS.md\`, rule 10).
 - \`grain lint\` checks \`grain.json\` and \`connect.json\` (the Connect profile Saltix shows before anyone signs in: write
-  it for your app); set \`entry.hosted\` to your https site and \`icon\` (\`grain icon icon.png\`).
-- Put \`public/\` on your site and the signed manifest (\`grain sign\`) at \`/.well-known/saltix-grain\`.
-- \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
-  more; back 30 days after \`grain retire\`), through the test network's public relays (\`--node <url>\` for your own
-  node); on the test network \`grain faucet --wait\` gives \`owner.key\`'s account test SALT first. \`grain profile\`
-  then sets the Connect profile from \`connect.json\`.
+  it for your app); \`grain icon <picture> --out icon.png\` makes the icon to Saltix's standard and names it.
+- \`grain publish\` puts the page into the Saltix network itself, no hosting: it seals \`public/\`, uploads it from this
+  computer, shows the QR code your Saltix signs the version from, and uploads the icon. A new slug keeps a deposit by
+  its length (100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain retire\`). With
+  \`grain pair\` first, the bundle goes up before you sign. On the test network \`--key owner.key\` signs here instead
+  (\`grain faucet --wait\` gives \`owner.key\`'s account test SALT first). \`grain profile\` then sets the Connect profile
+  from \`connect.json\`.
+- A page at your own https site instead: set \`entry.hosted\` to it, serve \`public/\` there and the signed manifest
+  (\`grain sign\`) at \`/.well-known/saltix-grain\`, and \`grain publish --hosted\`.
 
 \`owner.key\` is the grain's owner key: keep it secret and out of git.
 `;

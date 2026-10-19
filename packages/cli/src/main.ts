@@ -4,11 +4,11 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from
 import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  UNOWNED, AppKey, iconHash, isChatOnly, verifyManifest, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, type GrainCall, type Manifest,
+  AppKey, isChatOnly, verifyManifest, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, type GrainCall, type Manifest,
 } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
-import { publishCall, retireCall, show, walletLink, waitForPublished, salt, type Sent, type Signing } from "./registry.js";
+import { retireCall, show, salt, type Sent, type Signing } from "./registry.js";
 import { sendSettled } from "./send.js";
 import {
   APP_KEY_ENV, APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, inSaltix, membersOf, rateCall, readAppKey, serverKeyOf,
@@ -29,6 +29,8 @@ import { UsageError, helpFor, parse } from "./args.js";
 import { DevLog, reasonOf } from "./devlog.js";
 import { pair } from "./pair.js";
 import { doctor, keyState } from "./status.js";
+import { publishApp } from "./publish-flow.js";
+import { type Fit, parseColour, runIcon } from "./icon.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
@@ -46,16 +48,30 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain lint [--manifest grain.json]       what stops the manifest and connect.json (the Connect profile) from
                                            being registered, the icon file, and warnings: public/ (a top bar under
                                            the wallet's controls), permissions nothing uses
-  grain icon <png>                         the hash a manifest names its 256x256 icon by
+  grain icon <picture> --out icon.png [--fit crop|contain|mark] [--background #rrggbb] [--preview F]
+                                           a 512x512 icon to Saltix's standard from any PNG or JPEG: opaque, sRGB,
+                                           no metadata, at most 64 KiB (a palette when that is what fits); crop
+                                           covers the square, contain shows it whole, mark fits a logo inside the
+                                           keyline circle (the default for a picture with transparency); written
+                                           to the project's icon.png, grain.json's "icon" names it. Prints its
+                                           hash first, the checks, and a preview (.grain/icon-preview.png: the
+                                           rounded-square mask at 24, 40, 56 and 96 dp, dark and light)
+  grain icon <icon.png>                    check an icon as wallets do and print its hash; 256x256 is taken with
+                                           a warning (also: grain icon --fix <picture> <icon.png>)
   grain sign [--out signed.json]           the signed manifest, for /.well-known/saltix-grain
-  grain bundle --sources URL[,URL] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
-                                           seal public/ into one ZIP; grain.json names its hash and size
-                                           (upload bundle.zip to the sources; grain dev serves it itself)
-  grain publish [--wallet] [--no-wait] [--out signed.json]
-                                           register the slug or record a newer version: signed in the owner's
-                                           wallet by a QR code, or with --key (a key file, for test networks)
-                                           when owner.key is there. The deposit is the node's quote for the
-                                           slug's length: 100 SALT for 3-5 characters, 30 for 6-7, 10 for 8+
+  grain bundle [--sources URL[,URL]] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
+                                           seal public/ into one ZIP; grain.json names its hash and size (grain
+                                           publish does this itself; --sources only for hosts of your own)
+  grain publish [--wallet] [--no-wait] [--app-key F] [--hosted] [--out signed.json]
+                                           publish the app or a new version straight into the Saltix network, no
+                                           hosting: a page's public/ is sealed into a bundle, checked and put
+                                           into the network (resumed after a break; with grain pair's app.key
+                                           before the owner signs), then signed in the owner's Saltix by a QR
+                                           code (or with --key owner.key on test networks), and once the registry
+                                           holds it, its icon goes up. Run again, it finishes what is left.
+                                           --hosted: a page at your own https origin instead. The deposit is the
+                                           node's quote for the slug's length: 100 SALT for 3-5 characters, 30
+                                           for 6-7, 10 for 8+
   grain retire --slug S                    close the slug for good; the deposit returns 30 days later
   grain show --slug S [--out F]            what the registry holds for a slug (its Connect profile checked), or its
                                            deposit; F gets the manifest
@@ -98,8 +114,10 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            unpaired, revoked, replaced, retired, unregistered, other_network) and the
                                            command to run next; exit 0 only when paired
   grain doctor [--json]                    the project's state and the exact next step: the key, .gitignore, the
-                                           chat spec, dependencies, the bundle, what the registry holds, the Connect
-                                           profile; exit 0 when nothing is left to do
+                                           chat spec, dependencies, a page's bundle and where its publish stands
+                                           (not_uploaded, pending, waiting_for_owner, pending_expired, published),
+                                           what the registry holds, the icon, the Connect profile; exit 0 when
+                                           nothing is left to do
   Every command run in an app's project logs its steps to .grain/log.jsonl: codes and timings, never a key, an
   address or anything typed (SALTIX_GRAIN_LOG=off turns it off).
   grain app-key [--file F] [--offline]     a developer key's public parts (from SALTIX_APP_KEY, --file or stdin),
@@ -290,10 +308,20 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       return errors.length === 0 ? 0 : 1;
     }
     case "icon": {
-      const png = positional[0];
-      if (!png) throw new Error("grain icon <png>");
-      console.log(iconHash(new Uint8Array(readFileSync(png))));
-      return 0;
+      const fix = flags.get("fix") === true;
+      const input = positional[0];
+      const out = fix ? positional[1] : typeof flags.get("out") === "string" ? (flags.get("out") as string) : undefined;
+      if (!input || (fix && !out)) throw new UsageError(fix ? "grain icon --fix <picture> <icon.png>" : "grain icon <icon.png>, or grain icon <picture> --out icon.png");
+      const fit = flags.get("fit");
+      if (fit !== undefined && fit !== "crop" && fit !== "contain" && fit !== "mark") throw new UsageError("--fit crop, contain or mark");
+      const given = flags.get("background");
+      const background = typeof given === "string" ? parseColour(given) : null;
+      if (given !== undefined && background === null) throw new UsageError("--background #rrggbb");
+      const preview = flags.get("preview");
+      return runIcon({
+        input, out, fit: fit as Fit | undefined, background, preview: typeof preview === "string" ? preview : undefined,
+        dir: dirname(resolve(manifestPath)), manifestPath,
+      });
     }
     case "sign": {
       const signed = signedFor(manifestPath, readKey(keyPath));
@@ -303,37 +331,16 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       return 0;
     }
     case "publish": {
-      if (flags.get("wallet") === true || !existsSync(keyPath)) {
-        // The owner's key stays in the wallet: it fills in the owner and its key, signs and pays (12-grains §10).
-        const r = reach();
-        const node = r.node;
-        const { manifest } = readManifest(manifestPath);
-        const unowned = { ...manifest, ...UNOWNED };
-        const { errors } = lint(unowned);
-        if (errors.length > 0) throw new Error(errors.join("\n"));
-        const link = await walletLink(manifest, node);
-        const { grain, deposit } = await grainQuote(node, manifest.slug);
-        if (grain === null) console.log(`Registering ${manifest.slug} keeps a deposit of ${salt(deposit)} SALT until it retires (the slug's length sets it).`);
-        console.log(await QRCode.toString(link, { type: "terminal", small: true, errorCorrectionLevel: "L" }));
-        console.log(`Scan it with the owner's Saltix (the phone's camera opens it), check the grain and confirm with the PIN.`);
-        console.log(`The link: ${link}`);
-        console.log("Waiting for the registry…");
-        const signed = await waitForPublished(node, manifest, Number(text(flags, "timeout", "600")) * 1000);
-        if (signed === null) {
-          console.error(`not in the registry yet: once the wallet's transaction lands, grain show --slug ${manifest.slug}${r.flags} --out signed.json writes it`);
-          return 1;
-        }
-        writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
-        console.log(`${manifest.slug} v${manifest.version} is in the registry, owned by account ${signed.manifest.owner}; ${text(flags, "out", "signed.json")} written`);
-        return 0;
-      }
-      const secret = readKey(keyPath);
-      const signed = signedFor(manifestPath, secret);
       const r = reach();
-      writeFileSync(text(flags, "out", "signed.json"), JSON.stringify(signed, null, 2) + "\n");
-      return keyCall(() => publishCall(signed, r.node, secret), secret, flags, r, (sent) => {
-        const deposit = sent.amount > 0n ? `, deposit ${salt(sent.amount)} SALT` : "";
-        return `${sent.call} ${signed.manifest.slug} v${signed.manifest.version}: transaction ${sent.id} (fee ${sent.fee}${deposit})`;
+      const projectDir = dirname(resolve(manifestPath));
+      log.at(projectDir);
+      const appKey = flags.get("app-key");
+      return publishApp({
+        dir: projectDir, manifestPath, node: r.node, flags: r.flags, log, hosted: flags.get("hosted") === true,
+        wallet: flags.get("wallet") === true, keyPath, appKeyFile: typeof appKey === "string" ? appKey : undefined,
+        wait: flags.get("no-wait") !== true, timeoutMs: Number(text(flags, "timeout", "600")) * 1000, out: text(flags, "out", "signed.json"),
+        signing: signing(flags, r), tty: process.stdout.isTTY === true,
+        progress: (line) => process.stdout.write(`\r${line}`),
       });
     }
     case "retire": {
@@ -379,7 +386,10 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       writeFileSync(out, made.zip);
       writeFileSync(manifestPath, JSON.stringify(next, null, 2) + "\n");
       console.log(`${out}: ${made.files.length} files, ${made.size} bytes, bundle ${made.hash}`);
-      console.log(`${manifestPath} names it; upload ${out} to ${("sealed" in next.entry ? next.entry.sealed.sources : []).join(", ")}, raise "version" if it was published, then grain publish`);
+      const sources = "sealed" in next.entry ? next.entry.sealed.sources : [];
+      console.log(sources.length > 0
+        ? `${manifestPath} names it, and your sources ${sources.join(", ")} (upload ${out} there too); raise "version" if it was published, then grain publish`
+        : `${manifestPath} names it; raise "version" if it was published, then grain publish: it puts the bundle into the network itself, no hosting needed`);
       return 0;
     }
     case "chat-spec": {
@@ -511,11 +521,12 @@ async function main(argv: string[], log: DevLog): Promise<number> {
     }
     case "doctor": {
       const r = reach();
-      const { state, findings } = await doctor(process.cwd(), r.node, r.flags);
+      const { state, findings, publish } = await doctor(process.cwd(), r.node, r.flags);
       const first = findings.find((f) => !f.ok);
       log.step("doctor", first ? "refused" : "ok", first ? `${first.what.replace(/ /g, "_")}` : undefined);
+      if (publish !== null) log.step("doctor_publish", publish === "published" ? "ok" : "waiting", publish);
       if (flags.get("json") === true) {
-        console.log(JSON.stringify({ status: state.status, findings, next: first?.next ?? null }, null, 2));
+        console.log(JSON.stringify({ status: state.status, publish, findings, next: first?.next ?? null }, null, 2));
       } else {
         for (const f of findings) console.log(`${f.ok ? "ok " : "fix"}  ${f.what.padEnd(15)} ${f.detail}${f.ok || !f.next ? "" : ` → ${f.next}`}`);
         console.log(`next: ${first?.next ?? "nothing: the server is paired and the project is in order"}`);

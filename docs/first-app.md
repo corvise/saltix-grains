@@ -191,6 +191,69 @@ grain status                                                       # the server'
 grain doctor                                                       # everything else, and the exact next step
 ```
 
+## Publish a page: straight into the network
+
+An app with a page of its own (`grain init` without `--chat`; `grain dev` shows it as Saltix frames it) needs **no server
+and no hosting**: `grain publish` seals `public/` into one bundle and puts it into the Saltix network from your computer,
+onto the servers that keep it (three storage cities and five relays offering space); your Saltix signs the version from
+a QR code, and every wallet fetches the bundle from its own relay by its hash (Saltix
+[32-images §7.3](protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)). There is no domain, no
+certificate and no file to upload anywhere.
+
+```sh
+npx grain init ../space-game --slug space-game --name "Space"   # grain.json, connect.json, public/ with the bridge
+cd ../space-game && npx grain dev                              # write the game; the simulator shows it
+npx grain icon ~/Pictures/logo.png --out icon.png             # its icon, to the standard (docs/icons.md)
+npx grain pair                                                 # optional: lets the bundle go up before you sign
+npx grain publish
+```
+
+```text
+bundle: 14 files, 1.8 MiB, 9e41c0…
+sources: the network's own copies at 3 relays (protocol version 1 needs one; wallets ask their own relay first)
+version: the registry holds space-game v1; this one is v2 (grain.json says so now)
+upload: into the network now, vouched for by the server key 1476ff04 (app.key)
+  uploaded 0% (0 bytes of 1.8 MiB)
+  uploaded 27% (512.0 KiB of 1.8 MiB)
+  …
+  uploaded 100% (1.8 MiB of 1.8 MiB)
+the network holds the bundle, pending until 2026-10-20T14:02:11.000Z: the owner signs within that day, and this computer need not stay on
+█▀▀▀▀▀█ … (the QR code)
+Publish space-game v2: scan the QR code with the app owner's Saltix (the phone's camera), check the app and confirm with the PIN.
+  page  …/space-game/.grain/publish.html (the QR code for a browser)
+  link  salt:grain-publish?m=…
+Waiting for the owner's Saltix and the registry… (Ctrl-C stops; grain publish again goes on from here)
+icon: in the network
+space-game v2 is published, its bundle in the network; signed.json written. Saltix opens it from the Apps section (or salt:grain/space-game).
+```
+
+What happens, step by step:
+
+1. **The bundle.** `public/` is sealed as `grain bundle` seals it (the same bytes from the same files on any computer)
+   and checked as every node checks it; `grain.json` names it and `bundle.zip` is written. A bundle the network keeps is
+   at most 16 MiB.
+2. **The sources.** A network that runs protocol version 2 needs none. Before it (the test network runs version 1), a
+   sealed manifest must name one, so the tool names copies the network itself serves, at up to 3 relays of its own relay
+   list; you never host anything.
+3. **The upload.** With a server key the registry names for the app (`grain pair`'s `app.key`; or `SALTIX_APP_KEY`,
+   `--app-key`), the bundle goes up now, in pieces of 256 KiB, on that key's signed statement: the network holds it
+   **pending** for a day. A break is no loss: run `grain publish` again and it goes on where the node stands; a busy node
+   is waited out. Without a paired key (an app's first version), it goes up once the registry names it, and the command
+   keeps running until then.
+4. **Your signature.** Scan the QR code with your Saltix: it shows the app, the version and what changed, and after the
+   PIN signs the manifest and registers it (a new slug's deposit: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
+   more). Your key never leaves the phone. On the test network, `--key owner.key` signs here instead (after `grain faucet
+   --wait`).
+5. **The registry and the icon.** Once the registry holds the version, the icon goes into the network, and
+   `signed.json` is written. Run again, `grain publish` finishes whatever a break left; a version the registry holds
+   already only gets its uploads.
+
+`--no-wait` returns once the QR code is shown (a coding agent shows it to you, then runs `grain publish` again after you
+scanned it). `grain doctor` says where a publish stands: `not_uploaded`, `pending`, `waiting_for_owner`,
+`pending_expired` or `published`. A refusal is said in words with what to do (`busy`: again in a few minutes; `key`: the
+registry no longer names this computer's key, `grain pair --new`; …), and every step is in `.grain/log.jsonl` by its
+reason. A page you host yourself is published with `--hosted` instead.
+
 ## Building with a coding agent
 
 Wherever Saltix shows an app's key it offers **Copy brief for a coding agent**: on New app's last step, on the app's
