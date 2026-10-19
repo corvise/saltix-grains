@@ -6,6 +6,7 @@ mask. This page is the standard as a developer meets it, and what `grain icon` d
 
 ```sh
 npx grain icon logo.png --out icon.png     # any PNG or JPEG in; a 512 × 512 icon to the standard out
+npx grain icon --monogram S                # no picture yet: a letter (or two) on a colour, to the same standard
 ```
 
 It prints the icon's hash first (the hash `grain.json`'s `"icon"` names, which it now names), then what it did and what
@@ -52,6 +53,7 @@ clear of it.
 
 ```text
 grain icon <picture> --out icon.png [--fit crop|contain|mark] [--background #rrggbb] [--preview F]
+grain icon --monogram L [--background #rrggbb] [--out icon.png] [--preview F]
 grain icon <icon.png>
 grain icon --fix <picture> <icon.png>
 ```
@@ -75,8 +77,15 @@ for a drawing):
 5. **Written** in true colour when that fits 64 KiB, else with a palette (median cut refined by k-means, dithered first,
    fewer colours until it fits). A picture too detailed for 64 KiB even in 16 colours is refused: simplify it.
 
-Written to the project's `icon.png` (or `public/icon.png`), the icon is the one `grain.json` names from then on: raise
-`"version"` if the app is published, then `grain publish`.
+Written to the project's `icon.png` (or `public/icon.png`), the icon is the one `grain.json` names from then on; the next
+`grain publish` makes it the app's next version.
+
+**With no picture** (`--monogram`): one or two letters or digits (A–Z, 0–9) drawn bold, centred, their box's corners
+inside the keyline circle, on `--background` or else one of eight tints the slug picks (the same one every time, never
+the wallet's own white or black); the ink is white where it reads (a contrast of 3 or more), else a dark blue. The
+letters come from a stroke font of the tool's own, so the same letters on the same colour are the same bytes on any
+computer, with no font installed. Written to the project's `icon.png` unless `--out` says, checked and named in
+`grain.json` like any other: a placeholder until the app has a mark of its own.
 
 **Checking one** (`grain icon icon.png`, and `grain lint` for the project's icon file): the hash first, then the
 image check and §3.4's warnings:

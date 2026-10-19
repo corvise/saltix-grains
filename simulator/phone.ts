@@ -30,6 +30,7 @@ import {
   type Controls, type Frame, type PageLook, type SafeArea, type SystemInsets, LAYOUT_VARIABLES, frameColors, frameFor, pageColorOf, viewportFitCover,
   viewportOf,
 } from "../packages/grain/src/index";
+import { drawIcon } from "./icon";
 
 /** A screen the simulator plays: its size and what of the system covers it, CSS px (dp, or points on an iPhone). */
 export interface Device {
@@ -91,6 +92,8 @@ export interface PhoneHost {
   openChat(): void;
   /** Open the app again (after ✕). */
   reopen(): void;
+  /** The app's icon, where the development server serves it (null: none, the monogram). */
+  icon(): string | null;
 }
 
 export interface Phone {
@@ -213,7 +216,7 @@ export function setupPhone(host: PhoneHost): Phone {
     phone.dataset.glyphs = (colors.topDark ?? host.theme() === "dark") ? "light" : "dark";
     phone.dataset.navGlyphs = (colors.bottomDark ?? host.theme() === "dark") ? "light" : "dark";
     $("splash-name").textContent = host.name();
-    $("splash-icon").textContent = host.name().slice(0, 1).toUpperCase();
+    drawIcon($("splash-icon"), host.icon(), host.name());
     $("sheet-name").textContent = host.name();
   }
 

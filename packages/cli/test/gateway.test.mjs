@@ -82,30 +82,48 @@ test("a command goes to a relay's gateway trusted by its pin; another certificat
   const dir = project();
   const shown = await grain(["show", "--slug", "chess", "--relay", g.relay], dir);
   assert.equal(shown.code, 0, shown.stderr);
-  assert.equal(JSON.parse(shown.stdout).version, 2);
-  assert.deepEqual(g.asked.map((a) => `${a.path} ${a.method}`), ["POST /rpc grain_get"]);
+  // The record as JSON, then a line in words: the network it is on, and its version and access.
+  assert.equal(JSON.parse(shown.stdout.slice(0, shown.stdout.indexOf("\n}\n") + 2)).version, 2);
+  assert.match(shown.stdout, /^chess on devnet [0-9a-f]{16}: v2, public$/m);
+  assert.deepEqual(g.asked.map((a) => `${a.path} ${a.method}`), ["POST /rpc node_status", "POST /rpc grain_get"]);
+  // A free slug: the deposit registering it keeps, in words, and exit 0: the question was answered.
+  const empty = await gateway({});
+  t.after(() => empty.close());
+  const free = await grain(["show", "--slug", "chess", "--relay", empty.relay], dir);
+  assert.equal(free.code, 0, free.stderr);
+  assert.match(free.stdout, /^chess is free on devnet 5a5a5a5a5a5a5a5a: registering it keeps a deposit of 10 SALT until it retires/);
+  assert.doesNotMatch(free.stdout, /^null$/m);
   g.asked.length = 0;
   const wrong = await grain(["show", "--slug", "chess", "--relay", `${g.url}#${"ab".repeat(32)}`], dir);
   assert.equal(wrong.code, 1);
   assert.match(wrong.stderr, /certificate does not match the relay record/);
   assert.deepEqual(g.asked, [], "a relay that shows another certificate is sent nothing");
-  // An owner's call, signed with the key file and submitted through the gateway.
+  // An owner's call, signed with the key file (the app is its account's) and submitted through the gateway; the owner
+  // said first.
   const server = toHex(ed25519.getPublicKey(fromHex("63".repeat(32), 32)));
   const configured = await grain(["configure", "--slug", "chess", "--server", server, "--relay", g.relay], dir);
   assert.equal(configured.code, 0, configured.stderr);
-  assert.match(configured.stdout, new RegExp(`configure: transaction ${"ab".repeat(32)}`));
+  assert.match(configured.stdout, /^owner: dsalt1\S+, owner\.key's account on this computer, which the registry names as the owner$/m);
+  assert.match(configured.stdout, new RegExp(`configure: transaction ${"ab".repeat(32)} \\(fee [0-9.]+ SALT\\)`));
   // Then it waits for the call to land: this gateway's node says nothing of transactions, so it stops there.
-  assert.deepEqual(g.asked.map((a) => a.method), ["grain_get", "node_status", "account_get", "transaction_submit", "transaction_get"]);
+  assert.deepEqual(g.asked.map((a) => a.method), ["grain_get", "node_status", "grain_get", "node_status", "account_get", "transaction_submit", "transaction_get"]);
 });
 
 test("grain faucet asks for test SALT for the key file's account, says a refusal in words, and waits when asked", tls, async (t) => {
   const g = await gateway({ salt: 0n });
   t.after(() => g.close());
   const dir = project();
+  writeFileSync(join(dir, "grain.json"), JSON.stringify({ slug: "chess" }));
   const got = await grain(["faucet", "--wait", "--timeout", "10", "--relay", g.relay], dir);
   assert.equal(got.code, 0, got.stderr);
   assert.match(got.stdout, new RegExp(`100 SALT to ${address} \\(transaction ${"fa".repeat(32)}\\), and 500 WORK`));
   assert.match(got.stdout, /it is in the account/);
+  // Its steps in the project's log, with the network it reached: never the address.
+  const logged = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8");
+  for (const [step, outcome, reason] of [["grant", "ok", "sent"], ["wait", "ok", "landed"]]) {
+    assert.match(logged, new RegExp(`"command":"faucet","step":"${step}","outcome":"${outcome}","reason":"${reason}","ms":\\d+,"network":"devnet"`));
+  }
+  assert.ok(!logged.includes("dsalt1"), "no address in the log");
   assert.deepEqual(g.asked.find((a) => a.method === "faucet_request").params, { address });
   // Refused: once every 5 minutes.
   g.state.answer = (method) => method === "faucet_request" ? { error: { code: 3, message: "too_soon", data: { retry_after: 240 } } } : null;

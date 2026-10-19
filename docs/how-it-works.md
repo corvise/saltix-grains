@@ -27,9 +27,10 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
   public), its **Connect profile** (what Saltix shows before anyone opens it) and a username bound to it.
 - **The owner's phone signs everything the registry holds of the app.** An app made in Saltix belongs to the phone's
   account, and only that account changes it, after the PIN: in My apps, from a QR code a command shows
-  (`grain publish --wallet`, `grain profile --wallet`), or from a **Publish** card the program sends to the app's
-  console (`chat.proposeUpdate`). No computer holds the owner's key. (An app registered from a computer with a key
-  file, on the test network, is signed by that file instead: `grain init`'s `owner.key`.)
+  (`grain publish`, `grain profile`), or from a **Publish** card the program sends to the app's console
+  (`chat.proposeUpdate`). No computer holds the owner's key. (On the test network without a phone, a key file can own
+  an app instead, `grain init`'s `owner.key`, but only when a command names it: `--key owner.key`;
+  [No phone, test network](#no-phone-test-network).)
 - **The page** (if the app has one) is HTML, JavaScript and CSS that Saltix opens full screen in a WebView, with its
   own controls `⋯ | ✕` in the corner. It talks to Saltix only through the bridge, `window.saltix`, which
   [`@saltix/grain`](../packages/grain) wraps: the user's key in this app and its sign-in, payments through Saltix's own
@@ -92,7 +93,8 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
    `app.key`. Never reuse another app's key or slug, and never run a second program on a key that already has one (the
    SDK's example included: it is an app of its own): two programs on one key both answer in its chat, and the users see
    both. The owner makes the app in Saltix (**My apps → New app**: it starts private and chat-only), when pairing the
-   project (a free slug makes the app in place), or from `grain publish --wallet`'s QR code.
+   project (a free slug makes the app in place), or from `grain publish`'s QR code (public from its first version: a
+   publishing link registers it so; the owner makes it private in Saltix, My apps → the app → Access).
 2. **Set up and pair.**
    - The SDK is not on npm yet: clone it, `npm install && npm run build`, and make the app's project beside it with
      `npx grain init ../<slug> --chat --slug <slug>` (a chat) or `npx grain init ../<slug> --slug <slug>` (a page), then
@@ -106,6 +108,8 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
      names the key. No key is copied at all. `npx grain doctor` names what is left.
    - **A developer key** stands in only for a host where no command runs: the owner copies it in Saltix (**Copy key**)
      and saves it there themselves; a coding agent never asks for one in its chat.
+   - **A page alone pairs nothing**: it has no program, so `npx grain status` says `not_needed` and names the next
+     step (`grain doctor`).
 3. **Build.** A chat: `chat.json` (the commands; raise its `version` with every change) and their handlers in
    `chat.mjs`, tested end to end with `testChat` (`npm test`) ([docs/agents/app.md](agents/app.md)). A page: `public/`,
    with `@saltix/grain` for the bridge. Both: a page beside the chat, which Saltix keeps.
@@ -117,17 +121,20 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
    card keeps the [card standard](agents/cards.md), which `assertCardStandard` checks in the tests.
 5. **Try it.** A page: `npx grain dev` serves it with the simulator, which frames it as Saltix does at a phone's and the
    Galaxy Z Fold's sizes and holds it to Saltix's rules; a debug Saltix in the Android emulator opens the link it
-   prints. A chat: `npm start` in the project, then in Saltix tap the app in **My apps**: its home shows the commands,
+   prints. `npx grain dev --check` drives the simulator headless in this computer's Chrome, Chromium or Edge: the Connect
+   sheet, the page loading without errors, and at every size in both themes nothing tappable under the wallet's
+   controls; screenshots in `.grain/check/`, exit 1 on an error. A chat: `npm start` in the project, then in Saltix tap the app in **My apps**: its home shows the commands,
    and an answer is marked "from <slug>, verified".
 6. **Publish.** A chat goes live as soon as its program runs: there is nothing to upload. A page is a new version of
-   the manifest: `grain publish` puts its bundle into the network, and the owner signs it ([below](#publish-a-page)). Going **public** (from private) is the owner's, in
-   Saltix or `grain access --public`.
+   the manifest: `grain publish` puts its bundle into the network, and the owner signs it ([below](#publish-a-page));
+   with nothing changed it publishes nothing. Going **public** (from private) is the owner's, in Saltix or
+   `grain access --public`.
 7. **Run the program where it stays up** (when the app has one): your computer while you test, then any small server
    with outbound internet, under a supervisor that does not restart it on exit status 78 (a key that cannot work).
    [Below](#run-the-program).
 8. **Update and rotate.** A new command or text: change `chat.json`, raise `version`, restart. A new release of the
    program: raise `package.json`'s `version` (error reports name it), restart. A new name, icon or page: a new manifest
-   version the owner approves (`grain publish --wallet`, or `chat.proposeUpdate` in the console). A new key, to rotate
+   version the owner approves (`grain publish`, or `chat.proposeUpdate` in the console). A new key, to rotate
    one or replace one that leaked or stopped working: `npx grain pair --new` on the computer, then **Use only this
    server** in Saltix, and no key travels (a developer key: **Replace key** on the app's page in Saltix). The old key
    stops at the block that takes the change, its program exits with 78, and the new key in `app.key` starts it again.
@@ -153,10 +160,16 @@ npx grain publish                  # seal, check, upload into the network, then 
 - **The sources** a manifest names are the SDK's to fill in: none on a network that runs protocol version 2; before it
   (the test network runs version 1), copies the network itself serves at up to 3 relays of its relay list.
 - **`--no-wait`** returns once the QR code is shown (also `.grain/publish.html`); `grain publish` again finishes (the
-  bundle if it waited, the icon). A break, a busy node, a version the registry already holds: run it again.
-  `grain doctor` says where it stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, `published`).
-- An app made in Saltix is its owner's phone's, so `grain publish` asks the owner's Saltix even when the project has an
-  `owner.key`; `--wallet` says so outright. A program can propose the same update in the console instead:
+  bundle if it waited, the icon). A break or a busy node: run it again. `grain doctor` says where it stands
+  (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, `published`).
+- **Nothing changed, nothing sent.** What the registry holds already (the same manifest but for its owner, its version
+  and the relays' copies) is never signed again: `grain publish` finishes its uploads if any are missing, else says
+  "nothing to publish" and exits 0. A change to `public/` or `grain.json` (the bundle, the icon, a name) is the next
+  version, raised by `grain publish` itself.
+- **Who signs, said first.** The owner's Saltix, from the QR code: always for an app made in Saltix, and for a free slug
+  (the account that scans the code owns the app). A key file signs only when `--key` names it, or for an app the registry
+  already names its account as the owner of; `--wallet` always asks Saltix. `grain publish` prints the account that will
+  own the app before anything is signed. A program can propose the same update in the console instead:
   `chat.proposeUpdate(next, { bundle })` puts the bundle into the network and sends **Review and approve** to the owner.
 
 **Hosted, if you want it.** Your HTTPS site serves `public/` and the signed manifest at `/.well-known/saltix-grain`
@@ -165,6 +178,22 @@ time, and Saltix tells users so.
 
 **While you develop**, `grain dev` serves the page from your computer to the simulator and to a debug Saltix in the
 emulator; a release Saltix never opens such a development origin.
+
+### No phone, test network
+
+On Saltix's test network a page can be published with no phone at all, from a key file of this computer's own: the
+`owner.key` `grain init` wrote. The app is then that key's account's, not a person's: right for trying the SDK, while an
+app people use is made in Saltix (My apps → New app), which the owner's phone signs.
+
+1. `npx grain doctor`: before the first publish it says what registering the slug takes, a deposit by its length (100
+   SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more) and a fee, and what `owner.key`'s account holds.
+2. `npx grain faucet --wait`: test SALT for `owner.key`'s account (once every 5 minutes).
+3. `npx grain publish --key owner.key`: it says which account will own the app, registers it, makes it private (as an
+   app made in Saltix starts), and puts the bundle and the icon into the network. Later versions are signed by
+   `owner.key` without `--key`, since the registry names its account as the owner.
+4. `npx grain profile`: the Connect profile from `connect.json`, signed by `owner.key`.
+5. `npx grain access --slug <slug> --private --member dsalt1…:user --key owner.key` lets a tester's account open it, or
+   `--public` lets anyone.
 
 ## Run the program
 

@@ -132,3 +132,66 @@ test("a sealed grain's pages carry Saltix's Content-Security-Policy; a hosted gr
     hostedServer.close();
   }
 });
+
+test("a sealed grain's start page is where the simulator opens it, and the icon grain.json names is at /_icon.png", async () => {
+  const { devPageUrl } = await import("@saltix/grain/rules");
+  const { iconHash } = await import("@saltix/grain-server");
+  const { readFileSync } = await import("node:fs");
+  const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const icon = Buffer.from(vectors.images.find((i) => i.kind === "grain_icon" && i.width === 512).hex, "hex");
+  const dir = scratch("grain-dev-sealed-");
+  mkdirSync(join(dir, "public"));
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title><p>the page</p>");
+  let named = "00".repeat(32);
+  const m = () => ({ ...sealedOf([]), icon: named });
+  const server = await serve(dir, m, secret, 0, "127.0.0.1");
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    // As the simulator does: the manifest, then the page its entry names.
+    const manifestUrl = `${base}/.well-known/saltix-grain`;
+    const signed = await (await fetch(manifestUrl)).json();
+    const page = await fetch(devPageUrl(signed.manifest.entry, manifestUrl));
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /the page/);
+    assert.equal((await fetch(new URL("index.html", manifestUrl))).status, 404, "never beside the manifest");
+    // No icon named: none served (the sheet draws the monogram); a file whose hash grain.json names: served.
+    writeFileSync(join(dir, "icon.png"), icon);
+    assert.equal((await fetch(`${base}/_icon.png`)).status, 404);
+    named = iconHash(new Uint8Array(icon));
+    const served = await fetch(`${base}/_icon.png`);
+    assert.equal(served.status, 200);
+    assert.equal(served.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await served.arrayBuffer()), icon);
+    named = "11".repeat(32);
+    assert.equal((await fetch(`${base}/_icon.png`)).status, 404, "another icon than the file here");
+  } finally {
+    server.close();
+  }
+  // The simulator draws it: the sheet and the splash ask for it, in the rounded square.
+  const bundle = readFileSync(new URL("../dist/simulator/dist/simulator.js", import.meta.url), "utf8");
+  assert.ok(bundle.includes("/_icon.png") && bundle.includes("app-icon"));
+  assert.match(readFileSync(new URL("../dist/simulator/index.html", import.meta.url), "utf8"), /\.app-icon \{[^}]*border-radius: 26%/);
+});
+
+test("grain dev logs that it serves, and what form, to the steps' log", async () => {
+  const { spawn } = await import("node:child_process");
+  const { readFileSync, existsSync } = await import("node:fs");
+  const dir = scratch("grain-dev-log-");
+  mkdirSync(join(dir, "public"));
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title>");
+  writeFileSync(join(dir, "grain.json"), JSON.stringify(hosted()));
+  writeFileSync(join(dir, "owner.key"), "62".repeat(32) + "\n", { mode: 0o600 });
+  const child = spawn("node", [main, "dev", "--port", "0"], { cwd: dir });
+  try {
+    const log = join(dir, ".grain", "log.jsonl");
+    const end = Date.now() + 10_000;
+    while (!(existsSync(log) && readFileSync(log, "utf8").includes('"serve"'))) {
+      if (Date.now() > end) throw new Error("no serve step");
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const line = JSON.parse(readFileSync(log, "utf8").trim().split("\n").find((l) => l.includes('"serve"')));
+    assert.deepEqual([line.command, line.step, line.outcome, line.reason], ["dev", "serve", "ok", "page"]);
+  } finally {
+    child.kill();
+  }
+});

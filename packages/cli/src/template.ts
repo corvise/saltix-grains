@@ -1,13 +1,15 @@
-// What `grain init` makes: a hosted grain that runs in a wallet and in `grain dev`, drawn edge to edge (it declares
-// viewport-fit=cover and keeps inside the insets, 12-grains §7), that checks first and renders after (its splash until
-// its gate decides, 12-grains §5.1a), and the rules a coding agent follows (AGENTS.md, which CLAUDE.md points to).
-import { httpsLinkOk } from "@saltix/grain-server";
+// What `grain init` makes: a page that runs in a wallet and in `grain dev`, drawn edge to edge (it declares
+// viewport-fit=cover and keeps inside the insets, 12-grains §7): a page that works on its own by default, or, with
+// `--sign-in`, one for some people only that checks first and renders after (its splash until its gate decides, 12-grains
+// §5.1a); and the rules a coding agent follows (AGENTS.md, which CLAUDE.md points to), a page's first.
 
 /** The one line Saltix ends "Copy for an AI agent" with (24-app-studio §4), word for word. */
 export const FULL_SCREEN_RULE =
   "Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).";
 
-export const indexHtml = (name: string) => `<!doctype html>
+/** `public/index.html`: a page that works on its own, or (`signIn`) one that shows only its splash until its sign-in
+ *  decides. */
+export const indexHtml = (name: string, signIn = false) => `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -51,17 +53,18 @@ export const indexHtml = (name: string) => `<!doctype html>
     }
     button { font: inherit; padding: 12px; border-radius: 12px; border: none; width: 100%; margin: 6px 0; background: var(--bar); color: #fff; }
     pre { white-space: pre-wrap; font-size: 12px; background: rgba(127,127,127,.12); padding: 10px; border-radius: 10px; }
-    /* Check first, render after (AGENTS.md): the splash, the app's mark and name and nothing of its UI, until app.js's
-       gate decides; then the app, or the refusal. */
     [hidden] { display: none !important; }
+${signIn ? `    /* Check first, render after (AGENTS.md): the splash, the app's mark and name and nothing of its UI, until app.js's
+       gate decides; then the app, or the refusal. */
     .splash, .refused { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
       box-sizing: border-box; padding: calc(24px + var(--saltix-safe-top)) calc(24px + var(--saltix-safe-right)) calc(24px + var(--saltix-safe-bottom)) calc(24px + var(--saltix-safe-left)); text-align: center; }
     .mark { width: 72px; height: 72px; border-radius: 20px; background: var(--bar); color: #fff; display: grid; place-items: center; font-size: 32px; font-weight: 700; }
     .refused p { max-width: 320px; margin: 0; opacity: .8; }
-  </style>
+` : `    a { color: inherit; word-break: break-all; }
+`}  </style>
 </head>
 <body>
-  <div class="splash" data-grain-splash><div class="mark" aria-hidden="true">${(name.trim()[0] ?? "?").toUpperCase()}</div><strong>${name}</strong></div>
+${signIn ? `  <div class="splash" data-grain-splash><div class="mark" aria-hidden="true">${(name.trim()[0] ?? "?").toUpperCase()}</div><strong>${name}</strong></div>
   <div id="app" hidden>
     <header><h1>${name}</h1></header>
     <main>
@@ -70,14 +73,69 @@ export const indexHtml = (name: string) => `<!doctype html>
     </main>
   </div>
   <div class="refused" id="refused" hidden><div class="mark" aria-hidden="true">${(name.trim()[0] ?? "?").toUpperCase()}</div><h2 id="refused-title"></h2><p id="refused-body"></p></div>
-  <script type="module" src="./app.js"></script>
+` : `  <header><h1>${name}</h1></header>
+  <main>
+    <button id="count">Count</button>
+    <pre id="out"></pre>
+    <p id="outside" hidden>This page runs inside Saltix: <a id="open-in-saltix"></a></p>
+  </main>
+`}  <script type="module" src="./app.js"></script>
 </body>
 </html>
 `;
 
-export const appJs = `// A grain: the wallet's bridge (./grain.js is @saltix/grain), storage synced through the user's vault.
-import { TEAM, gateOf, grain, inWallet, walletLink } from "./grain.js";
+/** `public/app.js` of a page that works on its own: no server, no sign-in; outside Saltix it shows the link that opens
+ *  the app there (its slug's, which a sealed page's own address never is). */
+const pageJs = (slug: string) => `// A page that works on its own, with no server: the wallet's bridge (./grain.js is @saltix/grain), storage synced
+// through the user's vault.
+import { grain, inWallet, slugLink } from "./grain.js";
 
+/** This app's slug: outside Saltix the page links to the app by it (salt:grain/<slug>). */
+const SLUG = ${JSON.stringify(slug)};
+const out = document.getElementById("out");
+const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
+
+// Edge to edge (index.html declares viewport-fit=cover): the safe area and the wallet's controls as CSS variables, kept
+// current when the phone turns or unfolds (index.html lays out by them). Saltix sets them too, and its values win over
+// these: this is for older ones, a web wallet and plain browsers.
+grain.layout();
+
+if (inWallet()) {
+  grain.info().then((info) => { document.body.dataset.theme = info.theme; show(info); });
+  grain.on("theme", ({ theme }) => { document.body.dataset.theme = theme; });
+  // The colour at the top of the page: the wallet draws the status bar's icons and its controls to contrast with it.
+  grain.setHeader("#2f6bff").catch(() => {});
+  grain.ready().catch(() => {});
+} else {
+  // A plain browser: the link that opens the app in Saltix.
+  const link = document.getElementById("open-in-saltix");
+  link.href = slugLink(SLUG);
+  link.textContent = slugLink(SLUG);
+  document.getElementById("outside").hidden = false;
+}
+
+document.getElementById("count").addEventListener("click", async () => {
+  try {
+    const n = Number((await grain.storage.get("count")) ?? "0") + 1;
+    await grain.storage.set("count", String(n));
+    show(\`Counted \${n} times, on every phone of this account.\`);
+  } catch (e) {
+    show(\`\${e.code ?? ""} \${e.message}\`);
+  }
+});
+`;
+
+/** `public/app.js`: a page that works on its own, or (`signIn`) one for some people only, which checks first and
+ *  renders after. */
+export const appJs = (slug: string, signIn = false): string => (signIn ? gatedJs(slug) : pageJs(slug));
+
+/** `public/app.js` of a page for some people only: its splash until the gate decides, then the app or a refusal. */
+const gatedJs = (slug: string) => `// A page for some people only: the wallet's bridge (./grain.js is @saltix/grain), storage synced through the user's
+// vault, and the gate that decides who sees the app (check first, render after).
+import { TEAM, gateOf, grain, inWallet, slugLink } from "./grain.js";
+
+/** This app's slug: outside Saltix the page links to the app by it (salt:grain/<slug>). */
+const SLUG = ${JSON.stringify(slug)};
 const out = document.getElementById("out");
 const show = (x) => { out.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
 
@@ -97,7 +155,7 @@ const REFUSED = {
   update: ["Update Saltix", "This version of Saltix cannot confirm that you are on the app's team."],
   declined: ["Sign in to continue", "The app signs you in under a key of its own, never your address."],
   failed: ["The app did not open", "Its server did not answer. Try again in a minute."],
-  outside: ["Open it in Saltix", walletLink(location.origin + "/.well-known/saltix-grain")],
+  outside: ["Open it in Saltix", slugLink(SLUG)],
 };
 
 async function gate() {
@@ -180,24 +238,30 @@ controls \`⋯ | ✕\` floating in the top right corner, and lays the page out a
 
 const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (and the SDK) from the saltix-grains checkout beside
   this project, so \`npx grain …\` here runs it, never the npm registry's unrelated package of that name.
-- \`npx grain status\` first, every session, and \`npx grain doctor\`: where the project stands and the next step. An
-  app's server (its chat, invoices, a sign-in) runs with a key \`npx grain pair\` pairs by a QR code (rule 1).
+- \`npx grain status\` first, every session (a page alone: \`not_needed\`, nothing to pair), and \`npx grain doctor\`:
+  where the project stands and the exact next step; before the first publish, what registering the slug takes.
 - \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
   the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
-- \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered, and warnings about the page and
-  permissions nothing uses.
+  \`npx grain dev --check\` drives the same simulator in headless Chrome: the Connect sheet, the page loading without
+  errors, and at every size in both themes nothing tappable under the wallet's controls and no sideways scroll;
+  screenshots and \`report.json\` in \`.grain/check/\`, exit 1 when something is wrong.
+- \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\`, warnings about the page, placeholders and permissions
+  nothing uses, and whether this is the version the registry took at the last publish.
 - \`npx grain icon <picture> --out icon.png\`: the app's icon to Saltix's standard from any PNG or JPEG (512 × 512,
-  opaque, at most 64 KiB, the mark inside the keyline circle); it names it in \`grain.json\`. Look at the preview it
-  writes (\`.grain/icon-preview.png\`); never draw rounded corners or transparency yourself.
+  opaque, at most 64 KiB, the mark inside the keyline circle); it names it in \`grain.json\`. No picture yet:
+  \`npx grain icon --monogram <letter>\`, a letter on a colour (\`--background #rrggbb\`) to the same standard. Look at
+  the preview it writes (\`.grain/icon-preview.png\`); never draw rounded corners or transparency yourself.
 - \`npx grain publish\`: **a page needs no server and no hosting.** It seals \`public/\`, puts it into the Saltix network
-  from this computer (before the owner signs when \`app.key\` is paired), shows the QR code the owner's Saltix signs the
-  version from, waits for the registry and uploads the icon. \`--no-wait\` returns once the QR code is shown: show it to
-  the user (or \`.grain/publish.html\`), then \`npx grain publish\` again finishes. Never set up hosting, a domain or
-  \`--sources\` for it. An app made in Saltix is its owner's phone's: \`grain publish\` asks the owner's Saltix (\`--wallet\`
-  says so even with an \`owner.key\` here); a new slug may be signed with \`owner.key\` on the test network, after
-  \`npx grain faucet --wait\` for test SALT. Registry commands reach the test network through its public relays, each
-  pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
-- \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way.`;
+  from this computer, says which account will own the app, shows the QR code the owner's Saltix signs the version from,
+  waits for the registry and uploads the icon. \`--no-wait\` returns once the QR code is shown: show it to the user (or
+  \`.grain/publish.html\`), then \`npx grain publish\` again finishes. Run again with nothing changed, it says "nothing to
+  publish" and sends nothing; a change makes the next version. Never set up hosting, a domain or \`--sources\` for it.
+  A key file signs only when named: on the test network without a phone, \`npx grain faucet --wait\`, then
+  \`npx grain publish --key owner.key\` (the app is then that key's account's, and private until
+  \`npx grain access --slug <slug> --public --key owner.key\`). Registry commands reach the test network through its
+  public relays, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+- \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way (a QR
+  code; \`--key owner.key\` for an app that key registered).`;
 
 const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the server is paired with its app, and what to run next.
   \`npx grain pair\` pairs it (rule 1): a QR code the app owner's Saltix scans; the key is made here and never leaves.
@@ -294,26 +358,40 @@ export const appRules = `1. **The server's key is made where it runs and never l
    in it (the app's own data: \`connect.json\`'s privacy line says so) or an address the user shared
    (\`grain.requestAddress\`), shortened; a name someone typed is never proof of who they are.`;
 
-/** AGENTS.md of a new project: what it is, how to run it, and the rules (a page's, or a chat-only app's). */
-export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
+/** The first steps of a page's project: no server, so nothing to pair; the simulator, its headless check, publishing. */
+const PAGE_START = `1. \`npx grain status\`: a page alone needs no server, so it says \`not_needed\` (nothing to pair) and names the next
+   step. When the app gets a server (a chat, payments, a sign-in), that server is paired by a QR code the owner scans
+   (\`npx grain pair\`, rule 1): never a key pasted by the user.
+2. \`npx grain dev\`: the page in the simulator, framed as Saltix frames it. \`npx grain dev --check\` drives it headless at
+   every size and in both themes and says what is wrong (screenshots in \`.grain/check/\`).
+3. \`npx grain doctor\`, then \`npx grain publish\`: what is left before publishing, then the page into the network. The
+   owner's Saltix signs from a QR code; without a phone, on the test network: \`npx grain faucet --wait\`, then
+   \`npx grain publish --key owner.key\`.`;
 
-Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (the protocol:
-[grains](${PROTOCOL_DOCS}/grains.md)${chat ? `, [grain chats](${PROTOCOL_DOCS}/grain-chats.md) and [the app studio](${PROTOCOL_DOCS}/app-studio.md)` : ""}, in the SDK's
-[docs/protocol/](${PROTOCOL_DOCS}/README.md)). \`CLAUDE.md\` points here. The whole path, from pairing the server
-to an app that runs, is tested and ships, and what to do with an error report from Saltix's console:
-[the SDK's page for a coding agent](${APP_GUIDE}).
-
-## Start here, every session
-
-[How a Saltix mini-app works](${HOW_IT_WORKS}): what runs where, whether this app needs a server at all, and every step
-from here to a published app, as one checklist. Then:
-
-1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
+/** The first steps of a chat's project: pair its server, never take a key. */
+const CHAT_START = `1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
 2. \`npx grain pair\`: it prints a QR code (and writes \`.grain/pair.html\`). Show it to the user and say: scan it with
    Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same 6-digit code, confirm with
    the PIN. It waits, answers the phone, and once the registry names the key writes \`app.key\` and \`app.json\`. Run it
    in the background, or \`npx grain pair --no-wait\` to show the code and then \`npx grain pair\` to wait.
-3. \`npx grain doctor\`: what is left, and the exact next step.
+3. \`npx grain doctor\`: what is left, and the exact next step.`;
+
+/** AGENTS.md of a new project: what it is, how to run it, and the rules: a page's first for a page, the server's first
+ *  for a chat-only app. */
+export const agentsMd = (slug: string, chat: boolean) => `# AGENTS.md
+
+Rules for coding agents, and people, working on \`${slug}\`: an app that opens inside the Saltix wallet (the protocol:
+[grains](${PROTOCOL_DOCS}/grains.md)${chat ? `, [grain chats](${PROTOCOL_DOCS}/grain-chats.md) and [the app studio](${PROTOCOL_DOCS}/app-studio.md)` : ""}, in the SDK's
+[docs/protocol/](${PROTOCOL_DOCS}/README.md)). \`CLAUDE.md\` points here.
+The whole path, ${chat ? "from pairing the server to an app that runs, is tested and ships" : "from a page in the simulator to one published in the network"}, and
+what to do with an error report from Saltix's console: [the SDK's page for a coding agent](${APP_GUIDE}).
+
+## Start here, every session
+
+[How a Saltix mini-app works](${HOW_IT_WORKS}): what runs where, whether this app needs a server at all, and every step
+from here to a published app, as one checklist.${chat ? "" : " A page alone needs no server and no hosting."} Then:
+
+${chat ? CHAT_START : PAGE_START}
 
 ## The one rule to keep
 
@@ -344,16 +422,21 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 ## Commands
 
 ${chat ? CHAT_COMMANDS : PAGE_COMMANDS}
+${chat ? "" : `
+## The page's frame, and what Saltix gives a page
 
+${fullScreenRules}`}
 ## The rules every app follows
-
+${chat ? "" : `
+A page alone keeps rules 9 to 11 and the frame's rules above; rules 1 to 8 are for the app's server, once it has one.
+`}
 ${appRules}
 
 More in [the SDK's page](${APP_GUIDE}#the-rules-every-app-follows).
-
+${chat ? `
 ## The page's frame, and what Saltix gives a page
 
-${fullScreenRules}`;
+${fullScreenRules}` : ""}`;
 
 export const claudeMd = `# CLAUDE.md
 
@@ -375,7 +458,7 @@ node_modules/
 .grain/
 `;
 
-export const readme = (slug: string) => `# ${slug}
+export const readme = (slug: string, signIn = false) => `# ${slug}
 
 A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [docs/protocol/grains.md](${PROTOCOL_DOCS}/grains.md)).
 
@@ -383,19 +466,24 @@ A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [
   [docs/how-it-works.md](${HOW_IT_WORKS}). \`npm install\` first: it links the \`grain\` command from the checkout.
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
   debug Saltix (the emulator reaches this computer at 10.0.2.2), or the simulator it prints in a browser.
+  \`grain dev --check\` tries it headless in this computer's Chrome at every screen in both themes, and says what is
+  wrong (screenshots in \`.grain/check/\`).
 - Saltix lays the page inside the safe area unless it declares \`viewport-fit=cover\` (this one does): \`AGENTS.md\` says
   how the page keeps clear of the system's bars and the wallet's controls (coding agents read it too; \`CLAUDE.md\`
   points to it).
-- Check first, render after: \`public/index.html\` shows only a splash (\`data-grain-splash\`) until \`public/app.js\`'s
-  gate decides; set \`SIGN_IN\` to your server's sign-in and \`FOR\` to whom the app is for (\`AGENTS.md\`, rule 10).
+${signIn ? `- Check first, render after: \`public/index.html\` shows only a splash (\`data-grain-splash\`) until \`public/app.js\`'s
+  gate decides; set \`SIGN_IN\` to your server's sign-in and \`FOR\` to whom the app is for (\`AGENTS.md\`, rule 10).` : `- A page that works on its own: no server, no sign-in. One for some people only checks first and renders after
+  (\`grain init --sign-in\` makes such a page: a splash until its gate decides; \`AGENTS.md\`, rule 10).`}
 - \`grain lint\` checks \`grain.json\` and \`connect.json\` (the Connect profile Saltix shows before anyone signs in: write
-  it for your app); \`grain icon <picture> --out icon.png\` makes the icon to Saltix's standard and names it.
+  it for your app); \`grain icon <picture> --out icon.png\` (or \`grain icon --monogram <letter>\`, with no picture) makes
+  the icon to Saltix's standard and names it.
 - \`grain publish\` puts the page into the Saltix network itself, no hosting: it seals \`public/\`, uploads it from this
   computer, shows the QR code your Saltix signs the version from, and uploads the icon. A new slug keeps a deposit by
   its length (100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain retire\`). With
-  \`grain pair\` first, the bundle goes up before you sign. On the test network \`--key owner.key\` signs here instead
-  (\`grain faucet --wait\` gives \`owner.key\`'s account test SALT first). \`grain profile\` then sets the Connect profile
-  from \`connect.json\`.
+  \`grain pair\` first, the bundle goes up before you sign. On the test network without a phone, \`--key owner.key\` signs
+  here instead (\`grain faucet --wait\` gives \`owner.key\`'s account test SALT first); the app is then that key's
+  account's, and starts private. Run again with nothing changed, it says so and sends nothing. \`grain profile\` then
+  sets the Connect profile from \`connect.json\`.
 - A page at your own https site instead: set \`entry.hosted\` to it, serve \`public/\` there and the signed manifest
   (\`grain sign\`) at \`/.well-known/saltix-grain\`, and \`grain publish --hosted\`.
 
@@ -429,7 +517,6 @@ export const chatJson = (slug: string, name: string) => JSON.stringify({
  * does, facts it is good at, and what it keeps about a user and for how long. Rewrite it as the app grows.
  */
 export function connectJson(slug: string, name: string, chat: boolean): string {
-  const website = `https://${slug}.example/`;
   const texts = chat
     ? {
       en: {
@@ -463,8 +550,8 @@ export function connectJson(slug: string, name: string, chat: boolean): string {
     version: 1,
     subject: { grain: { slug } },
     texts,
-    // A link of a host the slug makes; replace it with the app's own site, or null for none.
-    website: httpsLinkOk(website) ? website : null,
+    // The app's own site, when it has one (an https:// link); never a placeholder, which grain lint refuses.
+    website: null,
     support: null,
     terms: null,
   }, null, 2) + "\n";
@@ -487,9 +574,10 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
 - **Add a command:** declare it in \`chat.json\`, add its handler in \`chat.mjs\` and its test in \`test/chat.test.mjs\`
   (\`npm test\`), and raise \`version\` with every change: a wallet takes only a version above the one it holds, and an
   app made in Saltix starts at 1.
-- \`grain publish\` registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
-  more; back 30 days after \`grain retire\`), through the test network's public relays; \`grain faucet --wait\` gives
-  \`owner.key\`'s account test SALT first. Or make the app in Saltix: My apps → New app.
+- Make the app in Saltix (My apps → New app), or \`grain pair\` makes it from its QR code. Without a phone, on the test
+  network: \`grain faucet --wait\` gives \`owner.key\`'s account test SALT, then \`grain publish --key owner.key\`
+  registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days
+  after \`grain retire\`), private, through the test network's public relays.
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key\` names it in the registry;
   \`grain app-key make --slug ${slug}\` writes \`app.key\`, the developer key the server runs with. Each takes \`--node
   <url>\` for a node of your own.

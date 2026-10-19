@@ -164,6 +164,40 @@ test("without a key file, the tool says what to do in Saltix and waits for the r
   node.close();
 });
 
+test("a key file signs an owner's call only for an app it owns, or when --key names it; else the owner's Saltix, the owner said first", async () => {
+  const theirs = "77".repeat(32);
+  const node = await fakeNode({ grain: grain({ owner: theirs }) });
+  const dir = scratch("owner-calls-");
+  writeFileSync(join(dir, "owner.key"), toHex(secret) + "\n", { mode: 0o600 });
+  writeFileSync(join(dir, "grain.json"), JSON.stringify({ slug: "chess-bot" }));
+  // owner.key here, the app another account's (made in Saltix): its Saltix is asked, nothing signed here.
+  const asked = await run(["access", "--slug", "chess-bot", "--private", "--node", node.url, "--timeout", "1"], dir);
+  assert.match(asked.stdout, /^owner: tsalt1\S+, as the registry names it: its Saltix signs \(owner\.key here is another account's\)$/m);
+  assert.match(asked.stdout, /In the owner's Saltix: My apps → chess-bot → make it private/);
+  // --key naming it: refused before anything is signed.
+  const named = await run(["access", "--slug", "chess-bot", "--public", "--key", "owner.key", "--node", node.url], dir);
+  assert.equal(named.code, 1);
+  assert.match(named.stderr, /chess-bot: the registry names another owner \(7{64}\) than owner\.key's account/);
+  // --wallet and --key at once: a misuse.
+  assert.equal((await run(["access", "--slug", "chess-bot", "--public", "--key", "owner.key", "--wallet", "--node", node.url], dir)).code, 2);
+  // Its own app: owner.key signs without --key, and says so.
+  node.state.grain = grain();
+  const own = await run(["access", "--slug", "chess-bot", "--public", "--node", node.url, "--no-wait"], dir);
+  assert.equal(own.code, 0, own.stderr);
+  assert.match(own.stdout, /^owner: tsalt1\S+, owner\.key's account on this computer, which the registry names as the owner$/m);
+  assert.match(own.stdout, /access: transaction (ab){32} \(fee 0\.\d+ SALT\)/);
+  // A slug nobody registered: said, never a call built for it.
+  node.state.grain = null;
+  const none = await run(["access", "--slug", "chess-bot", "--public", "--node", node.url], dir);
+  assert.equal(none.code, 1);
+  assert.match(none.stderr, /chess-bot: not registered yet \(grain publish registers an app/);
+  assert.equal(node.submitted.length, 1);
+  const log = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8");
+  assert.match(log, /"step":"signer","outcome":"ok","reason":"wallet_not_owner"/);
+  assert.match(log, /"step":"signer","outcome":"ok","reason":"key_owns"/);
+  node.close();
+});
+
 const run = (args, cwd, env = {}, input) => new Promise((resolve) => {
   const child = execFile("node", [main, ...args], { cwd, env: { ...process.env, SALTIX_APP_KEY: "", ...env } }, (error, stdout, stderr) => {
     resolve({ code: error ? error.code : 0, stdout, stderr });
@@ -231,7 +265,7 @@ test("init --chat makes a chat-only grain with a spec to build on", async () => 
   assert.equal(m.permissions, 4);
   assert.ok(!existsSync(join(dir, "public")));
   const lint = await run(["lint"], dir);
-  assert.match(lint.stdout, /ready to register/);
+  assert.match(lint.stdout, /coach v1: no errors; ready to publish/);
   const spec = JSON.parse(readFileSync(join(dir, "chat.json"), "utf8"));
   assert.equal(spec.slug, "coach");
   assert.ok(readFileSync(join(dir, ".gitignore"), "utf8").includes("app.key"));

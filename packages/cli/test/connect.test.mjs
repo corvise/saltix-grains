@@ -14,7 +14,7 @@ import {
   accountId, derive, checkGrainProfile, checkSiteProfile, decodeSignedProfile, fromHex, iconHash, profileProblem, readProfileLink, signProfile,
   signedProfileFromJson, toHex, profileToJson,
 } from "@saltix/grain-server";
-import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, pngSize, profileOfProject } from "../dist/connect.js";
+import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, placeholderLink, pngSize, profileOfProject } from "../dist/connect.js";
 import { connectJson } from "../dist/template.js";
 import { servedSiteRevision, siteProfile } from "../dist/profile.js";
 import { scratch } from "../../../scripts/scratch.mjs";
@@ -61,9 +61,11 @@ test("every project grain init makes ships a Connect profile in English and Russ
     assert.equal(linted.status, 0, linted.stderr);
     assert.doesNotMatch(linted.stdout + linted.stderr, /connect\.json|permissions:/);
   }
-  // A slug that makes no host gets no website: the profile still passes.
-  assert.equal(JSON.parse(connectJson("dice-", "Dice", false)).website, null);
-  assert.equal(JSON.parse(connectJson("dice", "Dice", false)).website, "https://dice.example/");
+  // No placeholder link: a website, support and terms are the app's own, and none until it has them.
+  for (const chat of [false, true]) {
+    const c = JSON.parse(connectJson("dice", "Dice", chat));
+    assert.deepEqual([c.website, c.support, c.terms], [null, null, null]);
+  }
 });
 
 test("lint: a missing connect.json stops registering, as every rule of the format does, each naming its field", () => {
@@ -72,7 +74,7 @@ test("lint: a missing connect.json stops registering, as every rule of the forma
   const missing = grain(["lint"], dir);
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /^error: connect\.json: missing\. Every app ships a Connect profile/m);
-  assert.doesNotMatch(missing.stdout, /ready to register/);
+  assert.doesNotMatch(missing.stdout, /ready to publish/);
   writeFileSync(join(dir, CONNECT_FILE), "{");
   assert.match(lintConnect(dir, manifestOf(dir)).errors[0], /connect\.json: not JSON/);
   writeFileSync(join(dir, CONNECT_FILE), connectJson("dice", "Dice", false));
@@ -103,12 +105,23 @@ test("lint: a missing connect.json stops registering, as every rule of the forma
     assert.ok(errors.some((e) => expected.test(e)), `${expected}: ${errors.join(" | ")}`);
     writeFileSync(join(dir, CONNECT_FILE), connectJson("dice", "Dice", false));
   }
-  // What a good profile may hold passes.
+  // What a good profile may hold passes: an app's own links.
   assert.deepEqual(change(dir, (c) => {
     c.support = "@dice_help";
-    c.terms = "https://dice.example/terms?lang=en#top";
+    c.terms = "https://saltix.io/terms?lang=en#top";
     c.texts.en.highlights = [];
   }).errors, []);
+  // A link to a host reserved for examples leads nowhere: refused, by lint and by grain profile alike (grain init writes
+  // none).
+  for (const [field, link] of [["website", "https://dice.example/"], ["terms", "https://www.example.com/terms"], ["support", "mailto:help@dice.test"],
+    ["website", "https://localhost/"], ["support", "https://help.dice.invalid/"]]) {
+    const { errors } = change(dir, (c) => { c[field] = link; });
+    assert.ok(errors.some((e) => e.startsWith(`connect.json: ${field}: ${link} is a placeholder that leads nowhere`)), `${field} ${link}: ${errors.join(" | ")}`);
+    writeFileSync(join(dir, CONNECT_FILE), connectJson("dice", "Dice", false));
+  }
+  for (const link of ["https://saltix.io/", "https://example.org.saltix.io/", "https://myexample.com/", "@example"]) {
+    assert.ok(!placeholderLink(link), link);
+  }
 });
 
 test("lint: the privacy summary is required where the app asks for the address or storage, and only there", () => {
@@ -266,7 +279,7 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   const node = await fakeNode({ grain: {}, profile: before });
   const r = await run(["profile", "--node", node.url], dir);
   assert.equal(r.code, 0, r.stderr);
-  assert.match(r.stdout, /profile: transaction (ab){32} \(fee \d+\)/);
+  assert.match(r.stdout, /profile: transaction (ab){32} \(fee \d+(\.\d+)? SALT\)/);
   const sent = profileOf(node.submitted[0]);
   assert.equal(sent.profile.revision, 5);
   assert.equal(sent.profile.owner, ownerId);
@@ -276,10 +289,16 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   const cleared = await run(["profile", "--clear", "--node", node.url], dir);
   assert.equal(cleared.code, 0, cleared.stderr);
   assert.equal(profileOf(node.submitted[1]), null);
+  // Another owner's app (one made in Saltix): owner.key here never signs for it. Without --key the owner's Saltix is
+  // asked, the owner said first; --key naming it is refused before anything is sent.
   node.state.grain = { owner: "77".repeat(32) };
-  const theirs = await run(["profile", "--node", node.url], dir);
+  const theirs = await run(["profile", "--key", "owner.key", "--node", node.url], dir);
   assert.equal(theirs.code, 1);
-  assert.match(theirs.stderr, /registered by another owner/);
+  assert.match(theirs.stderr, /dice: the registry names another owner \(7{64}\) than owner\.key's account/);
+  const asked = await run(["profile", "--timeout", "1", "--node", node.url], dir);
+  assert.match(asked.stdout, /^owner: dsalt1\S+, as the registry names it: its Saltix signs \(owner\.key here is another account's\)$/m);
+  assert.match(asked.stdout, /salt:grain-profile\?p=/);
+  assert.equal(node.submitted.length, 2, "nothing sent for another owner's app");
   node.state.grain = {};
   writeConnect(dir, { ...connectOf(dir), website: "http://dice.example" });
   const broken = await run(["profile", "--node", node.url], dir);
@@ -289,8 +308,14 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   node.state.profile = null;
   const none = await run(["profile", "--clear", "--node", node.url], dir);
   assert.match(none.stderr, /has no Connect profile to clear/);
-  // Cleared at revision 5: the next is 6, never an older one the registry would refuse.
+  // A link that leads nowhere (grain init's placeholders were such) is refused before anything is signed.
   writeConnect(dir, { ...connectOf(dir), website: "https://dice.example/" });
+  const placeholder = await run(["profile", "--node", node.url], dir);
+  assert.equal(placeholder.code, 1);
+  assert.match(placeholder.stderr, /connect\.json: website: https:\/\/dice\.example\/ is a placeholder that leads nowhere/);
+  assert.equal(node.submitted.length, 2);
+  // Cleared at revision 5: the next is 6, never an older one the registry would refuse.
+  writeConnect(dir, { ...connectOf(dir), website: "https://saltix.io/" });
   node.state.grain = { profile_revision: 5 };
   const again = await run(["profile", "--node", node.url], dir);
   assert.equal(again.code, 0, again.stderr);

@@ -4,14 +4,15 @@
 page (safe by default, full screen only with `viewport-fit=cover`), what a page gets from Saltix (no design tokens),
 checking first and rendering after, naming apps and people, and how this repository works. Before any of it,
 [How a mini-app works](../how-it-works.md): what runs where, whether an app needs a server (a page alone needs none),
-and the lifecycle as one checklist. These pages go on from it:
+and the lifecycle as one checklist. A page alone needs none of the server's steps: AGENTS.md's
+[quick path](../../AGENTS.md#quick-path-a-page-only-app) is all of it. These pages go on from it:
 
 - [Building an app](app.md): from `grain status` and `grain pair` (the server's key is paired by a QR code, never
   copied) to an app that runs, is tested and ships; the Connect profile; publishing a page into the network
   (`grain publish`, no hosting) and its icon (`grain icon`); the rules every app follows; how to act on an error report
   pasted from Saltix's console.
-- [Working on the SDK](sdk.md): this repository's map, its commands and tests, the golden vectors, and how a change
-  lands.
+- [Working on the SDK](sdk.md): this repository's map, its commands and tests, the golden vectors, the decisions the
+  SDK made and why, and how a change lands.
 - [Cards](cards.md): the card design standard as rules: a status first, at most 6 actions, short labels, destructive
   names, choices and polls, answering every tap, and `assertCardStandard` in the app's tests.
 

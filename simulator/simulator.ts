@@ -27,9 +27,10 @@ import { notificationProblem, decodeNotification } from "../packages/server/src/
 import { type DeviceKey, deviceKeyOf } from "../packages/server/src/keys";
 import { setupChat } from "./chat";
 import { sealedOrigin } from "../packages/server/src/sign-in";
-import { BridgeLimiter, bridgeAnswer, bridgeEvent, manageRule, permissionRule, storageRule, tapRule } from "../packages/grain/src/rules";
+import { BridgeLimiter, bridgeAnswer, bridgeEvent, devPageUrl, manageRule, permissionRule, storageRule, tapRule } from "../packages/grain/src/rules";
 import { type SheetManifest, fetchProfile, showConnectSheet } from "./connect-sheet";
-import { setupPhone } from "./phone";
+import { DEVICES, setupPhone } from "./phone";
+import { ICON_PATH } from "./icon";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const frame = $<HTMLIFrameElement>("grain");
@@ -278,6 +279,7 @@ window.addEventListener("message", async (event) => {
   } catch (e) {
     const err = e instanceof Refusal ? { code: e.code, message: e.message } : { code: 5000, message: String(e) };
     write(`${m.method} ${JSON.stringify(m.params)} ✖ ${err.code} ${err.message}`);
+    refused.push({ method: m.method, code: err.code, message: err.message });
     reply({ error: err });
   }
 });
@@ -291,6 +293,12 @@ function emit(event: string, data: object) {
 /** The manifest loaded and where it came from: what the Connect sheet shows. */
 let loaded: { manifest: SheetManifest; url: string } | null = null;
 
+/** The loaded manifest's icon where `grain dev` serves it, when the manifest names one; null for none (the monogram). */
+const iconUrl = (): string | null => (loaded && loaded.manifest.icon && !/^0+$/.test(loaded.manifest.icon) ? new URL(ICON_PATH, loaded.url).href : null);
+
+/** Requests the simulator refused, as the page got them: what `grain dev --check` reports. */
+const refused: Array<{ method: string; code: number; message: string }> = [];
+
 /** The Connect sheet the first time this account opens the app (19-connect §12.2): Continue records the sign-in and the
  *  switches as set; Cancel opens nothing and sends nothing. Whether the app may open. */
 async function connectFirst(): Promise<boolean> {
@@ -303,6 +311,7 @@ async function connectFirst(): Promise<boolean> {
     lang: () => settings().language,
     theme: () => settings().theme,
     log: write,
+    icon: iconUrl,
   }, loaded.manifest, profile, problem);
   if (choice === null) {
     write("Connect sheet: Cancel; Saltix opens nothing and sends nothing");
@@ -334,6 +343,7 @@ const phone = setupPhone({
   emit,
   openChat: () => void chat.open(),
   reopen: () => void openGrain(),
+  icon: iconUrl,
 });
 
 const chat = setupChat({
@@ -397,7 +407,7 @@ async function loadManifest(url: string): Promise<void> {
   $<HTMLInputElement>("slug").value = m.slug;
   const key = m.owner_key;
   $<HTMLInputElement>("owner").value = "ed25519" in key ? key.ed25519 : JSON.stringify(key);
-  $<HTMLInputElement>("url").value = m.entry.hosted?.url ?? (m.entry.sealed ? new URL(m.entry.sealed.start, url).href : "");
+  $<HTMLInputElement>("url").value = devPageUrl(m.entry, url) ?? "";
   loaded = { manifest: m, url };
   consents.clear();
   limiter = new BridgeLimiter();
@@ -415,3 +425,112 @@ const asked = new URLSearchParams(location.search).get("manifest");
 if (asked) {
   void loadManifest(new URL(asked, location.href).href).then(openGrain, (e: Error) => write(`manifest ✖ ${e.message}`));
 }
+
+// ── For a tool: `grain dev --check` drives this page headless (packages/cli/src/check.ts) ──
+//
+// What a person does with the controls, a tool does here: pick a device, a theme and a language, pass the Connect sheet,
+// and read what the simulator saw: the sheet, the page's load, the requests it refused, and the page's geometry in the
+// phone's coordinates (CSS px). What is wrong in it is the tool's to judge (pure functions, tested there).
+
+/** A box, CSS px from the phone's top left corner. */
+interface Box { x: number; y: number; width: number; height: number }
+
+/** `r` in the coordinates whose origin is at (`left`, `top`). */
+const boxIn = (r: DOMRect, left: number, top: number): Box => ({ x: r.left - left, y: r.top - top, width: r.width, height: r.height });
+
+/** Elements a user can tap. */
+const TAPPABLE = 'a[href], button, input:not([type="hidden"]), select, textarea, summary, label[for], [role="button"], [role="link"], [role="tab"], [onclick], [tabindex]:not([tabindex="-1"])';
+
+/** An element as a person reads it in a report: its tag, id and first words. */
+function nameOf(el: Element): string {
+  const words = (el.getAttribute("aria-label") ?? el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 24);
+  return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${words ? ` "${words}"` : ""}`;
+}
+
+function measure() {
+  const phoneEl = $("phone");
+  const phoneRect = phoneEl.getBoundingClientRect();
+  const frameRect = frame.getBoundingClientRect();
+  const capsule = $("capsule");
+  const capsuleRect = capsule.getBoundingClientRect();
+  const status = $("status-bar").getBoundingClientRect();
+  const nav = $("nav-bar").getBoundingClientRect();
+  let doc: Document | null = null;
+  try {
+    doc = frame.contentDocument;
+  } catch {
+    doc = null;
+  }
+  const view = doc?.defaultView ?? null;
+  const tappables: Array<{ name: string; box: Box }> = [];
+  if (doc && view) {
+    for (const el of Array.from(doc.querySelectorAll(TAPPABLE))) {
+      const style = view.getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1 || style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) continue;
+      if ((el as HTMLElement).closest("[hidden]")) continue;
+      // The page's own coordinates are its frame's: the frame sits at its place in the phone.
+      tappables.push({ name: nameOf(el), box: boxIn(r, phoneRect.left - frameRect.left, phoneRect.top - frameRect.top) });
+    }
+  }
+  const navigation = view?.performance.getEntriesByType("navigation")[0] as (PerformanceEntry & { responseStatus?: number }) | undefined;
+  const body = doc?.body ?? null;
+  return {
+    device: $<HTMLSelectElement>("size").value,
+    theme: settings().theme,
+    language: settings().language,
+    mode: $("frame-mode").textContent ?? "",
+    phone: { width: phoneRect.width, height: phoneRect.height, page: { x: phoneRect.left + scrollX, y: phoneRect.top + scrollY } },
+    frame: boxIn(frameRect, phoneRect.left, phoneRect.top),
+    controls: capsule.hidden || capsuleRect.width === 0 ? null : boxIn(capsuleRect, phoneRect.left, phoneRect.top),
+    bars: { top: Math.max(0, status.bottom - phoneRect.top), bottom: Math.max(0, phoneRect.bottom - nav.top) },
+    // The page as it loaded (never the frame's first, empty document).
+    page: doc && view && body && doc.URL !== "about:blank" ? {
+      url: doc.URL,
+      ready: doc.readyState,
+      status: typeof navigation?.responseStatus === "number" ? navigation.responseStatus : null,
+      title: doc.title,
+      scrollWidth: doc.documentElement.scrollWidth,
+      clientWidth: doc.documentElement.clientWidth,
+      background: view.getComputedStyle(body).backgroundColor,
+      color: view.getComputedStyle(body).color,
+      rootBackground: view.getComputedStyle(doc.documentElement).backgroundColor,
+    } : null,
+    tappables,
+  };
+}
+
+const select = (id: string, value: string) => {
+  const el = $<HTMLSelectElement>(id);
+  if (!Array.from(el.options).some((o) => o.value === value)) throw new Error(`${id}: no ${value}`);
+  el.value = value;
+  el.dispatchEvent(new Event("change"));
+};
+
+(window as unknown as { saltixSimulator: unknown }).saltixSimulator = {
+  version: 1,
+  devices: () => DEVICES.map((d) => d.id),
+  set(o: { device?: string; theme?: "dark" | "light"; language?: string }) {
+    if (o.language) $<HTMLSelectElement>("language").value = o.language;
+    if (o.theme) select("theme", o.theme);
+    if (o.device) select("size", o.device);
+  },
+  /** The Connect sheet on the phone now: its words, and why connect.json would be refused (null: it checks). */
+  sheet() {
+    const sheet = document.querySelector<HTMLElement>(".connect-sheet");
+    if (!sheet) return null;
+    return {
+      text: sheet.innerText,
+      problem: sheet.querySelector(".cs-bad")?.textContent ?? null,
+      profile: sheet.querySelector(".cs-tagline") !== null,
+      icon: sheet.querySelector(".cs-icon img") !== null,
+    };
+  },
+  continue() {
+    const go = document.querySelector<HTMLButtonElement>(".connect-sheet .cs-continue");
+    go?.click();
+    return go !== null;
+  },
+  refused: () => refused.slice(),
+  measure,
+};

@@ -200,3 +200,16 @@ export function sealedCsp(connect: readonly string[]): string {
     "form-action 'none'",
   ].map((d) => d.trimEnd()).join("; ");
 }
+
+/**
+ * Where a development wallet opens a grain's first page, from its manifest loaded at `manifestUrl`: a hosted grain at its
+ * `url`; a sealed grain at its `start` page from the root of the bundle, which Saltix serves at the grain's own origin
+ * (`https://<slug>.grain.invalid/<start>`) and a development server (`grain dev`) at the root of its own origin, where
+ * it serves `public/` (the bundle's files); null for a chat-only grain, which has no page. Never relative to the
+ * manifest's own path (`/.well-known/`), where no page is.
+ */
+export function devPageUrl(entry: { hosted?: { url: string }; sealed?: { start: string }; chat?: unknown }, manifestUrl: string): string | null {
+  if (entry.hosted) return entry.hosted.url;
+  if (entry.sealed) return new URL(entry.sealed.start.replace(/^\/+/, ""), new URL("/", manifestUrl)).href;
+  return null;
+}

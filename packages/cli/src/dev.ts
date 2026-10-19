@@ -10,11 +10,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, normalize, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type AppKey, type Manifest, ROLES } from "@saltix/grain-server";
+import { type AppKey, type Manifest, ROLES, iconHash } from "@saltix/grain-server";
 import { createDevRegistry } from "@saltix/grain-server/dev";
 import { sealedCsp } from "@saltix/grain/rules";
 import { forOrigin, sign, originOf } from "./project.js";
 import { makeBundle, sealed } from "./bundle.js";
+import { ICON_FILES } from "./icon.js";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
@@ -26,6 +27,9 @@ export const WELL_KNOWN = "/.well-known/saltix-grain";
 export const DEV_BUNDLE = "/_bundle.zip";
 /** Where the project's Connect profile (`connect.json`) is served, for the simulator's preview of the Connect sheet. */
 export const DEV_CONNECT = "/_connect.json";
+/** Where the project's icon is served (the file whose hash `grain.json`'s `icon` is), for the simulator's Connect sheet and
+ *  splash: Saltix draws the icon the manifest names, and the app's monogram without one. */
+export const DEV_ICON = "/_icon.png";
 /** Where the simulator is served; it loads the manifest and opens the page. */
 export const SIMULATOR = "/_simulator/";
 /** The simulator's files, built next to this module. */
@@ -118,6 +122,18 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
       const file = join(root, "connect.json");
       if (!existsSync(file)) res.writeHead(404).end("no connect.json: every app ships a Connect profile (grain lint)");
       else res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(readFileSync(file));
+      return;
+    }
+    if (path === DEV_ICON) {
+      let file: string | undefined;
+      try {
+        const named = manifest().icon;
+        file = ICON_FILES.map((f) => join(root, f)).find((f) => existsSync(f) && iconHash(new Uint8Array(readFileSync(f))) === named);
+      } catch {
+        file = undefined;
+      }
+      if (file === undefined) res.writeHead(404).end("no icon file here is the one grain.json names: grain icon makes one");
+      else res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" }).end(readFileSync(file));
       return;
     }
     if (path === DEV_BUNDLE) {

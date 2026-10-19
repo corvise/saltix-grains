@@ -4,6 +4,25 @@
 
 ### Added
 
+- **`grain dev --check`**: the simulator driven headless in the Chrome, Chromium, Edge or Brave of this computer
+  (`CHROME_PATH`), over `--remote-debugging-pipe`, with a profile and a temporary directory it removes after: the
+  Connect sheet, the page's load, then every screen it plays (a phone, one on its side, the Galaxy Z Fold's three sizes,
+  an iPhone-like screen) in both themes, judged by pure functions (`judge`): an error for something tappable under the
+  wallet's controls, a page that throws or does not load, a Connect profile a wallet refuses; a warning for a sideways
+  scroll, something under a system bar, a request the wallet refused, one look for both themes. A screenshot of each
+  screen and `report.json` in `.grain/check/`, exit 1 on an error; no browser downloaded, and without one it says so.
+  The simulator shows the project's icon (`/_icon.png`, the one `grain.json` names) on its Connect sheet and splash, and
+  answers a tool through `window.saltixSimulator`.
+- **`grain icon --monogram L`**: an icon to the standard with no picture, one or two of A–Z and 0–9 drawn bold inside the
+  keyline circle on `--background` or a tint the slug picks, the ink white or dark by contrast, from a stroke font of
+  the SDK's own (the same bytes on any computer); checked, previewed and named in `grain.json` as any other.
+- **`grain init --sign-in`**: the page for some people only, which checks first and renders after; `grain init` alone
+  now makes a page that works on its own, with no gate.
+- **A quick path for a page-only app** at the top of `AGENTS.md` and the README, and *No phone, test network* in
+  `docs/how-it-works.md` and `docs/agents/app.md`: from an empty folder to a published page, every command and nothing
+  about servers; a project's `AGENTS.md` for a page leads with a page's steps and rules, the server's after.
+- **Decisions** in `docs/agents/sdk.md`: what the SDK decided, why, and what it rejected.
+
 - **`grain publish` puts a page straight into the Saltix network** (Saltix 32-images §7.3, 12-grains §8, §10): no
   server, host, domain or certificate of the developer's. It seals `public/` (the bundle check every node runs, run here
   first), names the sources by the network's protocol (`node_status.protocol.version`: none from version 2; before it
@@ -181,6 +200,30 @@
 
 ### Changed
 
+- **`grain publish` with nothing changed publishes nothing**: what the registry holds already is compared with what it
+  would sign in the manifest's canonical form (the owner, the version and the relays' copies aside), never signed
+  again, its missing uploads finished, and with none it says "nothing to publish" and exits 0; a version is raised only
+  for a change of content (a node answers with its objects' keys sorted, so the JSON comparison raised the version and
+  sent `UpdateGrain` every run). The development registry answers with sorted keys, as a node does.
+- **A key file signs an owner's call only when `--key` names it**, or for an app the registry already names its account
+  as the owner of (`publish`, `profile`, `access`, `configure`, `bind`); otherwise the owner's Saltix signs (a QR code),
+  and `--wallet` always asks it. `grain init`'s `owner.key` no longer registers a free slug by itself. Every such call
+  prints the account that will own what it makes before anything is signed; `--key` naming another owner's app is
+  refused.
+- **A registration by a key file is made private at once** (`SetGrainAccess`), as Saltix's New app makes an app; a
+  first version a publishing link registers is public, and `grain publish` says so and how to make it private.
+- **`grain status` says `not_needed` for a page alone** (exit 0, without asking the network) and names `grain doctor`;
+  `grain doctor` ends with a page's words, and before a page's first publish names the slug's deposit, what `owner.key`'s
+  account holds and, on the test network, `grain faucet --wait` and `grain publish --key owner.key`.
+- `grain lint` says what the last `grain publish` left (published as it is, changed since, or ready to publish) instead
+  of "ready to register"; it warns of `grain init`'s placeholder origin, and refuses (as `grain profile` does) a Connect
+  profile's link to a host reserved for examples. `grain init`'s `connect.json` has no placeholder link, and its page
+  links to the app by its slug outside Saltix (`slugLink`). `grain sign` refuses the placeholder origin.
+- `grain show` for a free slug says the deposit and exits 0 (no `null`), and says the network, the version and the
+  access of a registered one. Fees are said in SALT. `grain init` calls the key it prints the public one.
+- esbuild 0.28 (0.24 had GHSA-67mh-4wv8-2f99 in its development server), its install script denied in `allowScripts`:
+  `npm install` in the checkout warns of nothing.
+
 - `grain bundle` needs no `--sources` (the network keeps the bundle); `--sources` only for hosts of the developer's own.
   `grain icon <png>` checks the icon as wallets do before it prints the hash, and refuses one they refuse.
 - The icon standard is 512 × 512 (32-images §3): `grain lint`'s icon check is the image check, no longer "a 256 × 256
@@ -282,6 +325,16 @@
   (deflated, compressible ones could exceed that); a host may still compress the download on the wire.
 
 ### Fixed
+
+- **The simulator opens a sealed page**: after `grain publish` sealed `grain.json`, `grain dev`'s simulator looked for its
+  start page beside the manifest (`/.well-known/index.html`, a 404); it opens it from the bundle's root now
+  (`devPageUrl`, in `@saltix/grain/rules`).
+- **`grain help <command>` keeps each note whole**: the notes shared by commands were filtered line by line, so one
+  command's help began a note in its middle (`notesOf`).
+- The steps' log has `grain dev` (`serve`, `check`), `faucet` (`grant`, `wait`), `profile`, `show`, `lint` and `icon`
+  steps and the network each reached; `publish` --key no longer says to keep running "until the owner has signed".
+- `docs/first-app.md`'s page steps run `npm install` in the project before `npx grain`; `docs/agents/app.md` says
+  `npm install`, a 512 × 512 icon and 16 MiB bundles.
 
 - **Tests leave nothing in the temporary directory.** 146 directories a run (projects, bundles, keys, stores) stayed
   behind, filling developers' temporary directories and any shared runner's: every test now takes its directories

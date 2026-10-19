@@ -356,6 +356,14 @@ export interface DevRegistry {
   blobPutHook: ((params: Record<string, unknown>) => { reason: string; received?: number } | undefined) | null;
 }
 
+/** `value` with every object's keys sorted, as a node's wallet interface writes its JSON: a reader that compares what it
+ *  sent with what the registry holds compares the canonical form, never JSON text. */
+function keysSorted<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(keysSorted) as T;
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((k) => [k, keysSorted((value as Record<string, unknown>)[k])])) as T;
+}
+
 /** A registry of one grain, as a node's wallet interface shows it, for development and tests. */
 export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
   const network = o.network ?? "devnet";
@@ -507,7 +515,8 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
         case "node_status":
           return status() as T;
         case "grain_get":
-          return { grain: params.slug === o.slug && registered ? structuredClone(grain) : null, deposit: "10000000000" } as T;
+          // As a node answers: the record's objects with their keys sorted (the manifest's too), never grain.json's order.
+          return { grain: params.slug === o.slug && registered ? keysSorted(structuredClone(grain)) : null, deposit: "10000000000" } as T;
         case "account_get": {
           const account = String(params.address);
           return { account, shard: "", nonce: 0, salt: "0", work: "0", channels: [], controller: controllers.get(account) ?? null } as T;
