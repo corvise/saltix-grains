@@ -58,6 +58,8 @@ export interface SheetSeen {
   profile: boolean;
   /** Whether it shows the project's icon. */
   icon: boolean;
+  /** Where its icon stands: `none`, `loading`, `loaded` or `failed`. */
+  iconState?: string;
 }
 
 /** Everything one check saw. */
@@ -256,9 +258,13 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
   await send("Page.navigate", { url: simulatorFor(origin) });
   const ready = await until(() => evaluate<boolean>("typeof window.saltixSimulator === 'object' && window.saltixSimulator.version === 1"), 20_000);
   if (!ready) throw new Error("the simulator did not load in the browser");
-  // The Connect sheet comes first; then the page opens.
-  const sheet = await until(() => evaluate<SheetSeen | null>("window.saltixSimulator.sheet()"), 8_000);
+  // The Connect sheet comes first, read once its icon has loaded (or is known to be none); then the page opens.
+  let sheet = await until(() => evaluate<SheetSeen | null>("window.saltixSimulator.sheet()"), 8_000);
   if (sheet) {
+    sheet = (await until(async () => {
+      const seen = await evaluate<SheetSeen | null>("window.saltixSimulator.sheet()");
+      return seen && seen.iconState !== "loading" ? seen : null;
+    }, 5_000)) ?? sheet;
     await sleep(300);
     await shot(null, "connect-sheet");
     await evaluate("window.saltixSimulator.continue()");

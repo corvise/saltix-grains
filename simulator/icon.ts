@@ -8,17 +8,25 @@
 /** Where `grain dev` serves the icon `grain.json` names. */
 export const ICON_PATH = "/_icon.png";
 
-/** Draw the icon at `url` (null: none) in `el`, its name's first letter until the picture has loaded. */
+/** Draw the icon at `url` (null: none) in `el`, its name's first letter until the picture has loaded. `el`'s
+ *  `data-icon-state` says where it stands, for a tool that reads the sheet: `none`, `loading`, `loaded` or `failed`
+ *  (the server has no icon file that is the one the manifest names). */
 export function drawIcon(el: HTMLElement, url: string | null, name: string): void {
   if (url !== null && el.dataset.icon === url && el.querySelector("img")) return;
   el.dataset.icon = url ?? "";
+  el.dataset.iconState = url === null ? "none" : "loading";
   el.textContent = name.slice(0, 1).toUpperCase();
   if (url === null) return;
   const img = new Image();
   img.alt = "";
   img.className = "app-icon";
   img.onload = () => {
-    if (el.dataset.icon === url) el.replaceChildren(img);
+    if (el.dataset.icon !== url) return;
+    el.replaceChildren(img);
+    el.dataset.iconState = "loaded";
+  };
+  img.onerror = () => {
+    if (el.dataset.icon === url) el.dataset.iconState = "failed";
   };
   img.src = url;
 }

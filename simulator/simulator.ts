@@ -519,11 +519,13 @@ const select = (id: string, value: string) => {
   sheet() {
     const sheet = document.querySelector<HTMLElement>(".connect-sheet");
     if (!sheet) return null;
+    const iconState = sheet.querySelector<HTMLElement>(".cs-icon")?.dataset.iconState ?? "none";
     return {
       text: sheet.innerText,
       problem: sheet.querySelector(".cs-bad")?.textContent ?? null,
       profile: sheet.querySelector(".cs-tagline") !== null,
-      icon: sheet.querySelector(".cs-icon img") !== null,
+      icon: iconState === "loaded",
+      iconState,
     };
   },
   continue() {
