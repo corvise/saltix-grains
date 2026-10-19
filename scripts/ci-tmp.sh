@@ -10,7 +10,8 @@
 # Everything that follows TMPDIR lands there: Node's os.tmpdir(), mktemp. `check` runs after passing steps only, and
 # whatever a failed job leaves the runner removes with $RUNNER_TEMP. A cache meant to outlive its process is no
 # leftover and goes beside the directory: TypeScript's tsc turns on Node's module compile cache, which
-# NODE_COMPILE_CACHE places.
+# NODE_COMPILE_CACHE places. setup-node's environment report runs `yarn --version`, whose bundled v8-compile-cache
+# keeps a cache in os.tmpdir() and takes no other place, only DISABLE_V8_COMPILE_CACHE: yarn runs without it.
 set -euo pipefail
 dir="${RUNNER_TEMP:?ci-tmp: no RUNNER_TEMP: this runs in a GitHub Actions job}/tmp"
 case "${1:-}" in
@@ -20,6 +21,7 @@ start)
     {
         echo "TMPDIR=$dir"
         echo "NODE_COMPILE_CACHE=$RUNNER_TEMP/node-compile-cache"
+        echo "DISABLE_V8_COMPILE_CACHE=1"
     } >>"${GITHUB_ENV:?ci-tmp: no GITHUB_ENV}"
     echo "ci-tmp: the job's temporary directory is $dir"
     ;;
