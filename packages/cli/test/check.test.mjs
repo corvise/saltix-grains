@@ -182,7 +182,7 @@ test("a browser that does not start is said in words, and nothing of it is left 
   const broken = spawnSync(process.execPath, [main, "dev", "--check"], { cwd: dir, encoding: "utf8", env: { ...process.env, CHROME_PATH: bad }, timeout: 50_000 });
   assert.equal(broken.status, 1, broken.stdout + broken.stderr);
   assert.match(broken.stdout, /the browser has no sandbox here/, "a sandbox it is not given: tried once more without one");
-  assert.match(broken.stderr, /^error: check: the browser exited: No usable sandbox! \(a test\)$/m);
+  assert.match(broken.stderr, /^error: check: the browser exited \(status 1\): No usable sandbox! \(a test\)$/m);
   assert.ok(!existsSync(join(dir, ".grain", "browser")));
   const log = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8");
   assert.match(log, /"step":"check","outcome":"waiting","reason":"no_sandbox"/);

@@ -61,14 +61,28 @@ export class Browser {
     const read = child.stdio[4] as Readable;
     read.setEncoding("utf8");
     read.on("data", (chunk: string) => this.received(chunk));
+    // A browser that goes away resets its end of the pipe (ECONNRESET on Linux, a plain end elsewhere): never an error of
+    // ours to throw. Its exit, below, says why, once its stderr has ended.
+    read.on("error", (e) => {
+      this.pipeError ??= e.message;
+    });
+    (child.stdio[3] as Writable).on("error", (e) => {
+      this.pipeError ??= e.message;
+    });
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (chunk: string) => {
       this.stderr = (this.stderr + chunk).slice(-4000);
     });
     child.on("error", (e) => this.fail(new Error(`the browser did not start: ${e.message}`)));
     // On "close", after its stderr ended: its last words say why (a sandbox it was not given, a missing library).
-    child.on("close", () => this.fail(new Error(`the browser exited${this.stderr ? `: ${this.stderr.trim().split("\n").slice(-3).join(" ")}` : ""}`)));
+    child.on("close", (code, signal) => {
+      const words = this.stderr.trim().split("\n").filter((l) => l.trim() !== "").slice(-3).join(" ");
+      this.fail(new Error(`the browser exited (${signal ?? `status ${code}`})${words ? `: ${words}` : this.pipeError ? `: ${this.pipeError}` : ""}`));
+    });
   }
+
+  /** What the pipe said when the browser went away, if anything. */
+  private pipeError: string | null = null;
 
   /** Start `path` headless with a profile in `profile` (made empty, removed by `close`), its temporary files there too;
    *  `sandbox: false` only where the system gives the browser none (a container, or Linux that forbids its namespaces). */
