@@ -1,10 +1,12 @@
 // A Chromium-family browser installed on this computer, driven headless over the DevTools protocol through a pipe
 // (`--remote-debugging-pipe`: messages on file descriptors 3 and 4, each ended by a NUL byte), for `grain dev --check`.
 // No package downloads a browser and no port is opened: the SDK uses the Chrome, Chromium, Edge or Brave the developer
-// has (or the one `CHROME_PATH` names), with a profile and a temporary directory of its own that it removes after.
+// has (or the one `CHROME_PATH` names), with a profile and a temporary directory of its own that it removes after. The
+// temporary directory is a short one in the system's (`os.tmpdir()`): a browser on Linux keeps a socket there, and a
+// socket's path has at most 108 bytes, which a project's own path soon passes.
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 
@@ -57,7 +59,7 @@ export class Browser {
   /** The browser's last words on stderr, for a launch that fails. */
   private stderr = "";
 
-  private constructor(private readonly child: ChildProcess, private readonly profile: string) {
+  private constructor(private readonly child: ChildProcess, private readonly profile: string, private readonly tmp: string) {
     const read = child.stdio[4] as Readable;
     read.setEncoding("utf8");
     read.on("data", (chunk: string) => this.received(chunk));
@@ -84,11 +86,13 @@ export class Browser {
   /** What the pipe said when the browser went away, if anything. */
   private pipeError: string | null = null;
 
-  /** Start `path` headless with a profile in `profile` (made empty, removed by `close`), its temporary files there too;
-   *  `sandbox: false` only where the system gives the browser none (a container, or Linux that forbids its namespaces). */
+  /** Start `path` headless with a profile in `profile` (made empty, removed by `close`) and temporary files in a short
+   *  directory of its own (removed too); `sandbox: false` only where the system gives the browser none (a container, or
+   *  Linux that forbids its namespaces). */
   static launch(path: string, profile: string, sandbox = true): Browser {
     rmSync(profile, { recursive: true, force: true });
-    mkdirSync(join(profile, "tmp"), { recursive: true });
+    mkdirSync(profile, { recursive: true });
+    const tmp = mkdtempSync(join(tmpdir(), "grain-browser-"));
     const args = [
       "--headless=new", "--remote-debugging-pipe", `--user-data-dir=${join(profile, "data")}`, "--no-first-run",
       "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", "--disable-sync",
@@ -98,12 +102,11 @@ export class Browser {
     // A container's /dev/shm is small; a root user has no sandbox.
     if (process.platform === "linux") args.push("--disable-dev-shm-usage");
     if (!sandbox || (typeof process.getuid === "function" && process.getuid() === 0)) args.push("--no-sandbox");
-    const tmp = join(profile, "tmp");
     const child = spawn(path, [...args, "about:blank"], {
       stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"],
       env: { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp },
     });
-    return new Browser(child, profile);
+    return new Browser(child, profile, tmp);
   }
 
   private received(chunk: string): void {
@@ -171,7 +174,7 @@ export class Browser {
     return sessionId;
   }
 
-  /** Close the browser and remove its profile and temporary files. */
+  /** Close the browser and remove its profile and its temporary files. */
   async close(): Promise<void> {
     if (!this.closed) {
       await this.send("Browser.close", {}, undefined, 3_000).catch(() => undefined);
@@ -190,12 +193,14 @@ export class Browser {
       });
     }
     // The browser may still be writing its last files for a moment.
-    for (let i = 0; i < 5; i++) {
-      try {
-        rmSync(this.profile, { recursive: true, force: true });
-        break;
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
+    for (const dir of [this.profile, this.tmp]) {
+      for (let i = 0; i < 5; i++) {
+        try {
+          rmSync(dir, { recursive: true, force: true });
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 200));
+        }
       }
     }
   }

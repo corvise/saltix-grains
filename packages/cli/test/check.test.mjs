@@ -6,6 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -120,6 +121,8 @@ const reportOf = (dir) => JSON.parse(readFileSync(join(dir, ".grain", "check", "
 
 test("a fresh page passes in a real browser: the sheet, the page, six screens in both themes, a screenshot of each", live, () => {
   const dir = page();
+  const temporary = () => readdirSync(tmpdir()).filter((name) => name.startsWith("grain-browser-"));
+  const before = new Set(temporary());
   const r = check(dir);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /^ok {4}connect sheet  shown with connect\.json's profile and the monogram/m);
@@ -131,6 +134,7 @@ test("a fresh page passes in a real browser: the sheet, the page, six screens in
   const shots = readdirSync(join(dir, ".grain", "check")).filter((f) => f.endsWith(".png"));
   assert.equal(shots.length, 13, shots.join(" "));
   assert.ok(!existsSync(join(dir, ".grain", "browser")), "the browser's profile is removed");
+  assert.deepEqual(temporary().filter((name) => !before.has(name)), [], "and its temporary directory");
   const log = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   assert.ok(log.some((l) => l.command === "dev" && l.step === "check" && l.outcome === "ok" && l.reason === "clean"));
 });
