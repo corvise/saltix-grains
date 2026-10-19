@@ -54,13 +54,14 @@ export async function profileLinkFor(node: NodeLike, slug: string, value: unknow
 
 /** The profile the registry holds once the owner's wallet set `profile` (any owner key, a revision above `before`);
  *  null after `ms`. */
-export async function waitForProfile(node: NodeLike, slug: string, profile: ConnectProfile, before: number, ms: number, every = 3000): Promise<SignedConnectProfile | null> {
+export async function waitForProfile(node: NodeLike, slug: string, profile: ConnectProfile, before: number, ms: number, every = 3000, onWait?: () => void): Promise<SignedConnectProfile | null> {
   const wanted = toHex(encodeProfile(unownedProfile(profile)));
   const end = Date.now() + ms;
   for (;;) {
     const p = (await grainGet(node, slug))?.profile;
     if (p && p.profile.revision > before && toHex(encodeProfile(unownedProfile(p.profile))) === wanted) return p;
     if (Date.now() >= end) return null;
+    onWait?.();
     await new Promise((r) => setTimeout(r, every));
   }
 }

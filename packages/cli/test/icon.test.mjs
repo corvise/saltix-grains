@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 import { checkImage, crc32, iconHash } from "@saltix/grain-server";
-import { EDGE_BAND, KEYLINE_RADIUS, checkIcon, iconPreview, makeIcon, parseColour, runIcon } from "../dist/icon.js";
+import { DARK_GROUND, EDGE_BAND, KEYLINE_RADIUS, LIGHT_GROUND, THEME_GROUNDS, checkIcon, iconPreview, makeIcon, parseColour, runIcon } from "../dist/icon.js";
+import { STROKE, contrast, luminance } from "../dist/monogram.js";
 import { PictureError, decodePicture } from "../dist/image.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
@@ -122,14 +123,14 @@ test("icons from many pictures all pass the image check: logos, photos, odd shap
 test("a logo with transparency: its mark inside the keyline circle, on a ground that is not the wallet's own", () => {
   const made = makeIcon(asPng(900, 600, logo(900, 600)));
   assert.equal(made.fit, "mark");
-  assert.deepEqual([...made.background], [0xf2, 0xf4, 0xf7], "a light ground for a dark mark");
+  assert.deepEqual([...made.background], [...LIGHT_GROUND], "a light ground for a dark mark");
   const lint = checkIcon(made.png);
   assert.deepEqual(lint.errors, []);
   assert.deepEqual(lint.warnings, []);
   assert.ok(lint.ring <= 0.02, `the ring holds ${lint.ring}`);
   assert.ok(lint.mark.width >= 0.5, "the mark fills the keyline circle, not a corner of it");
   // A light mark gets a dark ground; --background wins.
-  assert.deepEqual([...makeIcon(asPng(300, 300, logo(300, 300, [250, 250, 250]))).background], [0x10, 0x18, 0x20]);
+  assert.deepEqual([...makeIcon(asPng(300, 300, logo(300, 300, [250, 250, 250]))).background], [...DARK_GROUND]);
   assert.deepEqual([...makeIcon(asPng(300, 300, logo(300, 300)), { background: parseColour("#123456") }).background], [0x12, 0x34, 0x56]);
   // Every pixel of the mark lies inside the keyline circle: outside it only ground.
   const p = pixels(made.png);
@@ -141,6 +142,27 @@ test("a logo with transparency: its mark inside the keyline circle, on a ground 
       assert.ok(c.slice(0, 3).every((v, i) => Math.abs(v - ground[i]) <= 24), `(${x}, ${y}) is mark outside the keyline`);
     }
   }
+});
+
+test("a mark on transparency gets a ground that stands apart from both themes, and keeps every part of the mark readable", () => {
+  // Both grounds are apart from the wallet's white and its dark theme's #121212, so the rounded square shows on either.
+  for (const ground of [LIGHT_GROUND, DARK_GROUND]) {
+    for (const theme of THEME_GROUNDS) {
+      assert.ok(contrast(luminance(ground), luminance(theme)) >= 1.25, `${ground} on ${theme}: ${contrast(luminance(ground), luminance(theme))}`);
+    }
+  }
+  // A dark mark: the light ground; a light one: the dark ground.
+  const solid = (colour) => asPng(400, 400, (x, y) => (Math.hypot(x - 200, y - 200) < 120 ? [...colour, 255] : [0, 0, 0, 0]));
+  assert.deepEqual([...makeIcon(solid([20, 30, 110])).background], [...LIGHT_GROUND], "navy");
+  assert.deepEqual([...makeIcon(solid([255, 220, 120])).background], [...DARK_GROUND], "pale yellow");
+  // Orange arrows over a navy ruler (a units converter's logo): the navy would vanish into a dark ground, which the
+  // average of the two colours' luminance would pick; the ground keeps both readable.
+  const arrowsAndRuler = asPng(600, 600, (x, y) =>
+    y > 140 && y < 260 && x > 80 && x < 520 ? [255, 140, 40, 255] : y > 330 && y < 440 && x > 80 && x < 520 ? [20, 30, 110, 255] : [0, 0, 0, 0]);
+  const units = makeIcon(arrowsAndRuler);
+  assert.deepEqual([...units.background], [...LIGHT_GROUND]);
+  assert.ok(contrast(luminance([20, 30, 110]), luminance(units.background)) >= 3, "the navy part reads on it");
+  assert.match(units.backgroundWhy, /a light ground for a dark mark, apart from both themes' own/);
 });
 
 test("a photo covers the square, cut to it; contain shows it whole on its corners' colour", () => {
@@ -327,8 +349,10 @@ test("grain icon <picture> --out icon.png: written, named in grain.json, its has
   assert.equal(again[0], lines[0]);
   // A picture that is no icon: refused, with the command that makes one.
   const refused = [];
-  assert.equal(runIcon({ input: join(dir, "logo.png"), dir, manifestPath: join(dir, "grain.json"), print: (l) => refused.push(l) }), 1);
+  const reasons = [];
+  assert.equal(runIcon({ input: join(dir, "logo.png"), dir, manifestPath: join(dir, "grain.json"), print: (l) => refused.push(l), onRefused: (r) => reasons.push(r) }), 1);
   assert.match(refused.join("\n"), /not an icon wallets take: alpha .*\nnext: grain icon .*logo\.png --out icon\.png/);
+  assert.deepEqual(reasons, ["alpha"], "the refusal's reason, for the steps' log");
   // The command line, end to end: --fix <in> <out> and the flags.
   const run = (args) => spawnSync("node", [main, ...args], { cwd: dir, encoding: "utf8" });
   const fixed = run(["icon", "--fix", "logo.png", "public-icon.png", "--fit", "contain", "--background", "#203040"]);
@@ -337,6 +361,15 @@ test("grain icon <picture> --out icon.png: written, named in grain.json, its has
   assert.match(fixed.stdout, /ground #203040 \(as asked\)/);
   assert.equal(run(["icon", "logo.png", "--fit", "squash", "--out", "x.png"]).status, 2);
   assert.equal(run(["icon", "logo.png", "--background", "teal", "--out", "x.png"]).status, 2);
+  // The steps' log says why an icon was refused (its reason), never only that it was checked.
+  assert.equal(run(["icon", "logo.png"]).status, 1);
+  const log = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  assert.ok(log.some((l) => l.step === "icon" && l.outcome === "refused" && l.reason === "alpha"), JSON.stringify(log));
+  assert.ok(!log.some((l) => l.step === "icon" && l.outcome === "refused" && l.reason === "checked"));
+  // The project's icon file, edited since grain.json named it: refused by its hash.
+  writeFileSync(join(dir, "grain.json"), JSON.stringify({ slug: "space-game", version: 1, icon: "11".repeat(32) }, null, 2));
+  assert.equal(run(["icon", "icon.png"]).status, 1);
+  assert.match(readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").at(-2), /"step":"icon","outcome":"refused","reason":"hash"/);
 });
 
 test("grain icon --monogram: an icon to the standard with no picture, every letter and digit inside the keyline circle", async () => {
@@ -368,6 +401,23 @@ test("grain icon --monogram: an icon to the standard with no picture, every lett
   const at = (x, y) => [...px.data.subarray((y * px.width + x) * 4, (y * px.width + x) * 4 + 3)];
   assert.deepEqual(at(256, 256), [255, 255, 255], "the ink at the centre of an I");
   assert.deepEqual(at(20, 20), [0x20, 0x30, 0x40], "the ground at a corner");
+  // Bold: the I's stem, across its middle, is near a quarter of its height (its strokes' centre line, 1 high).
+  const inked = (x, y) => at(x, y)[0] > 128;
+  let stem = 0;
+  for (let x = 0; x < 512; x++) if (inked(x, 256)) stem++;
+  let top = 0;
+  while (!inked(256, top)) top++;
+  let bottom = 511;
+  while (!inked(256, bottom)) bottom--;
+  const height = bottom - top + 1 - stem;
+  assert.ok(Math.abs(stem / height - STROKE) < 0.02 && STROKE >= 0.22, `the stem is ${stem} px of a ${height} px letter`);
+  // Two letters never touch: columns of clear ground part M from W, top to bottom.
+  for (const pair of ["MW", "QJ", "AB"]) {
+    const two = PNG.sync.read(Buffer.from(makeMonogram(pair, [0x20, 0x30, 0x40], "x").png));
+    const column = [...Array(512).keys()].map((x) => [...Array(512).keys()].some((y) => two.data[(y * 512 + x) * 4] > 128));
+    const letters = column.reduce((n, v, i) => n + (v && !column[i - 1] ? 1 : 0), 0);
+    assert.equal(letters, 2, `${pair}: two letters apart`);
+  }
   // What it takes: one or two of A–Z and 0–9.
   for (const bad of ["", "ABC", "Ж", "a-", "1 2"]) assert.equal(monogramText(bad), null, bad);
   assert.equal(monogramText(" q7 "), "Q7");

@@ -167,10 +167,11 @@ npx grain publish                  # seal, check, upload into the network, then 
   "nothing to publish" and exits 0. A change to `public/` or `grain.json` (the bundle, the icon, a name) is the next
   version, raised by `grain publish` itself.
 - **Who signs, said first.** The owner's Saltix, from the QR code: always for an app made in Saltix, and for a free slug
-  (the account that scans the code owns the app). A key file signs only when `--key` names it, or for an app the registry
-  already names its account as the owner of; `--wallet` always asks Saltix. `grain publish` prints the account that will
-  own the app before anything is signed. A program can propose the same update in the console instead:
-  `chat.proposeUpdate(next, { bundle })` puts the bundle into the network and sends **Review and approve** to the owner.
+  (the account that scans the code owns the app). A key file signs only when `--key` names it, or by itself for an app
+  the registry already names its account as the owner of; `--wallet` always asks Saltix. `grain publish` prints the
+  account that will own the app before anything is signed ([No phone, test network](#no-phone-test-network)). A
+  program can propose the same update in the console instead: `chat.proposeUpdate(next, { bundle })` puts the bundle
+  into the network and sends **Review and approve** to the owner.
 
 **Hosted, if you want it.** Your HTTPS site serves `public/` and the signed manifest at `/.well-known/saltix-grain`
 ([README](../README.md#the-command-line)), and `grain publish --hosted` registers it; it can change the page at any
@@ -181,19 +182,43 @@ emulator; a release Saltix never opens such a development origin.
 
 ### No phone, test network
 
-On Saltix's test network a page can be published with no phone at all, from a key file of this computer's own: the
-`owner.key` `grain init` wrote. The app is then that key's account's, not a person's: right for trying the SDK, while an
-app people use is made in Saltix (My apps → New app), which the owner's phone signs.
+This is the one page that walks the way without a phone; the others link here. On Saltix's test network a page can be
+published from a key file of this computer's own, the `owner.key` `grain init` wrote. The app is then that key's
+account's, not a person's: right for trying the SDK, while an app people use is made in Saltix (My apps → New app), which
+the owner's phone signs.
 
-1. `npx grain doctor`: before the first publish it says what registering the slug takes, a deposit by its length (100
-   SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more) and a fee, and what `owner.key`'s account holds.
-2. `npx grain faucet --wait`: test SALT for `owner.key`'s account (once every 5 minutes).
-3. `npx grain publish --key owner.key`: it says which account will own the app, registers it, makes it private (as an
-   app made in Saltix starts), and puts the bundle and the icon into the network. Later versions are signed by
-   `owner.key` without `--key`, since the registry names its account as the owner.
-4. `npx grain profile`: the Connect profile from `connect.json`, signed by `owner.key`.
-5. `npx grain access --slug <slug> --private --member dsalt1…:user --key owner.key` lets a tester's account open it, or
-   `--public` lets anyone.
+1. `npx grain doctor`: before the first publish it says what registering the slug takes: a deposit by its length (100
+   SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more), the fees of the two transactions (millionths of a SALT), and
+   what `owner.key`'s account holds; and whether `connect.json` is ready (it is checked here until the registry can hold
+   it).
+2. `npx grain faucet --wait`: test SALT for `owner.key`'s account (once every 5 minutes; about 20 seconds).
+3. `npx grain publish --key owner.key`: it says which account will own the app, sends `RegisterGrain` and, right behind
+   it with the next nonce, `SetGrainAccess` private (as an app made in Saltix starts), waits for both to land, then puts
+   the bundle and the icon into the network. Later versions are signed by `owner.key` without `--key`: **a key file
+   signs an owner's call by itself when its account owns the app** (one it registered); `--key` names a key file
+   explicitly, `--wallet` asks Saltix instead.
+4. `npx grain profile`: the Connect profile from `connect.json`, signed by `owner.key` (it owns the app now). It refuses
+   `grain init`'s own words about its counter: write the profile for your app first.
+5. Who opens it: nobody yet, since it is private and no phone holds its owner's key. `npx grain access --slug <slug>
+   --private --member <your Saltix address>:user` lets your own Saltix open it (the address: Saltix → Receive), or
+   `--public` lets anyone. Without a phone, `npx grain dev` runs the same page sealed in the simulator, as Saltix will.
+
+**How long it takes.** A registry call lands in **about 1.5 to 2.5 minutes** on the test network: a shard block takes
+the transaction, and the registry, which the beacon chain keeps, applies it once that block is linked there. The two
+calls of a first publish land together, so `grain publish --key owner.key` takes about 2 to 4 minutes, **up to about
+6**; `grain profile` and `grain access` about 2 each. While it waits, a command says what it waits for and how long it
+has: one line rewritten on a terminal, a line every 15 seconds elsewhere. **A coding agent runs these commands in the
+background, or with a timeout of 10 minutes or more**, or passes `--no-wait`, which returns once the pool took the
+transactions, and then asks `npx grain doctor` until it says they landed; `grain publish` again finishes (the bundle and
+the icon), waiting for what was sent rather than sending it again. A run cut short (Ctrl-C, a tool's timeout) is
+resumed the same way.
+
+**Public for a moment, at most.** A new grain is public until its owner says otherwise (24-app-studio §2a), so
+`SetGrainAccess` private goes right behind the registration with the next nonce: an account's calls apply in order and a
+shard's registry calls reach the registry in their order, so the app is private from the block that registers it, or
+the one after. If that call is lost, the app stays public until it lands: `.grain/publish.json` remembers it,
+`grain doctor` says **public, but should be private** with the fix (`grain access --slug <slug> --private --key
+owner.key`), and the next `grain publish` sends it again.
 
 ## Run the program
 

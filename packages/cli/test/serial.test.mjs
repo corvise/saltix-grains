@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -81,14 +81,21 @@ function profileOf(b) {
   return b[at] === 0 ? null : decodeSignedProfile(b.slice(at + 1, b.length - 8 - 65));
 }
 
-/** A project of `grain init` with its owner key. */
+/** A project of `grain init` with its owner key, its Connect profile written for the app (grain profile refuses the
+ *  template's words). */
 function project() {
   const dir = join(scratch("grain-serial-"), "dice");
   const made = spawnSync("node", [main, "init", dir, "--slug", "dice", "--name", "Dice roll"], { encoding: "utf8", timeout: 20_000 });
   assert.equal(made.status, 0, made.stderr);
   writeFileSync(join(dir, "owner.key"), "61".repeat(32) + "\n", { mode: 0o600 });
+  const connect = JSON.parse(readFileSync(join(dir, "connect.json"), "utf8"));
+  writeFileSync(join(dir, "connect.json"), JSON.stringify({
+    ...connect, texts: { en: { tagline: "Roll dice for board games", about: "Tap Roll.", highlights: [], privacy: "Keeps your last roll in your Saltix vault." } },
+  }));
   return dir;
 }
+
+const logOf = (dir) => readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
 const run = (args, cwd) => new Promise((resolve) => {
   const child = spawn("node", [main, ...args], { cwd });
@@ -110,6 +117,11 @@ test("two calls in a row: the first returns once the registry has it, so the sec
     const first = await run(["profile", "--node", node.url], dir);
     assert.equal(first.code, 0, first.stderr);
     assert.match(first.stdout, /the registry has it/);
+    // The wait said as it goes (off a terminal: a line when its stage changes), how long a call takes, and the log's
+    // registry step.
+    assert.match(first.stdout, /^Waiting for it to land: usually 1\.5 to 2\.5 minutes on the test network/m);
+    assert.match(first.stdout, /^ {2}profile: in the pool, waiting for a shard block \(0:0\d\)$/m);
+    assert.ok(logOf(dir).some((l) => l.command === "profile" && l.step === "registry" && l.outcome === "ok" && l.reason === "set"));
     const second = await run(["profile", "--node", node.url], dir);
     assert.equal(second.code, 0, second.stderr);
     assert.deepEqual(node.state.submitted.map((s) => [s.nonce, profileOf(s.tx).profile.revision]), [[4, 6], [5, 7]]);
@@ -143,7 +155,9 @@ test("--no-wait returns once the pool took it", async () => {
     const r = await run(["profile", "--node", node.url, "--no-wait"], dir);
     assert.equal(r.code, 0, r.stderr);
     assert.doesNotMatch(r.stdout, /the registry has it/);
+    assert.match(r.stdout, /^sent as [0-9a-f]{64}: grain show says when it is in the registry/m);
     assert.equal(node.state.pending.size, 1);
+    assert.ok(logOf(dir).some((l) => l.step === "registry" && l.outcome === "waiting" && l.reason === "no_wait"));
   } finally {
     node.close();
   }

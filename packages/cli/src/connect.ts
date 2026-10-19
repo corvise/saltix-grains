@@ -9,6 +9,7 @@ import {
   languageOk, profileFromJson, profileLink, profileProblem, refusedChar, supportOk,
 } from "@saltix/grain-server";
 import { ICON_FILES, checkIcon } from "./icon.js";
+import { connectTexts } from "./template.js";
 
 /** The project's Connect profile. */
 export const CONNECT_FILE = "connect.json";
@@ -83,6 +84,44 @@ export function placeholderLinks(value: unknown): string[] {
   return (["website", "support", "terms"] as const)
     .filter((field) => typeof value[field] === "string" && placeholderLink(value[field] as string))
     .map((field) => `${field}: ${String(value[field])} is a placeholder that leads nowhere (an example domain): the app's own link, or null for none`);
+}
+
+/** `grain lint`'s warning for a profile that still says what `grain init` wrote. */
+export const TEMPLATE_RULE = "connect-template";
+
+/** A text of the template with the app's name in it, as a pattern that takes any name: the project's name may have
+ *  changed since `grain init` wrote it. */
+const NAME_MARK = "\u0000";
+const namePattern = (text: string): RegExp =>
+  new RegExp(`^${text.split(NAME_MARK).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".{1,64}")}$`, "s");
+
+/**
+ * Where a project's profile still says what `grain init` wrote about the counter (or the hello chat) it makes, in words,
+ * one line a language: its tagline, about or privacy, or all its highlights, unchanged (the about with any name in it,
+ * which the app's may have changed since). A wallet would show those words as the app's own, so `grain lint` warns
+ * (`connect-template`) and `grain profile` refuses.
+ */
+export function templateTexts(value: unknown): string[] {
+  if (!isObject(value) || !isObject(value.texts)) return [];
+  const found: string[] = [];
+  for (const [lang, t] of Object.entries(value.texts)) {
+    if (!isObject(t)) continue;
+    for (const chat of [false, true]) {
+      const template = connectTexts(NAME_MARK, chat)[lang];
+      if (!template) continue;
+      const same: string[] = [];
+      if (t.tagline === template.tagline) same.push("tagline");
+      if (typeof t.about === "string" && namePattern(template.about).test(t.about)) same.push("about");
+      if (Array.isArray(t.highlights) && JSON.stringify(t.highlights) === JSON.stringify(template.highlights)) same.push("highlights");
+      if (t.privacy === template.privacy) same.push("privacy");
+      if (same.length > 0) {
+        const fields = same.length === 1 ? same[0] : `${same.slice(0, -1).join(", ")} and ${same.at(-1)}`;
+        found.push(`texts.${lang}: ${fields} ${same.length === 1 ? "is" : "are"} grain init's words for the ${chat ? "hello chat" : "counter"} it makes, not this app's`);
+        break;
+      }
+    }
+  }
+  return found;
 }
 
 const LINK_RULE = `an https:// link of at most ${PROFILE_LIMITS.linkBytes} bytes: a lowercase host (an international one in its xn-- form), no user, no :443, the rest percent-encoded (http:, javascript: and data: are refused)`;
@@ -166,6 +205,9 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
   }
   // A link that leads nowhere: Saltix's sheet would show it, and users would tap it.
   errors.push(...placeholderLinks(value).map((words) => `${where}: ${words}`));
+  // The template's words, about the counter grain init makes: they pass every rule, and describe another app.
+  warnings.push(...templateTexts(value).map((words) =>
+    `${TEMPLATE_RULE}: ${where}: ${words}. Rewrite it for this app (docs/agents/app.md: the Connect profile); grain profile refuses it as it is`));
   if (errors.length > 0) return { errors, warnings };
 
   // In words above; the format's own check has the last word, so nothing the network refuses passes here.

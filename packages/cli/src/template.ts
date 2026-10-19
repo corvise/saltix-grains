@@ -7,6 +7,21 @@
 export const FULL_SCREEN_RULE =
   "Saltix lays an app's page inside the safe area; full screen only with viewport-fit=cover: then pad by grain_info.safe_area, keep tappable content clear of grain_info.controls, test at 475×751, 704×932 and 932×704 dp in grain dev (saltix-grains AGENTS.md).";
 
+/** The SDK's page to read first: what runs where, whether an app needs a server, the lifecycle as one checklist. */
+export const HOW_IT_WORKS = "https://github.com/corvise/saltix-grains/blob/main/docs/how-it-works.md";
+
+/** What `grain.json`'s `permissions` holds, beside it in every project's README and AGENTS.md (JSON takes no comment):
+ *  the bits of 12-grains §6, as `PERMISSIONS` has them. */
+export const PERMISSIONS_LINE = "`grain.json`'s `permissions` is the sum of what the app asks Saltix for: 1 storage " +
+  "(`grain.storage`), 2 relay (`grain.relay`), 4 notifications, 8 camera, 16 microphone, 32 location, 64 address " +
+  "(`grain.requestAddress`); each is a row on the Connect sheet, and `grain lint` warns about one nothing uses.";
+/** Where the SDK's page for a coding agent building an app is: a project has no copy of it. */
+export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
+/** The card design standard's rules for a coding agent, by its address. */
+export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/cards.md";
+/** The SDK's pages on the Saltix protocol, as an app needs it (the protocol's own repository is not public). */
+export const PROTOCOL_DOCS = "https://github.com/corvise/saltix-grains/blob/main/docs/protocol";
+
 /** `public/index.html`: a page that works on its own, or (`signIn`) one that shows only its splash until its sign-in
  *  decides. */
 export const indexHtml = (name: string, signIn = false) => `<!doctype html>
@@ -256,12 +271,15 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   waits for the registry and uploads the icon. \`--no-wait\` returns once the QR code is shown: show it to the user (or
   \`.grain/publish.html\`), then \`npx grain publish\` again finishes. Run again with nothing changed, it says "nothing to
   publish" and sends nothing; a change makes the next version. Never set up hosting, a domain or \`--sources\` for it.
-  A key file signs only when named: on the test network without a phone, \`npx grain faucet --wait\`, then
-  \`npx grain publish --key owner.key\` (the app is then that key's account's, and private until
-  \`npx grain access --slug <slug> --public --key owner.key\`). Registry commands reach the test network through its
-  public relays, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+  A key file signs only when \`--key\` names it, or by itself for an app its account owns: the way without a phone is
+  [No phone, test network](${HOW_IT_WORKS}#no-phone-test-network). Registry commands reach the test network through
+  its public relays, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+- **A command that waits for the chain** (\`grain publish\`, \`profile\`, \`access\` signed with a key file) takes about
+  1.5 to 2.5 minutes a transaction, up to about 6 for a first publish: run it in the background or with a timeout of 10
+  minutes or more, or with \`--no-wait\` and then \`npx grain doctor\` until it landed.
 - \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way (a QR
-  code; \`--key owner.key\` for an app that key registered).`;
+  code, or the key file that owns the app). Rewrite \`connect.json\` for this app first: \`grain init\`'s describes its
+  counter, \`grain lint\` warns while it does (\`connect-template\`) and \`grain profile\` refuses it.`;
 
 const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the server is paired with its app, and what to run next.
   \`npx grain pair\` pairs it (rule 1): a QR code the app owner's Saltix scans; the key is made here and never leaves.
@@ -272,20 +290,12 @@ const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the 
 - \`npm test\`: \`test/chat.test.mjs\`, the commands end to end with \`testChat\` from \`@saltix/grain-server/testing\` (a
   development relay and registry and a development key, nothing real); add a test for each command you add.
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\` from being registered; \`npx grain profile\` sets the
-  Connect profile once the app is registered (a QR code for the owner's Saltix, or \`--key owner.key\`).
+  Connect profile once the app is registered (a QR code for the owner's Saltix, or the key file that owns the app), once
+  \`connect.json\` is written for this app (\`grain init\`'s describes its hello chat, and \`grain profile\` refuses that).
 - \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).
 - \`npx grain show --slug <slug>\`, \`npx grain app-key --file app.key\`: what the registry holds, whether it names the key.
   Every registry command and \`npx grain faucet\` (test SALT) reach the test network through its public relays, each
   pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.`;
-
-/** The SDK's page to read first: what runs where, whether an app needs a server, the lifecycle as one checklist. */
-export const HOW_IT_WORKS = "https://github.com/corvise/saltix-grains/blob/main/docs/how-it-works.md";
-/** Where the SDK's page for a coding agent building an app is: a project has no copy of it. */
-export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/app.md";
-/** The card design standard's rules for a coding agent, by its address. */
-export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/cards.md";
-/** The SDK's pages on the Saltix protocol, as an app needs it (the protocol's own repository is not public). */
-export const PROTOCOL_DOCS = "https://github.com/corvise/saltix-grains/blob/main/docs/protocol";
 
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
@@ -340,7 +350,9 @@ export const appRules = `1. **The server's key is made where it runs and never l
    highlights that are facts (not slogans), and what it keeps about a user and for how long (required when
    \`grain.json\` asks for \`address\` or \`storage\`), in English and Russian. \`grain lint\` checks it, and warns about a
    permission nothing in the app uses: drop it, since the sheet shows every one. \`grain profile\` sets it (a QR code for
-   the owner's Saltix, or \`--key owner.key\` on the test network); the registry takes each change at a higher revision.
+   the owner's Saltix, or on the test network the key file that owns the app); the registry takes each change at a
+   higher revision. \`grain init\`'s \`connect.json\` describes the template's app: rewrite it, as \`grain lint\` says
+   (\`connect-template\`) and \`grain profile\` insists.
 10. **Check first, then render.** A page that is for some people only (its team, a private circle) shows nothing of
    itself before it knows who signed in: a splash (its icon and name, in an element marked \`data-grain-splash\`; the
    rest \`hidden\`) until \`grain.signIn({ url })\` resolves, then \`gateOf(signIn, TEAM)\` decides: the app, or a refusal
@@ -365,8 +377,9 @@ const PAGE_START = `1. \`npx grain status\`: a page alone needs no server, so it
 2. \`npx grain dev\`: the page in the simulator, framed as Saltix frames it. \`npx grain dev --check\` drives it headless at
    every size and in both themes and says what is wrong (screenshots in \`.grain/check/\`).
 3. \`npx grain doctor\`, then \`npx grain publish\`: what is left before publishing, then the page into the network. The
-   owner's Saltix signs from a QR code; without a phone, on the test network: \`npx grain faucet --wait\`, then
-   \`npx grain publish --key owner.key\`.`;
+   owner's Saltix signs from a QR code; without a phone, on the test network: [No phone, test
+   network](${HOW_IT_WORKS}#no-phone-test-network) (\`npx grain faucet --wait\`, \`npx grain publish --key owner.key\`;
+   minutes of waiting for the chain: in the background, or with \`--no-wait\` and \`npx grain doctor\`).`;
 
 /** The first steps of a chat's project: pair its server, never take a key. */
 const CHAT_START = `1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
@@ -409,7 +422,8 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 - \`chat.mjs\`: the handlers, one for each command, which \`server.mjs\` and the tests (\`test/\`, \`npm test\`) both run.
 - If the app gets a page of its own later (a hosted or sealed \`entry\`, its files in \`public/\`), the frame's rules
   below apply to it.` : `- \`public/\`: the page. \`public/grain.js\` is \`@saltix/grain\`, the wallet's bridge: do not edit it (\`grain init\` copies it).
-- \`grain.json\`: the manifest. The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above).
+- \`grain.json\`: the manifest, sealed from the start (\`grain publish\` and \`grain dev\` seal \`public/\` again as it
+  changes). The app's chat, when it has one, is a server of its own (\`ChatServer\`, the guide above). ${PERMISSIONS_LINE}
 - \`bundle.zip\`, once the app is sealed (\`npx grain publish\` seals it, as \`npx grain bundle\` does): the same bytes from
   the same files on any computer (files stored, at most 16 MiB for the network to keep it).
   Rebuild it in CI and fail when \`grain.json\` changes; never edit \`entry.sealed\` by hand.
@@ -475,15 +489,15 @@ ${signIn ? `- Check first, render after: \`public/index.html\` shows only a spla
   gate decides; set \`SIGN_IN\` to your server's sign-in and \`FOR\` to whom the app is for (\`AGENTS.md\`, rule 10).` : `- A page that works on its own: no server, no sign-in. One for some people only checks first and renders after
   (\`grain init --sign-in\` makes such a page: a splash until its gate decides; \`AGENTS.md\`, rule 10).`}
 - \`grain lint\` checks \`grain.json\` and \`connect.json\` (the Connect profile Saltix shows before anyone signs in: write
-  it for your app); \`grain icon <picture> --out icon.png\` (or \`grain icon --monogram <letter>\`, with no picture) makes
-  the icon to Saltix's standard and names it.
+  it for your app; \`grain init\`'s describes its counter, and \`grain profile\` refuses that); \`grain icon <picture> --out
+  icon.png\` (or \`grain icon --monogram <letter>\`, with no picture) makes the icon to Saltix's standard and names it.
+- ${PERMISSIONS_LINE}
 - \`grain publish\` puts the page into the Saltix network itself, no hosting: it seals \`public/\`, uploads it from this
   computer, shows the QR code your Saltix signs the version from, and uploads the icon. A new slug keeps a deposit by
   its length (100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain retire\`). With
   \`grain pair\` first, the bundle goes up before you sign. On the test network without a phone, \`--key owner.key\` signs
-  here instead (\`grain faucet --wait\` gives \`owner.key\`'s account test SALT first); the app is then that key's
-  account's, and starts private. Run again with nothing changed, it says so and sends nothing. \`grain profile\` then
-  sets the Connect profile from \`connect.json\`.
+  here instead: [No phone, test network](${HOW_IT_WORKS}#no-phone-test-network). Run again with nothing changed, it says
+  so and sends nothing. \`grain profile\` then sets the Connect profile from \`connect.json\`.
 - A page at your own https site instead: set \`entry.hosted\` to it, serve \`public/\` there and the signed manifest
   (\`grain sign\`) at \`/.well-known/saltix-grain\`, and \`grain publish --hosted\`.
 
@@ -517,7 +531,22 @@ export const chatJson = (slug: string, name: string) => JSON.stringify({
  * does, facts it is good at, and what it keeps about a user and for how long. Rewrite it as the app grows.
  */
 export function connectJson(slug: string, name: string, chat: boolean): string {
-  const texts = chat
+  return JSON.stringify({
+    version: 1,
+    subject: { grain: { slug } },
+    texts: connectTexts(name, chat),
+    // The app's own site, when it has one (an https:// link); never a placeholder, which grain lint refuses.
+    website: null,
+    support: null,
+    terms: null,
+  }, null, 2) + "\n";
+}
+
+/** The texts of `connectJson`, by language: about the counter (or the chat) `grain init` makes, named `name`. A project
+ *  that still has them describes the template, not its app: `grain lint` warns (`connect-template`), `grain profile`
+ *  refuses. */
+export function connectTexts(name: string, chat: boolean): Record<string, { tagline: string; about: string; highlights: string[]; privacy: string }> {
+  return chat
     ? {
       en: {
         tagline: "Answers your requests right in a Saltix chat",
@@ -546,15 +575,6 @@ export function connectJson(slug: string, name: string, chat: boolean): string {
         privacy: "Хранит одно число, ваш счёт, зашифрованным в хранилище Saltix, пока вы не удалите данные приложения. Ваш адрес не видит.",
       },
     };
-  return JSON.stringify({
-    version: 1,
-    subject: { grain: { slug } },
-    texts,
-    // The app's own site, when it has one (an https:// link); never a placeholder, which grain lint refuses.
-    website: null,
-    support: null,
-    terms: null,
-  }, null, 2) + "\n";
 }
 
 export const chatReadme = (slug: string) => `# ${slug}
@@ -581,7 +601,9 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key\` names it in the registry;
   \`grain app-key make --slug ${slug}\` writes \`app.key\`, the developer key the server runs with. Each takes \`--node
   <url>\` for a node of your own.
-- \`grain profile\` sets the Connect profile from \`connect.json\` once the app is registered: write it for your app.
+- \`grain profile\` sets the Connect profile from \`connect.json\` once the app is registered: write it for your app
+  (\`grain init\`'s describes its hello chat, and \`grain profile\` refuses that).
+- ${PERMISSIONS_LINE}
 - \`server.mjs\` runs the chat with \`ChatServer.start({ appKey, spec })\` from \`chat.json\` (the SDK's
   [docs/first-app.md](https://github.com/corvise/saltix-grains/blob/main/docs/first-app.md)).
 - \`AGENTS.md\` is what a coding agent follows here (\`CLAUDE.md\` points to it).

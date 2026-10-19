@@ -8,18 +8,21 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type NodeLike, type RegisteredGrain, NO_ICON, blobHeld, decodeOffer, fromHex, grainGet, grainQuote, iconHash,
-  keyFingerprint, nodeCall, registeredKeyStatus, toHex,
+  AppKey, APP_KEY_FILE, type Manifest, type NodeLike, type RegisteredGrain, NO_ICON, blobHeld, decodeOffer, fromHex, grainGet, grainQuote, iconHash,
+  keyFingerprint, minimumFee, nodeCall, registeredKeyStatus, toHex,
 } from "@saltix/grain-server";
 import { makeBundle } from "./bundle.js";
+import { CONNECT_FILE, lintConnect, readConnectFile, templateTexts } from "./connect.js";
 import { GRAIN_DIR } from "./devlog.js";
 import { saltOf } from "./faucet.js";
 import { ICON_FILES, checkIcon } from "./icon.js";
 import { accountOf, addressOf } from "./owner.js";
 import { PAIR_KEY_FILE, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
 import { KEY_FILE, readKey } from "./project.js";
-import { readPublishState } from "./publish-flow.js";
+import { type PublishState, type SentRecord, readPublishState } from "./publish-flow.js";
 import { salt } from "./registry.js";
+import { privateCall } from "./studio.js";
+import { LANDS_IN } from "./wait.js";
 
 /** Where a project's server stands with its app; `not_needed` for a page alone, which has no server. */
 export type PairStatus =
@@ -158,15 +161,29 @@ export type PublishStatus = "not_uploaded" | "pending" | "waiting_for_owner" | "
  *  private), with room to spare: 0.001 SALT. */
 const FEES_MARGIN = 1_000_000n;
 
+/** The fees of a first publish signed with a key file, in base units of SALT: `RegisterGrain` with the manifest as
+ *  grain.json has it now (its sources, which the network's protocol may add, are a few hundred bytes more at most), and
+ *  `SetGrainAccess` private right behind it; null when grain.json cannot be read as a manifest. */
+export function firstPublishFees(manifest: unknown, deposit: bigint): bigint | null {
+  try {
+    const m = manifest as Manifest;
+    return minimumFee({ register: { manifest: m, signature: "00".repeat(64) }, deposit }) + minimumFee(privateCall(m.slug));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Before a page's first publish (its slug free): what registering it takes, and the way there. The owner's Saltix
  * registers it from `grain publish`'s QR code and pays the deposit; on a test network without a phone, `owner.key`
  * does with `--key`, once the faucet gave its account the deposit and the fees.
  */
-async function firstPublish(dir: string, node: NodeLike, slug: string, flags: string): Promise<Finding> {
+async function firstPublish(dir: string, node: NodeLike, slug: string, flags: string, manifest: unknown): Promise<Finding> {
   const { deposit } = await grainQuote(node, slug);
   const { network } = await nodeCall<{ network: string }>(node, "node_status");
-  let detail = `${slug} is free: its first grain publish registers it, keeping a deposit of ${salt(deposit)} SALT until it retires`;
+  const fees = firstPublishFees(manifest, deposit);
+  let detail = `${slug} is free: its first grain publish registers it, keeping a deposit of ${salt(deposit)} SALT until it retires` +
+    (fees === null ? "" : `, and fees of about ${salt(fees)} SALT (registering, then making it private)`);
   let next = `grain publish${flags}: a QR code, and the owner's Saltix registers the app and pays the deposit`;
   if (network !== "mainnet") {
     let noPhone = `grain faucet --wait${flags}, then grain publish --key ${KEY_FILE}${flags}`;
@@ -183,6 +200,49 @@ async function firstPublish(dir: string, node: NodeLike, slug: string, flags: st
     next += `; without a phone, on the test network: ${noPhone} (the app is then ${KEY_FILE}'s account's)`;
   }
   return { ok: false, what: "registry", detail, next };
+}
+
+/** A registration or update a key file here sent that has not landed: on its way, and never to be sent again. */
+function onItsWay(tx: SentRecord, slug: string, flags: string): Finding {
+  return {
+    ok: false, what: "registry",
+    detail: `${tx.call === "register" ? "the registration" : `the update to v${tx.version}`} of ${slug} was sent at ${tx.at} (transaction ${tx.id}) ` +
+      `and has not landed yet: a registry call takes ${LANDS_IN}`,
+    next: `grain doctor${flags} again in a minute; grain publish${flags} waits for it (never sending it again), then puts the bundle and the icon up`,
+  };
+}
+
+/** Whether the app is public or private, as the registry holds it; a key file's registration still public is to fix. */
+function accessFinding(grain: RegisteredGrain, run: PublishState | null, slug: string, flags: string): Finding {
+  const members = grain.members?.length ?? 0;
+  if (grain.public === false) return { ok: true, what: "access", detail: `private: its owner${members > 0 ? ` and ${members} member${members === 1 ? "" : "s"}` : " alone"} open it` };
+  if (run?.private_pending) {
+    return {
+      ok: false, what: "access",
+      detail: `public, but should be private: ${KEY_FILE} registered it here, and the call that makes it private has not landed (anyone may open it meanwhile)`,
+      next: `grain access --slug ${slug} --private --key ${KEY_FILE}${flags} (or grain publish${flags}, which sends it again)`,
+    };
+  }
+  return { ok: true, what: "access", detail: "public: anyone opens it" };
+}
+
+/** Before the app is registered: `connect.json` as `grain lint` checks it, and whether it still says what grain init
+ *  wrote; the registry takes it once the app is registered (`grain profile`). */
+function localProfile(dir: string, manifest: unknown): Finding {
+  if (!existsSync(join(dir, CONNECT_FILE))) {
+    return { ok: false, what: "connect profile", detail: "no connect.json: every app ships a Connect profile", next: "grain lint says what it holds (grain init writes one)" };
+  }
+  try {
+    const { errors } = lintConnect(dir, manifest as Manifest);
+    if (errors.length > 0) return { ok: false, what: "connect profile", detail: `connect.json: ${errors.length} error(s)`, next: "grain lint says which" };
+    const template = templateTexts(readConnectFile(join(dir, CONNECT_FILE)));
+    if (template.length > 0) {
+      return { ok: false, what: "connect profile", detail: `connect.json is grain init's template (${template[0]})`, next: "rewrite connect.json for this app (docs/agents/app.md: the Connect profile)" };
+    }
+  } catch (e) {
+    return { ok: false, what: "connect profile", detail: `connect.json: ${(e as Error).message}`, next: "grain lint says more" };
+  }
+  return { ok: true, what: "connect profile", detail: "connect.json checks; the registry takes it once the app is registered (grain profile)" };
 }
 
 /** Every check of `grain doctor`, in the order of the path to an app that runs; and the next step, or what to say when
@@ -249,10 +309,16 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
   const placeholder = (manifest?.entry?.hosted?.origins ?? []).length > 0 && manifest!.entry!.hosted!.origins!.every((o) => /\.example(:\d+)?$/.test(o));
   const sealed = manifest?.entry?.sealed;
   let publish: PublishStatus | null = null;
-  // A page whose slug is free: what its first publish takes, before anything else of the publish.
-  if (page && manifest?.slug && grain === null) {
+  // What grain publish sent with a key file here and did not see land: on its way, not to be sent again.
+  const run = readPublishState(dir);
+  const ours = run && manifest?.slug && run.slug === manifest.slug ? run : null;
+  const inFlight = (ours?.sent ?? []).find((t) => t.call !== "access" && (grain === null || (grain !== undefined && grain.version < t.version)));
+  if (inFlight && grain !== undefined) {
+    findings.push(onItsWay(inFlight, manifest!.slug!, flags));
+  } else if (page && manifest?.slug && grain === null) {
+    // A page whose slug is free: what its first publish takes, before anything else of the publish.
     try {
-      findings.push(await firstPublish(dir, node, manifest.slug, flags));
+      findings.push(await firstPublish(dir, node, manifest.slug, flags, manifest));
     } catch {
       // The network did not answer: the key's finding says so.
     }
@@ -279,26 +345,25 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
     }
     // Where the publish stands: published, held pending (waiting for the owner, or not shown yet), its day over, or
     // not uploaded at all.
-    const run = readPublishState(dir);
-    const ours = run && sealed && run.bundle === sealed.bundle && run.version === version && run.slug === manifest?.slug ? run : null;
-    const until = ours?.pending_until ? Date.parse(ours.pending_until) : null;
+    const same = ours && sealed && ours.bundle === sealed.bundle && ours.version === version ? ours : null;
+    const until = same?.pending_until ? Date.parse(same.pending_until) : null;
     if (sealed && grain && grain.version === version && held === sealed.bundle) {
       publish = "published";
       const inNetwork = await blobHeld(node, "grain_bundle", sealed.bundle).catch(() => "absent" as const);
       findings.push(inNetwork === "absent"
         ? { ok: false, what: "upload", detail: "published, but the relay answering neither holds its bundle nor knows where it is", next: `grain publish${flags} (it puts the bundle up again)` }
         : { ok: true, what: "upload", detail: "published: the network holds its bundle" });
-    } else if (ours?.uploaded_at && until !== null && until > now) {
-      publish = ours.link_shown_at ? "waiting_for_owner" : "pending";
+    } else if (same?.uploaded_at && until !== null && until > now) {
+      publish = same.link_shown_at ? "waiting_for_owner" : "pending";
       findings.push({
         ok: false, what: "upload",
-        detail: `the network holds the bundle pending until ${ours.pending_until}${ours.link_shown_at ? ": waiting for the owner to sign the publishing link" : ""}`,
-        next: ours.link_shown_at ? `the owner scans the QR code in Saltix (grain publish${flags} shows it again, and finishes once they did)` : `grain publish${flags}`,
+        detail: `the network holds the bundle pending until ${same.pending_until}${same.link_shown_at ? ": waiting for the owner to sign the publishing link" : ""}`,
+        next: same.link_shown_at ? `the owner scans the QR code in Saltix (grain publish${flags} shows it again, and finishes once they did)` : `grain publish${flags}`,
       });
-    } else if (ours?.uploaded_at && until !== null) {
+    } else if (same?.uploaded_at && until !== null) {
       publish = "pending_expired";
-      findings.push({ ok: false, what: "upload", detail: `the bundle's day in the network ended at ${ours.pending_until} before the owner signed`, next: `grain publish${flags} (it puts it up again)` });
-    } else if (ours?.link_shown_at) {
+      findings.push({ ok: false, what: "upload", detail: `the bundle's day in the network ended at ${same.pending_until} before the owner signed`, next: `grain publish${flags} (it puts it up again)` });
+    } else if (same?.link_shown_at) {
       publish = "waiting_for_owner";
       findings.push({ ok: false, what: "upload", detail: "waiting for the owner to sign the publishing link; the bundle goes up once the registry names it", next: `the owner scans the QR code in Saltix, while grain publish${flags} runs` });
     } else {
@@ -336,10 +401,16 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
       else findings.push({ ok: true, what: "icon", detail: `${file}${lint.warnings.length > 0 ? `; ${lint.warnings.length} warning(s): grain icon ${file} says them` : ""}${inNetwork === "held" ? "; in the network" : ""}` });
     }
   }
+  // Who may open it: public or private, and a key file's registration that is still to be made private.
+  if (grain && grain.retired === null && grain.public !== undefined) findings.push(accessFinding(grain, ours, manifest?.slug ?? grain.slug, flags));
   if (grain && state.status !== "unknown") {
     findings.push(grain.profile
       ? { ok: true, what: "connect profile", detail: `revision ${grain.profile.profile.revision} in the registry` }
       : { ok: false, what: "connect profile", detail: "the registry holds no Connect profile: users see only the description", next: `grain profile${flags}` });
+  } else if (manifest && grain === null) {
+    // Before the app is registered the registry has no profile to hold: connect.json is checked here instead, and set
+    // once it is (grain profile).
+    findings.push(localProfile(dir, manifest));
   }
   const first = findings.find((f) => !f.ok);
   const done = kind === "page"

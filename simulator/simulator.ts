@@ -447,6 +447,36 @@ function nameOf(el: Element): string {
   return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${words ? ` "${words}"` : ""}`;
 }
 
+/** Whether `el` stays at its place low on the screen as the page scrolls: it, or an element around it, is fixed, or
+ *  sticky to the bottom (a bottom inset). One sticky to the top scrolls up with the page until it sticks there. */
+function pinnedOf(el: Element, view: Window): boolean {
+  for (let e: Element | null = el; e !== null; e = e.parentElement) {
+    const style = view.getComputedStyle(e);
+    if (style.position === "fixed" || (style.position === "sticky" && style.bottom !== "auto")) return true;
+  }
+  return false;
+}
+
+/** `read()` with the page and every box in it that scrolls scrolled to its end (instantly), then each put back where it
+ *  was; null when nothing scrolls. */
+function scrolledToEnd<T>(doc: Document, view: Window, read: () => T): T | null {
+  const scrolling = doc.scrollingElement;
+  const boxes = Array.from(doc.querySelectorAll("*")).filter((e) => {
+    if (e === scrolling) return false;
+    const overflow = view.getComputedStyle(e).overflowY;
+    return (overflow === "auto" || overflow === "scroll") && e.scrollHeight > e.clientHeight + 1;
+  });
+  const all = [...(scrolling && scrolling.scrollHeight > scrolling.clientHeight + 1 ? [scrolling] : []), ...boxes];
+  if (all.length === 0) return null;
+  const before = all.map((e) => [e.scrollLeft, e.scrollTop] as const);
+  try {
+    for (const e of all) e.scrollTo({ top: e.scrollHeight, behavior: "instant" });
+    return read();
+  } finally {
+    all.forEach((e, i) => e.scrollTo({ left: before[i]![0], top: before[i]![1], behavior: "instant" }));
+  }
+}
+
 function measure() {
   const phoneEl = $("phone");
   const phoneRect = phoneEl.getBoundingClientRect();
@@ -462,16 +492,23 @@ function measure() {
     doc = null;
   }
   const view = doc?.defaultView ?? null;
-  const tappables: Array<{ name: string; box: Box }> = [];
+  const tappables: Array<{ name: string; box: Box; pinned: boolean; end: Box | null }> = [];
   if (doc && view) {
+    // The page's own coordinates are its frame's: the frame sits at its place in the phone.
+    const inPhone = (r: DOMRect) => boxIn(r, phoneRect.left - frameRect.left, phoneRect.top - frameRect.top);
+    const shown: Element[] = [];
     for (const el of Array.from(doc.querySelectorAll(TAPPABLE))) {
       const style = view.getComputedStyle(el);
       const r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1 || style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) continue;
       if ((el as HTMLElement).closest("[hidden]")) continue;
-      // The page's own coordinates are its frame's: the frame sits at its place in the phone.
-      tappables.push({ name: nameOf(el), box: boxIn(r, phoneRect.left - frameRect.left, phoneRect.top - frameRect.top) });
+      shown.push(el);
+      tappables.push({ name: nameOf(el), box: inPhone(r), pinned: pinnedOf(el, view), end: null });
     }
+    // Where each is with everything scrolled to its end, as high as a user can bring it: a button at the fold of a long
+    // page is under the navigation bar only until the page scrolls (grain dev --check judges that), then put back.
+    const ends = scrolledToEnd(doc, view, () => shown.map((el) => inPhone(el.getBoundingClientRect())));
+    if (ends) ends.forEach((box, i) => (tappables[i]!.end = box));
   }
   const navigation = view?.performance.getEntriesByType("navigation")[0] as (PerformanceEntry & { responseStatus?: number }) | undefined;
   const body = doc?.body ?? null;

@@ -96,6 +96,7 @@ export function reasonOf(error: unknown): string {
   if (e?.name === "PairingError" && e.problem) return `pairing_${e.problem}`;
   if ((e?.name === "ChatSetupError" || e?.name === "ChatKeyNotRegistered") && typeof e.code === "string") return e.code;
   if (e?.name === "PublishError" && e.step && e.reason) return `${e.step}_${e.reason}`;
+  if (e?.name === "IconError" && e.reason) return `icon_${e.reason}`;
   if (e?.name === "RpcError") return "node_refused";
   if (typeof e?.message === "string" && /no relay answered|no relay took|ECONNREFUSED|ENOTFOUND|fetch failed/.test(e.message)) return "network_unreachable";
   if (typeof e?.code === "string" && /^E[A-Z]+$/.test(e.code)) return `fs_${e.code.toLowerCase()}`;

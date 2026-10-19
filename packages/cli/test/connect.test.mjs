@@ -14,8 +14,8 @@ import {
   accountId, derive, checkGrainProfile, checkSiteProfile, decodeSignedProfile, fromHex, iconHash, profileProblem, readProfileLink, signProfile,
   signedProfileFromJson, toHex, profileToJson,
 } from "@saltix/grain-server";
-import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, placeholderLink, pngSize, profileOfProject } from "../dist/connect.js";
-import { connectJson } from "../dist/template.js";
+import { CONNECT_FILE, TEMPLATE_RULE, lintConnect, lintIcon, lintPermissionsUse, placeholderLink, pngSize, profileOfProject, templateTexts } from "../dist/connect.js";
+import { connectJson, connectTexts } from "../dist/template.js";
 import { servedSiteRevision, siteProfile } from "../dist/profile.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
@@ -32,6 +32,12 @@ function project(chat = false, slug = "dice") {
   assert.equal(made.status, 0, made.stderr);
   return dir;
 }
+/** The app's own words in its project's connect.json, as a developer writes them over grain init's. */
+const OWN = {
+  en: { tagline: "Roll dice for board games", about: "Pick how many dice, tap Roll, and see the sum.", highlights: ["Up to 10 dice", "Works offline"], privacy: "Keeps your last roll on your phones, in your Saltix vault." },
+  ru: { tagline: "Кубики для настольных игр", about: "Выберите число кубиков, нажмите Roll и увидите сумму.", highlights: ["До 10 кубиков", "Работает без сети"], privacy: "Хранит последний бросок в вашем хранилище Saltix." },
+};
+const written = (dir) => writeFileSync(join(dir, CONNECT_FILE), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, CONNECT_FILE), "utf8")), texts: OWN }));
 const manifestOf = (dir) => JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
 const connectOf = (dir) => JSON.parse(readFileSync(join(dir, CONNECT_FILE), "utf8"));
 const writeConnect = (dir, value) => writeFileSync(join(dir, CONNECT_FILE), JSON.stringify(value));
@@ -53,13 +59,21 @@ test("every project grain init makes ships a Connect profile in English and Russ
       const t = c.texts[lang];
       assert.ok(t.tagline && t.about && t.highlights.length >= 2 && t.privacy, `${chat ? "chat" : "page"} ${lang}`);
     }
-    assert.deepEqual(lintConnect(dir, manifestOf(dir)), { errors: [], warnings: [] }, chat ? "chat-only" : "page");
+    // It passes every rule of the format, and says it is the template's own: words about the counter (or the hello chat)
+    // grain init makes, which a wallet would show as the app's.
+    const { errors, warnings } = lintConnect(dir, manifestOf(dir));
+    assert.deepEqual(errors, [], chat ? "chat-only" : "page");
+    assert.deepEqual(warnings.map((w) => w.split(": texts.")[0]), [`${TEMPLATE_RULE}: connect.json`, `${TEMPLATE_RULE}: connect.json`]);
+    assert.match(warnings[0], new RegExp(`texts\\.en: tagline, about, highlights and privacy are grain init's words for the ${chat ? "hello chat" : "counter"} it makes`));
     assert.deepEqual(lintPermissionsUse(dir, manifestOf(dir)), [], "the template uses what it asks for");
     const p = profileOfProject(c, ownerId, 1);
     assert.equal(profileProblem(p), null);
     const linted = grain(["lint"], dir);
     assert.equal(linted.status, 0, linted.stderr);
-    assert.doesNotMatch(linted.stdout + linted.stderr, /connect\.json|permissions:/);
+    assert.doesNotMatch(linted.stdout + linted.stderr, /permissions:/);
+    // Written for the app: nothing to say.
+    written(dir);
+    assert.deepEqual(lintConnect(dir, manifestOf(dir)), { errors: [], warnings: [] });
   }
   // No placeholder link: a website, support and terms are the app's own, and none until it has them.
   for (const chat of [false, true]) {
@@ -272,8 +286,37 @@ function profileOf(txHex) {
   return decodeSignedProfile(b.slice(at + 1, b.length - 8 - 65));
 }
 
+test("the template's words: lint warns (connect-template), grain profile refuses them; any language left so is named", async () => {
+  // Any name: the about carries the one grain init was given, which the app's may have changed since.
+  for (const chat of [false, true]) {
+    const template = JSON.parse(connectJson("dice", "Some other name", chat));
+    assert.equal(templateTexts(template).length, 2, chat ? "chat" : "page");
+    // One field left as the template's is still the template's.
+    const half = { ...template, texts: { en: { ...OWN.en, tagline: connectTexts("x", chat).en.tagline }, ru: OWN.ru } };
+    assert.deepEqual(templateTexts(half), [`texts.en: tagline is grain init's words for the ${chat ? "hello chat" : "counter"} it makes, not this app's`]);
+  }
+  assert.deepEqual(templateTexts({ ...JSON.parse(connectJson("dice", "Dice", false)), texts: OWN }), []);
+  assert.deepEqual(templateTexts("not a profile"), []);
+  // grain profile refuses the template's words before anything is signed or sent, and says why in the log.
+  const dir = project();
+  writeFileSync(join(dir, "owner.key"), "61".repeat(32) + "\n", { mode: 0o600 });
+  const node = await fakeNode({ grain: {} });
+  const refused = await run(["profile", "--node", node.url], dir);
+  assert.equal(refused.code, 1);
+  assert.match(refused.stderr, /^error: connect\.json: texts\.en: tagline, about, highlights and privacy are grain init's words for the counter it makes, not this app's; texts\.ru: .*: rewrite it for this app/m);
+  assert.deepEqual(node.submitted, []);
+  assert.match(readFileSync(join(dir, ".grain", "log.jsonl"), "utf8"), /"step":"profile","outcome":"refused","reason":"connect_template"/);
+  // Rewritten: it goes.
+  written(dir);
+  const set = await run(["profile", "--node", node.url], dir);
+  assert.equal(set.code, 0, set.stderr);
+  assert.equal(node.submitted.length, 1);
+  node.close();
+});
+
 test("grain profile --key: signed by the key file, the registry's revision and one, sent as SetGrainProfile", async () => {
   const dir = project();
+  written(dir);
   writeFileSync(join(dir, "owner.key"), "61".repeat(32) + "\n", { mode: 0o600 });
   const before = signProfile(profileOfProject(connectOf(dir), ownerId, 4), secret);
   const node = await fakeNode({ grain: {}, profile: before });
@@ -325,6 +368,7 @@ test("grain profile --key: signed by the key file, the registry's revision and o
 
 test("grain profile without a key: a QR code and the link for the owner's Saltix, then the registry's word", async () => {
   const dir = project();
+  written(dir);
   rmSync(join(dir, "owner.key"));
   const node = await fakeNode({ grain: {} });
   const child = spawn("node", [main, "profile", "--node", node.url, "--timeout", "20"], { cwd: dir });
@@ -359,12 +403,19 @@ test("grain show checks the registry's profile as a wallet does", async () => {
   const p = signProfile(profileOfProject(connectOf(dir), ownerId, 2), secret);
   const node = await fakeNode({ grain: {}, profile: p });
   const shown = await run(["show", "--slug", "dice", "--node", node.url], dir);
-  assert.match(shown.stdout, /Connect profile, revision 2: "A counter that follows you to every phone" \(en, ru\); it checks/);
+  // A summary first, in words; the record as JSON only with --json.
+  assert.match(shown.stdout, /^dice on devnet 5a5a5a5a5a5a5a5a: v1, public\n {2}owner {4}dsalt1\S+\n/);
+  assert.match(shown.stdout, /^ {2}profile {2}Connect profile revision 2: "A counter that follows you to every phone" \(en, ru\); it checks$/m);
+  assert.match(shown.stdout, /^grain show --slug dice --json prints the registry's whole record$/m);
+  assert.doesNotMatch(shown.stdout, /^\{/m);
+  const json = await run(["show", "--slug", "dice", "--json", "--node", node.url], dir);
+  assert.equal(json.code, 0, json.stderr);
+  assert.equal(JSON.parse(json.stdout).profile.profile.revision, 2, "only the record on stdout");
   node.state.grain = { owner: "77".repeat(32) };
   assert.match((await run(["show", "--slug", "dice", "--node", node.url], dir)).stdout, /a wallet refuses it: owner/);
   node.state.grain = {};
   node.state.profile = null;
-  assert.match((await run(["show", "--slug", "dice", "--node", node.url], dir)).stdout, /dice has no Connect profile: grain profile sets it/);
+  assert.match((await run(["show", "--slug", "dice", "--node", node.url], dir)).stdout, /^ {2}profile {2}none: grain profile sets it from connect\.json$/m);
   node.close();
 });
 

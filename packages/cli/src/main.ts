@@ -9,8 +9,9 @@ import {
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { retireCall, show, salt, type Sent, type Signing } from "./registry.js";
-import { type Signer, ownerLine, signerFor } from "./owner.js";
+import { type Signer, addressOf, ownerLine, signerFor } from "./owner.js";
 import { sendSettled } from "./send.js";
+import { LANDS_IN, type WaitOut, Waiting, rewriteLine } from "./wait.js";
 import {
   APP_KEY_ENV, APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, handleGet, inSaltix, membersOf, rateCall, readAppKey,
   serverKeyOf, waitForRegistry, writeAppKey,
@@ -21,7 +22,7 @@ import { serve, linkFor, simulatorFor } from "./dev.js";
 import { runCheck } from "./check.js";
 import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
-import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, placeholderLinks, readConnectFile } from "./connect.js";
+import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, placeholderLinks, readConnectFile, templateTexts } from "./connect.js";
 import { clearCall, profileCall, profileLinkFor, servedSiteRevision, siteProfile, waitForProfile, wellKnownOf } from "./profile.js";
 import { makeBundle, sealed } from "./bundle.js";
 import * as template from "./template.js";
@@ -31,18 +32,18 @@ import { UsageError, helpFor, parse } from "./args.js";
 import { DevLog, reasonOf } from "./devlog.js";
 import { pair } from "./pair.js";
 import { doctor, keyState, settled } from "./status.js";
-import { placeholderHosted, publishApp, readPublishState, readiness } from "./publish-flow.js";
-import { type Fit, parseColour, runIcon } from "./icon.js";
+import { accessDecided, placeholderHosted, publishApp, readPublishState, readiness } from "./publish-flow.js";
+import { type Fit, IconError, parseColour, runIcon } from "./icon.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
   grain help [command]                     this, or one command's part of it (also: grain <command> --help)
   grain init [dir] [--slug S] [--name N] [--chat | --sign-in]
-                                           a new grain: grain.json, connect.json, owner.key, public/ (a page that
-                                           works on its own; --sign-in a page for some people only, which checks
-                                           first and renders after); --chat a chat-only one (no page: grain.json,
-                                           connect.json and chat.json); each with a package.json whose npm install
-                                           links the grain command
+                                           a new grain: grain.json (its page sealed), connect.json (rewrite it for
+                                           the app), owner.key, public/ (a page that works on its own; --sign-in a
+                                           page for some people only, which checks first and renders after); --chat
+                                           a chat-only one (no page: grain.json, connect.json and chat.json); each
+                                           with a package.json whose npm install links the grain command
   grain dev [--port 8090] [--app-key F] [--check]
                                            serve public/ with the manifest signed for this computer, and the
                                            simulator: your page framed as Saltix frames it, with the wallet's
@@ -86,19 +87,24 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            before the owner signs), the account that will own the app said, then
                                            signed in the owner's Saltix by a QR code; a key file signs only when
                                            --key names it (the test network without a phone: a new app it
-                                           registers starts private) or for an app it registered. Once the
-                                           registry holds it, its icon goes up. Run again, it finishes what is
-                                           left; with nothing changed it says so and sends nothing (the version is
-                                           raised only when grain.json or public/ changed). --hosted: a page at
-                                           your own https origin instead. The deposit is the node's quote for the
-                                           slug's length: 100 SALT for 3-5 characters, 30 for 6-7, 10 for 8+
+                                           registers is made private in the same breath) or by itself for an app
+                                           it registered; it waits for the chain (about 2-4 minutes, up to 6;
+                                           --no-wait returns once the pool took it). Once the registry holds it,
+                                           its icon goes up, and it says who can open the app. Run again, it
+                                           finishes what is left, never sending a transaction twice; with nothing
+                                           changed it says so and sends nothing (the version is raised only when
+                                           grain.json or public/ changed). --hosted: a page at your own https
+                                           origin instead. The deposit is the node's quote for the slug's length:
+                                           100 SALT for 3-5 characters, 30 for 6-7, 10 for 8+
   grain retire --slug S                    close the slug for good; the deposit returns 30 days later
-  grain show --slug S [--out F]            what the registry holds for a slug (its Connect profile checked), or
-                                           for a free slug the deposit registering it keeps; F gets the manifest
+  grain show --slug S [--out F] [--json]   what the registry holds for a slug, in words (its Connect profile
+                                           checked), or for a free slug the deposit registering it keeps; --json
+                                           the whole record and nothing else; F gets the manifest
   grain profile [--profile connect.json] [--key F | --wallet] [--no-wait] [--clear]
                                            set the grain's Connect profile, what Saltix shows before anyone signs
-                                           in: a QR code for the owner's Saltix, or a key file (revision: the
-                                           registry's + 1); --clear removes it
+                                           in: a QR code for the owner's Saltix, or the key file that owns the app
+                                           (revision: the registry's + 1); grain init's own words are refused;
+                                           --clear removes it
   grain connect-profile --origin URL --name N --category C --key site.key [--profile F] [--revision N] [--out F]
                         [--offline]        a website's Connect profile signed by its operator's key file (or a
                                            device's of the account --owner names), written where the site serves
@@ -137,8 +143,10 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain doctor [--json]                    the project's state and the exact next step: the key, .gitignore, the
                                            chat spec, dependencies, a page's bundle and where its publish stands
                                            (not_uploaded, pending, waiting_for_owner, pending_expired, published;
-                                           before the first, the deposit and the way to it), what the registry
-                                           holds, the icon, the Connect profile; exit 0 when nothing is left to do
+                                           before the first, the deposit, the fees and the way to it), a
+                                           transaction still on its way, what the registry holds, public or
+                                           private, the icon, the Connect profile (connect.json before the app is
+                                           registered); exit 0 when nothing is left to do
   Every command run in an app's project logs its steps to .grain/log.jsonl: codes and timings, never a key, an
     address or anything typed (SALTIX_GRAIN_LOG=off turns it off).
   grain app-key [--file F] [--offline]     a developer key's public parts (from SALTIX_APP_KEY, --file or stdin),
@@ -149,9 +157,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
     code, or the tool says what to do in Saltix (My apps) and waits for the registry (--timeout seconds, 600). A key
     file signs only when --key names it, or for an app (a username) whose owner the registry names as that key file's
     account; --wallet always asks Saltix. The account that owns what the call makes is said before anything is signed.
-    A call signed with a key file returns once it landed and the registry holds it (3 minutes at most), so the next
-    one is built above it: its nonce, a profile's revision; one the pool refuses for the account's earlier call still
-    pending is built again once that landed. --no-wait returns once the pool took it.
+    A call signed with a key file returns once it landed and the registry holds it (about 1.5 to 2.5 minutes on the
+    test network, saying what it waits for meanwhile; it gives up after 6), so the next one is built above it: its
+    nonce, a profile's revision; one the pool refuses for the account's earlier call still pending is built again once
+    that landed. --no-wait returns once the pool took it: a coding agent runs these in the background, with a timeout
+    of 10 minutes or more, or with --no-wait and then grain doctor.
 
   grain sponsor init                       a sponsor key (sponsor.key): its account pays relays for your users
   grain sponsor                            the sponsor's account, WORK, channels and the exchanges to open one with
@@ -203,36 +213,67 @@ async function ownerSigner(what: string, owner: string | null, keyPath: string, 
   return signer;
 }
 
+/** Where a command's waits are said: one line rewritten in place on a terminal, a line every 15 seconds elsewhere. */
+const waitOut = (): WaitOut => ({ tty: process.stdout.isTTY === true, print: (line) => console.log(line), progress: rewriteLine((text) => process.stdout.write(text)) });
+
 /** The owner's call that `build` makes from what the registry holds, by `signer`: signed with its key file (one call of
- *  the account at a time, `sendSettled`), or done in the owner's Saltix and waited for. */
-async function ownerCall(signer: Signer, build: (secret?: Uint8Array) => Promise<GrainCall>, flags: Map<string, string | true>, reach: Reach): Promise<number> {
+ *  the account at a time, `sendSettled`), or done in the owner's Saltix and waited for. Either way the steps' log gets
+ *  where it ended (`registry`). */
+async function ownerCall(signer: Signer, build: (secret?: Uint8Array) => Promise<GrainCall>, flags: Map<string, string | true>, reach: Reach, log: DevLog): Promise<number> {
   if (signer.by === "wallet") {
     const call = await build();
     console.log(inSaltix(call));
-    console.log("Waiting for the registry…");
-    const ok = await waitForRegistry(reach.node, call, Number(text(flags, "timeout", "600")) * 1000);
+    const w = new Waiting(waitOut(), "waiting for the owner's Saltix, then the registry");
+    const ok = await waitForRegistry(reach.node, call, Number(text(flags, "timeout", "600")) * 1000, 3000, () => w.at("not in the registry yet"));
+    w.done();
+    log.step("registry", ok ? "ok" : "timeout", ok ? "set" : "not_signed");
     console.log(ok ? "the registry has it" : "not in the registry yet: check with grain show");
     return ok ? 0 : 1;
   }
-  return keyCall(() => build(signer.secret), signer.secret, flags, reach, (sent) => `${sent.call}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT)`);
+  return keyCall(() => build(signer.secret), signer.secret, flags, reach, (sent) => `${sent.call}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT)`, log);
 }
 
 /**
  * Send the call `build` makes, signed with `secret`, and wait until it landed (unless `--no-wait`): a command returns
  * once the registry holds what it made, so the next one is built above it (its nonce, a profile's revision). `said`
- * names the transaction once the pool took it.
+ * names the transaction once the pool took it; the wait is said as it goes, and logged as `registry`.
  */
-async function keyCall(build: () => Promise<GrainCall>, secret: Uint8Array, flags: Map<string, string | true>, reach: Reach, said: (s: Sent) => string): Promise<number> {
+async function keyCall(build: () => Promise<GrainCall>, secret: Uint8Array, flags: Map<string, string | true>, reach: Reach, said: (s: Sent) => string, log: DevLog): Promise<number> {
   const wait = flags.get("no-wait") !== true;
-  const { landed } = await sendSettled(build, secret, signing(flags, reach), {
+  let w: Waiting | null = null;
+  const { sent, landed } = await sendSettled(build, secret, signing(flags, reach), {
     wait,
-    onSent: (sent) => {
-      console.log(said(sent));
-      if (wait) console.log("Waiting for it to land…");
+    onSent: (s) => {
+      (w as Waiting | null)?.done();
+      console.log(said(s));
+      if (wait) console.log(`Waiting for it to land: ${LANDS_IN} (Ctrl-C stops waiting; the transaction stays sent)`);
+      w = new Waiting(waitOut(), s.call);
     },
+    // Before the pool took it: the account's earlier call still pending.
+    onWait: (stage) => (w ??= new Waiting(waitOut(), "waiting")).at(stage),
   });
-  if (landed !== null) console.log(landed ? "the registry has it" : "not in the registry yet: check with grain show");
+  (w as Waiting | null)?.done();
+  if (!wait) {
+    log.step("registry", "waiting", "no_wait");
+    console.log(`sent as ${sent.id}: grain show says when it is in the registry (${LANDS_IN})`);
+  } else if (landed === null) {
+    log.step("registry", "waiting", "unknown");
+    console.log("the node cannot say where the transaction is: grain show says when the registry has it");
+  } else {
+    log.step("registry", landed ? "ok" : "timeout", landed ? "set" : "not_landed");
+    console.log(landed ? "the registry has it" : "not in the registry yet: check with grain show");
+  }
   return landed === false ? 1 : 0;
+}
+
+/** `grain icon`'s run: a picture it cannot make an icon of is refused in the steps' log by its reason, then said. */
+function iconRun(run: () => number, log: DevLog): number {
+  try {
+    return run();
+  } catch (e) {
+    if (e instanceof IconError) log.step("icon", "refused", e.reason);
+    throw e;
+  }
 }
 
 /** All of stdin, when it is piped in. */
@@ -267,11 +308,9 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const ownerKey = newKey(join(dir, KEY_FILE));
       const manifest: Manifest = {
         slug, version: 1, ...ownerOf(ownerKey), name: { en: name }, description: { en: "" }, icon: "00".repeat(32),
-        entry: chat ? { chat: {} } : { hosted: { url: `https://${slug}.example/`, origins: [`https://${slug}.example`] } },
-        permissions: chat ? 4 : 1, sponsor: null, min_host: 1,
+        entry: { chat: {} }, permissions: chat ? 4 : 1, sponsor: null, min_host: 1,
       };
       if (!manifest.description.en) delete (manifest.description as Record<string, string>).en;
-      writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
       // Every app ships a Connect profile: what Saltix shows before anyone signs in (19-connect §11).
       writeFileSync(join(dir, CONNECT_FILE), template.connectJson(slug, name, chat));
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
@@ -280,6 +319,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       writeFileSync(join(dir, "AGENTS.md"), template.agentsMd(slug, chat));
       writeFileSync(join(dir, "CLAUDE.md"), template.claudeMd);
       if (chat) {
+        writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
         writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
         writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
         writeFileSync(join(dir, "chat.mjs"), chatTemplate.chatHandlers(slug));
@@ -300,6 +340,10 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       writeFileSync(join(dir, "public", "app.js"), template.appJs(slug, signIn));
       const bridge = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain"));
       copyFileSync(bridge, join(dir, "public", "grain.js"));
+      // Sealed from the start, as grain publish will put it into the network: no placeholder host to be told about, and
+      // the Connect sheet's preview says what users will read (a sealed app's code changes only with a version its
+      // owner signs). grain publish and grain dev seal public/ again as it changes.
+      writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(sealed(manifest, makeBundle(join(dir, "public")), { sources: [] }), null, 2) + "\n");
       writeFileSync(join(dir, "README.md"), template.readme(slug, signIn));
       // The grain command in the project itself: `npx grain` there runs this tool, never a registry's package of that name.
       writeFileSync(join(dir, "package.json"), chatTemplate.pagePackageJson(slug, chatTemplate.cliDependency(dir)));
@@ -322,6 +366,8 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const keyFile = typeof flags.get("app-key") === "string" ? (flags.get("app-key") as string) : undefined;
       const appKey = keyFile !== undefined || process.env[APP_KEY_ENV]?.trim() ? readAppKey(keyFile) : undefined;
       await serve(process.cwd(), () => readManifest(manifestPath).manifest, secret, port, "0.0.0.0", { appKey });
+      // Serving until stopped: Ctrl-C (or a supervisor's SIGTERM) is how it ends, and the log's last line says so.
+      stopsOk = true;
       const served = readManifest(manifestPath).manifest;
       log.step("serve", "ok", "sealed" in served.entry ? "sealed" : placeholderHosted(served) ? "page" : "hosted");
       console.log(`serving ${resolve("public")} on port ${port}`);
@@ -344,10 +390,11 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         warnings.push(...more.warnings);
       }
       warnings.push(...lintPermissionsUse(projectDir, manifest));
-      // grain init's placeholder origin: a page nobody hosts, which grain publish seals into the network instead.
+      // An older grain init's placeholder origin (a new project starts sealed): a page nobody hosts, which grain publish
+      // seals into the network instead; grain bundle seals it now, and the warning goes.
       if (placeholderHosted(manifest)) {
-        warnings.push(`entry: ${"hosted" in manifest.entry ? manifest.entry.hosted.url : ""} is grain init's placeholder (an example domain, no host): ` +
-          "grain publish seals public/ into the network in its place; only a page you host yourself names its own https origin (grain publish --hosted)");
+        warnings.push(`entry: ${"hosted" in manifest.entry ? manifest.entry.hosted.url : ""} is an older grain init's placeholder (an example domain, no host): ` +
+          "grain publish seals public/ into the network in its place, and grain bundle seals it now; only a page you host yourself names its own https origin (grain publish --hosted)");
       }
       // A page's frame: inside the safe area, or edge to edge with viewport-fit=cover (12-grains §7). A chat-only grain has
       // none.
@@ -373,8 +420,9 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         if (positional.length > 0 || fix || flags.has("fit")) throw new UsageError("grain icon --monogram L [--background #rrggbb] [--out icon.png]: no picture");
         const out = typeof flags.get("out") === "string" ? (flags.get("out") as string) : join(dir, "icon.png");
         const seed = existsSync(manifestPath) ? readManifest(manifestPath).manifest.slug : monogram;
-        const code = runIcon({ input: "", monogram, seed, out, background, preview, dir, manifestPath });
-        log.step("icon", code === 0 ? "ok" : "refused", "monogram");
+        let refused = "check";
+        const code = iconRun(() => runIcon({ input: "", monogram, seed, out, background, preview, dir, manifestPath, onRefused: (r) => (refused = r) }), log);
+        log.step("icon", code === 0 ? "ok" : "refused", code === 0 ? "monogram" : refused);
         return code;
       }
       const input = positional[0];
@@ -384,8 +432,10 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       }
       const fit = flags.get("fit");
       if (fit !== undefined && fit !== "crop" && fit !== "contain" && fit !== "mark") throw new UsageError("--fit crop, contain or mark");
-      const code = runIcon({ input, out, fit: fit as Fit | undefined, background, preview, dir, manifestPath });
-      log.step("icon", code === 0 ? "ok" : "refused", out === undefined ? "checked" : "made");
+      let refused = "check";
+      const code = iconRun(() => runIcon({ input, out, fit: fit as Fit | undefined, background, preview, dir, manifestPath, onRefused: (r) => (refused = r) }), log);
+      // Refused: why, by the check's own code (alpha, dimensions, hash…), never only that it was checked.
+      log.step("icon", code === 0 ? "ok" : "refused", code === 0 ? (out === undefined ? "checked" : "made") : refused);
       return code;
     }
     case "sign": {
@@ -409,14 +459,14 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         wallet: flags.get("wallet") === true, keyPath, keyNamed: flags.has("key"), appKeyFile: typeof appKey === "string" ? appKey : undefined,
         wait: flags.get("no-wait") !== true, timeoutMs: Number(text(flags, "timeout", "600")) * 1000, out: text(flags, "out", "signed.json"),
         signing: signing(flags, r), tty: process.stdout.isTTY === true,
-        progress: (line) => process.stdout.write(`\r${line}`),
+        progress: rewriteLine((line) => process.stdout.write(line)),
       });
     }
     case "retire": {
       const slug = text(flags, "slug");
       const secret = readKey(keyPath);
       const r = reach();
-      return keyCall(() => retireCall(slug, r.node, secret), secret, flags, r, (sent) => `retire ${slug}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT)`);
+      return keyCall(() => retireCall(slug, r.node, secret), secret, flags, r, (sent) => `retire ${slug}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT)`, log);
     }
     case "show": {
       const slug = text(flags, "slug");
@@ -432,23 +482,45 @@ async function main(argv: string[], log: DevLog): Promise<number> {
           "until it retires (100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more); its first grain publish registers it");
         return 0;
       }
-      console.log(JSON.stringify(g, null, 2));
-      console.log(`${slug} on ${status.network} ${status.genesis.slice(0, 16)}: v${g.version}, ${g.retired !== null ? `retired at slot ${g.retired}` : g.public === false ? `private, ${g.members?.length ?? 0} members` : "public"}`);
+      const out = flags.get("out");
+      if (flags.get("json") === true) {
+        // For a program: the registry's whole record and nothing else on stdout.
+        console.log(JSON.stringify(g, null, 2));
+        if (typeof out === "string" && g.manifest) {
+          writeFileSync(out, JSON.stringify(g.manifest, null, 2) + "\n");
+          console.error(`${out}: the signed manifest the registry holds`);
+        }
+        return 0;
+      }
+      // For people: what the record says, in a few lines; --json prints all of it.
+      const m = g.manifest?.manifest;
+      const members = g.members?.length ?? 0;
+      console.log(`${slug} on ${status.network} ${status.genesis.slice(0, 16)}: v${g.version}, ` +
+        (g.retired !== null ? `retired at slot ${g.retired}` : g.public === false ? `private, ${members} member${members === 1 ? "" : "s"}` : "public"));
+      console.log(`  owner    ${addressOf(status.network, g.owner)}`);
+      if (m) {
+        const form = "sealed" in m.entry ? `a sealed page, bundle ${m.entry.sealed.bundle.slice(0, 16)}… (${m.entry.sealed.size} bytes)`
+          : "hosted" in m.entry ? `a page hosted at ${m.entry.hosted.url}` : "a chat-only app";
+        console.log(`  manifest ${m.name.en ?? slug}: ${form}; icon ${/^0+$/.test(m.icon) ? "none (wallets draw the monogram)" : `${m.icon.slice(0, 16)}…`}`);
+      }
+      if (g.servers !== undefined) {
+        console.log(`  servers  ${g.servers.length === 0 ? "none named (a page alone needs none)" : `${g.servers.length} key${g.servers.length === 1 ? "" : "s"}, the app's chat goes to ${g.servers[0]!.slice(0, 16)}…`}`);
+      }
       if (g.profile) {
         // As a wallet takes it: checked against the record's slug and owner (whether its key still speaks for the owner
         // is the registry's, which took it).
         const problem = checkGrainProfile(g.profile, g.slug, g.owner);
         const p = g.profile.profile;
-        console.log(`Connect profile, revision ${p.revision}: "${profileText(p, "en").tagline}" (${Object.keys(p.texts).sort().join(", ")})` +
+        console.log(`  profile  Connect profile revision ${p.revision}: "${profileText(p, "en").tagline}" (${Object.keys(p.texts).sort().join(", ")})` +
           (problem ? `; a wallet refuses it: ${problem}` : "; it checks"));
       } else if (g.profile === null) {
-        console.log(`${slug} has no Connect profile: grain profile sets it`);
+        console.log(`  profile  none: grain profile sets it from connect.json`);
       }
-      const out = flags.get("out");
       if (typeof out === "string" && g.manifest) {
         writeFileSync(out, JSON.stringify(g.manifest, null, 2) + "\n");
         console.log(`${out}: the signed manifest the registry holds`);
       }
+      console.log(`grain show --slug ${slug} --json prints the registry's whole record`);
       return 0;
     }
     case "bundle": {
@@ -513,7 +585,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const category = typeof flags.get("category") === "string" ? (flags.get("category") as string) : undefined;
       const r = reach();
       const signer = await ownerSigner(slug, (await grainGet(r.node, slug))?.owner ?? null, keyPath, flags, r, log);
-      return ownerCall(signer, (secret) => configureCall(r.node, slug, servers, category, secret), flags, r);
+      return ownerCall(signer, (secret) => configureCall(r.node, slug, servers, category, secret), flags, r, log);
     }
     case "access": {
       const open = flags.get("public") === true;
@@ -522,7 +594,10 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const slug = text(flags, "slug");
       const members = membersOf(all("member"));
       const signer = await ownerSigner(slug, (await grainGet(r.node, slug))?.owner ?? null, keyPath, flags, r, log);
-      return ownerCall(signer, (secret) => accessCall(r.node, slug, open, members, secret), flags, r);
+      const code = await ownerCall(signer, (secret) => accessCall(r.node, slug, open, members, secret), flags, r, log);
+      // The owner said public or private: a registration's pending "make it private" here is theirs to decide no more.
+      if (code === 0) accessDecided(process.cwd(), slug);
+      return code;
     }
     case "rate": {
       const score = Number(text(flags, "score"));
@@ -534,7 +609,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const rater = readKey(keyPath);
       const r = reach();
       return keyCall(() => rateCall(r.node, text(flags, "slug"), score, review, rater), rater, flags, r,
-        (sent) => `rate ${text(flags, "slug")} ${score}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT); a rating names its account`);
+        (sent) => `rate ${text(flags, "slug")} ${score}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT); a rating names its account`, log);
     }
     case "bind": {
       const clear = flags.get("clear") === true;
@@ -545,7 +620,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       if (handle === null) throw new Error(`${typed}: not a name (@anna) or a number (+0 777 1234)`);
       // A username is its holder's: the holder's key file, or their Saltix, binds it.
       const signer = await ownerSigner(typed, (await handleGet(r.node, handle))?.owner ?? null, keyPath, flags, r, log);
-      return ownerCall(signer, (secret) => (secret ? bindCall(r.node, typed, slug, secret) : Promise.resolve({ bind: { handle, slug } })), flags, r);
+      return ownerCall(signer, (secret) => (secret ? bindCall(r.node, typed, slug, secret) : Promise.resolve({ bind: { handle, slug } })), flags, r, log);
     }
     case "app-key": {
       if (positional[0] === "make") {
@@ -599,7 +674,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const r = reach();
       const { state, findings, publish, next } = await doctor(process.cwd(), r.node, r.flags);
       const first = findings.find((f) => !f.ok);
-      log.step("doctor", first ? "refused" : "ok", first ? `${first.what.replace(/ /g, "_")}` : undefined);
+      log.step("doctor", first ? "refused" : "ok", first ? `${first.what.replace(/ /g, "_")}` : "done");
       if (publish !== null) log.step("doctor_publish", publish === "published" ? "ok" : "waiting", publish);
       if (flags.get("json") === true) {
         console.log(JSON.stringify({ status: state.status, publish, findings, next: first?.next ?? null }, null, 2));
@@ -638,23 +713,34 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const r = reach();
       const signer = await ownerSigner(slug, (await grainGet(r.node, slug))?.owner ?? null, keyPath, flags, r, log);
       if (flags.get("clear") === true) {
-        return ownerCall(signer, (secret) => clearCall(r.node, slug, secret), flags, r);
+        return ownerCall(signer, (secret) => clearCall(r.node, slug, secret), flags, r, log);
       }
       const value = readConnectFile(text(flags, "profile", join(dirname(resolve(manifestPath)), CONNECT_FILE)));
       const placeholder = placeholderLinks(value);
-      if (placeholder.length > 0) throw new Error(`${CONNECT_FILE}: ${placeholder.join("; ")}`);
+      if (placeholder.length > 0) {
+        log.step("profile", "refused", "placeholder_link");
+        throw new Error(`${CONNECT_FILE}: ${placeholder.join("; ")}`);
+      }
+      // grain init's own words, about the counter it makes: a wallet would show them as this app's.
+      const template = templateTexts(value);
+      if (template.length > 0) {
+        log.step("profile", "refused", "connect_template");
+        throw new Error(`${CONNECT_FILE}: ${template.join("; ")}: rewrite it for this app (what it is, what it does, what it keeps), then grain profile again`);
+      }
       if (signer.by === "key") {
         log.step("sign", "ok", "key_file");
-        return ownerCall(signer, (secret) => profileCall(r.node, slug, value, secret!), flags, r);
+        return ownerCall(signer, (secret) => profileCall(r.node, slug, value, secret!), flags, r, log);
       }
       // The owner's key stays in the wallet: it fills in its account and the revision, signs and sends (12-grains §10).
       const { link, profile, before } = await profileLinkFor(r.node, slug, value);
       console.log(await QRCode.toString(link, { type: "terminal", small: true, errorCorrectionLevel: "L" }));
       console.log(`Scan it with the owner's Saltix: it shows ${slug}'s Connect profile as the sheet will, and sets it after the PIN.`);
       console.log(`The link: ${link}`);
-      console.log("Waiting for the registry…");
+      console.log(`Waiting for the owner's Saltix, then the registry (${LANDS_IN} once they confirm)…`);
       log.step("link", "waiting", "shown");
-      const set = await waitForProfile(r.node, slug, profile, before, Number(text(flags, "timeout", "600")) * 1000);
+      const w = new Waiting(waitOut(), "waiting for the owner's Saltix, then the registry");
+      const set = await waitForProfile(r.node, slug, profile, before, Number(text(flags, "timeout", "600")) * 1000, 3000, () => w.at("not in the registry yet"));
+      w.done();
       log.step("registry", set ? "ok" : "timeout", set ? "set" : "not_signed");
       console.log(set ? `the registry has it: revision ${set.profile.revision}` : `not in the registry yet: grain show --slug ${slug}${r.flags} says when it is`);
       return set ? 0 : 1;
@@ -733,6 +819,9 @@ const toolVersion = (): string => {
   }
 };
 
+/** Whether a signal is the command's own way to end (`grain dev` serving), rather than a run cut short. */
+let stopsOk = false;
+
 const argv = process.argv.slice(2);
 let commandName = "other";
 try {
@@ -741,6 +830,14 @@ try {
   // A misuse is still logged, as "other": main says what was wrong.
 }
 const log = new DevLog(process.cwd(), commandName, toolVersion());
+// Stopped by Ctrl-C or SIGTERM: the log's last line says so (a server stopped, or a wait given up), and the exit status
+// is the shell's for that signal.
+for (const [signal, number] of [["SIGINT", 2], ["SIGTERM", 15]] as const) {
+  process.once(signal, () => {
+    log.step("end", stopsOk ? "ok" : "failed", signal.toLowerCase());
+    process.exit(128 + number);
+  });
+}
 main(argv, log).then((code) => {
   log.end(code);
   if (code !== 0) process.exitCode = code;

@@ -16,8 +16,9 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { AppKey, RpcError, accountId, fromHex, namedHash, readPublishLink, signManifest, toHex } from "@saltix/grain-server";
 import { createDevRegistry } from "@saltix/grain-server/dev";
 import { DevLog, reasonOf } from "../dist/devlog.js";
-import { BLOB_WORDS, PublishError, formOf, nodeNow, publishApp, readiness, sameContent } from "../dist/publish-flow.js";
-import { doctor, keyState } from "../dist/status.js";
+import { BLOB_WORDS, PublishError, accessDecided, formOf, nodeNow, publishApp, readiness, sameContent, whoOpens } from "../dist/publish-flow.js";
+import { doctor, firstPublishFees, keyState } from "../dist/status.js";
+import { salt } from "../dist/registry.js";
 import { ensureGitignore } from "../dist/pair.js";
 import { isRelaySource } from "../dist/sources.js";
 import { connectJson } from "../dist/template.js";
@@ -135,7 +136,9 @@ test("a page goes into the network before the owner signs, on the paired key's w
   assert.equal(registry.grain.version, 2);
   assert.equal(registry.blobs.get(hash).pendingUntil, null);
   assert.ok(registry.blobs.has(ICON.hash));
-  assert.match(lines.at(-1), /space-game v2 is published, its bundle in the network/);
+  assert.match(lines.at(-2), /space-game v2 is published, its bundle in the network/);
+  // Who opens it: anyone, as the registry holds it public.
+  assert.match(lines.at(-1), /^Anyone opens it in Saltix: the Apps section, or salt:grain\/space-game\. Without a phone, grain dev runs this page sealed/);
   // grain.json is what was published, sealed; bundle.zip is the bundle; signed.json the registry's.
   const written = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
   assert.equal(written.version, 2);
@@ -201,7 +204,7 @@ test("--no-wait returns once the owner has the link; the next run finds the vers
   const second = run(dir, registry);
   assert.equal(await second.done, 0, second.lines.join("\n"));
   assert.match(second.lines.join("\n"), /space-game v2: the registry holds it as grain\.json describes it, so there is nothing to sign/);
-  assert.match(second.lines.at(-1), /space-game v2 is published/, "the icon went up: something was done");
+  assert.match(second.lines.at(-2), /space-game v2 is published/, "the icon went up: something was done");
   assert.ok(registry.blobs.has(ICON.hash));
   assert.ok(!second.lines.join("\n").includes("salt:grain-publish"), "no link a second time");
   // A third run: nothing left to do, nothing uploaded again, and it says so.
@@ -394,6 +397,12 @@ test("the command line over HTTP: grain publish --no-wait, the owner signs, grai
   assert.match(second.out, /is published/);
   const done = await grain(["doctor", "--json"]);
   assert.equal(JSON.parse(done.out).publish, "published");
+  // Nothing left (its profile set): exit 0, and the log says so by a code, never an empty reason.
+  registry.grain.profile = { profile: { revision: 1 } };
+  const clean = await grain(["doctor"]);
+  assert.equal(clean.status, 0, clean.out);
+  assert.match(clean.out, /^next: nothing: the page is published/m);
+  assert.deepEqual(steps(dir).slice(-3), ["doctor:ok:done", "doctor_publish:ok:published", "end:ok"]);
   // A mistyped flag is refused before anything happens.
   assert.equal((await grain(["publish", "--hostd"])).status, 2);
   assertNoSecrets(dir, [first.out, first.err, second.out, second.err]);
@@ -406,8 +415,10 @@ test("the command line over HTTP: grain publish --no-wait, the owner signs, grai
  */
 function ledgerOf(registry, dir, secret, salt = "200000000000") {
   const submitted = [];
+  const nonces = [];
   return {
     submitted,
+    nonces,
     async call(method, params) {
       if (method === "account_get") return { nonce: submitted.length, salt };
       if (method === "transaction_get") return { status: "included" };
@@ -415,6 +426,7 @@ function ledgerOf(registry, dir, secret, salt = "200000000000") {
         // Transaction v3: the sender's tag and key (33), nonce, fee and last slot (24), the action's tag, the call's.
         const tag = fromHex(params.transaction)[58];
         submitted.push(tag);
+        nonces.push(nonceOf(params.transaction));
         if (tag === 7 || tag === 8) registry.publish(signManifest(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")), secret));
         else if (tag === 36) registry.setAccess(false, []);
         else throw new Error(`a call of tag ${tag}`);
@@ -424,6 +436,12 @@ function ledgerOf(registry, dir, secret, salt = "200000000000") {
     },
   };
 }
+/** A signed transaction's nonce: after the sender's tag and key (33 bytes), little-endian. */
+function nonceOf(hex) {
+  const b = fromHex(hex);
+  return Number(new DataView(b.buffer, b.byteOffset + 33, 8).getBigUint64(0, true));
+}
+
 const OWNER_FILE = fromHex("77".repeat(32), 32);
 const ownerFileAccount = toHex(accountId(ed25519.getPublicKey(OWNER_FILE)));
 const keyed = (dir) => writeFileSync(join(dir, "owner.key"), "77".repeat(32) + "\n", { mode: 0o600 });
@@ -456,27 +474,39 @@ test("--key owner.key on a test network: the owner said, signed and sent here, m
   const said = lines.join("\n");
   assert.match(said, /^owner: dsalt1\S+, owner\.key's account on this computer \(--key names it\): the app is registered to it$/m);
   assert.ok(said.indexOf("owner: ") < said.indexOf("register space-game"), "the owner is said before anything is signed");
-  assert.match(said, /upload: once the registry names the bundle \(no server key here: grain pair lets the bundle go up before the owner signs\); it goes up once the transaction lands, which this command waits for/);
-  assert.doesNotMatch(said, /keep this command running until the owner has signed/, "no owner to wait for");
+  assert.match(said, /^upload: once the registry names the bundle, after the transaction lands; this command waits for it$/m);
+  // No phone and no owner to wait for: nothing about pairing a server, which would change only the order of the upload.
+  assert.doesNotMatch(said, /keep this command running until the owner has signed|grain pair/, "no owner to wait for");
   assert.match(said, /register space-game v1: transaction (ab){32} \(fee 0\.\d+ SALT, deposit 10 SALT\)/);
-  // A new app starts private, as one made in Saltix does: SetGrainAccess right after RegisterGrain.
+  assert.match(said, /^waiting for it to land: usually 1\.5 to 2\.5 minutes on the test network/m);
+  // A new app starts private, as one made in Saltix does: SetGrainAccess right behind RegisterGrain, with the next nonce.
   assert.deepEqual(ledger.submitted, [7, 36]);
+  assert.deepEqual(ledger.nonces, [0, 1]);
+  assert.match(said, /^access space-game: private, sent right behind it with the next nonce/m);
   assert.equal(registry.grain.public, false);
   assert.deepEqual(registry.grain.members, []);
   assert.match(said, /space-game is private: only its owner's account and the members it names open it/);
   assert.match(said, /grain access --slug space-game --private --member <address>:user --key owner\.key adds someone; --public opens it to anyone/);
+  // Nobody holds the owner's key on a phone: who can open it, and how to try it without one.
+  assert.equal(lines.at(-1), "It is private, and its owner is owner.key's account, which no phone holds: nobody opens it in Saltix yet. " +
+    "To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner.key " +
+    "(the address: Saltix → Receive), or --public for anyone. Without a phone, grain dev runs this page sealed in the simulator, " +
+    "as Saltix will (grain dev --check tries it headless).");
+  assert.doesNotMatch(said, /Saltix opens it from the Apps section/);
   assert.equal(registry.grain.owner, ownerFileAccount);
   const hash = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).entry.sealed.bundle;
   assert.equal(registry.blobs.get(hash).pendingUntil, null);
   assert.ok(registry.blobs.has(ICON.hash));
-  assert.ok(steps(dir).includes("sign:ok:key_file") && steps(dir).includes("access:ok:private"));
+  assert.ok(steps(dir).includes("sign:ok:key_file") && steps(dir).includes("access:waiting:sent") && steps(dir).includes("access:ok:private"));
+  const settled = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
+  assert.deepEqual([settled.sent, settled.private_pending], [[], false], "nothing left on its way");
   assertNoSecrets(dir, lines);
   // The app is owner.key's now: its next version is signed by it without --key, an update that leaves the access be.
   writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space 2</title>");
   const next = run(dir, ledger, { signing: { node: ledger, validFor: 600 } });
   assert.equal(await next.done, 0, next.lines.join("\n"));
   assert.match(next.lines.join("\n"), /^owner: dsalt1\S+, owner\.key's account on this computer, which the registry names as the owner$/m);
-  assert.deepEqual(ledger.submitted, [7, 36, 8]);
+  assert.deepEqual(ledger.submitted, [7, 36, 8], "an update leaves the access be");
   assert.equal(registry.grain.version, 2);
   assert.ok(!next.lines.join("\n").includes("salt:grain-publish"));
   // Without funds: what to do, in words.
@@ -570,7 +600,12 @@ test("doctor before a page's first publish: the deposit, the owner's Saltix, and
   const d = await doctor(dir, free);
   const registry = d.findings.find((f) => f.what === "registry");
   assert.equal(registry.ok, false);
-  assert.equal(registry.detail, "space-game is free: its first grain publish registers it, keeping a deposit of 10 SALT until it retires; owner.key's account holds 0 SALT");
+  assert.match(registry.detail, /^space-game is free: its first grain publish registers it, keeping a deposit of 10 SALT until it retires, and fees of about 0\.0000\d+ SALT \(registering, then making it private\); owner\.key's account holds 0 SALT$/);
+  // The fees said are what the two transactions take at the pool's floor.
+  const fees = firstPublishFees(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")), 10_000_000_000n);
+  assert.ok(fees > 0n && fees < 1_000_000n, String(fees));
+  assert.ok(registry.detail.includes(`fees of about ${salt(fees)} SALT`));
+  assert.equal(firstPublishFees("not a manifest", 1n), null);
   assert.equal(registry.next, "grain publish: a QR code, and the owner's Saltix registers the app and pays the deposit; without a phone, on the test network: " +
     "grain faucet --wait, then grain publish --key owner.key (the app is then owner.key's account's)");
   assert.equal(d.findings.find((f) => !f.ok).what, "registry", "the first thing to do");
@@ -578,9 +613,261 @@ test("doctor before a page's first publish: the deposit, the owner's Saltix, and
   // With the deposit and the fees in owner.key's account, no faucet first.
   const funded = { call: (m, p) => (m === "account_get" ? Promise.resolve({ nonce: 0, salt: "10001000000" }) : free.call(m, p)) };
   assert.match((await doctor(dir, funded)).next, /without a phone, on the test network: grain publish --key owner\.key \(/);
+  // The Connect profile, before the registry can hold one: connect.json checked here, the template's words said.
+  assert.match(d.findings.find((f) => f.what === "connect profile").detail, /^no connect\.json/);
+  writeFileSync(join(dir, "connect.json"), connectJson(SLUG, "Space", false));
+  const template = (await doctor(dir, free)).findings.find((f) => f.what === "connect profile");
+  assert.equal(template.ok, false);
+  assert.match(template.detail, /^connect\.json is grain init's template \(texts\.en: tagline, about, highlights and privacy are grain init's words/);
+  const own = JSON.parse(connectJson(SLUG, "Space", false));
+  own.texts = { en: { tagline: "A space game", about: "Fly.", highlights: [], privacy: "Keeps your best score in your Saltix vault." } };
+  writeFileSync(join(dir, "connect.json"), JSON.stringify(own));
+  const checked = (await doctor(dir, free)).findings.find((f) => f.what === "connect profile");
+  assert.deepEqual([checked.ok, checked.detail], [true, "connect.json checks; the registry takes it once the app is registered (grain profile)"]);
   // Without an owner.key: the faucet, then --key, as the way to it; never a balance it cannot know.
   rmSync(join(dir, "owner.key"));
   const keyless = (await doctor(dir, free)).findings.find((f) => f.what === "registry");
   assert.doesNotMatch(keyless.detail, /holds/);
   assert.match(keyless.next, /grain faucet --wait, then grain publish --key owner\.key/);
+});
+
+/**
+ * A node's pool and ledger as the network keeps them for a key file's calls. Its clock is the reads of a transaction's
+ * status or the registry while anything is on its way: a transaction waits in the pool for `polls` of them from when it
+ * was sent, then lands in the block that takes
+ * every one of the account's due by then, in nonce order and never across a gap (two sent together land together); the
+ * pool takes a nonce ahead of the account's and refuses one used already or pending. Each registry call then applies in
+ * that order, `lag` reads after its block (the beacon chain's):
+ * a registration publishes grain.json as the key file signed it, `SetGrainAccess` sets the access — and fails, changing
+ * nothing, for an app the registry does not hold yet. `seen` records the registry's access after every block; `sent`
+ * each transaction's call tag, nonce and whether the registry held the app when it was sent. `drop(tag)` loses a
+ * transaction of that tag (the node never knows it); `failures` submissions fail before reaching the pool.
+ */
+function poolOf(registry, dir, secret, { polls = 2, lag = 0, drop = () => false, failures = 0, salt = "200000000000" } = {}) {
+  const pool = { nonce: 0, clock: 0, pending: [], included: [], sent: [], seen: [], failures, txs: new Map() };
+  const holds = async () => (await registry.call("grain_get", { slug: SLUG })).grain !== null;
+  const block = async () => {
+    for (;;) {
+      const next = pool.pending.find((p) => p.nonce === pool.nonce && p.due <= pool.clock);
+      if (!next) break;
+      pool.pending.splice(pool.pending.indexOf(next), 1);
+      pool.nonce++;
+      next.status = "included";
+      next.applies = pool.clock + lag;
+      pool.included.push(next);
+    }
+    while (pool.included.length > 0 && pool.included[0].applies <= pool.clock) {
+      const call = pool.included.shift();
+      if (call.tag === 7 || call.tag === 8) registry.publish(signManifest(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")), secret));
+      else if (call.tag === 36 && (await holds())) registry.setAccess(false, []);
+    }
+    const g = (await registry.call("grain_get", { slug: SLUG })).grain;
+    pool.seen.push(g === null ? "free" : g.public === false ? "private" : "public");
+  };
+  return {
+    pool,
+    async call(method, params) {
+      if (method === "account_get") return { nonce: pool.nonce, salt };
+      if ((method === "transaction_get" || method === "grain_get") && (pool.pending.length > 0 || pool.included.length > 0)) {
+        pool.clock++;
+        await block();
+      }
+      if (method === "transaction_get") {
+        const tx = pool.txs.get(params.id);
+        return { status: !tx || tx.status === "dropped" ? "unknown" : tx.status };
+      }
+      if (method === "transaction_submit") {
+        if (pool.failures-- > 0) throw new Error("fetch failed");
+        const nonce = nonceOf(params.transaction);
+        const tag = fromHex(params.transaction)[58];
+        if (nonce < pool.nonce) throw new RpcError(method, 2, `nonce ${nonce} is used already; the account is at ${pool.nonce}`);
+        if (pool.pending.some((p) => p.nonce === nonce)) throw new RpcError(method, 2, "a replacement must pay more per byte");
+        const id = toHex(crypto.getRandomValues(new Uint8Array(32)));
+        const tx = { id, nonce, tag, due: pool.clock + polls, status: drop(tag) ? "dropped" : "pending" };
+        pool.txs.set(id, tx);
+        if (tx.status === "pending") pool.pending.push(tx);
+        pool.sent.push({ tag, nonce, held: await holds(), fee: new DataView(fromHex(params.transaction).buffer).getBigUint64(41, true) });
+        return { id };
+      }
+      return registry.call(method, params);
+    },
+  };
+}
+
+/** `run` with a key file signing on `ledger`, its waits short. */
+const keyRun = (dir, ledger, over = {}) => run(dir, ledger, { signing: { node: ledger, validFor: 600 }, keyNamed: true, settleMs: 3_000, ...over });
+
+test("a key file's registration and the call that makes it private go together: the second sent before the first lands, the app never public", async () => {
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 3, lag: 2 });
+  const { lines, done } = keyRun(dir, ledger);
+  assert.equal(await done, 0, lines.join("\n"));
+  // SetGrainAccess went into the pool right behind RegisterGrain, with the next nonce, while the registry did not hold
+  // the app yet; the chain applied the two in order, so no block ever showed it public.
+  assert.deepEqual(ledger.pool.sent.map(({ tag, nonce, held }) => ({ tag, nonce, held })), [{ tag: 7, nonce: 0, held: false }, { tag: 36, nonce: 1, held: false }]);
+  assert.ok(!ledger.pool.seen.includes("public"), ledger.pool.seen.join(" "));
+  assert.equal(ledger.pool.seen.at(-1), "private");
+  assert.equal(registry.grain.public, false);
+  assert.deepEqual(steps(dir).filter((s) => s.startsWith("access:")), ["access:waiting:sent", "access:ok:private"]);
+  assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, false);
+  // The wait is said as it goes, off a terminal a line when its stage changes: in the pool, then on its way.
+  const said = lines.join("\n");
+  assert.match(said, /^ {2}register space-game v1: in the pool, waiting for a shard block \(\d+:\d\d\)$/m);
+  assert.match(said, /^ {2}register space-game v1: in a shard block, on its way to the registry \(the beacon chain\) \(\d+:\d\d\)$/m);
+});
+
+test("a pool that will not take the access call ahead: it goes once the registration landed, and the app is private in the end", async () => {
+  // An older pool that takes no nonce ahead of the account's: the call is sent again once the registration landed.
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 1 });
+  const strict = {
+    pool: ledger.pool,
+    call: (method, params) => method === "transaction_submit" && nonceOf(params.transaction) > ledger.pool.nonce
+      ? Promise.reject(new RpcError(method, 2, `nonce ${nonceOf(params.transaction)} is too far ahead of the account's ${ledger.pool.nonce}`))
+      : ledger.call(method, params),
+  };
+  const { lines, done } = keyRun(dir, strict);
+  assert.equal(await done, 0, lines.join("\n"));
+  assert.match(lines.join("\n"), /^access space-game: private once the registration landed \(the pool did not take it ahead of it: /m);
+  assert.deepEqual(ledger.pool.sent.map((t) => [t.tag, t.nonce, t.held]), [[7, 0, false], [36, 1, true]]);
+  assert.equal(registry.grain.public, false);
+  assert.ok(steps(dir).includes("access:waiting:after_registry") && steps(dir).includes("access:ok:private"));
+});
+
+test("--no-wait with a key file returns once the pool took both; doctor says they are on their way; the next run waits, never sends again", async () => {
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  ensureGitignore(dir);
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 4 });
+  const first = keyRun(dir, ledger, { wait: false });
+  assert.equal(await first.done, 0, first.lines.join("\n"));
+  assert.match(first.lines.join("\n"), /^sent: it lands in the registry in a few minutes \(usually 1\.5 to 2\.5 minutes on the test network\)\. grain doctor says when/m);
+  assert.deepEqual(ledger.pool.sent.map((t) => t.tag), [7, 36]);
+  const state = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
+  assert.deepEqual(state.sent.map((t) => [t.call, t.nonce]), [["register", 0], ["access", 1]]);
+  assert.equal(state.private_pending, true);
+  assert.ok(steps(dir).includes("registry:waiting:no_wait"));
+  // grain doctor meanwhile: on its way, never to be sent again; not the deposit to pay.
+  const d = await doctor(dir, ledger);
+  const way = d.findings.find((f) => f.what === "registry");
+  assert.equal(way.ok, false);
+  assert.match(way.detail, /^the registration of space-game was sent at \S+ \(transaction [0-9a-f]{64}\) and has not landed yet: a registry call takes usually 1\.5 to 2\.5 minutes/);
+  assert.match(way.next, /grain publish waits for it \(never sending it again\)/);
+  assert.doesNotMatch(d.findings.map((f) => f.detail).join("\n"), /is free/);
+  // The next run, without --key: it waits for that registration, sends nothing again, and finishes the bundle and icon.
+  const second = run(dir, ledger, { signing: { node: ledger, validFor: 600 }, settleMs: 3_000 });
+  assert.equal(await second.done, 0, second.lines.join("\n"));
+  assert.match(second.lines.join("\n"), /^register space-game v1: an earlier grain publish sent it at \S+ \(transaction [0-9a-f]{64}\), and the registry does not hold it yet: waiting for it rather than sending it again/m);
+  assert.deepEqual(ledger.pool.sent.map((t) => t.tag), [7, 36], "nothing sent a second time");
+  assert.doesNotMatch(second.lines.join("\n"), /salt:grain-publish/, "never a QR code for an app the key file is registering");
+  assert.equal(registry.grain.public, false);
+  const hash = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).entry.sealed.bundle;
+  assert.ok(registry.blobs.has(hash) && registry.blobs.has(ICON.hash));
+  assert.ok(steps(dir).includes("registry:waiting:earlier"));
+  const after = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
+  assert.deepEqual([after.sent, after.private_pending], [[], false]);
+  assertNoSecrets(dir, [...first.lines, ...second.lines]);
+});
+
+test("the call that makes it private does not land: doctor says public, should be private; the next run sends it again until it lands", async () => {
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  ensureGitignore(dir);
+  // The access call is lost: the registration lands and the app stays public.
+  const lossy = poolOf(registry, dir, OWNER_FILE, { polls: 1, drop: (tag) => tag === 36 });
+  const first = keyRun(dir, lossy, { settleMs: 400 });
+  assert.equal(await first.done, 1, first.lines.join("\n"));
+  assert.match(first.lines.join("\n"), /^space-game is registered but still public: the call that makes it private has not landed yet\. grain doctor says when it has; grain publish again sends it again if it is needed \(or: grain access --slug space-game --private --key owner\.key\)$/m);
+  assert.equal(registry.grain.public, true);
+  assert.ok(steps(dir).includes("access:timeout:not_landed"));
+  assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, true);
+  // grain doctor: public, but should be private, and the fix.
+  const d = await doctor(dir, lossy);
+  const access = d.findings.find((f) => f.what === "access");
+  assert.equal(access.ok, false);
+  assert.match(access.detail, /^public, but should be private: owner\.key registered it here, and the call that makes it private has not landed/);
+  assert.equal(access.next, "grain access --slug space-game --private --key owner.key (or grain publish, which sends it again)");
+  // The next run: nothing new to publish, the call sent again (with the account's nonce now), the first submission
+  // failing on the way and tried again; it lands, and the app is private.
+  const sound = poolOf(registry, dir, OWNER_FILE, { polls: 1, failures: 1 });
+  sound.pool.nonce = lossy.pool.nonce;
+  const second = run(dir, sound, { signing: { node: sound, validFor: 600 }, settleMs: 3_000 });
+  assert.equal(await second.done, 0, second.lines.join("\n"));
+  assert.deepEqual(sound.pool.sent.map((t) => [t.tag, t.nonce]), [[36, 1]]);
+  assert.equal(registry.grain.public, false);
+  assert.match(second.lines.join("\n"), /^access space-game: private \(transaction [0-9a-f]{64}, fee /m);
+  assert.match(second.lines.join("\n"), /^ {2}access space-game: private: not sent \(fetch failed\): trying again/m);
+  assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, false);
+  assert.equal((await doctor(dir, sound)).findings.find((f) => f.what === "access").detail, "private: its owner alone open it");
+  // An owner who decides with grain access in the project: the pending "make it private" is theirs no more.
+  writeFileSync(join(dir, ".grain", "publish.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")), private_pending: true }));
+  accessDecided(dir, SLUG);
+  assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, false);
+});
+
+test("an earlier run's registration that never reached the network is forgotten once its last slot passed, and sent anew", async () => {
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  // Valid until slot 0, and the node is past it: that transaction can never land.
+  const gone = { call: "register", id: "cd".repeat(32), nonce: 0, valid_until: 0, version: 1, at: new Date(0).toISOString() };
+  assert.ok((await registry.call("node_status", {})).slot > 0);
+  const genesis = (await registry.call("node_status", {})).genesis.slice(0, 16);
+  mkdirSync(join(dir, ".grain"), { recursive: true });
+  writeFileSync(join(dir, ".grain", "publish.json"), JSON.stringify({ network: "devnet", genesis, slug: SLUG, version: 1, sent: [gone], private_pending: true }));
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 1 });
+  const { lines, done } = keyRun(dir, ledger);
+  assert.equal(await done, 0, lines.join("\n"));
+  assert.doesNotMatch(lines.join("\n"), /an earlier grain publish sent it/);
+  assert.deepEqual(ledger.pool.sent.map((t) => t.tag), [7, 36]);
+  assert.equal(registry.grain.public, false);
+});
+
+test("who opens the app, said once it is published: anyone, its owner and members in Saltix, or nobody until a key file names one", () => {
+  const dir = project({ paired: false });
+  keyed(dir);
+  const keyPath = join(dir, "owner.key");
+  const grain = (over) => ({ slug: SLUG, owner: ownerFileAccount, version: 1, retired: null, public: false, members: [], ...over });
+  assert.match(whoOpens(SLUG, grain({ public: true }), keyPath, "", "sealed"), /^Anyone opens it in Saltix: the Apps section, or salt:grain\/space-game\. Without a phone, grain dev runs this page sealed/);
+  assert.equal(whoOpens(SLUG, grain({ public: true }), keyPath, "", "chat"), "Anyone opens it in Saltix: the Apps section, or salt:grain/space-game.", "no page, no simulator");
+  // A phone's app: its owner (and members) in Saltix.
+  const phones = grain({ owner: "77".repeat(32) });
+  assert.match(whoOpens(SLUG, phones, keyPath, "", "chat"), /^It is private: its owner alone opens it in Saltix \(My apps → space-game, or salt:grain\/space-game\); My apps → space-game → Access adds members/);
+  assert.match(whoOpens(SLUG, { ...phones, members: [{ account: "88".repeat(32), roles: 1 }] }, keyPath, "", "chat"), /^It is private: its owner and its 1 member open it in Saltix/);
+  // owner.key's app: no phone holds the owner's key, so nobody opens it until a member is named.
+  const said = whoOpens(SLUG, grain({}), keyPath, " --network devnet", "sealed");
+  assert.match(said, /^It is private, and its owner is owner\.key's account, which no phone holds: nobody opens it in Saltix yet\. To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner\.key --network devnet/);
+  assert.match(whoOpens(SLUG, grain({ members: [{ account: "88".repeat(32), roles: 1 }, { account: "99".repeat(32), roles: 1 }] }), keyPath, "", "sealed"), /its 2 members open it in Saltix \(salt:grain\/space-game\)/);
+});
+
+test("a registration needs the deposit and both fees in the account: refused before anything is sent when the second's is short", async () => {
+  // The two transactions' fees, as a first publish sends them.
+  const dir = project({ paired: false });
+  keyed(dir);
+  const sent = poolOf(node({ registered: false }), dir, OWNER_FILE);
+  assert.equal(await keyRun(dir, sent, { wait: false }).done, 0);
+  const [register, access] = sent.pool.sent.map((t) => t.fee);
+  assert.ok(register > 0n && access > 0n);
+  const needs = 10_000_000_000n + register + access;
+  // One base unit short of the deposit and both fees: SetGrainAccess right behind the registration could not be paid,
+  // and the app would stay public. Nothing is sent; the faucet is the next step.
+  const shortDir = project({ paired: false });
+  keyed(shortDir);
+  const shortRegistry = node({ registered: false });
+  const short = poolOf(shortRegistry, shortDir, OWNER_FILE, { salt: String(needs - 1n) });
+  await assert.rejects(keyRun(shortDir, short).done, (e) => e instanceof PublishError && e.reason === "no_salt" && /grain faucet --wait/.test(e.message));
+  assert.deepEqual(short.pool.sent, [], "nothing sent");
+  assert.equal((await shortRegistry.call("grain_get", { slug: SLUG })).grain, null, "nothing registered");
+  // Exactly enough: both go.
+  const exactDir = project({ paired: false });
+  keyed(exactDir);
+  const exact = poolOf(node({ registered: false }), exactDir, OWNER_FILE, { salt: String(needs) });
+  assert.equal(await keyRun(exactDir, exact, { wait: false }).done, 0);
+  assert.deepEqual(exact.pool.sent.map((t) => t.tag), [7, 36]);
 });

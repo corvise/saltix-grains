@@ -40,12 +40,14 @@ npx grain publish                # says who will own the app; the owner's Saltix
 ```
 
 Run `grain publish` again with nothing changed and it says "nothing to publish" and sends nothing; a change to `public/`
-or `grain.json` makes the next version. **No phone, on the test network**: `npx grain faucet --wait`, then
-`npx grain publish --key owner.key` (the app is then `owner.key`'s account's, and starts private:
-`npx grain access --slug <slug> --public --key owner.key` opens it), then `npx grain profile`
-([No phone, test network](docs/how-it-works.md#no-phone-test-network)). The rest of this page, and of
-[docs/agents/app.md](docs/agents/app.md), about servers, keys and pairing is for an app with a program: a chat,
-payments, notifications, a page for some people only.
+or `grain.json` makes the next version. Write `connect.json` for the app before `grain profile`: `grain init`'s is about
+its counter, and `grain profile` refuses it. **No phone, on the test network**: `grain faucet --wait`,
+`grain publish --key owner.key`, `grain profile`, `grain access`, as
+[No phone, test network](docs/how-it-works.md#no-phone-test-network) walks them. **A command that waits for the chain**
+(`grain publish`, `profile`, `access` signed with a key file: about 1.5 to 2.5 minutes a transaction, up to about 6 for a
+first publish) **runs in the background or with a timeout of 10 minutes or more**, or with `--no-wait` and then
+`grain doctor` until it landed. The rest of this page, and of [docs/agents/app.md](docs/agents/app.md), about servers,
+keys and pairing is for an app with a program: a chat, payments, notifications, a page for some people only.
 
 ## Start here: Saltix's brief, or a developer key
 
@@ -155,9 +157,9 @@ Never set up hosting, a CDN, a domain or a certificate for a page, and never ask
 `--sources` unless the user hosts the bundle on purpose. `grain publish --no-wait` returns once the QR code is shown:
 show it (or `.grain/publish.html`) to the user, then run `grain publish` again after they confirmed; it finishes what is
 left. With nothing changed it says "nothing to publish" and sends nothing; a version is raised only when `grain.json` or
-`public/` changed. **A key file signs only when `--key` names it** (on the test network without a phone: `--key
-owner.key`, after `grain faucet --wait`; the app is then that key's account's, and starts private), or for an app the
-registry already names its account as the owner of; `grain init`'s `owner.key` never registers an app by itself.
+`public/` changed. **A key file signs only when `--key` names it, or by itself for an app its account owns**
+([No phone, test network](docs/how-it-works.md#no-phone-test-network)); `grain init`'s `owner.key` never registers an
+app by itself.
 `grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`,
 `published`), and before the first one what registering the slug takes; a refusal says what to do. `--hosted` only for
 a page the user hosts at their own origin.
@@ -185,16 +187,18 @@ The `grain` command line needs no node: registry commands and `grain faucet` (te
 public relays, each pinned by its certificate; `--node URL` is for a node of your own.
 
 **Every app ships a complete Connect profile, and asks only for what it uses.** The first time someone opens an app,
-Saltix shows its Connect sheet (Saltix 19-connect [§12](docs/protocol/connect.md#12-the-connect-sheet)): "Saltix Connect", the app's identity, its profile "in
-its own words", then a row for each permission the manifest asks for, and Continue. The profile is `connect.json`
-(`grain init` writes one): a tagline that says what the app is, what it does, highlights that are facts (not slogans),
-and what it keeps about a user and for how long (required when `grain.json` asks for `address` or `storage`), in
-English and Russian. `grain lint` fails without it and checks every rule; it warns about a permission nothing in the
-app's sources uses: drop it. `grain profile` sets it in the registry (a QR code for the owner's Saltix, or `--key` on
-the test network). Its links are the app's own: a link to an example domain (`.example`) is refused, as it leads
-nowhere. How to write one: [docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson). Websites
-and DApps use the same standard to sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`). A Connect
-grant is for display only: a bearer artefact that answers no server's challenge, so a server never takes it as a login
+Saltix shows its Connect sheet (Saltix 19-connect [§12](docs/protocol/connect.md#12-the-connect-sheet)): "Saltix
+Connect", the app's identity, its profile "in its own words", then a row for each permission the manifest asks for, and
+Continue. The profile is `connect.json` (`grain init` writes one): a tagline that says what the app is, what it does,
+highlights that are facts (not slogans), and what it keeps about a user and for how long (required when `grain.json`
+asks for `address` or `storage`), in English and Russian. `grain lint` fails without it and checks every rule; it warns
+about a permission nothing in the app's sources uses: drop it. `grain init`'s `connect.json` describes its counter:
+`grain lint` warns while it does (`connect-template`), and `grain profile` refuses it. `grain profile` sets it in the
+registry (a QR code for the owner's Saltix, or the key file that owns the app). Its links are the app's own: a link to
+an example domain (`.example`) is refused, as it leads nowhere. How to write one:
+[docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson). Websites and DApps use the same standard to
+sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`). A Connect grant is for display only: a
+bearer artefact that answers no server's challenge, so a server never takes it as a login
 ([docs/connect.md](docs/connect.md#5-a-grant-is-for-display-never-a-servers-login)).
 
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console

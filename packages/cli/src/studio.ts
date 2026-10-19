@@ -74,6 +74,11 @@ export function membersOf(texts: string[]): Array<{ account: string; roles: numb
   });
 }
 
+/** The call that makes a new app private with no members, built without asking the registry: `grain publish` sends it
+ *  right behind the app's registration, before the registry holds the app (a shard's registry calls reach the registry
+ *  in their order, so it applies after the registration). */
+export const privateCall = (slug: string): GrainCall => checked({ access: { slug, public: false, members: [] } });
+
 /** The call that makes `slug` public or private with `members`, the key file's account its owner. */
 export async function accessCall(node: NodeLike, slug: string, open: boolean, members: Array<{ account: string; roles: number }>, owner?: Uint8Array): Promise<GrainCall> {
   const g = owner ? await ownGrain(node, slug, owner) : await grainGet(node, slug);
@@ -145,11 +150,12 @@ export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
 
 /** Wait until the registry holds what `call` makes it, at most `ms`: the transaction landed, or the owner did it in
  *  Saltix. */
-export async function waitForRegistry(node: NodeLike, call: GrainCall, ms: number, every = 3000): Promise<boolean> {
+export async function waitForRegistry(node: NodeLike, call: GrainCall, ms: number, every = 3000, onWait?: () => void): Promise<boolean> {
   const end = Date.now() + ms;
   for (;;) {
     if (await holds(node, call)) return true;
     if (Date.now() >= end) return false;
+    onWait?.();
     await new Promise((r) => setTimeout(r, every));
   }
 }

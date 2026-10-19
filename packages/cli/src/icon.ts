@@ -14,7 +14,7 @@ import { ICON_SIDE, LEGACY_ICON_SIDE, MAX_ICON_BYTES, NAMED_REASONS, checkImage,
 import { grainDir } from "./devlog.js";
 import { type Mapping, type Rgba, decodePicture, over, resample } from "./image.js";
 import { encodePng, fitPng } from "./png-write.js";
-import { inkFor, monogramGround, monogramPixels, monogramText } from "./monogram.js";
+import { contrast, inkFor, luminance, monogramGround, monogramPixels, monogramText } from "./monogram.js";
 
 /** Where a project keeps the icon its manifest names: beside `grain.json`, or with the page. */
 export const ICON_FILES = ["icon.png", "public/icon.png"];
@@ -44,9 +44,13 @@ export function parseColour(text: string): Colour | null {
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as unknown as Colour;
 }
 
-/** A light and a dark ground for a mark on transparency: neither is the wallet's own white or black. */
-const LIGHT_GROUND: Colour = [0xf2, 0xf4, 0xf7];
-const DARK_GROUND: Colour = [0x10, 0x18, 0x20];
+/** The wallet's own grounds under an icon: its light theme's white and its dark theme's #121212. */
+export const THEME_GROUNDS: readonly Colour[] = [[0xff, 0xff, 0xff], [0x12, 0x12, 0x12]];
+/** A light and a dark ground for a mark on transparency, each standing apart from both themes' grounds (a contrast of
+ *  1.25 at least against the nearer one), so the icon's rounded square shows on either: never the wallet's own white or
+ *  near-black, which the icon's edge would vanish into. */
+export const LIGHT_GROUND: Colour = [0xdf, 0xe4, 0xec];
+export const DARK_GROUND: Colour = [0x26, 0x2d, 0x38];
 
 const median = (values: number[]) => {
   const s = [...values].sort((a, b) => a - b);
@@ -114,23 +118,36 @@ function markOf(img: Rgba, ground: Colour | null): { x0: number; y0: number; x1:
   return { x0, y0, x1, y1, radius };
 }
 
-/** The background a picture is flattened onto: the one asked for; else its corners' colour when they are opaque; else
- *  a light ground for a dark mark and a dark one for a light mark. */
+/** An sRGB channel's value in linear light, by table. */
+const LINEAR = Array.from({ length: 256 }, (_, v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+
+/**
+ * The background a picture is flattened onto: the one asked for; else its corners' colour when they are opaque; else,
+ * on transparency, the light or the dark ground (both apart from the two themes' own), whichever leaves less of the mark
+ * faint: each pixel's contrast with the ground by luminance, its faintness 1/contrast², weighted by its alpha. A dark
+ * mark gets the light ground and a light one the dark; a mark of two colours (orange arrows over a navy ruler) keeps its
+ * navy part, which would vanish into a dark ground, where an average of its luminance would pick that dark ground.
+ */
 function groundFor(img: Rgba, asked: Colour | null): { colour: Colour; why: string } {
   if (asked) return { colour: asked, why: "as asked" };
   const c = cornerColour(img);
   if (c.alpha >= 250) return { colour: c.colour, why: "the picture's corners" };
-  // The mark's mean luminance, weighted by its alpha.
-  let sum = 0;
-  let weight = 0;
+  const onLight = luminance(LIGHT_GROUND);
+  const onDark = luminance(DARK_GROUND);
+  let light = 0;
+  let dark = 0;
   for (let p = 0; p < img.data.length; p += 4) {
     const a = img.data[p + 3]! / 255;
     if (a < 0.1) continue;
-    sum += a * (0.2126 * img.data[p]! + 0.7152 * img.data[p + 1]! + 0.0722 * img.data[p + 2]!);
-    weight += a;
+    const l = 0.2126 * LINEAR[img.data[p]!]! + 0.7152 * LINEAR[img.data[p + 1]!]! + 0.0722 * LINEAR[img.data[p + 2]!]!;
+    light += a / contrast(l, onLight) ** 2;
+    dark += a / contrast(l, onDark) ** 2;
   }
-  const light = weight > 0 && sum / weight / 255 > 0.55;
-  return { colour: light ? DARK_GROUND : LIGHT_GROUND, why: `transparent corners: a ${light ? "dark" : "light"} ground for a ${light ? "light" : "dark"} mark` };
+  const darkMark = light <= dark;
+  return {
+    colour: darkMark ? LIGHT_GROUND : DARK_GROUND,
+    why: `transparent corners: a ${darkMark ? "light" : "dark"} ground for a ${darkMark ? "dark" : "light"} mark, apart from both themes' own`,
+  };
 }
 
 export interface MadeIcon {
@@ -197,6 +214,8 @@ export function makeIcon(bytes: Uint8Array, options: { fit?: Fit; background?: C
 export interface IconLint {
   errors: string[];
   warnings: string[];
+  /** The first error's code, for the steps' log: the image check's reason (`alpha`, `dimensions`…), `hash` or `decode`. */
+  reason?: string;
   /** Its sides, the share of the keyline's ring that is not ground, and the mark's box as a share of the side. */
   width?: number;
   ring?: number;
@@ -211,10 +230,12 @@ export function checkIcon(bytes: Uint8Array, expected?: string): IconLint {
   const checked = checkImage("grain_icon", bytes);
   if (!checked.ok) {
     errors.push(`the image check: ${checked.reason} (${NAMED_REASONS[checked.reason]}); grain icon <picture> --out icon.png makes one that passes`);
-    return { errors, warnings };
+    return { errors, warnings, reason: checked.reason };
   }
+  let reason: string | undefined;
   if (expected !== undefined && iconHash(bytes) !== expected) {
     errors.push(`its hash is ${iconHash(bytes)}, but grain.json's "icon" is ${expected}: set "icon" to it (grain icon prints it)`);
+    reason = "hash";
   }
   const side = checked.value.width;
   if (side === LEGACY_ICON_SIDE) warnings.push("256 × 256: wallets take it, soft on large screens; the standard is 512 × 512 (grain icon icon.png --out icon.png)");
@@ -224,7 +245,7 @@ export function checkIcon(bytes: Uint8Array, expected?: string): IconLint {
     img = { width: png.width, height: png.height, data: new Uint8Array(png.data) };
   } catch (e) {
     errors.push(`it does not decode (${(e as Error).message})`);
-    return { errors, warnings };
+    return { errors, warnings, reason: "decode" };
   }
   // The ground: the median colour of the four corners' squares (16 × 16 at 512).
   const ground = cornerColour({ ...img, data: img.data }).colour;
@@ -264,7 +285,7 @@ export function checkIcon(bytes: Uint8Array, expected?: string): IconLint {
   const uniform = cornerPx.every((p) => Math.abs(p[0] - ground[0]) <= 2 && Math.abs(p[1] - ground[1]) <= 2 && Math.abs(p[2] - ground[2]) <= 2);
   if (uniform && ground.every((c) => c >= 253)) warnings.push("the ground is pure white, the wallet's own on the light theme: the icon's edge vanishes there (pick a tint)");
   if (uniform && ground.every((c) => c <= 2)) warnings.push("the ground is pure black, the wallet's own on the dark theme: the icon's edge vanishes there (pick a tint)");
-  return { errors, warnings, width: side, ring, mark };
+  return { errors, warnings, width: side, ring, mark, ...(reason ? { reason } : {}) };
 }
 
 /** Whether a point (in pixel units, side `s`) is inside the rounded square of corner radius `MASK_CORNER · s`. */
@@ -373,6 +394,8 @@ export interface IconRun {
   dir: string;
   manifestPath: string;
   print?: (line: string) => void;
+  /** Told why an icon is refused, as a code (`alpha`, `dimensions`, `hash`…), for the steps' log. */
+  onRefused?: (reason: string) => void;
 }
 
 /** `grain icon`: its exit status. The first line printed is the icon's hash, as before. */
@@ -400,6 +423,7 @@ export function runIcon(o: IconRun): number {
   } else {
     const checked = checkImage("grain_icon", bytes);
     if (!checked.ok) {
+      o.onRefused?.(checked.reason);
       print(`${o.input} is not an icon wallets take: ${checked.reason} (${NAMED_REASONS[checked.reason]})`);
       print(`next: grain icon ${o.input} --out icon.png makes a ${ICON_SIDE} × ${ICON_SIDE} icon to the standard from it`);
       return 1;
@@ -452,5 +476,6 @@ function finishIcon(o: IconRun, png: Uint8Array, lines: string[], print: (line: 
   print(`  preview: ${previewPath} (the mask at ${PREVIEW_SIZES.join(", ")} dp on dark and light, and the zones)`);
   if (named) print(`  grain.json's "icon" names it: grain publish puts it into the network (the next version, if the app is published)`);
   else if (manifest && (manifest.manifest?.icon ?? manifest.icon) !== hash) print(`  grain.json's "icon" is another: set it to ${hash}`);
+  if (lint.errors.length > 0) o.onRefused?.(lint.reason ?? "check");
   return lint.errors.length === 0 ? 0 : 1;
 }

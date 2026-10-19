@@ -4,6 +4,31 @@
 
 ### Added
 
+- **A key file's first publish makes the app private in the same breath**: `grain publish --key owner.key` sends
+  `SetGrainAccess` private right behind `RegisterGrain`, with the next nonce, before the registration lands (the pool
+  takes a nonce ahead; a shard's registry calls reach the registry in their order), so the app is never public in
+  between and the publish takes one transaction's time, not two. What it sent is kept in `.grain/publish.json`
+  (`sent`, `private_pending`): a run cut short, or `--no-wait` (now taken with a key file too), is finished by the next
+  run, which waits for it rather than sending it again; a call that makes the app private and is lost is sent again
+  until the registry says private. `grain doctor` says what is on its way, and **public, but should be private** with
+  the fix; `grain access` in the project ends it.
+- **Waits said as they go** (`wait.ts`): a registry call, an owner's Saltix, an earlier run's transaction — what it waits
+  for, where it stands (in the pool, in a shard block on its way to the registry) and for how long; one line rewritten on
+  a terminal, a line when the stage changes and every 15 seconds elsewhere. A transaction is waited for 6 minutes (was
+  3). The docs state the times (about 1.5 to 2.5 minutes a registry call on the test network, up to about 6 for a first
+  publish) and tell coding agents to run such commands in the background, with a timeout of 10 minutes or more, or with
+  `--no-wait` and then `grain doctor`.
+- **`connect-template`**: `grain lint` warns, and `grain profile` refuses before anything is signed, a `connect.json`
+  whose tagline, about, privacy or highlights are still `grain init`'s words about its counter or hello chat.
+- **Who opens the app**, said once `grain publish` is done: anyone; its owner and members in Saltix; or, for a private
+  app a key file owns, nobody until a member is named, with the command that names one and the simulator to try it.
+- **`grain show --json`**: the registry's record and nothing else; without it, a summary in words.
+- `grain doctor` shows the fees of a first publish (the pool's floor for its two transactions) beside the deposit, and
+  checks `connect.json` (as `grain lint` does, the template's words included) until the registry can hold the profile;
+  it says whether the app is public or private.
+- `grain.json`'s `permissions` explained in every project's README and AGENTS.md, and in docs/agents/app.md.
+
+
 - **`grain dev --check`**: the simulator driven headless in the Chrome, Chromium, Edge or Brave of this computer
   (`CHROME_PATH`), over `--remote-debugging-pipe`, with a profile and a temporary directory it removes after: the
   Connect sheet, the page's load, then every screen it plays (a phone, one on its side, the Galaxy Z Fold's three sizes,
@@ -200,6 +225,26 @@
 
 ### Changed
 
+- **A new page project starts sealed**: `grain init` names the bundle `public/` makes in `grain.json`, as `grain publish`
+  will publish it, so `grain lint` has no placeholder host to warn of on every run and the simulator's Connect sheet
+  never calls the code changeable. An older project's placeholder origin is still sealed by `grain publish`, and lint
+  now says `grain bundle` seals it.
+- **`grain dev --check` judges the navigation bar by what stays there**: the simulator measures each tappable element as
+  the page opens and with everything scrolled to its end, and whether it is fixed or sticky to the bottom; such a pinned
+  element is a warning when it is under the bar as the page opens, one that scrolls with the page only when it is still
+  under the bar at the end. A button at a long page's fold is no longer a warning; a button fixed over the bar still is.
+- **`grain icon`**: a mark on transparency goes on a light (`#dfe4ec`) or a dark (`#262d38`) ground, whichever leaves
+  less of it faint, both apart from Saltix's white and its dark theme's `#121212` (were `#f2f4f7` and `#101820`, which
+  vanished into one theme each), so a two-colour mark keeps both. The monogram is bolder (a stroke 0.24 of its height,
+  was 0.17), with a tenth of it clear between two letters (they touched).
+- The way without a phone is told once, in docs/how-it-works.md's *No phone, test network* (the steps, how long each
+  takes, the access call and its window, who opens the app), and linked from the README, AGENTS.md,
+  docs/agents/app.md and every project's AGENTS.md and README; one rule for who signs: a key file signs an owner's
+  call by itself when its account owns the app, `--key` names one, `--wallet` asks Saltix.
+- docs/protocol/basics.md: an account's transactions in nonce order, several at once, and the beacon chain's time for
+  a registry call (08-node §2, 05-beacon §1, 06-licenses §4).
+
+
 - **`grain publish` with nothing changed publishes nothing**: what the registry holds already is compared with what it
   would sign in the manifest's canonical form (the owner, the version and the relays' copies aside), never signed
   again, its missing uploads finished, and with none it says "nothing to publish" and exits 0; a version is raised only
@@ -325,6 +370,16 @@
   (deflated, compressible ones could exceed that); a host may still compress the download on the wire.
 
 ### Fixed
+
+- The steps' log as docs/devex.md has it: an owner's call signed with a key file logs `registry` (`set`, `not_landed`,
+  `no_wait`), `grain profile` among them; an icon refused logs its reason (`alpha`, `hash`, …), not `checked`;
+  `doctor` with nothing left logs `done`; a command stopped by Ctrl-C or SIGTERM logs its `end` (`grain dev`: `ok`, any
+  other: `failed`, `sigint` or `sigterm`) and exits with the shell's status for the signal.
+- `grain publish` with a key file no longer says "grain pair lets the bundle go up before the owner signs": there is no
+  owner to wait for.
+- The docs' "and a fee" (doctor showed none), "the Connect profile" before registration (doctor checked none), and the
+  README's way without a phone, which missed `grain profile`.
+
 
 - **The simulator opens a sealed page**: after `grain publish` sealed `grain.json`, `grain dev`'s simulator looked for its
   start page beside the manifest (`/.well-known/index.html`, a 404); it opens it from the bundle's root now
