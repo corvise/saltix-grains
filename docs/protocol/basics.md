@@ -1,8 +1,9 @@
 # Basics: encodings, keys, addresses and amounts
 
 > Reflects Saltix 01-foundation v2 §3–§5 (approved 2026-10-10), 03-ledger §1–§3, 13-accounts §2–§7 and §11,
-> 21-names §3–§5a, 23-upgrades §6–§7 and 09-relay §1.5, as of corvise/saltix `7d3744c5` (2026-10-19). Only what an
-> app touches.
+> 21-names §3–§5a, 23-upgrades §6–§7, 09-relay §1.5, and of 08-node §2, 05-beacon §1 and 06-licenses §4 the order an
+> account's transactions and registry calls take, as of corvise/saltix `7d3744c5` (2026-10-19). Only what an app
+> touches.
 
 What every other page builds on. The [index](README.md#conventions) gives the notation (Borsh, `derive`, hex,
 base64url).
@@ -180,6 +181,15 @@ SignedTransaction { tx: Transaction, proof }    proof 0 Key([u8; 64]): the key's
 ```
 
 - At most 16 384 bytes signed. `transaction_submit` takes the hex of the signed Borsh; `transaction_get` follows it.
+- **In nonce order, several at once.** A block applies an account's transactions in the order of their nonces, each
+  the account's next. A node's pool takes one up to 64 nonces ahead of the account's (`account_get`'s `nonce`), so a
+  tool may send a call right behind another still in the pool, with the next nonce; the pool refuses a nonce used
+  already, too far ahead, or of a pending transaction it does not outbid (error `2`,
+  [wallet interface](wallet-interface.md#errors)).
+- **A registry call takes the beacon chain's time.** The account's shard takes the transaction and turns its call into
+  a receipt to the registry, which the beacon chain keeps; a shard's calls reach it in their order, so a call sent right
+  behind a registration applies after it, in the same beacon block or a later one. The registry holds what a call makes
+  once the shard block is linked into the beacon chain: about 1.5 to 2.5 minutes on the test network.
 - A `Text` memo is public on the chain forever, and holds no control character but the line feed and no bidirectional
   formatting character. An invoice's payment carries its reference there ([grains §5.2](grains.md#52-payments)).
 - The registry calls an app's owner sends are listed with their tags in [grains §3](grains.md#3-registry) and

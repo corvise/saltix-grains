@@ -93,7 +93,7 @@ test("one command's help keeps each note whole: never a sentence cut from a note
   // What the agent met: grain help init printed the owner's note from its middle on.
   const init = helpFor(HELP, "init");
   assert.doesNotMatch(init, /with a key file returns once it landed|built again once that landed/);
-  assert.match(helpFor(HELP, "profile"), /The owner's calls[\s\S]*--no-wait returns once the pool took it\./);
+  assert.match(helpFor(HELP, "profile"), /The owner's calls[\s\S]*--no-wait returns once the pool took it: a coding agent runs these in the background,[\s\S]*grain doctor\./);
 });
 
 test("--help on any command prints its help, exits 0 and leaves the directory as it was", () => {

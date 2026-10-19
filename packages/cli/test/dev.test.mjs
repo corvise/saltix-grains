@@ -195,3 +195,49 @@ test("grain dev logs that it serves, and what form, to the steps' log", async ()
     child.kill();
   }
 });
+
+test("grain dev stopped by Ctrl-C or SIGTERM ends its log with the stop; a wait cut short by one says it failed", async () => {
+  const { spawn } = await import("node:child_process");
+  const { readFileSync, existsSync } = await import("node:fs");
+  const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  const until = async (what, check) => {
+    const end = Date.now() + 10_000;
+    while (!check()) {
+      if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  };
+  for (const [signal, status] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    const dir = scratch("grain-dev-stop-");
+    mkdirSync(join(dir, "public"));
+    writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title>");
+    writeFileSync(join(dir, "grain.json"), JSON.stringify(hosted()));
+    writeFileSync(join(dir, "owner.key"), "62".repeat(32) + "\n", { mode: 0o600 });
+    const child = spawn("node", [main, "dev", "--port", "0"], { cwd: dir });
+    const exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
+    await until("the serve step", () => lines(dir).some((l) => l.step === "serve"));
+    child.kill(signal);
+    assert.equal(await exited, status, signal);
+    const last = lines(dir).at(-1);
+    assert.deepEqual([last.command, last.step, last.outcome, last.reason], ["dev", "end", "ok", signal.toLowerCase()], signal);
+  }
+  // A command that waits (grain publish for the owner's Saltix), stopped: its run was cut short.
+  const dir = scratch("grain-dev-stop-");
+  mkdirSync(join(dir, "public"));
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title>");
+  writeFileSync(join(dir, "grain.json"), JSON.stringify(hosted()));
+  const hang = (await import("node:http")).createServer(() => {});
+  await new Promise((r) => hang.listen(0, "127.0.0.1", r));
+  try {
+    const child = spawn("node", [main, "publish", "--node", `http://127.0.0.1:${hang.address().port}`], { cwd: dir });
+    const exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
+    await new Promise((r) => setTimeout(r, 500));
+    child.kill("SIGINT");
+    assert.equal(await exited, 130);
+    const last = lines(dir).at(-1);
+    assert.deepEqual([last.step, last.outcome, last.reason], ["end", "failed", "sigint"]);
+  } finally {
+    hang.closeAllConnections();
+    hang.close();
+  }
+});

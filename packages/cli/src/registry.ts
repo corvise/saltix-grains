@@ -26,6 +26,17 @@ export interface Sent {
   fee: bigint;
   /** What the call sent besides its fee: a registration's deposit. */
   amount: bigint;
+  /** The account's nonce it carries, and the last slot it is valid in. */
+  nonce: number;
+  validUntil: number;
+}
+
+export interface SubmitOptions {
+  /** The nonce to sign with, when it is not the account's next one: a call sent right behind another still in the pool
+   *  takes the one after it (the pool takes a transaction up to 64 nonces ahead, and the chain applies them in order). */
+  nonce?: number;
+  /** Base units of SALT the account must hold besides this call's value and fee: the fees of calls sent right after it. */
+  reserve?: bigint;
 }
 
 /** Base units of SALT as SALT, for people: `10`, `30.5`. */
@@ -85,7 +96,7 @@ export async function show(node: NodeLike, slug: string): Promise<RegisteredGrai
 
 /** Sign `call` with the key file's secret and submit it, after the network, the balance and the call's own bounds are
  *  checked: what a node would refuse is refused before a transaction is made. */
-export async function submit(call: GrainCall, secret: Uint8Array, s: Signing): Promise<Sent> {
+export async function submit(call: GrainCall, secret: Uint8Array, s: Signing, o: SubmitOptions = {}): Promise<Sent> {
   const status = await nodeCall<Status>(s.node, "node_status");
   if (s.genesis !== undefined && status.genesis !== s.genesis.toLowerCase()) {
     throw new Error(`the node is on genesis ${status.genesis}, not ${s.genesis}`);
@@ -94,20 +105,24 @@ export async function submit(call: GrainCall, secret: Uint8Array, s: Signing): P
   const account = await nodeCall<Account>(s.node, "account_get", { address: id });
   const fee = s.fee ?? minimumFee(call);
   const amount = callAmount(call);
-  if (BigInt(account.salt) < amount + fee) {
-    throw new Error(`the account has ${account.salt} base units of SALT; this needs ${amount + fee}`);
+  const needs = amount + fee + (o.reserve ?? 0n);
+  if (BigInt(account.salt) < needs) {
+    throw new Error(`the account has ${account.salt} base units of SALT; this needs ${needs}`);
   }
-  const signed = signGrainTx(secret, { nonce: account.nonce, fee, validUntilSlot: status.slot + s.validFor }, call, status.genesis);
+  const nonce = o.nonce ?? account.nonce;
+  const validUntil = status.slot + s.validFor;
+  const signed = signGrainTx(secret, { nonce, fee, validUntilSlot: validUntil }, call, status.genesis);
   const answer = await nodeCall<{ id: string }>(s.node, "transaction_submit", { transaction: signed.hex });
   const kind = (["register", "update", "retire", "configure", "access", "rate", "bind", "profile"] as const).find((k) => k in call)!;
-  return { call: kind, id: answer.id, fee, amount };
+  return { call: kind, id: answer.id, fee, amount, nonce, validUntil };
 }
 
-/** Wait until the registry shows `done`, at most `ms`, asking every `every` ms. */
-export async function waitFor(node: NodeLike, slug: string, done: (g: RegisteredGrain | null) => boolean, ms: number, every = 3000): Promise<boolean> {
+/** Wait until the registry shows `done`, at most `ms`, asking every `every` ms; `onWait` is told each time it does not. */
+export async function waitFor(node: NodeLike, slug: string, done: (g: RegisteredGrain | null) => boolean, ms: number, every = 3000, onWait?: () => void): Promise<boolean> {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     if (done(await grainGet(node, slug))) return true;
+    onWait?.();
     await new Promise((r) => setTimeout(r, every));
   }
   return false;
@@ -123,11 +138,11 @@ export async function walletLink(m: Manifest, node: NodeLike): Promise<string> {
 }
 
 /** The signed manifest once the registry holds `m` as a wallet published it (any owner key); null after `ms`. */
-export async function waitForPublished(node: NodeLike, m: Manifest, ms: number, every?: number): Promise<SignedManifest | null> {
+export async function waitForPublished(node: NodeLike, m: Manifest, ms: number, every?: number, onWait?: () => void): Promise<SignedManifest | null> {
   let found: SignedManifest | null = null;
   await waitFor(node, m.slug, (g) => {
     if (g?.manifest && g.retired === null && sameManifest(g.manifest.manifest, m)) found = g.manifest;
     return found !== null;
-  }, ms, every);
+  }, ms, every, onWait);
   return found;
 }

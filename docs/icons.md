@@ -70,8 +70,11 @@ for a drawing):
    - `crop` (the default for an opaque picture): covers the square, the overflow cut, centred;
    - `contain`: the whole picture, the rest the background.
 3. **Flattened** onto a background: `--background`, else the picture's corners' colour when they are opaque, else a
-   light ground (`#f2f4f7`) for a dark mark or a dark one (`#101820`) for a light mark, never the wallet's own pure white
-   or black, on which the icon's edge vanishes.
+   light ground (`#dfe4ec`) or a dark one (`#262d38`), whichever leaves less of the mark faint (each pixel's luminance
+   contrast with the ground, its faintness 1/contrast², weighted by its alpha): a dark mark gets the light ground and a
+   light one the dark, and a mark of two colours, say orange arrows over a navy ruler, keeps its navy part readable.
+   Both grounds stand apart from the two themes' own (a contrast of at least 1.25 with Saltix's white and with its dark
+   theme's `#121212`), so the icon's rounded square shows on either; a paler or a darker one would vanish into one.
 4. **Resampled** once, from the picture's own pixels, with a Lanczos filter; a picture upscaled by more than 1.5 times is
    said so (a larger one is sharper).
 5. **Written** in true colour when that fits 64 KiB, else with a palette (median cut refined by k-means, dithered first,
@@ -80,8 +83,9 @@ for a drawing):
 Written to the project's `icon.png` (or `public/icon.png`), the icon is the one `grain.json` names from then on; the next
 `grain publish` makes it the app's next version.
 
-**With no picture** (`--monogram`): one or two letters or digits (A–Z, 0–9) drawn bold, centred, their box's corners
-inside the keyline circle, on `--background` or else one of eight tints the slug picks (the same one every time, never
+**With no picture** (`--monogram`): one or two letters or digits (A–Z, 0–9) drawn bold (a stroke 0.24 of their height,
+with a tenth of it clear between two letters, so a letter still reads at 24 dp), centred, their box's corners inside
+the keyline circle, on `--background` or else one of eight tints the slug picks (the same one every time, never
 the wallet's own white or black); the ink is white where it reads (a contrast of 3 or more), else a dark blue. The
 letters come from a stroke font of the tool's own, so the same letters on the same colour are the same bytes on any
 computer, with no font installed. Written to the project's `icon.png` unless `--out` says, checked and named in

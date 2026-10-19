@@ -232,7 +232,8 @@ Publish space-game v2: scan the QR code with the app owner's Saltix (the phone's
   link  salt:grain-publish?m=…
 Waiting for the owner's Saltix and the registry… (Ctrl-C stops; grain publish again goes on from here)
 icon: in the network
-space-game v2 is published, its bundle in the network; signed.json written. Saltix opens it from the Apps section (or salt:grain/space-game).
+space-game v2 is published, its bundle in the network; signed.json written.
+It is private: its owner alone opens it in Saltix (My apps → space-game, or salt:grain/space-game); My apps → space-game → Access adds members or makes it public. …
 ```
 
 What happens, step by step:

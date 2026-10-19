@@ -46,7 +46,10 @@ export interface Measure {
     color: string;
     rootBackground: string;
   } | null;
-  tappables: Array<{ name: string; box: Box }>;
+  /** What a user can tap: its box as the page opens (scrolled to its top), whether it stays there as the page scrolls
+   *  (`pinned`: it or an element around it is fixed, or sticky to the bottom), and its box with the page scrolled to its
+   *  end (`end`, null when nothing scrolls; absent from an older simulator). */
+  tappables: Array<{ name: string; box: Box; pinned?: boolean; end?: Box | null }>;
 }
 
 /** The Connect sheet as the simulator drew it. */
@@ -90,6 +93,23 @@ export interface CheckFinding {
 export const overlap = (a: Box, b: Box, tolerance = 1): boolean =>
   Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > tolerance &&
   Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > tolerance;
+
+/**
+ * Whether a tappable element stays under the status bar: measured as the page opens, scrolled to its top, which is as
+ * low as an element that scrolls with the page ever gets, and where a fixed or sticky one stays.
+ */
+export const underStatusBar = (t: Measure["tappables"][number], status: Box): boolean => overlap(t.box, status);
+
+/**
+ * Whether a tappable element stays under the navigation bar, where a tap goes to the system. One fixed, or sticky to
+ * the bottom (`pinned`), stays where it is as the page opens while the page scrolls under it: judged there (a bar pinned
+ * to the bottom with no padding for the navigation bar). Any other moves up as the page scrolls (one sticky to the top
+ * too, until it sticks there): judged with the page scrolled to its end, as high as a user can bring it, so only a page
+ * with no room below it keeps it under the bar. A button at a long page's fold is not: the page scrolls it clear.
+ */
+export function underNavigationBar(t: Measure["tappables"][number], nav: Box): boolean {
+  return overlap(t.pinned === true ? t.box : t.end ?? t.box, nav);
+}
 
 /** Whether a page is laid out edge to edge (it declares viewport-fit=cover), by the simulator's own words. */
 const edgeToEdge = (m: Measure): boolean => /^Edge to edge/.test(m.mode);
@@ -143,8 +163,8 @@ export function judge(run: CheckRun): CheckFinding[] {
       const status = { x: 0, y: 0, width: m.phone.width, height: m.bars.top };
       const nav = { x: 0, y: m.phone.height - m.bars.bottom, width: m.phone.width, height: m.bars.bottom };
       for (const t of m.tappables) {
-        if (m.bars.top > 0 && overlap(t.box, status)) add("warning", "bars", `${t.name} is under the status bar: pad by --saltix-safe-top`, where);
-        if (m.bars.bottom > 0 && overlap(t.box, nav)) add("warning", "bars", `${t.name} is under the navigation bar: pad by --saltix-safe-bottom`, where);
+        if (m.bars.top > 0 && underStatusBar(t, status)) add("warning", "bars", `${t.name} is under the status bar: pad by --saltix-safe-top`, where);
+        if (m.bars.bottom > 0 && underNavigationBar(t, nav)) add("warning", "bars", `${t.name} is under the navigation bar: pad by --saltix-safe-bottom`, where);
       }
     }
     if (m.page.scrollWidth > m.page.clientWidth + 1) {

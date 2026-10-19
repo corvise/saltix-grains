@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { findBrowser } from "../dist/browser.js";
-import { checkReason, findingLines, judge, overlap } from "../dist/check.js";
+import { checkReason, findingLines, judge, overlap, underNavigationBar, underStatusBar } from "../dist/check.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -83,6 +83,46 @@ test("a page that does not open, throws, or a Connect profile a wallet refuses i
   assert.ok(!judge(run({ measures: [safe, light(safe)] })).some((f) => f.what === "bars"));
 });
 
+test("the navigation bar: what is pinned there stays a warning; a button at a long page's fold that scrolls clear is none", () => {
+  // The phone of `measure()`: 753 px tall, its navigation bar the last 25 (from y 728).
+  const nav = { x: 0, y: 728, width: 477, height: 25 };
+  const status = { x: 0, y: 0, width: 477, height: 33 };
+  const atFold = { x: 17, y: 700, width: 443, height: 42 };
+  const scrolledUp = { x: 17, y: 420, width: 443, height: 42 };
+  const barsOf = (tappables) => judge(run({ measures: [measure({ tappables })] })).filter((f) => f.what === "bars").map((f) => f.detail);
+  // A long page: its button sits at the fold as it opens, and the page scrolls it clear of the bar. No warning.
+  const fold = { name: 'button#next "Next"', box: atFold, pinned: false, end: scrolledUp };
+  assert.equal(underNavigationBar(fold, nav), false);
+  assert.deepEqual(barsOf([fold]), []);
+  // The same button on a page with no room below it: still under the bar with the page scrolled to its end.
+  const stuck = { ...fold, end: atFold };
+  assert.equal(underNavigationBar(stuck, nav), true);
+  assert.match(barsOf([stuck])[0], /^button#next "Next" is under the navigation bar: pad by --saltix-safe-bottom/);
+  // A page that does not scroll: where it is, it stays.
+  assert.equal(underNavigationBar({ ...fold, end: null }, nav), true);
+  // A button fixed to the bottom with no padding: under the bar at every scroll. A warning, whatever the page does.
+  const fixed = { name: 'button#buy "Buy"', box: { x: 0, y: 711, width: 477, height: 42 }, pinned: true, end: { x: 0, y: 711, width: 477, height: 42 } };
+  assert.equal(underNavigationBar(fixed, nav), true);
+  assert.match(barsOf([fixed])[0], /^button#buy "Buy" is under the navigation bar/);
+  // A bar sticky to the bottom: under the navigation bar as the page opens and while it scrolls, though at the scroll's
+  // end it rests at its place above the page's padding. A warning: most of the time a tap there goes to the system.
+  const stickyBottom = { name: "button#checkout", box: { x: 0, y: 711, width: 477, height: 42 }, pinned: true, end: { x: 0, y: 600, width: 477, height: 42 } };
+  assert.equal(underNavigationBar(stickyBottom, nav), true);
+  // A bar sticky to the top (not pinned low: it scrolls up until it sticks there), which a long page's opening shows at
+  // its place near the bottom: clear once the page scrolls. No warning.
+  const stickyTop = { name: "nav#tabs", box: { x: 0, y: 720, width: 477, height: 48 }, pinned: false, end: { x: 0, y: 33, width: 477, height: 48 } };
+  assert.equal(underNavigationBar(stickyTop, nav), false);
+  // Padded by the inset: clear of the bar at once.
+  assert.equal(underNavigationBar({ ...fixed, box: { ...fixed.box, y: 686 }, end: { ...fixed.box, y: 686 } }, nav), false);
+  // An older simulator, which measured no scroll: judged where it is, as before.
+  assert.equal(underNavigationBar({ name: "a", box: atFold }, nav), true);
+  // The status bar: an element that scrolls with the page is at its lowest as the page opens, so under it then is under
+  // it for good; a pinned one stays there.
+  const top = { name: "a#home", box: { x: 10, y: 5, width: 40, height: 20 }, pinned: false, end: { x: 10, y: -400, width: 40, height: 20 } };
+  assert.equal(underStatusBar(top, status), true);
+  assert.equal(underStatusBar({ ...top, box: { ...top.box, y: 40 } }, status), false);
+});
+
 test("the browser: CHROME_PATH first, then the system's usual places; none is said, never guessed", () => {
   const has = (paths) => (p) => paths.includes(p);
   assert.equal(findBrowser({ CHROME_PATH: "/opt/chrome" }, "linux", has(["/opt/chrome"])), "/opt/chrome");
@@ -126,7 +166,8 @@ test("a fresh page passes in a real browser: the sheet, the page, six screens in
   const r = check(dir);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /^ok {4}connect sheet  shown with connect\.json's profile and the monogram/m);
-  assert.match(r.stdout, /^ok {4}open {11}the page loaded \(\/, "Dice"\)$/m);
+  // A new project is sealed from the start: the simulator opens its start page from the bundle's root.
+  assert.match(r.stdout, /^ok {4}open {11}the page loaded \(\/index\.html, "Dice"\)$/m);
   assert.match(r.stdout, /^next: nothing: the page checks at every screen in both themes/m);
   const report = reportOf(dir);
   assert.equal(report.run.measures.length, 12);
@@ -163,6 +204,43 @@ test("a real browser finds a button under the controls, a page that throws, and 
   const gone = check(missing);
   assert.equal(gone.status, 1, gone.stdout);
   assert.match(gone.stdout, /^error open {11}http:\/\/127\.0\.0\.1:\d+\/nowhere\.html answered 404/m);
+});
+
+test("a real browser: a long page's button at the fold is fine, a button fixed over the navigation bar is not", live, () => {
+  // A long page with a button at the fold as it opens (its top 20 px above the screen's bottom edge, over the
+  // navigation bar), which the page scrolls clear of the bar.
+  const long = page((dir) => {
+    const html = readFileSync(join(dir, "public", "index.html"), "utf8")
+      .replace("<body>", '<body>\n  <div style="height:calc(100vh - 20px)"></div><button id="next" style="display:block">Next</button><div style="height:60vh"></div>');
+    writeFileSync(join(dir, "public", "index.html"), html);
+  });
+  const fine = check(long);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  assert.doesNotMatch(fine.stdout, /under the navigation bar/, "a button the page scrolls clear of the bar");
+  const report = reportOf(long);
+  const atFold = report.run.measures.filter((m) => m.bars.bottom > 0).map((m) => [m, m.tappables.find((t) => t.name.startsWith("button#next"))]);
+  assert.ok(atFold.length > 0);
+  for (const [m, t] of atFold) {
+    assert.equal(t.pinned, false);
+    assert.ok(overlap(t.box, { x: 0, y: m.phone.height - m.bars.bottom, width: m.phone.width, height: m.bars.bottom }), `${m.device}: over the bar as the page opens`);
+    assert.ok(t.end && t.end.y < t.box.y, `${m.device}: measured again with the page scrolled to its end`);
+  }
+  // A button fixed to the bottom of an edge-to-edge page, with no padding for the bar, and one in a bar sticky to the
+  // bottom: warnings at every screen. The page's own sticky top bar is not pinned low: it scrolls up until it sticks.
+  const fixed = page((dir) => {
+    const html = readFileSync(join(dir, "public", "index.html"), "utf8")
+      .replace("<header>", '<header><a id="home" href="#">Home</a>')
+      .replace("</main>", '<div style="height:150vh"></div><div style="position:sticky;bottom:0"><button id="pay" style="margin:0">Pay</button></div></main>' +
+        '<button id="buy" style="position:fixed;left:0;right:0;bottom:0;width:100%;margin:0">Buy</button>');
+    writeFileSync(join(dir, "public", "index.html"), html);
+  });
+  const warned = check(fixed);
+  assert.equal(warned.status, 0, warned.stdout + warned.stderr);
+  assert.match(warned.stdout, /^warn {2}bars {11}button#buy "Buy" is under the navigation bar: pad by --saltix-safe-bottom/m);
+  assert.match(warned.stdout, /^warn {2}bars {11}button#pay "Pay" is under the navigation bar/m);
+  const phone = reportOf(fixed).run.measures.find((m) => m.device === "phone").tappables;
+  const pinned = (name) => phone.find((t) => t.name.startsWith(name)).pinned;
+  assert.deepEqual([pinned("button#buy"), pinned("button#pay"), pinned("a#home")], [true, true, false]);
 });
 
 test("a sealed page, as grain publish leaves grain.json, opens in the simulator from the bundle's root, its icon on the sheet", live, () => {

@@ -169,16 +169,20 @@ How to write a good one:
   its user; so is a link to a host reserved for examples (`splitbill.example` above, `example.com`, `.test`), which
   leads nowhere: the app's own links, or `null` for none (`grain init` writes `null`).
 - **Ask only for what you use.** Every permission is a row on the sheet, and `address` and `notifications` are switches
-  users may leave off. `grain lint` warns about a permission nothing in the app's sources uses.
+  users may leave off. `grain.json`'s `permissions` is the sum of their bits: 1 storage (`grain.storage`), 2 relay
+  (`grain.relay`), 4 notifications, 8 camera, 16 microphone, 32 location, 64 address (`grain.requestAddress`); `grain
+  init`'s page asks for 1. `grain lint` warns about a permission nothing in the app's sources uses.
 
 `grain lint` checks every rule of the format with the field and its limit, the privacy summary, the icon file
 (`icon.png` or `public/icon.png`: a 512 × 512 PNG whose hash `grain.json` names) and the link's length for a QR code.
-`grain profile` sets it once the app is registered: a QR code the owner's Saltix scans (it fills in its account and the
-registry's revision and one, shows the profile as the sheet will, and signs after the PIN), or `--key owner.key` on the
-test network. The owner may also write it in Saltix's app studio (My apps → the app → Connect profile). `grain show`
-prints the registry's profile and whether a wallet takes it. `grain dev`'s simulator shows a preview of the sheet from
-`connect.json` and the manifest, with the project's icon, before the app opens (**Show it again** after a change);
-`grain dev --check` reports a profile a wallet would refuse.
+`grain init`'s `connect.json` describes the counter it makes: rewrite it for your app, as `grain lint` says until you do
+(`connect-template`); `grain profile` refuses those words. `grain profile` sets it once the app is registered: a QR code
+the owner's Saltix scans (it fills in its account and the registry's revision and one, shows the profile as the sheet
+will, and signs after the PIN), or, on the test network, the key file that owns the app signs it by itself. The owner
+may also write it in Saltix's app studio (My apps → the app → Connect profile). `grain show` prints the registry's
+profile and whether a wallet takes it. `grain dev`'s simulator shows a preview of the sheet from `connect.json` and the
+manifest, with the project's icon, before the app opens (**Show it again** after a change); `grain dev --check` reports
+a profile a wallet would refuse.
 
 ## Handlers and cards: `server.mjs`
 
@@ -386,13 +390,19 @@ publish" and sends nothing (no fee, no QR code); a change to `public/` or `grain
 
 ### No phone, test network
 
-When nobody's phone is at hand, on Saltix's test network only: `npx grain doctor` (the deposit, and what `owner.key`'s
-account holds), `npx grain faucet --wait` (test SALT for it), `npx grain publish --key owner.key` (the owner it will be,
-then registered, made private, the bundle and the icon put into the network), `npx grain profile` (signed by
-`owner.key`, the app's owner now), and `npx grain access --slug <slug> --public --key owner.key` (or `--private --member
-dsalt1…:user`) for testers. The app is then the key file's account's, not a person's: say so to the user, and make an
-app people will use in Saltix instead ([how it works](../how-it-works.md#no-phone-test-network)). Never pass `--key`
-for an app the user made in Saltix: it is refused, and their Saltix signs from the QR code.
+When nobody's phone is at hand, on Saltix's test network only, [No phone, test
+network](../how-it-works.md#no-phone-test-network) is the whole way: `grain doctor`, `grain faucet --wait`, `grain
+publish --key owner.key`, `grain profile`, `grain access`. What an agent adds to it:
+
+- **Give the chain its time.** Each registry call lands in about 1.5 to 2.5 minutes on the test network, and a first
+  `grain publish --key owner.key` takes about 2 to 4, up to about 6. Run it in the background, or with a tool timeout of
+  10 minutes or more; or pass `--no-wait` (it returns once the pool took the transactions), then run `grain doctor`
+  until it no longer says they are on their way, and `grain publish` again for the bundle and the icon. A command cut
+  short is never sent twice: the next run waits for what it sent.
+- **Say whose the app is and who can open it.** It is the key file's account's, not a person's, and private: nobody
+  opens it until `grain access --slug <slug> --private --member <their Saltix address>:user` names someone (the user's
+  address: Saltix → Receive), or `--public`. Tell the user so, and that an app people will use is made in Saltix.
+- **Never pass `--key` for an app the user made in Saltix**: it is refused, and their Saltix signs from the QR code.
 
 ## Ship
 

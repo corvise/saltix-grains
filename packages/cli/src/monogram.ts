@@ -95,7 +95,10 @@ const toLinear = (v: number) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 25
 const toSrgb = (v: number) => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
 
 /** sRGB's relative luminance of a colour (WCAG), 0 to 1. */
-const luminance = (c: Colour) => 0.2126 * toLinear(c[0]) + 0.7152 * toLinear(c[1]) + 0.0722 * toLinear(c[2]);
+export const luminance = (c: Colour) => 0.2126 * toLinear(c[0]) + 0.7152 * toLinear(c[1]) + 0.0722 * toLinear(c[2]);
+
+/** WCAG's contrast ratio of two relative luminances, 1 to 21. */
+export const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
 /** The ink on `ground`: white wherever it reads (a contrast of 3 at least, WCAG's for large marks), else a dark blue. */
 export function inkFor(ground: Colour): Colour {
@@ -103,10 +106,10 @@ export function inkFor(ground: Colour): Colour {
   return contrast >= 3 ? [255, 255, 255] : [0x0b, 0x10, 0x20];
 }
 
-/** The stroke's width, as a share of the letters' height. */
-const STROKE = 0.17;
-/** The space between two letters, as a share of their height. */
-const GAP = 0.16;
+/** The stroke's width, as a share of the letters' height: bold, so that a letter still reads at 24 dp. */
+export const STROKE = 0.24;
+/** The space between two letters' centre lines, as a share of their height: a tenth of it clear between their strokes. */
+const GAP = STROKE + 0.1;
 /** How far from the centre the letters reach at most, as a share of the side: inside the keyline circle (5/12) with room. */
 const REACH = (5 / 12) * 0.88;
 

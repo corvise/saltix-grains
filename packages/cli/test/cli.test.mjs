@@ -14,6 +14,8 @@ import { publish, retire, walletLink, waitForPublished } from "../dist/registry.
 import { serve, simulatorFor } from "../dist/dev.js";
 import { lintPages, TOP_BAR_RULE, COVER_RULE, GATE_RULE, shownBeforeSignIn } from "../dist/pages.js";
 import { FULL_SCREEN_RULE } from "../dist/template.js";
+import { makeBundle } from "../dist/bundle.js";
+import { TEMPLATE_RULE } from "../dist/connect.js";
 import { publishLink, publishLinkManifest } from "../dist/publish.js";
 import { encodeManifest } from "@saltix/grain-server";
 import { scratch } from "../../../scripts/scratch.mjs";
@@ -315,6 +317,13 @@ test("init makes a project the owner alone can sign for", () => {
   assert.ok(!existsSync(join(dir, "both")), "nothing made");
   const linted = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
   assert.ok(!linted.includes(TOP_BAR_RULE), linted);
+  // Sealed from the start, as grain publish will publish it: no placeholder host to be told about, nothing hosted for
+  // the Connect sheet to warn of; and connect.json is the template's until it is written for the app.
+  const sealed = JSON.parse(readFileSync(join(dir, "dice", "grain.json"), "utf8")).entry.sealed;
+  assert.deepEqual(sealed, { bundle: makeBundle(join(dir, "dice", "public")).hash, size: sealed.size, sources: [], start: "index.html", connect: [] });
+  assert.doesNotMatch(linted, /placeholder|\.example/);
+  assert.match(linted, new RegExp(`^warning: ${TEMPLATE_RULE}: connect\\.json: texts\\.en: tagline, about, highlights and privacy are grain init's words for the counter it makes, not this app's`, "m"));
+  assert.ok(!existsSync(join(dir, "dice", "bundle.zip")), "no bundle written: grain.json names what public/ makes");
   // The page's script reads as a module, and the bridge it imports has the layout.
   writeFileSync(join(dir, "app.mjs"), readFileSync(join(dir, "dice", "public", "app.js")));
   execFileSync("node", ["--check", join(dir, "app.mjs")], { stdio: "pipe" });
@@ -341,10 +350,11 @@ test("init makes a project the owner alone can sign for", () => {
   assert.equal(m.owner, toHex(accountId(ed25519.getPublicKey(key))));
   assert.ok(verifyManifest(signedFor(join(dir, "dice", "grain.json"), key)));
   assert.throws(() => execFileSync("node", [main, "init", join(dir, "dice")], { stdio: "pipe" }), "not over an existing grain");
-  // grain init's placeholder origin names no page anyone hosts: lint says so, grain sign refuses it.
+  // An older grain init's placeholder origin names no page anyone hosts: lint says so and what seals it, grain sign
+  // refuses it.
   writeFileSync(join(dir, "dice", "grain.json"), JSON.stringify({ ...m, entry: { hosted: { url: "https://dice.example/", origins: ["https://dice.example"] } } }));
   const placeholder = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
-  assert.match(placeholder, /^warning: entry: https:\/\/dice\.example\/ is grain init's placeholder \(an example domain, no host\): grain publish seals public\/ into the network in its place/m);
+  assert.match(placeholder, /^warning: entry: https:\/\/dice\.example\/ is an older grain init's placeholder \(an example domain, no host\): grain publish seals public\/ into the network in its place, and grain bundle seals it now/m);
   assert.throws(() => execFileSync("node", [main, "sign"], { cwd: join(dir, "dice"), stdio: "pipe" }),
     (e) => e.status === 1 && /grain sign is for a page at your own https origin/.test(String(e.stderr)));
   assert.ok(!existsSync(join(dir, "dice", "signed.json")));

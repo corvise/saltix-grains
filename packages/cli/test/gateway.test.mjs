@@ -82,10 +82,12 @@ test("a command goes to a relay's gateway trusted by its pin; another certificat
   const dir = project();
   const shown = await grain(["show", "--slug", "chess", "--relay", g.relay], dir);
   assert.equal(shown.code, 0, shown.stderr);
-  // The record as JSON, then a line in words: the network it is on, and its version and access.
-  assert.equal(JSON.parse(shown.stdout.slice(0, shown.stdout.indexOf("\n}\n") + 2)).version, 2);
-  assert.match(shown.stdout, /^chess on devnet [0-9a-f]{16}: v2, public$/m);
+  // A line in words first: the network it is on, and its version and access; the record as JSON with --json alone.
+  assert.match(shown.stdout.split("\n")[0], /^chess on devnet [0-9a-f]{16}: v2, public$/);
   assert.deepEqual(g.asked.map((a) => `${a.path} ${a.method}`), ["POST /rpc node_status", "POST /rpc grain_get"]);
+  const json = await grain(["show", "--slug", "chess", "--json", "--relay", g.relay], dir);
+  assert.equal(json.code, 0, json.stderr);
+  assert.equal(JSON.parse(json.stdout).version, 2);
   // A free slug: the deposit registering it keeps, in words, and exit 0: the question was answered.
   const empty = await gateway({});
   t.after(() => empty.close());

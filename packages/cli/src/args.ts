@@ -35,7 +35,7 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   bundle: ["sources", "start", "connect", "out", "dir", "manifest"],
   publish: [...OWNER, "manifest", "out", "hosted", "app-key"],
   retire: ["slug", ...KEYED],
-  show: ["slug", ...NET, "out"],
+  show: ["slug", ...NET, "out", "json"],
   "chat-spec": ["spec", "cert", "out", "manifest", "key"],
   cert: ["server", "server-key", "slug", "days", "out", "manifest", "key"],
   configure: ["slug", "server", "revoke-all", "category", ...OWNER],
