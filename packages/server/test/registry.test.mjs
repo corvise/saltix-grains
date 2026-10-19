@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import {
   encodeGrainTx, grainTxId, signGrainTx, minimumFee, fromHex, toHex, sameManifest, grainDeposit, grainCallProblem, callAmount,
   parseRoles, roleNames, categoryOf, accountId, parseHandle, displayHandle, encodeHandle, handleProblem, GRAIN_DEPOSIT, ROLES,
+  serverKeyProofPayload, verifyServerKeyProof,
 } from "../dist/index.js";
 import { ed25519 } from "@noble/curves/ed25519";
 
@@ -21,7 +22,9 @@ const callOf = (c) => {
     case "register_grain": return { register: c.manifest };
     case "update_grain": return { update: c.manifest };
     case "retire_grain": return { retire: c.slug };
-    case "configure_grain": return { configure: { slug: c.slug, servers: c.servers, category: c.category } };
+    case "configure_grain": return c.tag === 39
+      ? { configureProven: { slug: c.slug, servers: c.servers.map((s) => ({ key: s.key, proof: s.proof })), category: c.category } }
+      : { configure: { slug: c.slug, servers: c.servers, category: c.category } };
     case "set_grain_access": return { access: { slug: c.slug, public: c.public, members: c.members } };
     case "rate_grain": return { rate: { slug: c.slug, score: c.score, review: c.review } };
     default: throw new Error(`a call of the vectors: ${c.call}`);
@@ -31,7 +34,7 @@ const sender = (hex) => hex.slice(2, 66);
 
 test("registry transactions are the node's", () => {
   const r = v.registry;
-  assert.deepEqual(r.transactions.map((t) => t.name), ["register", "update", "retire", "register-chat", "configure", "access", "rate"]);
+  assert.deepEqual(r.transactions.map((t) => t.name), ["register", "update", "retire", "register-chat", "configure", "configure-v2", "access", "rate"]);
   assert.equal(toHex(ed25519.getPublicKey(RATER)), sender(r.transactions.find((t) => t.name === "rate").transaction_hex));
   for (const t of r.transactions) {
     const key = t.name === "rate" ? RATER : secret;
@@ -47,6 +50,17 @@ test("registry transactions are the node's", () => {
     assert.ok(minimumFee(call) >= BigInt(t.signed_hex.length / 2) * 10n);
   }
   assert.equal(r.deposit, "100000000000");
+  // Version 2's call names each key with its proof over (genesis, slug, owner), the call's sender (24-app-studio §2): the
+  // same proof a paired key's answer carries (§3a).
+  const v2 = r.transactions.find((t) => t.name === "configure-v2");
+  const owner = toHex(accountId(ed25519.getPublicKey(secret)));
+  for (const s of v2.call.servers) {
+    assert.equal(toHex(serverKeyProofPayload(r.genesis_hash, v2.call.slug, owner)), s.signed_payload_hex);
+    assert.ok(verifyServerKeyProof(s.key, s.proof, r.genesis_hash, v2.call.slug, owner));
+    assert.ok(!verifyServerKeyProof(s.key, s.proof, r.genesis_hash, "chess-bot", owner), "another app");
+    assert.ok(!verifyServerKeyProof(s.key, s.proof, r.genesis_hash, v2.call.slug, "00".repeat(32)), "another owner");
+  }
+  assert.match(grainCallProblem({ configureProven: { slug: "chess", servers: [{ key: v2.call.servers[0].key, proof: "ab" }], category: 4 } }), /proof/);
 });
 
 test("the deposit follows the slug's length, and a registration sends the node's quote", () => {

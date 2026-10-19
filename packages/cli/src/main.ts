@@ -26,6 +26,9 @@ import * as template from "./template.js";
 import * as chatTemplate from "./chat-template.js";
 import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
 import { UsageError, helpFor, parse } from "./args.js";
+import { DevLog, reasonOf } from "./devlog.js";
+import { pair } from "./pair.js";
+import { doctor, keyState } from "./status.js";
 
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
@@ -83,6 +86,21 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            rate someone else's grain (0 withdraws your rating); public, by account
   grain bind --handle @name --slug S       (or --clear) point a username you hold at your grain: @name opens
                                            its chat
+  grain pair [--slug S] [--name N] [--new] [--no-wait] [--timeout 600]
+                                           pair this computer's server with its app in the owner's Saltix by a QR
+                                           code: the key is made here and never leaves it (.grain/pair.key, then
+                                           app.key, owner-only, and app.json); it answers the phone, waits until the
+                                           registry names the key and writes them. The slug is grain.json's unless
+                                           --slug; --name names a new app; --new pairs a new key (to rotate it);
+                                           --no-wait shows the offer and returns
+  grain status [--json]                    whether this project's server is paired with its app (paired, pairing,
+                                           unpaired, revoked, replaced, retired, unregistered, other_network) and the
+                                           command to run next; exit 0 only when paired
+  grain doctor [--json]                    the project's state and the exact next step: the key, .gitignore, the
+                                           chat spec, dependencies, the bundle, what the registry holds, the Connect
+                                           profile; exit 0 when nothing is left to do
+  Every command run in an app's project logs its steps to .grain/log.jsonl: codes and timings, never a key, an
+  address or anything typed (SALTIX_GRAIN_LOG=off turns it off).
   grain app-key [--file F] [--offline]     a developer key's public parts (from SALTIX_APP_KEY, --file or stdin),
                                            and whether its network's registry names it; never the secret
   grain app-key make --slug S [--server server.key] [--out app.key]
@@ -171,7 +189,7 @@ async function stdinText(): Promise<string | undefined> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-async function main(argv: string[]): Promise<number> {
+async function main(argv: string[], log: DevLog): Promise<number> {
   const { command, topic, positional, flags, all } = parse(argv);
   const manifestPath = text(flags, "manifest", MANIFEST_FILE);
   /** Where the command reaches the network: the public relays by default, --relay, or --node. */
@@ -189,6 +207,7 @@ async function main(argv: string[]): Promise<number> {
       if (existsSync(join(dir, MANIFEST_FILE))) throw new Error(`${join(dir, MANIFEST_FILE)} exists already`);
       const chat = flags.get("chat") === true;
       mkdirSync(chat ? dir : join(dir, "public"), { recursive: true });
+      log.at(dir);
       const ownerKey = newKey(join(dir, KEY_FILE));
       const manifest: Manifest = {
         slug, version: 1, ...ownerOf(ownerKey), name: { en: name }, description: { en: "" }, icon: "00".repeat(32),
@@ -213,10 +232,11 @@ async function main(argv: string[]): Promise<number> {
         writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
-        console.log(`next: make the app in Saltix (Apps → My apps → New app, slug ${slug}) and put its developer key in app.key ` +
-          `(owner-only, never on the command line); then npm install && npm start in ${dir}`);
+        console.log(`next: npm install, then grain pair in ${dir}: scan its QR code with your Saltix, which makes the app ` +
+          `${slug} (or pairs it, if it is yours already); then npm start. The server's key is made here and never leaves it`);
         console.log(`  or on the test network, with owner.key: grain faucet --wait, grain publish, grain cert init, ` +
           `grain configure --slug ${slug} --server server.key, grain app-key make --slug ${slug}`);
+        log.step("init", "ok", "chat");
         return 0;
       }
       writeFileSync(join(dir, "public", "index.html"), template.indexHtml(name));
@@ -226,6 +246,7 @@ async function main(argv: string[]): Promise<number> {
       writeFileSync(join(dir, "README.md"), template.readme(slug));
       console.log(`a grain "${slug}" in ${dir}; owner key ${ownerKey} in ${KEY_FILE} (keep it secret)`);
       console.log("next: grain dev");
+      log.step("init", "ok", "page");
       return 0;
     }
     case "dev": {
@@ -460,6 +481,44 @@ async function main(argv: string[]): Promise<number> {
       console.log(JSON.stringify(described, null, 2));
       return described.registered === false ? 1 : 0;
     }
+    case "pair": {
+      const r = reach();
+      const given = flags.get("timeout");
+      return pair({
+        dir: process.cwd(), node: r.node, flags: r.flags, log,
+        slug: typeof flags.get("slug") === "string" ? (flags.get("slug") as string) : undefined,
+        name: typeof flags.get("name") === "string" ? (flags.get("name") as string) : undefined,
+        fresh: flags.get("new") === true, wait: flags.get("no-wait") !== true,
+        timeoutMs: Number(typeof given === "string" ? given : "600") * 1000, tty: process.stdout.isTTY === true,
+      });
+    }
+    case "status": {
+      const r = reach();
+      const state = await keyState(process.cwd(), r.node, r.flags);
+      log.step("status", state.status === "paired" ? "ok" : "refused", state.status);
+      if (flags.get("json") === true) {
+        const { grain: _grain, ...shown } = state;
+        console.log(JSON.stringify(shown, null, 2));
+      } else {
+        console.log(`status: ${state.status}`);
+        console.log(`  ${state.detail}`);
+        console.log(`next: ${state.next ?? "nothing: the server is paired (npm start runs it; grain doctor checks the rest)"}`);
+      }
+      return state.status === "paired" ? 0 : 1;
+    }
+    case "doctor": {
+      const r = reach();
+      const { state, findings } = await doctor(process.cwd(), r.node, r.flags);
+      const first = findings.find((f) => !f.ok);
+      log.step("doctor", first ? "refused" : "ok", first ? `${first.what.replace(/ /g, "_")}` : undefined);
+      if (flags.get("json") === true) {
+        console.log(JSON.stringify({ status: state.status, findings, next: first?.next ?? null }, null, 2));
+      } else {
+        for (const f of findings) console.log(`${f.ok ? "ok " : "fix"}  ${f.what.padEnd(15)} ${f.detail}${f.ok || !f.next ? "" : ` → ${f.next}`}`);
+        console.log(`next: ${first?.next ?? "nothing: the server is paired and the project is in order"}`);
+      }
+      return first ? 1 : 0;
+    }
     case "sponsor": {
       const sponsorKey = text(flags, "key", SPONSOR_KEY_FILE);
       const sub = positional[0] ?? "show";
@@ -563,8 +622,30 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-main(process.argv.slice(2)).then((code) => { if (code !== 0) process.exitCode = code; }, (e) => {
+/** This tool's version, for the steps' log. */
+const toolVersion = (): string => {
+  try {
+    return (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
+  } catch {
+    return "unknown";
+  }
+};
+
+const argv = process.argv.slice(2);
+let commandName = "other";
+try {
+  commandName = parse(argv).command;
+} catch {
+  // A misuse is still logged, as "other": main says what was wrong.
+}
+const log = new DevLog(process.cwd(), commandName, toolVersion());
+main(argv, log).then((code) => {
+  log.end(code);
+  if (code !== 0) process.exitCode = code;
+}, (e) => {
+  const exit = e instanceof UsageError ? 2 : 1;
+  log.end(exit, reasonOf(e));
   console.error(`error: ${(e as Error).message}`);
-  process.exitCode = e instanceof UsageError ? 2 : 1;
+  process.exitCode = exit;
 });
 

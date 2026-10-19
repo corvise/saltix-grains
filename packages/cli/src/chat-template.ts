@@ -27,42 +27,39 @@ export const chatPackageJson = (slug: string, sdk: string) => JSON.stringify({
 }, null, 2) + "\n";
 
 /** A chat-only grain's server: the developer key is its whole configuration (Saltix 24-app-studio §3). */
-export const chatServer = (slug: string) => `// The chat of ${slug}, run by its developer key (Saltix 24-app-studio §3): the key names the app, its network and
-// the server key the registry trusts; the server finds the network's public relays and answers chat.json's commands.
+export const chatServer = (slug: string) => `// The chat of ${slug}, run by its server key (Saltix 24-app-studio §3a): \`grain pair\` made it on this computer and
+// wrote app.key once the registry named it; the key names the app, its network and the server key the registry trusts.
+// The server finds the network's public relays and answers chat.json's commands.
 //
 //   npm start             the key from SALTIX_APP_KEY, the file SALTIX_APP_KEY_FILE names (a systemd credential), or
-//                         app.key (owner-only)
+//                         app.key beside this file (owner-only); with none, it refuses to start (78) and says to run
+//                         grain pair
 //   NODE_RPC              your own node's wallet interface, for a network with no public relays
 //   STATE_DIRECTORY       where chat.store.json is kept (systemd sets it with StateDirectory=; else here): it also
 //                         remembers the spec served, so chat.json changed without raising "version" is refused (78)
 //
 // The log is one JSON line per event, and never holds a key or what users wrote.
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AppKey, ChatServer, chatSpecFromJson, fileChatStore, setupCannotWork } from "@saltix/grain-server";
+import { fileURLToPath } from "node:url";
+import { ChatServer, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, setupCannotWork } from "@saltix/grain-server";
 import { handlers } from "./chat.mjs";
 
-/** The exit code when the setup cannot work as it stands (EX_CONFIG, the SDK's EXIT_CONFIG): the key is not one or the
- *  registry does not name it, or chat.json changed under a version this server served. Restarting would not help. */
+/** The exit code when the setup cannot work as it stands (EX_CONFIG, the SDK's EXIT_CONFIG): no key (not paired yet: run
+ *  grain pair), the key is not one or the registry does not name it, or chat.json changed under a version this server
+ *  served. Restarting would not help. */
 const DEAD_KEY = 78;
 
 const log = (level, event, meta = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), level, event, ...meta }));
 /** A file next to this one, wherever the server is started from. */
 const beside = (name) => new URL(name, import.meta.url);
 
-/** The developer key from SALTIX_APP_KEY or a file only its owner reads: never from the command line, which shells keep. */
-function developerKey() {
-  if (process.env.SALTIX_APP_KEY?.trim()) return AppKey.parse(process.env.SALTIX_APP_KEY);
-  const file = process.env.SALTIX_APP_KEY_FILE || "app.key";
-  if (!existsSync(file)) throw new Error(\`no developer key: put it in \${file} (owner-only) or SALTIX_APP_KEY\`);
-  if (process.platform !== "win32" && (statSync(file).mode & 0o077) !== 0) throw new Error(\`\${file}: readable by others; chmod 600 it\`);
-  return AppKey.parse(readFileSync(file, "utf8"));
-}
-
 let chat;
 try {
   chat = await ChatServer.start({
-    appKey: developerKey(),
+    // SALTIX_APP_KEY, SALTIX_APP_KEY_FILE or app.key here, owner-only, never from the command line (which shells keep);
+    // none: "run grain pair" (chat_unpaired, 78).
+    appKey: appKeyFromEnvironment({ dir: fileURLToPath(new URL(".", import.meta.url)) }),
     spec: chatSpecFromJson(JSON.parse(readFileSync(beside("chat.json"), "utf8"))),
     store: fileChatStore(join(process.env.STATE_DIRECTORY || ".", "chat.store.json")),
     version: JSON.parse(readFileSync(beside("package.json"), "utf8")).version,

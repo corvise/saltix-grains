@@ -146,25 +146,29 @@ const STOPPED: Record<ChatStopReason, string> = {
 /** What the developer does about each reason: a new key for a live grain, a new grain for a retired one, and for one
  *  the registry does not hold, waiting for its registration or making it. */
 const REMEDY: Record<ChatStopReason, (slug: string) => string> = {
-  revoked: (slug) => `Make a new developer key in Saltix (My apps → ${slug} → Developer key) and start with it.`,
-  replaced: (slug) => `Make a new developer key in Saltix (My apps → ${slug} → Developer key) and start with it, or run the server ` +
-    `that holds the key the owner put in its place.`,
-  retired: () => "A retired slug is never used again: make a new app in Saltix (Apps → My apps → New app) and start with its developer key.",
+  revoked: (slug) => `Pair a new key: run grain pair --new where this server runs and scan its QR code with ${slug}'s owner's ` +
+    `Saltix (or, where no command runs, make a developer key in Saltix: My apps → ${slug} → Servers).`,
+  replaced: (slug) => `Pair a new key: run grain pair --new where this server runs and scan its QR code with ${slug}'s owner's ` +
+    `Saltix; or run the server that holds the key the owner put in its place.`,
+  retired: () => "A retired slug is never used again: run grain pair --new and make a new app from its QR code in Saltix " +
+    "(or Apps → My apps → New app).",
   unregistered: (slug) => `If ${slug} was just made, wait until its registration is in a block (Saltix shows the app live in My apps) ` +
-    `and start again; otherwise make it in Saltix (Apps → My apps → New app) or register it (grain publish).`,
+    `and start again; otherwise run grain pair --new and make the app from its QR code in Saltix, or register it (grain publish).`,
 };
 
 /** The exit code of a server whose setup cannot work as it stands (EX_CONFIG): restarting it would not help, so a
  *  supervisor should not (systemd: `RestartPreventExitStatus=78`). */
 export const EXIT_CONFIG = 78;
 
-/** Why a server's setup cannot work as it stands: the key is another network's (`chat_wrong_network`: the network was
- *  reset, or another answers), the registry does not name it (`chat_key_not_registered`), the spec changed under the
- *  version served or went below it, a developer key's spec is of the starting spec's version (`chat_spec_version_starter`),
- *  or no relay is known for the key's network (`chat_no_relays`). */
+/** Why a server's setup cannot work as it stands: it has no key, or only one `grain pair` has not paired yet
+ *  (`chat_unpaired`), its key file is readable by others (`chat_key_exposed`), the key is another network's
+ *  (`chat_wrong_network`: the network was reset, or another answers), the registry does not name it
+ *  (`chat_key_not_registered`), the spec changed under the version served or went below it, a developer key's spec is of
+ *  the starting spec's version (`chat_spec_version_starter`), or no relay is known for the key's network
+ *  (`chat_no_relays`). */
 export type ChatSetupCode =
-  | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version" | "chat_spec_version_lowered"
-  | "chat_spec_version_starter" | "chat_no_relays";
+  | "chat_unpaired" | "chat_key_exposed" | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version"
+  | "chat_spec_version_lowered" | "chat_spec_version_starter" | "chat_no_relays";
 
 /** The version of the spec Saltix signs when it makes an app (24-app-studio §5): a developer key's server serves a
  *  higher one, since a wallet replaces the spec it holds only with a higher version (22-grain-chats §2). */
@@ -632,7 +636,7 @@ export class ChatServer {
       const status = await view.nodeStatus(true);
       if (appKey && !appKey.isFor(status.network, status.genesis)) {
         throw new ChatSetupError("chat_wrong_network", `the developer key is for ${appKey.network} ${appKey.genesis}…, but the network answering is ${status.network} ` +
-          `${status.genesis.slice(0, 16)}…: was the network reset? Make a new developer key in Saltix, or pass node for your own network`);
+          `${status.genesis.slice(0, 16)}…: was the network reset? Pair a new key (grain pair --new), or pass node for your own network`);
       }
       if (chain && (chain.genesis !== status.genesis || chain.network !== status.network)) {
         throw new ChatSetupError("chat_wrong_network", `chain: the node is on ${status.network} ${status.genesis}, not ${chain.network} ${chain.genesis}`);

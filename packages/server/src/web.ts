@@ -10,3 +10,4 @@ export * from "./keys.js";
 export * from "./handle.js";
 export * from "./keylog.js";
 export * from "./profile.js";
+export * from "./pairing.js";

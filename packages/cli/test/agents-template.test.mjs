@@ -50,10 +50,20 @@ test("(a) the key: where server.mjs reads it, where the guide keeps it, never on
     assert.ok(appRules.includes(where), where);
     assert.ok(guide.includes(where.replace(/`/g, "")) || guide.includes(where), `the guide: ${where}`);
   }
-  assert.match(server, /process\.env\.SALTIX_APP_KEY\b/);
-  assert.match(server, /process\.env\.SALTIX_APP_KEY_FILE \|\| "app\.key"/);
+  // server.mjs reads them through the SDK (appKeyFromEnvironment: SALTIX_APP_KEY, SALTIX_APP_KEY_FILE, app.key beside it),
+  // which refuses to start without one and says to run grain pair.
+  assert.match(server, /appKeyFromEnvironment\(\{ dir: fileURLToPath\(new URL\("\.", import\.meta\.url\)\) \}\)/);
+  assert.doesNotMatch(server, /process\.env\.SALTIX_APP_KEY/, "one reader of the key: the SDK's");
   assert.match(appRules, /never from the command line/);
   assert.match(guide, /Never put it on a command line/);
+  // The key is paired, never copied: status first, pair, show the QR code, never ask for a key.
+  for (const text of [appRules, guide, agentsMd("coach", true), agentsMd("coach", false)]) {
+    assert.match(text, /grain status/);
+    assert.match(text, /grain pair/);
+  }
+  assert.match(appRules, /Never ask the\s+user to paste, type or send a key/);
+  assert.match(guide, /Never ask the user to paste/);
+  assert.match(agentsMd("coach", true), /## Start here, every session/);
 });
 
 test("(b) the spec's version: raised with every change, as the guide says", () => {

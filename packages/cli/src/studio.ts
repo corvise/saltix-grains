@@ -9,7 +9,7 @@ import {
 } from "@saltix/grain-server";
 import { publicKeyOf, readKey } from "./project.js";
 
-export const APP_KEY_FILE = "app.key";
+export { APP_KEY_FILE } from "@saltix/grain-server";
 /** Where tools read a developer key from when no file is named. */
 export const APP_KEY_ENV = "SALTIX_APP_KEY";
 
@@ -111,9 +111,11 @@ export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
     const g = await grainGet(node, call.retire);
     return g !== null && g.retired !== null;
   }
-  if ("configure" in call) {
-    const g = await grainGet(node, call.configure.slug);
-    return g !== null && JSON.stringify(g.servers ?? []) === JSON.stringify(call.configure.servers) && g.category === call.configure.category;
+  if ("configure" in call || "configureProven" in call) {
+    const c = "configure" in call ? call.configure : call.configureProven;
+    const servers = "configure" in call ? call.configure.servers : call.configureProven.servers.map((s) => s.key);
+    const g = await grainGet(node, c.slug);
+    return g !== null && JSON.stringify(g.servers ?? []) === JSON.stringify(servers) && g.category === c.category;
   }
   if ("access" in call) {
     const g = await grainGet(node, call.access.slug);
@@ -185,7 +187,7 @@ export async function describeAppKey(key: AppKey, node: NodeLike | null): Promis
   out.network_answering = `${status.network} ${status.genesis.slice(0, 16)}`;
   if (!key.isFor(status.network, status.genesis)) {
     out.registered = false;
-    out.why = "the network answering is another: was it reset? Make a new developer key in Saltix";
+    out.why = "the network answering is another: was it reset? Pair a new key (grain pair --new)";
     return out;
   }
   const grain = await grainGet(node, key.slug);

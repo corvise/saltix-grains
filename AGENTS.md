@@ -4,7 +4,8 @@ Rules for coding agents, and the people working with them: building an app for S
 this repository (saltix-grains: the grain SDKs, the simulator and the `grain` command line). `CLAUDE.md` points here.
 Three pages go on from it, and the protocol has pages of its own:
 
-- [docs/agents/app.md](docs/agents/app.md): building an app, from a developer key to an app that runs, is tested and
+- [docs/agents/app.md](docs/agents/app.md): building an app, from pairing its server (`grain status`, then `grain pair`:
+  a QR code the owner's Saltix scans; never ask anyone to paste a key) to an app that runs, is tested and
   ships; the rules every app follows; how to act on an error report pasted from Saltix's console.
 - [docs/agents/sdk.md](docs/agents/sdk.md): working on the SDK: the repository's map, its commands and tests, the golden
   vectors, and how a change lands.
@@ -105,8 +106,15 @@ deliver on the page's or the user's word, and never put another payee in an invo
 Saltix 0.1.54 pays a developer key's invoice and 0.1.53 and older cannot, so say in the card what to do if the sheet does
 not open: update Saltix ([docs/payments.md](docs/payments.md)).
 
-Secrets (`owner.key`, `server.key`, `app.key`, a developer key `saltix-app:1:…`) are never committed, printed, logged or
-pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
+**The server's key is paired, never copied** (Saltix 24-app-studio [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). Start every session in an app's project
+with `grain status`; when it is not `paired`, run `grain pair`, show the user its QR code (or `.grain/pair.html`) and the
+6-digit code, and wait while they scan it with Saltix and confirm: the key is made on this computer and never leaves it,
+and `grain pair` writes `app.key` once the registry names it. Never ask the user to paste, type or send a key; a developer
+key is only for a host where no command runs. `grain doctor` names the next step. Every command logs its steps to
+`.grain/log.jsonl`, codes and timings only.
+
+Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, a developer key `saltix-app:1:…`) are never committed,
+printed, logged or pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
 status of a dead key, payments, the Connect profile, people's names) are in
 [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows). Two of them, in short:
 raise `chat.json`'s `version` with every change of it (the server refuses to start on a spec changed under a version it

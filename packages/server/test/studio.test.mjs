@@ -94,15 +94,15 @@ test("a server starts only while the registry names its key, on the key's networ
   try {
     // Each reason says what to do about it: a new key for a live grain, a new app for a retired one, and for one the
     // registry does not hold yet, waiting for its registration or making it.
-    await refused((s) => (s.grain.servers = []), "revoked", /no server key.*My apps → access → Developer key/);
-    await refused((s) => (s.grain.servers = ["77".repeat(32)]), "replaced", /replaced this server key.*Developer key.*or run the server that holds/);
-    await refused((s) => (s.grain.retired = 900), "retired", /retired.*never used again: make a new app/);
+    await refused((s) => (s.grain.servers = []), "revoked", /no server key.*grain pair --new.*access's owner.*My apps → access → Servers/);
+    await refused((s) => (s.grain.servers = ["77".repeat(32)]), "replaced", /replaced this server key.*grain pair --new.*or run the server that holds/);
+    await refused((s) => (s.grain.retired = 900), "retired", /retired.*never used again: run grain pair --new and make a new app/);
     await refused((s) => (s.grain = null), "unregistered", /no such grain\. If access was just made, wait until its registration is in a block/);
     for (const reason of ["retired", "unregistered"]) {
       const fake = fakeChain();
       if (reason === "retired") fake.state.grain.retired = 900;
       else fake.state.grain = null;
-      await assert.rejects(start(fake), (e) => !/Developer key/.test(e.message), `${reason}: a new developer key would not help`);
+      await assert.rejects(start(fake), (e) => !/Servers|developer key/.test(e.message), `${reason}: a new key for this app would not help`);
     }
     // A configuration refusal is a ChatSetupError with exit code 78: restarting cannot help (a reset network above all,
     // which a supervisor would otherwise restart forever).
@@ -177,7 +177,7 @@ test("a revoked or replaced key stops the server, which says so and answers no m
       const stopped = events.find((e) => e.event === "chat_stopped");
       assert.equal(stopped.level, "error");
       assert.equal(stopped.meta.reason, reason);
-      assert.match(stopped.meta.hint, reason === "retired" ? /stopped answering\. A retired slug is never used again/ : /stopped answering\. Make a new developer key/);
+      assert.match(stopped.meta.hint, reason === "retired" ? /stopped answering\. A retired slug is never used again/ : /stopped answering\. Pair a new key: run grain pair --new/);
       // Nothing more goes out under the key: requests wait in the mailbox, unanswered; sending throws.
       const after = user.request("idle");
       await user.send(after);

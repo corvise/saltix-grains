@@ -111,7 +111,9 @@ test("a chat-only grain's server starts from its developer key alone and answers
   for (const f of ["grain.json", "chat.json", "server.mjs", "chat.mjs", "test/chat.test.mjs", "package.json", "README.md", ".gitignore", "owner.key"]) {
     assert.ok(existsSync(join(dir, f)), f);
   }
-  assert.match(made.stdout, /My apps → New app, slug coach.*app\.key.*npm install && npm start/s);
+  assert.match(made.stdout, /npm install, then grain pair in .*coach: scan its QR code.*npm start.*never leaves it/s);
+  // Its .gitignore keeps every key and grain pair's state out of git.
+  for (const entry of ["app.key", "*.key", ".grain/"]) assert.ok(readFileSync(join(dir, ".gitignore"), "utf8").split("\n").includes(entry), entry);
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
   assert.equal(pkg.scripts.start, "node server.mjs");
   assert.equal(pkg.scripts.test, 'node --test --test-force-exit "test/*.test.mjs"');
@@ -148,10 +150,11 @@ test("a chat-only grain's server starts from its developer key alone and answers
   const node = await fakeNode(relay, "coach", () => servers);
   t.after(async () => { node.close(); await relay.close(); });
 
-  // No key at all, or one readable by others: it says so and stops.
+  // No key at all (not paired), or one readable by others: it says so and stops with 78, which a supervisor does not
+  // restart on.
   const none = start(dir, { NODE_RPC: node.url });
-  assert.equal(await none.exited, 1);
-  assert.match((await none.until("not_started")).error, /no developer key/);
+  assert.equal(await none.exited, 78);
+  assert.match((await none.until("not_started")).error, /not paired with an app.*Run grain pair here/);
   // The key in the environment, as a secret store hands it over.
   const viaEnv = start(dir, { NODE_RPC: node.url, SALTIX_APP_KEY: key.reveal(), STATE_DIRECTORY: mkdtempSync(join(tmpdir(), "grain-env-")) });
   assert.equal((await viaEnv.until("ready")).address, key.address);
@@ -160,7 +163,7 @@ test("a chat-only grain's server starts from its developer key alone and answers
   writeFileSync(join(dir, "app.key"), key.reveal() + "\n");
   chmodSync(join(dir, "app.key"), 0o644);
   const open = start(dir, { NODE_RPC: node.url });
-  assert.equal(await open.exited, 1);
+  assert.equal(await open.exited, 78);
   assert.match((await open.until("not_started")).error, /readable by others/);
   chmodSync(join(dir, "app.key"), 0o600);
 

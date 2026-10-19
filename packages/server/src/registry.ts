@@ -77,6 +77,10 @@ export type GrainCall =
   | { update: SignedManifest }
   | { retire: string }
   | { configure: { slug: string; servers: string[]; category: number } }
+  /** `ConfigureGrain` of protocol version 2 (tag 39, 24-app-studio §2): each key with its proof that its holder names it
+   *  for this app and owner (`signServerKeyProof`; a paired key's comes in its pairing answer, §3a). No network runs
+   *  version 2 yet: tag 34 (`configure`) until then. */
+  | { configureProven: { slug: string; servers: Array<{ key: string; proof: string }>; category: number } }
   | { bind: { handle: Handle; slug: string | null } }
   | { access: { slug: string; public: boolean; members: Array<{ account: string; roles: number }> } }
   | { rate: { slug: string; score: number; review: string } }
@@ -85,20 +89,25 @@ export type GrainCall =
   | { profile: { slug: string; profile: SignedConnectProfile | null } };
 
 // Action::Registry is tag 1; RegisterGrain, UpdateGrain and RetireGrain are calls 7, 8 and 9; ConfigureGrain,
-// BindHandle, SetGrainAccess and RateGrain 34 to 37; SetGrainProfile 38.
+// BindHandle, SetGrainAccess and RateGrain 34 to 37; SetGrainProfile 38; ConfigureGrain with proofs 39.
 const ACTION_REGISTRY = 1;
-const CALL = { register: 7, update: 8, retire: 9, configure: 34, bind: 35, access: 36, rate: 37, profile: 38 } as const;
+const CALL = { register: 7, update: 8, retire: 9, configure: 34, bind: 35, access: 36, rate: 37, profile: 38, configureProven: 39 } as const;
 
 /** Why `call` would be refused before it leaves the shard (24-app-studio §9), or null; the registry checks the rest. */
 export function grainCallProblem(call: GrainCall, sender?: string): string | null {
   const slug = (s: string) => (slugOk(s) ? null : "slug: 3 to 32 of [a-z0-9-], not starting with -");
   if ("retire" in call) return slug(call.retire);
-  if ("configure" in call) {
-    const { servers, category } = call.configure;
+  if ("configure" in call || "configureProven" in call) {
+    const c = "configure" in call ? call.configure : call.configureProven;
+    const servers = "configure" in call ? call.configure.servers : call.configureProven.servers.map((s) => s.key);
     const keysOk = servers.length <= MAX_SERVERS && new Set(servers).size === servers.length && servers.every(serverKeyOk);
     if (!keysOk) return `servers: at most ${MAX_SERVERS} Ed25519 keys in lowercase hex, valid, none twice`;
-    if (categoryOf(category) === null) return "category: 0 to 9";
-    return slug(call.configure.slug);
+    // Each proof's signature is the shard's to verify, with the network's genesis (verifyServerKeyProof).
+    if ("configureProven" in call && !call.configureProven.servers.every((s) => /^[0-9a-f]{128}$/.test(s.proof))) {
+      return "servers: each key's proof, 64 bytes in lowercase hex";
+    }
+    if (categoryOf(c.category) === null) return "category: 0 to 9";
+    return slug(c.slug);
   }
   if ("bind" in call) {
     if (handleProblem(call.bind.handle)) return "handle: not a name or number in its canonical form";
@@ -162,6 +171,11 @@ function grainAction(call: GrainCall, sender?: string): Uint8Array {
     const c = call.configure;
     w.u8(CALL.configure).string(c.slug).u32(c.servers.length);
     for (const key of c.servers) w.fixed(fromHex(key, 32), 32);
+    w.u8(c.category);
+  } else if ("configureProven" in call) {
+    const c = call.configureProven;
+    w.u8(CALL.configureProven).string(c.slug).u32(c.servers.length);
+    for (const s of c.servers) w.fixed(fromHex(s.key, 32), 32).fixed(fromHex(s.proof, 64), 64);
     w.u8(c.category);
   } else if ("bind" in call) {
     writeHandle(w.u8(CALL.bind), call.bind.handle).option(call.bind.slug, (w, slug) => w.string(slug));
