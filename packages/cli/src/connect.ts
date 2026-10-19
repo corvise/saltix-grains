@@ -59,6 +59,32 @@ function textIssue(field: string, text: unknown, min: number, max: number, lines
   return null;
 }
 
+/** Whether a link leads to a host reserved for examples and tests (RFC 2606, RFC 6761: `.example`, `.invalid`, `.test`,
+ *  `localhost`, `example.com`…): it leads nowhere, so a Connect profile never carries one. `grain init`'s placeholders
+ *  end in `.example`. */
+export function placeholderLink(link: string): boolean {
+  let host: string;
+  if (link.startsWith("mailto:")) host = link.slice(link.lastIndexOf("@") + 1);
+  else {
+    try {
+      host = new URL(link).hostname;
+    } catch {
+      return false;
+    }
+  }
+  host = host.toLowerCase().replace(/\.$/, "");
+  return /(^|\.)(example|invalid|test|localhost)$/.test(host) || /(^|\.)example\.(com|net|org)$/.test(host);
+}
+
+/** The links of a project's profile that lead to such a host, in words: an error each, for `grain lint` and
+ *  `grain profile`. */
+export function placeholderLinks(value: unknown): string[] {
+  if (!isObject(value)) return [];
+  return (["website", "support", "terms"] as const)
+    .filter((field) => typeof value[field] === "string" && placeholderLink(value[field] as string))
+    .map((field) => `${field}: ${String(value[field])} is a placeholder that leads nowhere (an example domain): the app's own link, or null for none`);
+}
+
 const LINK_RULE = `an https:// link of at most ${PROFILE_LIMITS.linkBytes} bytes: a lowercase host (an international one in its xn-- form), no user, no :443, the rest percent-encoded (http:, javascript: and data: are refused)`;
 
 /**
@@ -138,6 +164,8 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
     const v = value[field];
     if (v !== undefined && v !== null && !ok(v)) errors.push(`${where}: ${field}: ${rule}`);
   }
+  // A link that leads nowhere: Saltix's sheet would show it, and users would tap it.
+  errors.push(...placeholderLinks(value).map((words) => `${where}: ${words}`));
   if (errors.length > 0) return { errors, warnings };
 
   // In words above; the format's own check has the last word, so nothing the network refuses passes here.

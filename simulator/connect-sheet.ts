@@ -10,6 +10,7 @@
 import type { SafeArea } from "../packages/grain/src/index";
 import { PERMISSIONS } from "../packages/server/src/manifest";
 import { type ConnectProfile, profileFromJson, profileProblem, profileText } from "../packages/server/src/profile";
+import { drawIcon } from "./icon";
 
 /** Where `grain dev` (and `npm run dev`) serves the project's `connect.json`. */
 export const CONNECT_PATH = "/_connect.json";
@@ -74,6 +75,8 @@ export interface SheetManifest {
   description: Record<string, string>;
   permissions: number;
   entry: Record<string, unknown>;
+  /** The icon's hash, zeros for none. */
+  icon?: string;
 }
 
 /** What the user chose: the switches as set, or null for Cancel (or Back). */
@@ -86,6 +89,8 @@ export interface SheetHost {
   lang(): string;
   theme(): "dark" | "light";
   log(line: string): void;
+  /** The app's icon, where the development server serves it (null: none, the monogram). */
+  icon(): string | null;
 }
 
 /** The project's profile as `connect.json` holds it, with the manifest's owner and revision 1, and why a wallet would
@@ -136,7 +141,9 @@ export function showConnectSheet(host: SheetHost, m: SheetManifest, profile: Con
   const who = el("div", "cs-who");
   const titles = el("div", "cs-titles");
   titles.append(el("strong", "cs-name", name), el("span", "cs-meta", `${m.slug} · ${w.by} ${m.owner.slice(0, 8)}…`));
-  who.append(el("div", "cs-icon", name.slice(0, 1).toUpperCase()), titles);
+  const icon = el("div", "cs-icon");
+  drawIcon(icon, host.icon(), name);
+  who.append(icon, titles);
 
   const words = el("section", "cs-words");
   words.append(el("div", "cs-label", w.ownWords));

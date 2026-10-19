@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { FLAGS, SWITCHES, UsageError, entriesOf, flagsNamed, helpFor, parse } from "../dist/args.js";
+import { FLAGS, SWITCHES, UsageError, entriesOf, flagsNamed, helpFor, notesOf, parse } from "../dist/args.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -46,7 +46,7 @@ test("a switch never takes the next word, and a value comes either way", () => {
 
 test("a flag a command does not take, a switch given a value and an unknown command are refused", () => {
   assert.throws(() => parse(["lint", "--manifst", "x.json"]), (e) => e instanceof UsageError && /takes no --manifst; it takes --manifest, --key/.test(e.message));
-  assert.throws(() => parse(["icon", "--key", "x"]), /takes no --key; it takes --out, --fit, --background, --preview, --fix, --manifest/);
+  assert.throws(() => parse(["icon", "--key", "x"]), /takes no --key; it takes --out, --fit, --background, --preview, --fix, --monogram, --manifest/);
   assert.throws(() => parse(["version-of-nothing"]), /no command/);
   assert.throws(() => parse(["init", "--chat=yes"]), (e) => e instanceof UsageError && /switch/.test(e.message));
   assert.throws(() => parse(["frob"]), (e) => e instanceof UsageError && /no command "frob"/.test(e.message));
@@ -72,6 +72,28 @@ test("the help names every command, and every flag a command's help names is one
   assert.doesNotMatch(helpFor(HELP, "lint"), /owner's calls/);
   assert.doesNotMatch(helpFor(HELP, "show"), /--manifest F/, "a note on flags the command does not take is left out");
   assert.equal(helpFor(HELP, "frob"), null);
+});
+
+test("one command's help keeps each note whole: never a sentence cut from a note it leaves out", () => {
+  const notes = notesOf(HELP);
+  assert.ok(notes.length >= 8, notes.join("\n---\n"));
+  // The owner's calls' note is one paragraph of several lines, and ends a sentence.
+  const owner = notes.find((n) => /owner's calls/.test(n));
+  assert.ok(owner.split("\n").length >= 4 && /\.$/.test(owner), owner);
+  for (const command of Object.keys(FLAGS)) {
+    const part = helpFor(HELP, command);
+    const tail = part.slice(part.indexOf("\n\n", part.indexOf(`grain ${command}`)) + 2);
+    // Every note line printed belongs to a note printed whole.
+    const shown = notes.filter((n) => part.includes(n));
+    for (const line of tail.split("\n").filter((l) => /^ {2}\S/.test(l) || /^ {4}\S/.test(l))) {
+      if (/^ {2}grain /.test(line)) continue;
+      assert.ok(shown.some((n) => n.split("\n").includes(line)), `grain help ${command} prints "${line}" outside a whole note`);
+    }
+  }
+  // What the agent met: grain help init printed the owner's note from its middle on.
+  const init = helpFor(HELP, "init");
+  assert.doesNotMatch(init, /with a key file returns once it landed|built again once that landed/);
+  assert.match(helpFor(HELP, "profile"), /The owner's calls[\s\S]*--no-wait returns once the pool took it\./);
 });
 
 test("--help on any command prints its help, exits 0 and leaves the directory as it was", () => {

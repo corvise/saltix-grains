@@ -277,7 +277,11 @@ test("lint: a page that signs in shows only its splash until the gate decides (c
 test("init makes a project the owner alone can sign for", () => {
   const dir = scratch("grain-init-");
   const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
-  execFileSync("node", [main, "init", join(dir, "dice"), "--name", "Dice"], { stdio: "pipe" });
+  const said = execFileSync("node", [main, "init", join(dir, "dice"), "--name", "Dice"], { stdio: "pipe" }).toString();
+  // The key it prints is the public one, and it says where the secret is and when it signs.
+  const publicKey = toHex(ed25519.getPublicKey(readKey(join(dir, "dice", "owner.key"))));
+  assert.match(said, new RegExp(`owner public key ${publicKey}: its secret is in owner\\.key \\(keep it secret; grain dev signs with it, and grain publish only with --key owner\\.key`));
+  assert.ok(!said.includes(readFileSync(join(dir, "dice", "owner.key"), "utf8").trim()), "never the secret");
   for (const f of ["grain.json", "owner.key", "public/index.html", "public/app.js", "public/grain.js", ".gitignore", "AGENTS.md", "CLAUDE.md"]) {
     assert.ok(existsSync(join(dir, "dice", f)), f);
   }
@@ -289,13 +293,26 @@ test("init makes a project the owner alone can sign for", () => {
     assert.ok(html.includes(`var(${v})`), v);
   }
   assert.match(readFileSync(join(dir, "dice", "public", "app.js"), "utf8"), /grain\.layout\(\)/);
-  // Check first, render after: the HTML shows its splash alone; the app and the refusal wait for the gate.
-  assert.match(html, /<div class="splash" data-grain-splash>/);
-  assert.match(html, /<div id="app" hidden>/);
-  assert.deepEqual(shownBeforeSignIn(html), []);
+  // A page that works on its own: its UI at once, no sign-in, and outside Saltix a link to the app by its slug.
+  assert.doesNotMatch(html, /data-grain-splash/);
   const js = readFileSync(join(dir, "dice", "public", "app.js"), "utf8");
-  for (const words of ["grain.signIn({ url: SIGN_IN })", "gateOf(s, FOR)", 'document.querySelector("[data-grain-splash]").remove()']) assert.ok(js.includes(words), words);
+  assert.doesNotMatch(js, /signIn|gateOf/);
+  assert.match(js, /slugLink\(SLUG\)/);
   assert.deepEqual(lintPages(join(dir, "dice", "public")), []);
+  // With --sign-in, check first, render after: the HTML shows its splash alone; the app and the refusal wait for the gate.
+  execFileSync("node", [main, "init", join(dir, "team"), "--name", "Team", "--sign-in"], { stdio: "pipe" });
+  const gated = readFileSync(join(dir, "team", "public", "index.html"), "utf8");
+  assert.match(gated, /<div class="splash" data-grain-splash>/);
+  assert.match(gated, /<div id="app" hidden>/);
+  assert.deepEqual(shownBeforeSignIn(gated), []);
+  const gatedJs = readFileSync(join(dir, "team", "public", "app.js"), "utf8");
+  for (const words of ["grain.signIn({ url: SIGN_IN })", "gateOf(s, FOR)", 'document.querySelector("[data-grain-splash]").remove()']) assert.ok(gatedJs.includes(words), words);
+  assert.deepEqual(lintPages(join(dir, "team", "public")), []);
+  writeFileSync(join(dir, "gated.mjs"), gatedJs);
+  execFileSync("node", ["--check", join(dir, "gated.mjs")], { stdio: "pipe" });
+  assert.throws(() => execFileSync("node", [main, "init", join(dir, "both"), "--chat", "--sign-in"], { stdio: "pipe" }),
+    (e) => e.status === 2 && /--chat or --sign-in: a chat-only app has no page to sign in to/.test(String(e.stderr)));
+  assert.ok(!existsSync(join(dir, "both")), "nothing made");
   const linted = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
   assert.ok(!linted.includes(TOP_BAR_RULE), linted);
   // The page's script reads as a module, and the bridge it imports has the layout.
@@ -315,7 +332,7 @@ test("init makes a project the owner alone can sign for", () => {
   const warned = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
   assert.match(warned, new RegExp(`^warning: ${COVER_RULE}: `, "m"));
   assert.match(warned, new RegExp(`^warning: ${TOP_BAR_RULE}: `, "m"));
-  assert.match(warned, /ready to register/);
+  assert.match(warned, /dice v1: no errors; ready to publish/);
   assert.equal(statSync(join(dir, "dice", "owner.key")).mode & 0o777, 0o600);
   const m = JSON.parse(readFileSync(join(dir, "dice", "grain.json"), "utf8"));
   assert.equal(m.slug, "dice");
@@ -324,6 +341,13 @@ test("init makes a project the owner alone can sign for", () => {
   assert.equal(m.owner, toHex(accountId(ed25519.getPublicKey(key))));
   assert.ok(verifyManifest(signedFor(join(dir, "dice", "grain.json"), key)));
   assert.throws(() => execFileSync("node", [main, "init", join(dir, "dice")], { stdio: "pipe" }), "not over an existing grain");
+  // grain init's placeholder origin names no page anyone hosts: lint says so, grain sign refuses it.
+  writeFileSync(join(dir, "dice", "grain.json"), JSON.stringify({ ...m, entry: { hosted: { url: "https://dice.example/", origins: ["https://dice.example"] } } }));
+  const placeholder = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
+  assert.match(placeholder, /^warning: entry: https:\/\/dice\.example\/ is grain init's placeholder \(an example domain, no host\): grain publish seals public\/ into the network in its place/m);
+  assert.throws(() => execFileSync("node", [main, "sign"], { cwd: join(dir, "dice"), stdio: "pipe" }),
+    (e) => e.status === 1 && /grain sign is for a page at your own https origin/.test(String(e.stderr)));
+  assert.ok(!existsSync(join(dir, "dice", "signed.json")));
 });
 
 test("the wallet's way: a link first, the signed manifest from the registry after", async () => {

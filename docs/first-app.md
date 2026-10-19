@@ -95,7 +95,8 @@ The example in the checkout is an app of its own: `npx grain pair --name "Hello 
 tap it), **A report** (a CSV file next to the relay) and **Fail on purpose** (below).
 
 `owner.key`, which `grain init` also makes, is the command line's own owner key, for registering from a computer on a
-test network; an app made in Saltix has its owner on your phone and never uses it.
+test network when no phone is at hand, and it signs only when a command names it (`--key owner.key`); an app made in
+Saltix has its owner on your phone and never uses it.
 
 Never run the example, or any second program, with the key of an app that already has a program: two programs on one
 key both answer in its chat, and the example's spec (version 3) sits below your project's (4, `grain init`'s), so a
@@ -175,9 +176,10 @@ Connect profile**). Ask only for the permissions the app uses: each is a row on 
 When it is ready: **My apps → your app → Make public**. A public app is in the marketplace, anyone can open its chat,
 and it never learns who its users are: each user is a key of their own in your app.
 
-The same from the command line in the checkout (`npx grain …`): signed with the owner's key file on test networks, or,
-without one, done in Saltix while the tool waits for the registry. Every command reaches the test network through its
-public relays, pinned by their certificates; `--node URL` is a node of your own instead
+The same from the command line in the checkout (`npx grain …`): each says first which account owns what it changes, and
+for an app made in Saltix the tool says what to do there and waits for the registry. A key file signs only for an app it
+registered, or when `--key` names it (the test network without a phone). Every command reaches the test network through
+its public relays, pinned by their certificates; `--node URL` is a node of your own instead
 ([README](../README.md#networks-no-node-of-your-own-needed)). `grain faucet --wait` gives `owner.key`'s account test
 SALT for the fees and deposits:
 
@@ -186,7 +188,7 @@ grain faucet --wait                                                # test SALT f
 grain access --slug your-app --private --member dsalt1q…:user      # members, while private
 grain access --slug your-app --public                              # anyone
 grain bind --handle @your_app --slug your-app                      # a username you hold opens its chat
-grain profile --key owner.key                                     # the Connect profile from connect.json
+grain profile                                                      # the Connect profile from connect.json
 grain status                                                       # the server's key: paired? what next?
 grain doctor                                                       # everything else, and the exact next step
 ```
@@ -202,16 +204,22 @@ certificate and no file to upload anywhere.
 
 ```sh
 npx grain init ../space-game --slug space-game --name "Space"   # grain.json, connect.json, public/ with the bridge
-cd ../space-game && npx grain dev                              # write the game; the simulator shows it
-npx grain icon ~/Pictures/logo.png --out icon.png             # its icon, to the standard (docs/icons.md)
+cd ../space-game && npm install                                # links the grain command from the checkout
+npx grain dev                                                  # write the game; the simulator shows it
+npx grain dev --check                                          # the same headless: every screen, both themes
+npx grain icon ~/Pictures/logo.png --out icon.png             # its icon, to the standard (or grain icon --monogram S)
 npx grain pair                                                 # optional: lets the bundle go up before you sign
 npx grain publish
 ```
+
+Never `npx grain` in a folder where `npm install` has not linked it: npx would fetch the npm registry's unrelated package
+of that name.
 
 ```text
 bundle: 14 files, 1.8 MiB, 9e41c0…
 sources: the network's own copies at 3 relays (protocol version 1 needs one; wallets ask their own relay first)
 version: the registry holds space-game v1; this one is v2 (grain.json says so now)
+owner: dsalt1q…, as the registry names it: its Saltix signs
 upload: into the network now, vouched for by the server key 1476ff04 (app.key)
   uploaded 0% (0 bytes of 1.8 MiB)
   uploaded 27% (512.0 KiB of 1.8 MiB)
@@ -242,11 +250,11 @@ What happens, step by step:
    keeps running until then.
 4. **Your signature.** Scan the QR code with your Saltix: it shows the app, the version and what changed, and after the
    PIN signs the manifest and registers it (a new slug's deposit: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
-   more). Your key never leaves the phone. On the test network, `--key owner.key` signs here instead (after `grain faucet
-   --wait`).
+   more). Your key never leaves the phone. On the test network without a phone, `--key owner.key` signs here instead
+   ([No phone, test network](how-it-works.md#no-phone-test-network)); the app is then that key's account's.
 5. **The registry and the icon.** Once the registry holds the version, the icon goes into the network, and
-   `signed.json` is written. Run again, `grain publish` finishes whatever a break left; a version the registry holds
-   already only gets its uploads.
+   `signed.json` is written. Run again, `grain publish` finishes whatever a break left; with nothing changed it says
+   "nothing to publish" and sends nothing (no fee, no QR code), and a change makes the next version.
 
 `--no-wait` returns once the QR code is shown (a coding agent shows it to you, then runs `grain publish` again after you
 scanned it). `grain doctor` says where a publish stands: `not_uploaded`, `pending`, `waiting_for_owner`,
@@ -382,7 +390,8 @@ An app with a screen of its own (a page: `grain init`, then `grain dev`) opens a
 - **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes; CSS px equal dp), on a 360×780 phone and on the
   iPhone-like screen in the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, inside the
   safe area or edge to edge by your meta, draws the bars, the cutout and the controls where a phone and Saltix do, and
-  its ✕ and **Back** close the app as the phone's do. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
+  its ✕ and **Back** close the app as the phone's do. `grain dev --check` goes through every one of them headless and
+  says what is under the controls, what threw, and what scrolls sideways, with a screenshot of each. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
   (`cover-without-insets`), and about a bar pinned to the top of such a page that keeps clear of nothing
   (`full-screen-top-bar`).
 

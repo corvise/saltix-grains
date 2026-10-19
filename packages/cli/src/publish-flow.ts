@@ -9,31 +9,37 @@
 //               bundle goes into the network now, in pieces, on that key's statement: held pending for a day, so the
 //               owner signs whenever they like and this computer need not stay on; without one, once the registry
 //               names it (step 5);
-//   4. sign     the owner's Saltix signs the manifest from a QR code (or `owner.key` on test networks);
+//   4. sign     the owner's Saltix signs the manifest from a QR code; a key file only when `--key` names it, or when
+//               the registry names its account as the app's owner already (`owner.ts`); the account that will own the
+//               app is said first. A key file's registration is followed by `SetGrainAccess` private: a new app starts
+//               private, as one made in Saltix does;
 //   5. registry watched until it holds the version; the bundle goes up now if it did not before;
 //   6. icon     the icon the manifest names goes up (`blob_put`), unless the network holds it.
-// Run again, it goes on from where it stopped: a version the registry holds already only gets its uploads.
+// Run again, it goes on from where it stopped. What the registry holds already (the same content, compared in the
+// manifest's canonical form) is never signed again: only its uploads are finished, and with nothing left to do the run
+// says "nothing to publish" and sends nothing. A version is raised only when the content changed.
 // A chat-only app, and a hosted page (`--hosted`), skip 1–3 and 5's upload.
 //
 // Every step goes to `.grain/log.jsonl` with a stable reason (docs/devex.md); where the publish stands goes to
 // `.grain/publish.json` (nothing secret), which `grain doctor` reads. No key is ever printed or logged.
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import QRCode from "qrcode";
 import {
   AppKey, AppKeyError, BlobRefused, MAX_NETWORK_BUNDLE_BYTES, NAMED_REASONS, NO_ICON, PENDING_MS, UNOWNED, type Manifest, type NodeLike,
-  type RegisteredGrain, type SignedManifest, accountId, blobHeld, fromHex, grainGet, grainQuote, iconHash, keyFingerprint, manifestProblem,
-  nodeCall, putBundle, putIcon, registeredKeyStatus, signBundleUpload, signManifest, toHex,
+  type RegisteredGrain, type SignedManifest, accountId, blobHeld, encodeManifest, fromHex, grainGet, grainQuote, iconHash, keyFingerprint,
+  manifestProblem, nodeCall, putBundle, putIcon, registeredKeyStatus, signBundleUpload, signManifest, toHex,
 } from "@saltix/grain-server";
 import { makeBundle, sealed, type Bundle } from "./bundle.js";
 import { ICON_FILES } from "./icon.js";
 import { type DevLog, GRAIN_DIR, grainDir } from "./devlog.js";
 import { ensureGitignore, terminalQr } from "./pair.js";
-import { lint, publicKeyOf, readKey } from "./project.js";
+import { type Signer, ownerLine, signerFor } from "./owner.js";
+import { lint, publicKeyOf } from "./project.js";
 import { publishCall, salt, walletLink, waitForPublished, type Signing } from "./registry.js";
 import { sendSettled } from "./send.js";
 import { protocolOf, sourcesFor } from "./sources.js";
-import { APP_KEY_ENV, APP_KEY_FILE } from "./studio.js";
+import { APP_KEY_ENV, APP_KEY_FILE, accessCall } from "./studio.js";
 
 /** Where a publish stands, for `grain doctor` and the next run: nothing secret. */
 export const PUBLISH_STATE_FILE = join(GRAIN_DIR, "publish.json");
@@ -73,6 +79,32 @@ export function readPublishState(dir: string): PublishState | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * What `grain lint` says of a manifest it finds no error in, by what the last `grain publish` here left (`state`): the
+ * version the registry took and whether grain.json (and `public/`, for a sealed page) still say what it took; or ready
+ * to publish. The registry itself is `grain doctor`'s to ask: a lint reads nothing from the network.
+ */
+export function readiness(m: Manifest, state: PublishState | null, dir: string): string {
+  const took = state && state.slug === m.slug && state.published_at ? state : null;
+  if (took === null) return `${m.slug} v${m.version}: no errors; ready to publish (grain publish)`;
+  const where = `${took.network} ${took.genesis}`;
+  const bundle = "sealed" in m.entry ? m.entry.sealed.bundle : null;
+  let built: string | null = bundle;
+  if (bundle !== null && existsSync(join(dir, "public"))) {
+    try {
+      built = makeBundle(join(dir, "public")).hash;
+    } catch {
+      built = null;
+    }
+  }
+  if (took.version === m.version && (bundle === null || (took.bundle === bundle && built === bundle))) {
+    return `${m.slug} v${m.version}: no errors; published on ${where} as it is here (the registry took it at ${took.published_at}; ` +
+      `grain doctor asks the registry now). A change to ${bundle !== null ? "public/ or " : ""}grain.json: grain publish makes v${m.version + 1}`;
+  }
+  return `${m.slug} v${m.version}: no errors; the registry took v${took.version} on ${where} at the last grain publish, and this has changed ` +
+    `since: grain publish makes the next version`;
 }
 
 function writePublishState(dir: string, state: PublishState): void {
@@ -201,9 +233,12 @@ export interface PublishOptions {
   flags: string;
   log: DevLog;
   hosted: boolean;
-  /** `--wallet`: the owner's Saltix signs, even with `owner.key` here. */
+  /** `--wallet`: the owner's Saltix signs, even for an app a key file here owns. */
   wallet: boolean;
+  /** The owner's key file: `--key F`, or `owner.key` beside the manifest. */
   keyPath: string;
+  /** Whether `--key` named it: only then does a key file register an app (`owner.ts`). */
+  keyNamed: boolean;
   /** `--app-key F`: the server key that vouches for the bundle. */
   appKeyFile?: string;
   wait: boolean;
@@ -295,11 +330,6 @@ export async function publishApp(o: PublishOptions): Promise<number> {
 
   const before = await grainGet(o.node, slug);
   if (before?.retired != null) throw new PublishError("registry", "retired", `${slug}: retired at slot ${before.retired}; a retired slug is never used again`);
-  const state: PublishState = {
-    network: status.network, genesis: status.genesis.slice(0, 16), slug, version: given.version, form, bundle: null, size: null,
-    uploaded_at: null, pending_until: null, link_shown_at: null, published_at: null, icon: null, icon_uploaded_at: null,
-    ...sameRun(readPublishState(dir), status.genesis, slug, given.version),
-  };
 
   // 1–2. The bundle and its sources.
   let manifest = given;
@@ -329,23 +359,30 @@ export async function publishApp(o: PublishOptions): Promise<number> {
       : from === "relays" ? `sources: the network's own copies at ${sources.length} relays (protocol version ${protocol} needs one; wallets ask their own relay first)`
       : `sources: your own (${sources.length}), as grain.json names them`);
     manifest = sealed(given, made, { sources });
-    state.bundle = made.hash;
-    state.size = made.size;
   }
-  // The registry holds this version already (a run cut short after the owner signed): the same manifest but for its
-  // relays' copies, which follow the relay list. Anything else at this version or below is a new version: the next one
-  // (an app made in Saltix starts at 1, a project at 1 too), which grain.json says from now on.
-  const same = before?.manifest && before.version === manifest.version && sameRegistered(before.manifest.manifest, manifest) ? before.manifest : null;
-  if (before && before.version >= manifest.version && !same) {
+  // What the registry holds already, with the same content (a run cut short after the owner signed, or nothing changed
+  // since the last publish), is nothing new to sign, whatever version grain.json says: grain.json takes the registry's
+  // version and its relays' copies, and only the uploads are left. Anything else at this version or below is a new
+  // version, the next one (an app made in Saltix starts at 1, a project at 1 too), which grain.json says from now on.
+  const same = before?.manifest && sameContent(before.manifest.manifest, manifest) ? before.manifest : null;
+  if (same) {
+    if (manifest.version !== same.manifest.version) {
+      print(`version: nothing changed since ${slug} v${same.manifest.version} in the registry; grain.json says v${same.manifest.version} again`);
+    }
+    manifest = { ...manifest, version: same.manifest.version };
+    if ("sealed" in same.manifest.entry && "sealed" in manifest.entry) {
+      manifest = { ...manifest, entry: { sealed: { ...manifest.entry.sealed, sources: same.manifest.entry.sealed.sources } } };
+    }
+  } else if (before && before.version >= manifest.version) {
     print(`version: the registry holds ${slug} v${before.version}; this one is v${before.version + 1} (grain.json says so now)`);
     o.log.step("version", "ok", "raised");
     manifest = { ...manifest, version: before.version + 1 };
-    state.version = manifest.version;
-    Object.assign(state, { uploaded_at: null, pending_until: null, link_shown_at: null, published_at: null, icon_uploaded_at: null });
   }
-  if (same && "sealed" in same.manifest.entry && "sealed" in manifest.entry) {
-    manifest = { ...manifest, entry: { sealed: { ...manifest.entry.sealed, sources: same.manifest.entry.sealed.sources } } };
-  }
+  const state: PublishState = {
+    network: status.network, genesis: status.genesis.slice(0, 16), slug, version: manifest.version, form, bundle: made?.hash ?? null,
+    size: made?.size ?? null, uploaded_at: null, pending_until: null, link_shown_at: null, published_at: null, icon: null, icon_uploaded_at: null,
+    ...sameRun(readPublishState(dir), status.genesis, slug, manifest.version, made?.hash ?? null),
+  };
   if (JSON.stringify(manifest) !== JSON.stringify(given)) writeFileSync(o.manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   if (made) writeFileSync(join(dir, "bundle.zip"), made.zip);
   // What the network takes: the manifest's bounds at its protocol version, and a transaction it fits in.
@@ -356,11 +393,19 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   }
   state.icon = manifest.icon === NO_ICON ? null : manifest.icon;
 
-  // A version the registry holds already: only its uploads are left.
+  // Who signs a new version, and which account owns the app: said before anything is signed.
   const published = same;
+  let signer: Signer | null = null;
+  if (!published) {
+    signer = signerFor({ wallet: o.wallet, keyPath: o.keyPath, named: o.keyNamed, owner: before?.owner ?? null, what: slug });
+    o.log.step("signer", "ok", signer.by === "key" ? `key_${signer.why}` : `wallet_${signer.why}`);
+    print(ownerLine(signer, status.network, before?.owner ?? null, o.keyPath));
+  }
+
+  // A version the registry holds already: only its uploads are left, if any.
   let uploaded = false;
   if (published) {
-    print(`${slug} v${manifest.version} is in the registry already: finishing its uploads`);
+    print(`${slug} v${manifest.version}: the registry holds it as grain.json describes it, so there is nothing to sign`);
     o.log.step("registry", "ok", "published_before");
   } else if (made && made.size <= MAX_NETWORK_BUNDLE_BYTES) {
     // 3. Into the network before the owner signs, on a registered server key's statement.
@@ -387,38 +432,46 @@ export async function publishApp(o: PublishOptions): Promise<number> {
         : "the network holds the bundle");
     } else {
       o.log.step("upload", "waiting", `after_registry_${why}`);
-      print(`upload: once the registry names the bundle (${vouchWords(why)}); keep this command running until the owner has signed`);
+      print(`upload: once the registry names the bundle (${vouchWords(why)}); ` +
+        (signer?.by === "key" ? "it goes up once the transaction lands, which this command waits for" : "keep this command running until the owner has signed"));
     }
   }
 
   // 4–5. The owner's signature, and the registry.
   let signed: SignedManifest;
+  let failed = false;
   if (published) {
     signed = published;
-  } else {
-    const ownerSecret = !o.wallet && existsSync(o.keyPath) ? readKey(o.keyPath) : null;
-    const ownerAccount = ownerSecret ? toHex(accountId(fromHex(publicKeyOf(ownerSecret), 32))) : null;
-    if (ownerSecret && before && before.owner !== ownerAccount) {
-      print(`${slug} is registered to another account than ${o.keyPath}'s (an app made in Saltix is its owner's phone's): asking the owner's Saltix`);
-    }
-    if (ownerSecret && (before === null || before.owner === ownerAccount)) {
-      const result = await signWithKey(o, print, manifest, ownerSecret);
-      if (result === null) return 1;
-      signed = result;
-    } else {
-      const result = await signInWallet(o, print, manifest, state, before === null);
-      if (result === "no_wait") return 0;
-      if (result === null) return 1;
-      signed = result;
-    }
+  } else if (signer!.by === "key") {
+    const result = await signWithKey(o, print, manifest, signer!.secret);
+    if (result === null) return 1;
+    signed = result.signed;
     o.log.step("registry", "ok", "published");
     state.published_at = new Date(now()).toISOString();
     writePublishState(dir, state);
+    // A new app starts private, its owner's alone, as an app made in Saltix does (24-app-studio §2a, §4): the registry
+    // makes a new grain public until its owner says otherwise, so the key file says so at once.
+    if (result.registered && !(await makePrivate(o, print, slug, signer!.secret))) failed = true;
+  } else {
+    const result = await signInWallet(o, print, manifest, state, before === null);
+    if (result === "no_wait") return 0;
+    if (result === null) return 1;
+    signed = result;
+    o.log.step("registry", "ok", "published");
+    state.published_at = new Date(now()).toISOString();
+    writePublishState(dir, state);
+    if (before === null) {
+      // The publishing link registers a free slug and nothing else (12-grains §10): the app is public from its first
+      // version. Making it private is the owner's, in Saltix.
+      o.log.step("access", "ok", "public");
+      print(`${slug} is public from its first version (a publishing link registers it so). To keep it to its owner and members ` +
+        `while you develop it: in Saltix, My apps → ${slug} → Access → Private (an app made in Saltix's New app starts private)`);
+    }
   }
   writeFileSync(o.out, JSON.stringify(signed, null, 2) + "\n");
 
   // The bundle, now that the registry names it, when it did not go up before (or the network lost it).
-  let failed = false;
+  let sentNow = uploaded;
   if (made && made.size <= MAX_NETWORK_BUNDLE_BYTES && !uploaded) {
     try {
       const held = await blobHeld(o.node, "grain_bundle", made.hash).catch(() => "absent" as const);
@@ -428,6 +481,7 @@ export async function publishApp(o: PublishOptions): Promise<number> {
       } else {
         print("upload: the registry names the bundle; putting it into the network");
         await upload(o, print, made, null);
+        sentNow = true;
         state.uploaded_at = new Date(now()).toISOString();
         state.pending_until = null;
         writePublishState(dir, state);
@@ -441,11 +495,21 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   }
 
   // 6. The icon.
-  if (!(await iconStep(o, print, manifest, state))) failed = true;
+  const icon = await iconStep(o, print, manifest, state);
+  if (icon === "failed") failed = true;
+  if (icon === "uploaded") sentNow = true;
   writePublishState(dir, state);
   if (failed) {
-    print(`${slug} v${manifest.version} is in the registry, but not everything went up: grain publish${o.flags} again finishes it`);
+    print(`${slug} v${manifest.version} is in the registry, but not everything is done: grain publish${o.flags} again finishes it`);
     return 1;
+  }
+  if (published && !sentNow) {
+    // Nothing was signed, sent or uploaded: say so, and what makes the next version.
+    o.log.step("published", "ok", "unchanged");
+    print(`nothing to publish: the registry holds ${slug} v${manifest.version} as grain.json describes it` +
+      `${form === "sealed" ? ", and the network holds its bundle" : ""}${manifest.icon === NO_ICON ? "" : " and its icon"}. ` +
+      `A change to ${form === "sealed" ? "public/ or " : ""}grain.json publishes v${manifest.version + 1}.`);
+    return 0;
   }
   o.log.step("published", "ok", form);
   print(`${slug} v${manifest.version} is published${form === "sealed" ? ", its bundle in the network" : ""}; ${o.out} written. Saltix opens it from the Apps section (or salt:grain/${slug}).`);
@@ -464,18 +528,30 @@ function readManifestFile(path: string): { manifest: Manifest } {
   return { manifest: o && typeof o === "object" && o.manifest && o.signature ? o.manifest : (value as Manifest) };
 }
 
-/** What an earlier run of the same version on the same network left (its uploads and the link), or nothing. */
-function sameRun(state: PublishState | null, genesis: string, slug: string, version: number): Partial<PublishState> {
-  if (!state || state.genesis !== genesis.slice(0, 16) || state.slug !== slug || state.version !== version) return {};
+/** What an earlier run of the same version and bundle on the same network left (its uploads and the link), or
+ *  nothing. */
+function sameRun(state: PublishState | null, genesis: string, slug: string, version: number, bundle: string | null): Partial<PublishState> {
+  if (!state || state.genesis !== genesis.slice(0, 16) || state.slug !== slug || state.version !== version || state.bundle !== bundle) return {};
   const { uploaded_at, pending_until, link_shown_at, published_at, icon_uploaded_at } = state;
   return { uploaded_at, pending_until, link_shown_at, published_at, icon_uploaded_at };
 }
 
-/** Whether the registry's manifest is ours but for the owner (and a sealed one's relays' copies, which change with the
- *  relay list). */
-function sameRegistered(registered: Manifest, ours: Manifest): boolean {
-  const plain = (m: Manifest): Manifest => ({ ...m, ...UNOWNED, ...("sealed" in m.entry ? { entry: { sealed: { ...m.entry.sealed, sources: [] } } } : {}) });
-  return JSON.stringify(plain(registered)) === JSON.stringify(plain(ours));
+/**
+ * Whether the registry's manifest says what ours says: the same content but for the owner (a wallet fills in its own),
+ * the version (grain.json's may lag behind the registry's) and a sealed one's relays' copies (they follow the relay
+ * list). Compared in the manifest's canonical form (its Borsh bytes, 12-grains §2), never as JSON text: a node answers
+ * with its objects' keys sorted, so the same manifest reads as other JSON than grain.json's.
+ */
+export function sameContent(registered: Manifest, ours: Manifest): boolean {
+  const plain = (m: Manifest): Manifest => ({
+    ...m, ...UNOWNED, version: 1, ...("sealed" in m.entry ? { entry: { sealed: { ...m.entry.sealed, sources: [] } } } : {}),
+  });
+  try {
+    return toHex(encodeManifest(plain(registered))) === toHex(encodeManifest(plain(ours)));
+  } catch {
+    // A manifest that does not encode is not one the registry holds.
+    return false;
+  }
 }
 
 const VOUCH_WORDS: Record<string, string> = {
@@ -510,23 +586,26 @@ async function upload(o: PublishOptions, print: (line: string) => void, made: Bu
   }
 }
 
-/** The owner's key file signs and sends the call, and the command waits until it landed. Null when it did not in time. */
-async function signWithKey(o: PublishOptions, print: (line: string) => void, manifest: Manifest, secret: Uint8Array): Promise<SignedManifest | null> {
+/** The owner's key file signs and sends the call, and the command waits until it landed: the signed manifest, and
+ *  whether the call registered the app. Null when it did not land in time. */
+async function signWithKey(o: PublishOptions, print: (line: string) => void, manifest: Manifest, secret: Uint8Array): Promise<{ signed: SignedManifest; registered: boolean } | null> {
   const owned: Manifest = { ...manifest, owner: toHex(accountId(fromHex(publicKeyOf(secret), 32))), owner_key: { ed25519: publicKeyOf(secret) } };
   const signed = signManifest(owned, secret);
   o.log.step("sign", "ok", "key_file");
   let landed: boolean | null;
+  let registered = false;
   try {
     ({ landed } = await sendSettled(() => publishCall(signed, o.signing.node, secret), secret, o.signing, {
       wait: true,
       onSent: (sent) => {
+        registered = sent.call === "register";
         const deposit = sent.amount > 0n ? `, deposit ${salt(sent.amount)} SALT` : "";
-        print(`${sent.call} ${manifest.slug} v${manifest.version}: transaction ${sent.id} (fee ${sent.fee}${deposit}); waiting for it to land…`);
+        print(`${sent.call} ${manifest.slug} v${manifest.version}: transaction ${sent.id} (fee ${salt(sent.fee)} SALT${deposit}); waiting for it to land…`);
       },
     }));
   } catch (e) {
     if (/base units of SALT; this needs/.test((e as Error).message)) {
-      throw new PublishError("sign", "no_salt", `${(e as Error).message}: grain faucet --wait${o.flags} gives the key file's account test SALT, or --wallet asks the owner's Saltix`);
+      throw new PublishError("sign", "no_salt", `${(e as Error).message}: grain faucet --wait --key ${o.keyPath}${o.flags} gives the key file's account test SALT; or, without --key, the owner's Saltix signs and pays (a QR code)`);
     }
     throw e;
   }
@@ -535,7 +614,32 @@ async function signWithKey(o: PublishOptions, print: (line: string) => void, man
     print(`not in the registry yet: grain publish${o.flags} again finishes once it is (grain show --slug ${manifest.slug}${o.flags} says when)`);
     return null;
   }
-  return signed;
+  return { signed, registered };
+}
+
+/** `SetGrainAccess` private, with no members, signed with the key file that registered the app: whether it landed. */
+async function makePrivate(o: PublishOptions, print: (line: string) => void, slug: string, secret: Uint8Array): Promise<boolean> {
+  const key = basename(o.keyPath);
+  const next = `grain access --slug ${slug} --private --key ${key}${o.flags}`;
+  try {
+    const { landed } = await sendSettled(() => accessCall(o.signing.node, slug, false, [], secret), secret, o.signing, {
+      wait: true,
+      onSent: (sent) => print(`access ${slug}: private (transaction ${sent.id}, fee ${salt(sent.fee)} SALT); waiting for it to land…`),
+    });
+    if (landed === false) {
+      o.log.step("access", "timeout", "not_landed");
+      print(`${slug} is registered, and the call that makes it private has not landed yet: ${next} again if grain show --slug ${slug}${o.flags} says it is public`);
+      return false;
+    }
+  } catch (e) {
+    o.log.step("access", "failed", "private");
+    print(`${slug} is registered but public: making it private failed (${(e as Error).message}). Next: ${next}`);
+    return false;
+  }
+  o.log.step("access", "ok", "private");
+  print(`${slug} is private: only its owner's account and the members it names open it, as an app made in Saltix starts. ` +
+    `grain access --slug ${slug} --private --member <address>:user --key ${key}${o.flags} adds someone; --public opens it to anyone`);
+  return true;
 }
 
 /** The owner's Saltix signs from a QR code; the command waits for the registry (unless `--no-wait`). */
@@ -568,12 +672,12 @@ async function signInWallet(o: PublishOptions, print: (line: string) => void, ma
   return signed;
 }
 
-/** The icon the manifest names into the network, unless it holds it. False when it did not go up. */
-async function iconStep(o: PublishOptions, print: (line: string) => void, manifest: Manifest, state: PublishState): Promise<boolean> {
+/** The icon the manifest names into the network, unless it holds it: what became of it. */
+async function iconStep(o: PublishOptions, print: (line: string) => void, manifest: Manifest, state: PublishState): Promise<"none" | "held" | "uploaded" | "failed"> {
   if (manifest.icon === NO_ICON) {
     o.log.step("icon", "ok", "none");
-    print("icon: none (wallets draw the app's monogram); grain icon <picture> --out icon.png makes one");
-    return true;
+    print("icon: none (wallets draw the app's monogram); grain icon <picture> --out icon.png, or grain icon --monogram <letter>, makes one");
+    return "none";
   }
   const file = ICON_FILES.map((name) => join(o.dir, name)).find((path) => existsSync(path) && iconHash(new Uint8Array(readFileSync(path))) === manifest.icon);
   let held: "held" | "fetching" | "absent" = "absent";
@@ -585,12 +689,12 @@ async function iconStep(o: PublishOptions, print: (line: string) => void, manife
   if (held === "held") {
     o.log.step("icon", "ok", "held");
     print("icon: the network holds it");
-    return true;
+    return "held";
   }
   if (!file) {
     o.log.step("icon", "refused", "file_missing");
-    print(`icon: no ${ICON_FILES.join(" or ")} here is the icon grain.json names, and the network does not hold it: wallets draw the monogram until it goes up (grain icon <picture> --out icon.png, raise the version, grain publish)`);
-    return false;
+    print(`icon: no ${ICON_FILES.join(" or ")} here is the icon grain.json names, and the network does not hold it: wallets draw the monogram until it goes up (grain icon <picture> --out icon.png, then grain publish)`);
+    return "failed";
   }
   try {
     await putIcon(o.node, new Uint8Array(readFileSync(file)), { pause: o.pause, now: o.now, namedGraceMs: NAMED_GRACE_MS });
@@ -598,10 +702,10 @@ async function iconStep(o: PublishOptions, print: (line: string) => void, manife
     if (!(e instanceof BlobRefused)) throw e;
     o.log.step("icon", "refused", e.reason);
     print(refusalText(e, "icon"));
-    return false;
+    return "failed";
   }
   state.icon_uploaded_at = new Date((o.now ?? Date.now)()).toISOString();
   o.log.step("icon", "ok", "uploaded");
   print("icon: in the network");
-  return true;
+  return "uploaded";
 }

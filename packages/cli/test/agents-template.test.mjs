@@ -32,6 +32,19 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
   assert.match(agentsMd("coach", true), /`server\.mjs`/);
   assert.match(agentsMd("coach", true), /`npm start`/);
   assert.match(agentsMd("coach", false), /`npx grain dev`/);
+  // A page's project leads with a page's path: no pairing to do, the simulator and its check, publishing; the frame's
+  // rules before the server's, which wait until the app has a server.
+  const page = agentsMd("dice", false);
+  const pageStart = page.slice(page.indexOf("## Start here"), page.indexOf("## The one rule to keep"));
+  for (const words of ["`not_needed`", "`npx grain dev --check`", "`npx grain publish`", "`npx grain publish --key owner.key`", "`npx grain faucet --wait`"]) {
+    assert.ok(pageStart.includes(words), `a page's first steps: ${words}`);
+  }
+  assert.ok(!pageStart.includes(".grain/pair.html"), "nothing to pair for a page alone");
+  assert.ok(page.indexOf("## The page's frame") < page.indexOf("## The rules every app follows"), "a page's rules first");
+  assert.match(page, /A page alone keeps rules 9 to 11 and the frame's rules above; rules 1 to 8 are for the app's server/);
+  const chatProject = agentsMd("coach", true);
+  assert.ok(chatProject.indexOf("## The rules every app follows") < chatProject.indexOf("## The page's frame"), "a chat's server rules first");
+  assert.ok(chatProject.slice(chatProject.indexOf("## Start here"), chatProject.indexOf("## The one rule")).includes(".grain/pair.html"));
   assert.equal([...appRules.matchAll(/^\d+\. \*\*/gm)].length, 11);
 });
 
@@ -179,9 +192,19 @@ test("(j) check first, then render: the splash, the gate and the server's check,
   assert.match(guide, /^## A page for some people only: check first, then render$/m);
   assert.match(appRules, /`ChatMemberUnchecked`[^.]*503/);
   assert.match(guide, /`ChatMemberUnchecked`[^.]*503/);
-  // The template is the pattern: a splash in the HTML, the gate in the script.
-  assert.ok(indexHtml("Dice").includes(SPLASH_ATTRIBUTE));
-  for (const words of ["grain.signIn(", "gateOf(", "[data-grain-splash]"]) assert.ok(appJs.includes(words), words);
+  // The template with --sign-in is the pattern: a splash in the HTML, the gate in the script.
+  assert.ok(indexHtml("Dice", true).includes(SPLASH_ATTRIBUTE));
+  for (const words of ["grain.signIn(", "gateOf(", "[data-grain-splash]"]) assert.ok(appJs("dice", true).includes(words), words);
+  // A page that works on its own (grain init's default) needs no gate: no splash, no sign-in, its UI at once.
+  assert.ok(!indexHtml("Dice").includes(SPLASH_ATTRIBUTE));
+  for (const words of ["signIn", "gateOf", "SIGN_IN"]) assert.ok(!appJs("dice").includes(words), words);
+  // Outside Saltix both link to the app by its slug, never to a manifest at the page's own origin, which a sealed page
+  // (served from the phone) has none of.
+  for (const signIn of [false, true]) {
+    assert.match(appJs("dice", signIn), /slugLink\(SLUG\)/);
+    assert.match(appJs("dice", signIn), /const SLUG = "dice";/);
+    assert.doesNotMatch(appJs("dice", signIn), /walletLink|well-known/);
+  }
 });
 
 test("(k) people's names: Saltix gives an app none, as the guide says", () => {

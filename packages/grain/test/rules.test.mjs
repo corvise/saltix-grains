@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   BRIDGE_METHODS, BRIDGE_MESSAGE_MAX, BridgeLimiter, DEFAULT_BRIDGE_RATE, BRIDGE_RATES, USER_ACTIVATION_MS, STORAGE_MAX_GRAIN_BYTES,
-  STORAGE_MAX_KEY_BYTES, STORAGE_MAX_VALUE_BYTES, bridgeAnswer, bridgeEvent, manageRule, permissionRule, sealedCsp, storageRule,
+  STORAGE_MAX_KEY_BYTES, STORAGE_MAX_VALUE_BYTES, bridgeAnswer, bridgeEvent, devPageUrl, manageRule, permissionRule, sealedCsp, storageRule,
   tapRule,
 } from "../dist/rules.js";
 import { MAX_RELAY_PAYLOAD } from "../dist/index.js";
@@ -95,4 +95,17 @@ test("a sealed grain's Content-Security-Policy, as Saltix serves it", () => {
   assert.match(csp, /connect-src 'self' https:\/\/api\.chess\.example wss:\/\/api\.chess\.example;/);
   assert.match(csp, /frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'$/);
   assert.equal(sealedCsp([]).includes("connect-src 'self';"), true);
+});
+
+test("a development wallet opens a sealed grain's start page from the bundle's root, never beside the manifest", () => {
+  // grain dev serves public/ (the bundle's files) at the root of its origin and the manifest at /.well-known/: the start
+  // page resolved against the manifest's own URL was /.well-known/index.html, a 404 (what an agent met after publishing).
+  const manifest = "http://localhost:8097/.well-known/saltix-grain";
+  const sealed = (start) => ({ sealed: { bundle: "ab".repeat(32), size: 1, sources: [], start, connect: [] } });
+  assert.equal(devPageUrl(sealed("index.html"), manifest), "http://localhost:8097/index.html");
+  assert.equal(devPageUrl(sealed("game/start.html"), manifest), "http://localhost:8097/game/start.html");
+  assert.equal(devPageUrl(sealed("/index.html"), "http://10.0.2.2:8090/.well-known/saltix-grain"), "http://10.0.2.2:8090/index.html");
+  // A hosted grain opens where it says; a chat-only grain has no page.
+  assert.equal(devPageUrl({ hosted: { url: "http://localhost:8097/app/", origins: ["http://localhost:8097"] } }, manifest), "http://localhost:8097/app/");
+  assert.equal(devPageUrl({ chat: {} }, manifest), null);
 });

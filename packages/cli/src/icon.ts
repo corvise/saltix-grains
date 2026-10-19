@@ -14,6 +14,7 @@ import { ICON_SIDE, LEGACY_ICON_SIDE, MAX_ICON_BYTES, NAMED_REASONS, checkImage,
 import { grainDir } from "./devlog.js";
 import { type Mapping, type Rgba, decodePicture, over, resample } from "./image.js";
 import { encodePng, fitPng } from "./png-write.js";
+import { inkFor, monogramGround, monogramPixels, monogramText } from "./monogram.js";
 
 /** Where a project keeps the icon its manifest names: beside `grain.json`, or with the page. */
 export const ICON_FILES = ["icon.png", "public/icon.png"];
@@ -356,8 +357,12 @@ export function iconPreview(png: Uint8Array): Uint8Array {
 }
 
 export interface IconRun {
-  /** The picture, or the icon to check. */
+  /** The picture, or the icon to check; unused with `monogram`. */
   input: string;
+  /** Letters for an icon with no picture (`--monogram`): 1 or 2 of A–Z, 0–9. */
+  monogram?: string;
+  /** The ground's seed when no `background` is named: the slug. */
+  seed?: string;
   /** Make an icon from `input` and write it here; without it, `input` is checked as it is. */
   out?: string;
   fit?: Fit;
@@ -373,9 +378,17 @@ export interface IconRun {
 /** `grain icon`: its exit status. The first line printed is the icon's hash, as before. */
 export function runIcon(o: IconRun): number {
   const print = o.print ?? ((line: string) => console.log(line));
+  const lines: string[] = [];
+  if (o.monogram !== undefined) {
+    const made = makeMonogram(o.monogram, o.background ?? null, o.seed ?? o.monogram);
+    mkdirSync(dirname(resolve(o.out!)), { recursive: true });
+    writeFileSync(o.out!, made.png);
+    lines.push(`${o.out}: ${ICON_SIDE} × ${ICON_SIDE} PNG, ${made.colours === null ? "true colour" : `a palette of ${made.colours} colours`}, ${made.png.length} bytes (64 KiB at most), opaque, sRGB`);
+    lines.push(`  the monogram ${made.text} in ${hexColour(made.ink)} on ${hexColour(made.background)}${o.background ? "" : " (the slug's colour; --background #rrggbb picks another)"}, inside the keyline circle`);
+    return finishIcon(o, made.png, lines, print);
+  }
   const bytes: Uint8Array = new Uint8Array(readFileSync(o.input));
   let png: Uint8Array = bytes;
-  const lines: string[] = [];
   if (o.out !== undefined) {
     const made = makeIcon(bytes, { fit: o.fit, background: o.background ?? null });
     png = made.png;
@@ -392,6 +405,26 @@ export function runIcon(o: IconRun): number {
       return 1;
     }
   }
+  return finishIcon(o, png, lines, print);
+}
+
+/** An icon of `typed`'s letters (`monogramText`) on `background`, or on the colour `seed` picks: to the standard and
+ *  checked as every icon `grain icon` makes. */
+export function makeMonogram(typed: string, background: Colour | null, seed: string): { png: Uint8Array; text: string; background: Colour; ink: Colour; colours: number | null } {
+  const text = monogramText(typed);
+  if (text === null) throw new IconError("monogram", `--monogram ${typed}: one or two letters or digits, A–Z and 0–9`);
+  const ground = background ?? monogramGround(seed);
+  const ink = inkFor(ground);
+  const fitted = fitPng(monogramPixels(text, ground, ink), ICON_SIDE, ICON_SIDE, MAX_ICON_BYTES);
+  if (fitted === null) throw new IconError("size", "the monogram does not fit 64 KiB: a bug in grain icon, please report it");
+  const checked = checkImage("grain_icon", fitted.png);
+  if (!checked.ok) throw new IconError(checked.reason, `the monogram fails the image check (${checked.reason}): a bug in grain icon, please report it`);
+  return { png: fitted.png, text, background: ground, ink, colours: fitted.colours };
+}
+
+/** What every icon `grain icon` makes or checks gets: its hash first, the lines about it, the checks, the preview, and
+ *  its name in `grain.json` when it is the project's icon file. */
+function finishIcon(o: IconRun, png: Uint8Array, lines: string[], print: (line: string) => void): number {
   const manifest = existsSync(o.manifestPath) ? (JSON.parse(readFileSync(o.manifestPath, "utf8")) as { icon?: string; manifest?: { icon?: string } }) : null;
   const hash = iconHash(png);
   // An icon written where the project keeps it is the one grain.json names from now on.
@@ -417,7 +450,7 @@ export function runIcon(o: IconRun): number {
   const previewPath = o.preview ?? (existsSync(o.manifestPath) ? join(grainDir(o.dir), "icon-preview.png") : `${(o.out ?? o.input).replace(/\.png$/i, "")}.preview.png`);
   writeFileSync(previewPath, iconPreview(png));
   print(`  preview: ${previewPath} (the mask at ${PREVIEW_SIZES.join(", ")} dp on dark and light, and the zones)`);
-  if (named) print(`  grain.json's "icon" names it: raise "version" if the app is published, then grain publish puts it into the network`);
+  if (named) print(`  grain.json's "icon" names it: grain publish puts it into the network (the next version, if the app is published)`);
   else if (manifest && (manifest.manifest?.icon ?? manifest.icon) !== hash) print(`  grain.json's "icon" is another: set it to ${hash}`);
   return lint.errors.length === 0 ? 0 : 1;
 }

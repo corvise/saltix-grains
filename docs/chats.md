@@ -54,8 +54,8 @@ again. Once the key is replaced or revoked, or the grain retired, it **stops**: 
 more, logs `chat_stopped` with the reason and what to do, and calls `onStop`. Requests to the old key wait in its mailbox.
 Wallets write to the first key the registry names; a server whose key is not the first warns `chat_not_first_key`.
 
-The owner's side from the command line (signed with `owner.key` on test networks; without it the tool says what to do
-in Saltix and waits for the registry):
+The owner's side from the command line (the tool says what to do in the owner's Saltix and waits for the registry; a key
+file signs instead for an app it owns, or when `--key` names it, on test networks):
 
 ```sh
 grain pair                                                   # the owner's Saltix pairs this computer's own key (QR code)

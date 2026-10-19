@@ -5,6 +5,12 @@ Saltix, shows a page, or both. [How a mini-app works](../how-it-works.md) comes 
 needs a program at all (a page alone needs none), and the lifecycle as one checklist. This page is the whole path, the
 rules every app follows, and what to do with an error report.
 
+**A page alone** (a game, a tool) needs no program, no key and no pairing: `npx grain status` says `not_needed`, and the
+path is `grain dev` (and `grain dev --check`), `grain icon`, `grain lint`, `grain doctor`, `grain publish`, as
+[AGENTS.md's quick path](../../AGENTS.md#quick-path-a-page-only-app) lists them; then
+[Publish a page, and its icon](#publish-a-page-and-its-icon) below, and the rules of an app's page. The sections on the
+server's key, the chat spec, handlers, tests and shipping are for an app with a program.
+
 ## Start here: pair the server, never ask for a key
 
 The app's server speaks with a server key that the app's registry record names. **That key is made on the computer where
@@ -12,9 +18,10 @@ the server runs and never leaves it** (Saltix 24-app-studio [§3a](../protocol/a
 app's owner pairs it from Saltix by scanning a QR code. Never ask the user to paste, type or send a key, and never take
 one in a chat when pairing can be done.
 
-1. **`npx grain status`, at the start of every session.** `paired`: go on. `pairing`, `unpaired`, `revoked`,
-   `replaced`, `retired`, `unregistered`, `other_network`: it prints the command to run next (`grain pair`, or
-   `grain pair --new` for a key that stopped working). `--json` gives the same for a program. Exit 0 only when paired.
+1. **`npx grain status`, at the start of every session.** `paired`: go on. `not_needed`: a page alone, nothing to pair
+   (it names `grain doctor` next). `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`,
+   `other_network`: it prints the command to run next (`grain pair`, or `grain pair --new` for a key that stopped
+   working). `--json` gives the same for a program. Exit 0 when paired or not needed.
 2. **`npx grain pair`** prints a QR code (a terminal's, with the colours set; off a terminal, plain half blocks drawn for
    a dark background), writes it to `.grain/pair.html` (open it in a browser when the terminal's will not scan), and
    prints the link and a **6-digit code**. Show the QR code to the user and tell them: scan it with Saltix (the phone's
@@ -64,7 +71,7 @@ it speaks for the app until the owner replaces it.
 
 ```sh
 git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains
-npm ci && npm run build
+npm install && npm run build
 npx grain init ../<slug> --chat --slug <slug>    # grain.json, chat.json, connect.json, chat.mjs, server.mjs, test/, AGENTS.md…
 cd ../<slug> && npm install                      # the SDK and the grain command, from the checkout: not on npm yet
 npx grain status                                 # unpaired
@@ -78,8 +85,9 @@ the app answers. It exits with **78** when it has no key (not paired yet: `chat_
 the app retired) or when `chat.json` changed under a version it served (`setupCannotWork`: an `AppKeyError` or a
 `ChatSetupError`): restarting does not help, the log says what does. It exits with **1** for anything else (a network
 down), which a restart may fix.
-`owner.key`, which `grain init` also makes, is for registering from a computer on a test network; an app made in Saltix
-has its owner on the phone and never uses it.
+`owner.key`, which `grain init` also makes, is for registering from a computer on a test network, and signs only when a
+command names it (`--key owner.key`) or for an app it registered; an app made in Saltix has its owner on the phone and
+never uses it.
 
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 
@@ -158,17 +166,19 @@ How to write a good one:
 - **English and Russian.** `en` is required; a reader sees their own language, else English.
 - **Links**: `website` and `terms` are `https://` links; `support` is an `https://` link, a `mailto:` address or a
   Saltix username (`@name`). Anything else is refused, so the sheet never opens a link a profile could turn against
-  its user.
+  its user; so is a link to a host reserved for examples (`splitbill.example` above, `example.com`, `.test`), which
+  leads nowhere: the app's own links, or `null` for none (`grain init` writes `null`).
 - **Ask only for what you use.** Every permission is a row on the sheet, and `address` and `notifications` are switches
   users may leave off. `grain lint` warns about a permission nothing in the app's sources uses.
 
 `grain lint` checks every rule of the format with the field and its limit, the privacy summary, the icon file
-(`icon.png` or `public/icon.png`: a 256×256 PNG whose hash `grain.json` names) and the link's length for a QR code.
+(`icon.png` or `public/icon.png`: a 512 × 512 PNG whose hash `grain.json` names) and the link's length for a QR code.
 `grain profile` sets it once the app is registered: a QR code the owner's Saltix scans (it fills in its account and the
 registry's revision and one, shows the profile as the sheet will, and signs after the PIN), or `--key owner.key` on the
 test network. The owner may also write it in Saltix's app studio (My apps → the app → Connect profile). `grain show`
 prints the registry's profile and whether a wallet takes it. `grain dev`'s simulator shows a preview of the sheet from
-`connect.json` and the manifest before the app opens (**Show it again** after a change).
+`connect.json` and the manifest, with the project's icon, before the app opens (**Show it again** after a change);
+`grain dev --check` reports a profile a wallet would refuse.
 
 ## Handlers and cards: `server.mjs`
 
@@ -237,7 +247,8 @@ if (gate === "open") drawApp(); else drawRefusal(gate);
 ```
 
 `grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything in its HTML outside its
-splash, or marks no splash. `grain init` makes a page that does all of this (`SIGN_IN`, `FOR` in `public/app.js`).
+splash, or marks no splash. `grain init --sign-in` makes a page that does all of this (`SIGN_IN`, `FOR` in
+`public/app.js`); `grain init` alone makes a page that works on its own, with no gate.
 
 Saltix's own splash (the app's icon and name) covers the page only while it loads; `grain.ready()` neither holds nor
 hides it (Saltix ignores it today, and so does the simulator). From then on the page's `data-grain-splash` is all a user
@@ -309,8 +320,8 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   when its text depends on what comes after), at most 6 actions, labels of at most 18 characters, the first `run`
   primary, destructive commands named so. Check each with `assertCardStandard(card, spec)` in the tests.
 - **Bundles**: `grain bundle` makes the same bytes from the same files on any computer (files stored, never deflated,
-  at most 20 MiB): rebuild it in CI and fail when `grain.json` changes (`git diff --exit-code grain.json`); never edit
-  `entry.sealed` by hand.
+  at most 16 MiB for the network to keep it): rebuild it in CI and fail when `grain.json` changes
+  (`git diff --exit-code grain.json`); never edit `entry.sealed` by hand.
 - **Formats**: never build a protocol message by hand. The SDK makes and checks every one, byte for byte the network's.
 - **Money**: never deliver on the page's or the user's word: only on `chat.paymentOf` (or `findPayment`) with enough
   confirmations. Never put another payee in an invoice: a developer key's invoice pays the owner, and wallets refuse
@@ -354,20 +365,34 @@ the QR code the owner's Saltix signs the version from, waits for the registry an
 a CDN, a domain or a certificate for it, and never ask the user for one.
 
 1. `npx grain icon <picture> --out icon.png`: a 512 × 512 icon to the standard from any PNG or JPEG ([icons](../icons.md));
-   it names it in `grain.json`. Look at `.grain/icon-preview.png` (the icon in Saltix's rounded square at 24 to 96 dp):
-   if the mark does not read at 24 dp, make it bolder. Never draw rounded corners, transparency or a border.
-2. `npx grain status`: with `app.key` paired, the bundle goes up before the owner signs (held pending for a day); without
-   it, it goes up once the registry names the version, so the command must keep running until the owner signed.
-3. `npx grain publish --no-wait`: show the user its QR code (or `.grain/publish.html`) and say: scan it with Saltix, check
-   the app and the version, confirm with the PIN. Then `npx grain publish` again: it finishes (the bundle if it waited,
-   the icon) and ends with `is published`.
-4. `npx grain doctor` names what is left. Its `publish` state: `not_uploaded` (run `grain publish`), `pending` (the
-   bundle is in the network; show the QR code), `waiting_for_owner` (the user has the QR code), `pending_expired` (the
-   day passed: `grain publish` again), `published`.
+   it names it in `grain.json`. No picture yet: `npx grain icon --monogram <letter>`, a letter or two on a colour. Look
+   at `.grain/icon-preview.png` (the icon in Saltix's rounded square at 24 to 96 dp): if the mark does not read at 24 dp,
+   make it bolder. Never draw rounded corners, transparency or a border.
+2. `npx grain dev --check`: the page in the simulator, headless, at every size and in both themes; fix its errors first.
+3. `npx grain doctor`: what is left, and before the first publish what registering the slug takes (its deposit). With
+   `app.key` paired, the bundle goes up before the owner signs (held pending for a day); without it (a page alone needs
+   none), it goes up once the registry names the version, so the command must keep running until the owner signed.
+4. `npx grain publish --no-wait`: it says which account will own the app; show the user its QR code (or
+   `.grain/publish.html`) and say: scan it with Saltix, check the app and the version, confirm with the PIN. Then
+   `npx grain publish` again: it finishes (the bundle if it waited, the icon) and ends with `is published`. Its
+   `publish` state in `grain doctor`: `not_uploaded` (run `grain publish`), `pending` (the bundle is in the network; show
+   the QR code), `waiting_for_owner` (the user has the QR code), `pending_expired` (the day passed: `grain publish`
+   again), `published`.
 
 A refusal comes in words with the next step (`the bundle was refused: busy (…). Next: grain publish again in a few
-minutes`); act on the next step, never work around it. A version the registry holds already is raised to the next by
+minutes`); act on the next step, never work around it. Run again with nothing changed, `grain publish` says "nothing to
+publish" and sends nothing (no fee, no QR code); a change to `public/` or `grain.json` is the next version, raised by
 `grain publish` itself. A page the user hosts at their own origin: `--hosted`.
+
+### No phone, test network
+
+When nobody's phone is at hand, on Saltix's test network only: `npx grain doctor` (the deposit, and what `owner.key`'s
+account holds), `npx grain faucet --wait` (test SALT for it), `npx grain publish --key owner.key` (the owner it will be,
+then registered, made private, the bundle and the icon put into the network), `npx grain profile` (signed by
+`owner.key`, the app's owner now), and `npx grain access --slug <slug> --public --key owner.key` (or `--private --member
+dsalt1…:user`) for testers. The app is then the key file's account's, not a person's: say so to the user, and make an
+app people will use in Saltix instead ([how it works](../how-it-works.md#no-phone-test-network)). Never pass `--key`
+for an app the user made in Saltix: it is refused, and their Saltix signs from the QR code.
 
 ## Ship
 
@@ -398,8 +423,10 @@ minutes`); act on the next step, never work around it. A version the registry ho
   the new bundle into the network and shows the QR code the owner scans; or `await chat.proposeUpdate(next)` sends the
   manifest to the owner's console as **Review and approve** (`chat.proposeUpdate(next, { bundle })` puts its bundle
   into the network first, on the server key's statement) ([publishing a page](../how-it-works.md#publish-a-page)).
-- **Public**: the app starts private (its owner and members). The owner makes it public in Saltix (My apps → the app),
-  or `grain access --public` with `owner.key` on the test network.
+- **Public**: an app starts private (its owner and members), made in Saltix or registered by a key file; one whose
+  first version a publishing link registered starts public (the wallet registers it so), and its owner makes it private
+  in Saltix. The owner makes it public in Saltix (My apps → the app), or `grain access --public --key owner.key` on the
+  test network for an app that key owns.
 
 ## An error report from the console
 

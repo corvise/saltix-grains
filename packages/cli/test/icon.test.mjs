@@ -338,3 +338,57 @@ test("grain icon <picture> --out icon.png: written, named in grain.json, its has
   assert.equal(run(["icon", "logo.png", "--fit", "squash", "--out", "x.png"]).status, 2);
   assert.equal(run(["icon", "logo.png", "--background", "teal", "--out", "x.png"]).status, 2);
 });
+
+test("grain icon --monogram: an icon to the standard with no picture, every letter and digit inside the keyline circle", async () => {
+  const { MONOGRAM_CHARACTERS, MONOGRAM_GROUNDS, inkFor, monogramGround, monogramText } = await import("../dist/monogram.js");
+  const { makeMonogram } = await import("../dist/icon.js");
+  assert.equal(MONOGRAM_CHARACTERS, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  // One letter, and pairs: each passes the image check every wallet runs, with no warning of §3.4 (inside the keyline
+  // circle, not small, a ground that is the wallet's own on neither theme).
+  const texts = [...MONOGRAM_CHARACTERS, "AB", "MW", "88", "QJ"];
+  for (const text of texts) {
+    const made = makeMonogram(text, null, "space-game");
+    assert.ok(checkImage("grain_icon", made.png).ok, text);
+    const lint = checkIcon(made.png);
+    assert.deepEqual([lint.errors, lint.warnings], [[], []], text);
+    assert.ok(lint.ring <= 0.02, `${text}: inside the keyline circle (${lint.ring})`);
+    // The mark is the letters: some ink, centred.
+    assert.ok(lint.mark && lint.mark.height > 0.3 && lint.mark.width > 0.05, `${text}: ${JSON.stringify(lint.mark)}`);
+  }
+  // The same letters on the same colour are the same bytes, on any computer; another letter is another icon.
+  assert.equal(iconHash(makeMonogram("d", null, "space-game").png), iconHash(makeMonogram("D", null, "space-game").png));
+  assert.notEqual(iconHash(makeMonogram("D", null, "space-game").png), iconHash(makeMonogram("E", null, "space-game").png));
+  // The ground: as asked, else the slug's (always the same, never white or black); the ink white where it reads.
+  assert.deepEqual(makeMonogram("D", [0x20, 0x30, 0x40], "x").background, [0x20, 0x30, 0x40]);
+  assert.deepEqual(monogramGround("space-game"), monogramGround("space-game"));
+  assert.ok(MONOGRAM_GROUNDS.some((g) => g.join() === monogramGround("space-game").join()));
+  assert.deepEqual(inkFor([0x2f, 0x6b, 0xff]), [255, 255, 255]);
+  assert.deepEqual(inkFor([0xf2, 0xe0, 0x60]), [0x0b, 0x10, 0x20], "a dark ink on a light ground");
+  const px = PNG.sync.read(Buffer.from(makeMonogram("I", [0x20, 0x30, 0x40], "x").png));
+  const at = (x, y) => [...px.data.subarray((y * px.width + x) * 4, (y * px.width + x) * 4 + 3)];
+  assert.deepEqual(at(256, 256), [255, 255, 255], "the ink at the centre of an I");
+  assert.deepEqual(at(20, 20), [0x20, 0x30, 0x40], "the ground at a corner");
+  // What it takes: one or two of A–Z and 0–9.
+  for (const bad of ["", "ABC", "Ж", "a-", "1 2"]) assert.equal(monogramText(bad), null, bad);
+  assert.equal(monogramText(" q7 "), "Q7");
+  // The command: written where the project keeps its icon unless --out says, named in grain.json, its hash first.
+  const dir = scratch("grain-monogram-");
+  writeFileSync(join(dir, "grain.json"), JSON.stringify({ slug: "space-game", version: 1, icon: "00".repeat(32) }, null, 2));
+  const run = (args) => spawnSync("node", [main, ...args], { cwd: dir, encoding: "utf8" });
+  const made = run(["icon", "--monogram", "S"]);
+  assert.equal(made.status, 0, made.stderr);
+  const icon = readFileSync(join(dir, "icon.png"));
+  assert.equal(made.stdout.split("\n")[0], iconHash(new Uint8Array(icon)));
+  assert.equal(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).icon, iconHash(new Uint8Array(icon)), "grain.json names it");
+  assert.match(made.stdout, /the monogram S in #ffffff on #[0-9a-f]{6} \(the slug's colour; --background #rrggbb picks another\), inside the keyline circle/);
+  assert.ok(existsSync(join(dir, ".grain", "icon-preview.png")));
+  assert.equal(run(["icon", "--monogram", "S", "--background", "#203040", "--out", "other.png"]).status, 0);
+  assert.ok(existsSync(join(dir, "other.png")));
+  const refused = run(["icon", "--monogram", "ABC"]);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /--monogram ABC: one or two letters or digits, A–Z and 0–9/);
+  assert.equal(run(["icon", "logo.png", "--monogram", "S"]).status, 2, "a picture or letters, not both");
+  assert.equal(run(["icon", "--monogram"]).status, 2);
+  const log = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  assert.ok(log.some((l) => l.command === "icon" && l.step === "icon" && l.outcome === "ok" && l.reason === "monogram"));
+});

@@ -1,23 +1,48 @@
 // `grain status` and `grain doctor`: where a project's server stands, read from its files and the registry, and the
 // exact next step. `status` answers one question, whether the server is paired with its app (Saltix 24-app-studio §3a);
-// `doctor` checks the rest of the path to an app that runs, and stops at the first thing to do. Neither writes anything
-// but the steps' log, and neither prints a secret: keys appear by their fingerprint.
+// a page alone has no server, so for it pairing is `not_needed`. `doctor` checks the rest of the path to an app that runs
+// or a page that is published, and stops at the first thing to do: before a page's first publish, what registering it
+// takes (the deposit, and on the test network without a phone the faucet and `--key owner.key`). Neither writes
+// anything but the steps' log, and neither prints a secret: keys appear by their fingerprint.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type NodeLike, type RegisteredGrain, NO_ICON, blobHeld, decodeOffer, fromHex, grainGet, iconHash, keyFingerprint,
-  nodeCall, registeredKeyStatus, toHex,
+  AppKey, APP_KEY_FILE, type NodeLike, type RegisteredGrain, NO_ICON, blobHeld, decodeOffer, fromHex, grainGet, grainQuote, iconHash,
+  keyFingerprint, nodeCall, registeredKeyStatus, toHex,
 } from "@saltix/grain-server";
 import { makeBundle } from "./bundle.js";
 import { GRAIN_DIR } from "./devlog.js";
+import { saltOf } from "./faucet.js";
 import { ICON_FILES, checkIcon } from "./icon.js";
+import { accountOf, addressOf } from "./owner.js";
 import { PAIR_KEY_FILE, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
+import { KEY_FILE, readKey } from "./project.js";
 import { readPublishState } from "./publish-flow.js";
+import { salt } from "./registry.js";
 
-/** Where a project's server stands with its app. */
+/** Where a project's server stands with its app; `not_needed` for a page alone, which has no server. */
 export type PairStatus =
-  | "paired" | "pairing" | "unpaired" | "revoked" | "replaced" | "retired" | "unregistered" | "other_network" | "invalid" | "unknown";
+  | "paired" | "not_needed" | "pairing" | "unpaired" | "revoked" | "replaced" | "retired" | "unregistered" | "other_network" | "invalid"
+  | "unknown";
+
+/** The states `grain status` exits 0 for: nothing to pair. */
+export const settled = (status: PairStatus): boolean => status === "paired" || status === "not_needed";
+
+/** What the project in `dir` is: a page alone (its manifest names a page, and there is no `chat.json`), an app with a
+ *  chat (`chat.json`, or a chat-only manifest), or no app's project. */
+export function projectKind(dir: string): "page" | "chat" | "none" {
+  let entry: unknown;
+  try {
+    const value = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")) as { entry?: unknown; manifest?: { entry?: unknown } };
+    entry = value.manifest?.entry ?? value.entry;
+  } catch {
+    entry = undefined;
+  }
+  const object = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
+  if (existsSync(join(dir, "chat.json")) || (object !== null && "chat" in object)) return "chat";
+  return object !== null ? "page" : "none";
+}
 
 export interface KeyState {
   status: PairStatus;
@@ -36,6 +61,14 @@ export interface KeyState {
  *  that reach it again in a command suggested). */
 export async function keyState(dir: string, node: NodeLike, flags = ""): Promise<KeyState> {
   const appKeyPath = join(dir, APP_KEY_FILE);
+  // A page alone has no server, so no key to pair; a key it has (or one being paired) is still checked below.
+  if (!existsSync(appKeyPath) && !existsSync(join(dir, PAIR_KEY_FILE)) && projectKind(dir) === "page") {
+    return {
+      status: "not_needed",
+      detail: "a page alone needs no server key: nothing to pair (grain pair would only let grain publish put the bundle into the network before the owner signs)",
+      next: `grain doctor${flags}`,
+    };
+  }
   let status: { network: string; genesis: string };
   try {
     status = await nodeCall(node, "node_status");
@@ -121,8 +154,40 @@ export interface Finding {
  *  waiting for the owner's signature (the link shown), its day over, or published. */
 export type PublishStatus = "not_uploaded" | "pending" | "waiting_for_owner" | "pending_expired" | "published";
 
-/** Every check of `grain doctor`, in the order of the path to an app that runs. */
-export async function doctor(dir: string, node: NodeLike, flags = "", now = Date.now()): Promise<{ state: KeyState; findings: Finding[]; publish: PublishStatus | null }> {
+/** What a test network's key file needs beyond a slug's deposit: two registry calls' fees (registering, then making it
+ *  private), with room to spare: 0.001 SALT. */
+const FEES_MARGIN = 1_000_000n;
+
+/**
+ * Before a page's first publish (its slug free): what registering it takes, and the way there. The owner's Saltix
+ * registers it from `grain publish`'s QR code and pays the deposit; on a test network without a phone, `owner.key`
+ * does with `--key`, once the faucet gave its account the deposit and the fees.
+ */
+async function firstPublish(dir: string, node: NodeLike, slug: string, flags: string): Promise<Finding> {
+  const { deposit } = await grainQuote(node, slug);
+  const { network } = await nodeCall<{ network: string }>(node, "node_status");
+  let detail = `${slug} is free: its first grain publish registers it, keeping a deposit of ${salt(deposit)} SALT until it retires`;
+  let next = `grain publish${flags}: a QR code, and the owner's Saltix registers the app and pays the deposit`;
+  if (network !== "mainnet") {
+    let noPhone = `grain faucet --wait${flags}, then grain publish --key ${KEY_FILE}${flags}`;
+    if (existsSync(join(dir, KEY_FILE))) {
+      try {
+        const account = accountOf(readKey(join(dir, KEY_FILE)));
+        const held = await saltOf(node, addressOf(network, account));
+        detail += `; ${KEY_FILE}'s account holds ${salt(held)} SALT`;
+        if (held >= deposit + FEES_MARGIN) noPhone = `grain publish --key ${KEY_FILE}${flags}`;
+      } catch {
+        // An unreadable key file is grain publish's to report; the way stays as it is.
+      }
+    }
+    next += `; without a phone, on the test network: ${noPhone} (the app is then ${KEY_FILE}'s account's)`;
+  }
+  return { ok: false, what: "registry", detail, next };
+}
+
+/** Every check of `grain doctor`, in the order of the path to an app that runs; and the next step, or what to say when
+ *  there is none. */
+export async function doctor(dir: string, node: NodeLike, flags = "", now = Date.now()): Promise<{ state: KeyState; findings: Finding[]; publish: PublishStatus | null; next: string }> {
   const findings: Finding[] = [];
   const manifestPath = join(dir, "grain.json");
   const chatPath = join(dir, "chat.json");
@@ -144,11 +209,11 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
     : { ok: false, what: "git", detail: ".gitignore does not keep app.key, *.key and .grain/ out of git", next: `grain pair${flags} (it adds them), or add them to .gitignore` });
 
   const state = await keyState(dir, node, flags);
-  // A page alone needs no server: unpaired is fine (a paired key only lets grain publish put the bundle up before the
-  // owner signs). A key that stopped working still needs one.
-  const pageOnly = manifest?.entry !== undefined && !("chat" in manifest.entry) && !existsSync(chatPath);
-  if (pageOnly && state.status === "unpaired") {
-    findings.push({ ok: true, what: "key", detail: `not paired: a page needs no server (grain pair${flags} lets grain publish put its bundle into the network before the owner signs)` });
+  // A page alone needs no server (a paired key only lets grain publish put the bundle up before the owner signs). A key
+  // that stopped working still needs one.
+  const kind = projectKind(dir);
+  if (state.status === "not_needed") {
+    findings.push({ ok: true, what: "key", detail: `not needed: a page alone has no server (grain pair${flags} would let grain publish put its bundle into the network before the owner signs)` });
   } else {
     findings.push({ ok: state.status === "paired", what: "key", detail: state.detail, ...(state.next ? { next: state.next } : {}) });
   }
@@ -184,6 +249,14 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
   const placeholder = (manifest?.entry?.hosted?.origins ?? []).length > 0 && manifest!.entry!.hosted!.origins!.every((o) => /\.example(:\d+)?$/.test(o));
   const sealed = manifest?.entry?.sealed;
   let publish: PublishStatus | null = null;
+  // A page whose slug is free: what its first publish takes, before anything else of the publish.
+  if (page && manifest?.slug && grain === null) {
+    try {
+      findings.push(await firstPublish(dir, node, manifest.slug, flags));
+    } catch {
+      // The network did not answer: the key's finding says so.
+    }
+  }
   if (page && (sealed || placeholder)) {
     // The bundle grain.json names, and whether public/ still makes it.
     let built: string | null = null;
@@ -199,7 +272,7 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
     } else if (built !== null && built !== sealed.bundle) {
       findings.push({
         ok: true, what: "bundle",
-        detail: `public/ changed since grain.json's bundle: grain publish seals it again${grain && grain.version >= version ? ` (raise grain.json's version above ${grain.version} first)` : ""}`,
+        detail: `public/ changed since grain.json's bundle: grain publish seals it again${grain && grain.version >= version ? `, as v${grain.version + 1}` : ""}`,
       });
     } else {
       findings.push({ ok: true, what: "bundle", detail: "grain.json names the bundle public/ makes" });
@@ -240,7 +313,8 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
     if (registryChat || held < manifest.version) {
       findings.push({
         ok: false, what: "published", detail: `the registry holds version ${held}${registryChat ? " (a chat-only app)" : ""}, grain.json is ${manifest.version}`,
-        next: manifest.version > held ? `grain publish${flags}` : `raise grain.json's version above ${held}, then grain publish${flags}`,
+        // grain publish raises the version itself when the registry holds this one or above.
+        next: `grain publish${flags}`,
       });
     } else findings.push({ ok: true, what: "published", detail: `the registry holds version ${held}` });
   }
@@ -267,5 +341,11 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
       ? { ok: true, what: "connect profile", detail: `revision ${grain.profile.profile.revision} in the registry` }
       : { ok: false, what: "connect profile", detail: "the registry holds no Connect profile: users see only the description", next: `grain profile${flags}` });
   }
-  return { state, findings, publish };
+  const first = findings.find((f) => !f.ok);
+  const done = kind === "page"
+    ? publish === "published"
+      ? "nothing: the page is published and the project is in order (a change to public/ or grain.json: grain publish makes the next version)"
+      : "nothing: the project is in order"
+    : "nothing: the server is paired and the project is in order (npm start runs it)";
+  return { state, findings, publish, next: first?.next ?? done };
 }

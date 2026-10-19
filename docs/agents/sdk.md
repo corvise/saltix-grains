@@ -9,7 +9,7 @@ repository's account of what apps need of them, and the golden vectors in `vecto
 
 | Where | What |
 |---|---|
-| `packages/grain/src/rules.ts` | `@saltix/grain/rules`, the wallet's bridge rules the simulator plays by (as Saltix's Android app applies them: its bridge, container, storage and sealed site): `tapRule`, `permissionRule`, `manageRule`, `BridgeLimiter` (a bucket per known method only), `bridgeAnswer` and `bridgeEvent` (64 KiB), `storageRule`, `sealedCsp`; tested in `packages/grain/test/rules.test.mjs`; never part of a page's `index.js` |
+| `packages/grain/src/rules.ts` | `@saltix/grain/rules`, the wallet's bridge rules the simulator plays by (as Saltix's Android app applies them: its bridge, container, storage and sealed site): `tapRule`, `permissionRule`, `manageRule`, `BridgeLimiter` (a bucket per known method only), `bridgeAnswer` and `bridgeEvent` (64 KiB), `storageRule`, `sealedCsp`, `devPageUrl` (where a development wallet opens a page: a sealed one's start page from the bundle's root, never beside the manifest); tested in `packages/grain/test/rules.test.mjs`; never part of a page's `index.js` |
 | `packages/grain/src/index.ts` | `@saltix/grain`, the page's side of the bridge, one module (`grain init` copies it into `public/`); `layoutSheet`, where `grain.layout()` keeps its CSS variables below the wallet's; and the wallet's rules the simulator plays by (`frameFor`, `controlsFor`, `pageColorOf`, `frameColors`) |
 | `packages/server/src/` | `@saltix/grain-server`; `index.ts` re-exports every module below |
 | `manifest.ts`, `registry.ts`, `tx.ts`, `handle.ts` | the manifest, the registry's calls (`signGrainTx`, `grainCallProblem`), transactions v3, usernames |
@@ -26,8 +26,8 @@ repository's account of what apps need of them, and the golden vectors in `vecto
 | `packages/connect/src/` | `@saltix/connect`, Sign in with Saltix for websites ([../connect.md](../connect.md)): `client.ts` (`createConnect`), `session.ts`, `offer.ts`, `grant.ts`, `seal.ts`, `relay.ts`, `store.ts`, `verify.ts` (the page's check of a grant: the reference Saltix's explorer follows), `button.ts`, `dialog.ts`, `connect.css`, `site.ts` (`readSiteProfile`); built also as one module, `dist/saltix-connect.js` |
 | `publish.ts`, `publish-link.ts`, `inflate.ts`, `keys.ts`, `address.ts`, `bytes.ts` | publishing links, raw DEFLATE, device keys and the one Ed25519 check (`verifyEd25519`), Address v1, encoding |
 | `packages/cli/src/main.ts` | `grain`: the help and every command's dispatch |
-| `packages/cli/src/` others | `network.ts` (where a command reaches the network: public relays, `--relay`, `--node`), `faucet.ts`, `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `connect.ts` (`connect.json`, and `grain lint`'s checks of it, the icon and permissions nothing uses), `pair.ts` (`grain pair`: the key in `.grain/`, the offer shown, the relay connection that answers Saltix, the registry watched, `app.key` and `app.json`), `status.ts` (`grain status`, `grain doctor`), `devlog.ts` (the steps' log, `.grain/log.jsonl`: codes only), `profile.ts` (`grain profile`, `grain connect-profile`); `chat-template.ts` the chat's server and every project's `package.json`, which links the SDK and the `grain` command from the checkout, `bundle.ts` (the bundle, checked as every node checks it), `publish-flow.ts` (`grain publish`: the form, the bundle, its sources, the upload on the paired key's statement, the owner's signature, the registry, the icon; `.grain/publish.json`, which `grain doctor` reads), `sources.ts` (a sealed manifest's sources by the network's protocol: none from version 2, before it the network's own copies at up to 3 relays), `icon.ts`, `image.ts`, `png-write.ts` (`grain icon`: an icon to the standard from any PNG or JPEG, §3.4's checks, the preview; decoding with colour profiles and EXIF, Lanczos resampling, PNG writing and palettes), `registry.ts` (publish's calls, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `send.ts` (an account's registry calls one at a time: each waits until it landed, and one the pool refuses for an earlier pending call is built again), `chat.ts` (chat-spec, cert), `sponsor.ts` |
-| `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
+| `packages/cli/src/` others | `network.ts` (where a command reaches the network: public relays, `--relay`, `--node`), `faucet.ts`, `project.ts` (manifest checks, key files), `template.ts` (`grain init`, its AGENTS.md), `dev.ts` (and the simulator it serves at `/_simulator/`), `pages.ts` (`grain lint`'s checks of a page), `connect.ts` (`connect.json`, and `grain lint`'s checks of it, the icon and permissions nothing uses), `pair.ts` (`grain pair`: the key in `.grain/`, the offer shown, the relay connection that answers Saltix, the registry watched, `app.key` and `app.json`), `status.ts` (`grain status`, `grain doctor`: `projectKind`, a page alone's `not_needed`, the deposit before a first publish), `owner.ts` (who signs an owner's call: `signerFor`, the owner's Saltix unless `--key` names a key file or the registry names its account; `ownerLine`, said before anything is signed), `check.ts` (`grain dev --check`: the simulator driven through `window.saltixSimulator`, what it saw judged by `judge`), `browser.ts` (`findBrowser`, and the DevTools protocol over `--remote-debugging-pipe`), `monogram.ts` (`grain icon --monogram`: a stroke font of A–Z and 0–9, `monogramPixels`), `devlog.ts` (the steps' log, `.grain/log.jsonl`: codes only), `profile.ts` (`grain profile`, `grain connect-profile`); `chat-template.ts` the chat's server and every project's `package.json`, which links the SDK and the `grain` command from the checkout, `bundle.ts` (the bundle, checked as every node checks it), `publish-flow.ts` (`grain publish`: the form, the bundle, its sources, what the registry holds already (`sameContent`, in the manifest's canonical form: nothing changed, nothing sent), the upload on the paired key's statement, the owner's signature, a key file's registration made private, the registry, the icon; `.grain/publish.json`, which `grain doctor` and `grain lint` (`readiness`) read), `sources.ts` (a sealed manifest's sources by the network's protocol: none from version 2, before it the network's own copies at up to 3 relays), `icon.ts`, `image.ts`, `png-write.ts` (`grain icon`: an icon to the standard from any PNG or JPEG, §3.4's checks, the preview; decoding with colour profiles and EXIF, Lanczos resampling, PNG writing and palettes), `registry.ts` (publish's calls, retire, show), `studio.ts` (configure, access, rate, bind, app-key), `send.ts` (an account's registry calls one at a time: each waits until it landed, and one the pool refuses for an earlier pending call is built again), `chat.ts` (chat-spec, cert), `sponsor.ts` |
+| `simulator/` | the wallet's side in a desktop browser (`simulator/connect-sheet.ts`: a preview of the Connect sheet from `connect.json` and the manifest, before a grain opens; `simulator/phone.ts`: the page framed as Saltix frames it, inside the safe area or edge to edge with `viewport-fit=cover`, with the wallet's controls, the band, margins and icons in the page's colours (`frameColors`, `pageColorOf`, read when Saltix reads them) and Saltix's splash while the page loads, on a phone, one on its side, the Galaxy Z Fold's sizes and an iPhone-like screen; `simulator/icon.ts`: the project's icon, which `grain dev` serves at `/_icon.png`, in the sheet and the splash; `window.saltixSimulator`, what `grain dev --check` drives: the devices, the theme, the sheet, the refused requests and the page's geometry); it imports the server's modules one by one, never `index.ts` (which holds Node-only code); `grain dev` serves it too, built into the command line's package |
 | `scripts/dev.mjs`, `scripts/dev-relay.mjs` | `npm run dev`: the simulator, `examples/hello-grain`, a development relay (the SDK's `/dev`, re-exported) and registry |
 | `scripts/sync-vectors.sh`, `scripts/check-vectors.mjs` | copies the protocol's golden vectors from a checkout of the protocol's repository, `vectors/SOURCE` naming its commit and each file's blob id; the check CI runs that every file is those bytes; `vectors/README.md` says what each file holds |
 | `scripts/scratch.mjs`, `scripts/ci-tmp.sh` | a test file's directories (`scratch(prefix)`: under the system's temporary directory, removed after the file's last test, a failed one's too); CI's check that the tests left nothing in the job's own temporary directory |
@@ -37,8 +37,9 @@ repository's account of what apps need of them, and the golden vectors in `vecto
 ## Commands
 
 ```sh
-npm ci                     # npm 11 warns that esbuild's install script is not approved: harmless here
+npm ci                     # esbuild's install script is denied (allowScripts): its binary comes from its platform package
 npm test                   # builds every package and the simulator, then each package's node --test: what CI runs
+cd packages/cli && node --test --test-force-exit test/check.test.mjs   # grain dev --check in this computer's Chrome
 npm run build --workspace packages/server            # one package
 cd packages/server && node --test --test-force-exit test/chat-server.test.mjs   # one file
 node --test --test-force-exit --test-name-pattern "budget" test/chat-server.test.mjs  # one test
@@ -104,6 +105,53 @@ Tests import `dist/`: build the package before running its tests by path, and ag
   request. A change a developer meets also extends `AGENTS.md`, these pages and every project's `AGENTS.md` (the texts in
   `packages/cli/src/template.ts`: `agentsMd`, `appRules`, `fullScreenRules`), which `agents-template.test.mjs`,
   `agent-docs.test.mjs` and `docs.test.mjs` hold to each other and to the code.
+
+## Decisions
+
+What the SDK decided, and why, where a choice was made; the newest first. A change that goes against one says so here.
+
+- **2026-10-20, from a fresh agent's acceptance test** (it built and published a page-only game from the public SDK
+  alone, and reported what it met):
+  - **Who signs an owner's call** (`owner.ts`): the owner's Saltix (a QR code, or My apps) by default; a key file only
+    when `--key` names it, or for an app the registry already names its account as the owner of; `--wallet` always
+    Saltix; the account that will own what the call makes is printed before anything is signed. Why: `grain init` puts
+    an `owner.key` in every project, and `grain publish` signed with it whenever the slug was free, so a developer with
+    a phone could end up with an app owned by a throwaway key. Rejected: the key file whenever it exists (that
+    accident); a key file only on the test network, with a notice (a notice does not stop it, and a plain account may
+    keep its key in a file on any network).
+  - **Nothing changed, nothing sent** (`sameContent`): `grain publish` compares what the registry holds with what it
+    would sign in the manifest's canonical form (Borsh), the owner, the version and the relays' copies aside; the same
+    content is never signed again, its missing uploads are finished, and with none it says "nothing to publish" and
+    exits 0. A version is raised only for a change of content. Why: the comparison was JSON text, and a node answers
+    with its objects' keys sorted, so every run raised the version and sent `UpdateGrain` (a fee, two minutes, a QR code
+    for the owner). The development registry answers with sorted keys too, so the tests meet what the network does.
+    Rejected: always raising (that cost); comparing JSON with sorted keys (the canonical bytes are what is signed).
+  - **A key file's registration starts private**: `SetGrainAccess` private right after `RegisterGrain`, as Saltix's New
+    app does (24-app-studio §2a: a new grain is public until its owner says otherwise). A publishing link registers a
+    free slug public (the wallet's own flow, 12-grains §10), and `grain publish` says so. Rejected: changing the docs to
+    "public at once" (an app half made would be in the marketplace); one call that registers private (the protocol
+    has none).
+  - **A page alone pairs nothing**: `grain status` says `not_needed` (exit 0, no network asked) and names `grain doctor`;
+    `doctor` ends with a page's words, and before a first publish names the deposit and, on the test network, the way
+    without a phone. Rejected: `unpaired`, exit 1 (an agent told to start with `grain status` was sent to pair a page).
+  - **`grain dev --check`** drives the simulator in the developer's own Chrome, Chromium, Edge or Brave
+    (`CHROME_PATH`), headless, over `--remote-debugging-pipe`, with a profile and a temporary directory it removes
+    after (the temporary one short, in the system's: a browser on Linux keeps a socket there, whose path has at most
+    108 bytes); the simulator measures (`window.saltixSimulator`), `judge` decides, tested on its own. Without a sandbox
+    only where the system gives none. CI runs it in GitHub's Ubuntu image's Chrome. Rejected: Puppeteer or Playwright (a browser download in every install); a debugging
+    port (a port open on the computer, and Node 20 has no WebSocket).
+  - **`grain icon --monogram`**: one or two letters from a stroke font of the SDK's own, so the bytes are the same on any
+    computer. Rejected: a font file or a text-drawing package (another system draws other bytes; a native dependency).
+  - **Templates**: `grain init` makes a page that works on its own (no gate); `--sign-in` the page that checks first.
+    `connect.json` has no placeholder link; `grain lint` and `grain profile` refuse links to hosts reserved for
+    examples, `grain lint` warns of `grain init`'s placeholder origin and `grain sign` refuses it. A page outside
+    Saltix links to the app by its slug (`slugLink`), never to a manifest at its own origin, which a sealed page has not.
+  - **The simulator opens a sealed page's start from the bundle's root** (`devPageUrl`), where `grain dev` serves
+    `public/`, and shows the project's icon on its Connect sheet and splash.
+  - **One command's help keeps each note whole** (`notesOf`): a note goes on in lines indented by four, and is shown or
+    left out as a whole.
+  - **esbuild 0.28** (0.24's development server was GHSA-67mh-4wv8-2f99; the SDK only bundles with it), its install
+    script denied in `allowScripts` (npm 11 asks): the binary comes from its platform package.
 
 ## How a change lands
 

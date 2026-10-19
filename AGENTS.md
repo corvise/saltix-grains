@@ -23,6 +23,30 @@ file, and the protocol has pages of its own:
   and the protocol commit it was read at. The protocol's own repository is not public: read these pages, and the
   golden vectors in [vectors/](vectors/README.md), which are its bytes and win over any page.
 
+## Quick path: a page-only app
+
+A page that works on its own (a game, a tool, what it keeps per user in `grain.storage`) needs no server, no key to pair
+and no hosting. From an empty folder to an app published in the network, every command and nothing else:
+
+```sh
+git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build
+npx grain init ../<slug> --slug <slug> --name "<Name>" && cd ../<slug> && npm install
+npx grain status                 # not_needed: a page alone has nothing to pair
+npx grain dev                    # write public/; the simulator frames it as Saltix does
+npx grain dev --check            # headless: the Connect sheet, every screen, both themes; screenshots in .grain/check/
+npx grain icon --monogram <L>    # or grain icon <picture> --out icon.png
+npx grain lint && npx grain doctor   # what is left; before the first publish, what registering the slug takes
+npx grain publish                # says who will own the app; the owner's Saltix signs from a QR code
+```
+
+Run `grain publish` again with nothing changed and it says "nothing to publish" and sends nothing; a change to `public/`
+or `grain.json` makes the next version. **No phone, on the test network**: `npx grain faucet --wait`, then
+`npx grain publish --key owner.key` (the app is then `owner.key`'s account's, and starts private:
+`npx grain access --slug <slug> --public --key owner.key` opens it), then `npx grain profile`
+([No phone, test network](docs/how-it-works.md#no-phone-test-network)). The rest of this page, and of
+[docs/agents/app.md](docs/agents/app.md), about servers, keys and pairing is for an app with a program: a chat,
+payments, notifications, a page for some people only.
+
 ## Start here: Saltix's brief, or a developer key
 
 Saltix offers **Copy brief for a coding agent** beside each app's key: the app's name, slug, form and network and these
@@ -45,11 +69,12 @@ you were given, an app is waiting for you:
    `npx grain init ../<slug> --chat --slug <slug>` (a page: without `--chat`) and `cd ../<slug> && npm install`, which
    links the SDK and the `grain` command from the checkout (the SDK is not on npm yet).
 3. **Pair it, every session from `grain status`** (Saltix 24-app-studio
-   [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). `npx grain status`: `paired`, go on. Anything
-   else: `npx grain pair` (in the background, or `npx grain pair --no-wait` and then `npx grain pair` to wait).
-   **Show the person its QR code (the terminal's, or `.grain/pair.html`) and the 6-digit code, and wait**: they scan it
-   with Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same code, keep **Add this
-   server** and confirm with the PIN. `grain pair` writes `app.key` and `app.json` once the registry names the key; the
+   [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). `npx grain status`: `paired`, go on (a page
+   alone says `not_needed`: [the quick path](#quick-path-a-page-only-app)). Anything else: `npx grain pair` (in the
+   background, or `npx grain pair --no-wait` and then `npx grain pair` to wait). **Show the person its QR code (the
+   terminal's, or `.grain/pair.html`) and the 6-digit code, and wait**: they scan it with Saltix (the phone's camera,
+   or My apps → Pair a server), check that Saltix shows the same code, keep **Add this server** and confirm with the
+   PIN. `grain pair` writes `app.key` and `app.json` once the registry names the key; the
    key is made on this computer and never leaves it. Then `npx grain doctor` names what is left. **Never ask the person
    to paste, type or send a key.**
 4. **A developer key is only for a host where no command runs.** If one reaches you anyway, read only its public parts:
@@ -111,7 +136,9 @@ That line closes every report Saltix copies for an AI agent. In full (Saltix 12-
   above the page, so the safe area and the controls are 0; a plain browser gives its own insets (`env(safe-area-inset-*)`).
 - **Test at 475×751, 704×932 and 932×704** (the Galaxy Z Fold's sizes), on a 360×780 phone, one on its side and the
   iPhone-like screen in the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, in both
-  ways, and says which. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
+  ways, and says which. `grain dev --check` does it headless in the Chrome, Chromium or Edge of this computer and exits
+  1 on an error (something tappable under the controls, a page that throws or does not load, a Connect profile a
+  wallet refuses), with a screenshot of every screen in `.grain/check/`. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
   (`cover-without-insets`), and about a bar pinned to the top of such a page whose rule keeps clear of nothing
   (`full-screen-top-bar`).
 
@@ -121,20 +148,25 @@ keep it): rebuild it in CI and fail when `grain.json` changes; never edit `entry
 
 **A page needs no server and no hosting: `grain publish` puts it into the Saltix network.** It seals `public/`, checks
 it as every node does, and uploads it from this computer straight into the network (Saltix 32-images
-[§7.3](docs/protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)), then shows the QR code the
-owner's Saltix signs the version from, waits for the registry, and uploads the icon. With `grain pair`'s `app.key` the
-bundle goes up before the owner signs (held pending for a day); without one, after. Never set up hosting, a CDN, a
-domain or a certificate for a page, and never ask the user for one; never pass `--sources` unless the user hosts the
-bundle on purpose. `grain publish --no-wait` returns once the QR code is shown: show it (or `.grain/publish.html`) to
-the user, then run `grain publish` again after they confirmed; it finishes what is left and raises a version the
-registry already holds. `grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`,
-`pending_expired`, `published`); a refusal says what to do. `--hosted` only for a page the user hosts at their own
-origin.
+[§7.3](docs/protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)), says which account will own
+the app, then shows the QR code the owner's Saltix signs the version from, waits for the registry, and uploads the icon.
+With `grain pair`'s `app.key` the bundle goes up before the owner signs (held pending for a day); without one, after.
+Never set up hosting, a CDN, a domain or a certificate for a page, and never ask the user for one; never pass
+`--sources` unless the user hosts the bundle on purpose. `grain publish --no-wait` returns once the QR code is shown:
+show it (or `.grain/publish.html`) to the user, then run `grain publish` again after they confirmed; it finishes what is
+left. With nothing changed it says "nothing to publish" and sends nothing; a version is raised only when `grain.json` or
+`public/` changed. **A key file signs only when `--key` names it** (on the test network without a phone: `--key
+owner.key`, after `grain faucet --wait`; the app is then that key's account's, and starts private), or for an app the
+registry already names its account as the owner of; `grain init`'s `owner.key` never registers an app by itself.
+`grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`,
+`published`), and before the first one what registering the slug takes; a refusal says what to do. `--hosted` only for
+a page the user hosts at their own origin.
 
 **The icon** is a 512 × 512 opaque PNG, sRGB, no metadata, at most 64 KiB, its mark inside the keyline circle
 (5/12 of the side from the centre), the background full bleed (Saltix cuts the rounded square, corners 0.26 of the side):
-make it with `grain icon <picture> --out icon.png` from any PNG or JPEG (it names it in `grain.json`), look at the
-preview it writes, and never draw rounded corners, transparency or a border yourself ([docs/icons.md](docs/icons.md)).
+make it with `grain icon <picture> --out icon.png` from any PNG or JPEG (it names it in `grain.json`), or, with no
+picture yet, `grain icon --monogram <letter>` (a letter or two on a colour), look at the preview it writes, and never
+draw rounded corners, transparency or a border yourself ([docs/icons.md](docs/icons.md)).
 
 A top bar that keeps clear on an edge-to-edge page, as the page `grain init` makes has it:
 
@@ -159,7 +191,8 @@ its own words", then a row for each permission the manifest asks for, and Contin
 and what it keeps about a user and for how long (required when `grain.json` asks for `address` or `storage`), in
 English and Russian. `grain lint` fails without it and checks every rule; it warns about a permission nothing in the
 app's sources uses: drop it. `grain profile` sets it in the registry (a QR code for the owner's Saltix, or `--key` on
-the test network). How to write one: [docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson). Websites
+the test network). Its links are the app's own: a link to an example domain (`.example`) is refused, as it leads
+nowhere. How to write one: [docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson). Websites
 and DApps use the same standard to sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`). A Connect
 grant is for display only: a bearer artefact that answers no server's challenge, so a server never takes it as a login
 ([docs/connect.md](docs/connect.md#5-a-grant-is-for-display-never-a-servers-login)).
@@ -175,7 +208,7 @@ Saltix 0.1.54 pays a developer key's invoice and 0.1.53 and older cannot, so say
 not open: update Saltix ([docs/payments.md](docs/payments.md)).
 
 **The server's key is paired, never copied** (Saltix 24-app-studio [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). Start every session in an app's project
-with `grain status`; when it is not `paired`, run `grain pair`, show the user its QR code (or `.grain/pair.html`) and the
+with `grain status` (a page alone: `not_needed`, nothing to pair); when it is not `paired`, run `grain pair`, show the user its QR code (or `.grain/pair.html`) and the
 6-digit code, and wait while they scan it with Saltix and confirm: the key is made on this computer and never leaves it,
 and `grain pair` writes `app.key` once the registry names it. Never ask the user to paste, type or send a key; a developer
 key is only for a host where no command runs. `grain doctor` names the next step. Every command logs its steps to
@@ -213,7 +246,8 @@ UI; a private app never loads for them at all, since Saltix reads the registry f
   a sign-in button (`declined`), try again (`failed`), open it in Saltix (`outside`).
 - `grain lint` warns (`render-before-sign-in`) about a page that signs in and shows anything else in its HTML first, or
   marks no splash. [docs/agents/app.md](docs/agents/app.md#a-page-for-some-people-only-check-first-then-render) has the
-  steps and the code; `grain init` makes a page that follows them.
+  steps and the code; `grain init --sign-in` makes a page that follows them (`grain init` alone makes a page that works
+  on its own, with no sign-in).
 
 ## Building an app: what a page gets from Saltix, and what it does not
 

@@ -43,7 +43,9 @@
     .splash { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #0b1020; color: #e6ecff; }
     .splash .progress { position: absolute; top: 0; left: 0; height: 2px; width: 40%; background: #4f8bff; animation: progress 1.2s ease-in-out infinite; }
     @keyframes progress { from { left: -40%; } to { left: 100%; } }
-    .splash .icon { width: 64px; height: 64px; border-radius: 16px; background: #1e2d5c; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+    .splash .icon { width: 64px; height: 64px; border-radius: 16px; background: #1e2d5c; display: flex; align-items: center; justify-content: center; font-size: 28px; overflow: hidden; }
+    /* The app's icon in Saltix's rounded square: corners 0.26 of the side (32-images §3.2). */
+    .app-icon { width: 100%; height: 100%; border-radius: 26%; display: block; }
     .closed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #0b1020; color: #9fb0d8; font-size: 13px; }
     .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; }
     .sheet { width: 100%; background: #121a33; color: #e6ecff; border-radius: 18px 18px 0 0; padding: 12px 12px 28px; display: flex; flex-direction: column; gap: 4px; }
@@ -126,7 +128,8 @@
     .connect-sheet .cs-mark { width: 24px; height: 24px; border-radius: 7px; background: #5eb8f0; color: #0b1220; display: grid; place-items: center; font-weight: 800; }
     .connect-sheet .cs-preview { font-size: 11px; color: #e0a14f; }
     .connect-sheet .cs-who { display: flex; align-items: center; gap: 12px; }
-    .connect-sheet .cs-icon { width: 52px; height: 52px; border-radius: 14px; background: #1e2d5c; color: #eaf1fa; display: grid; place-items: center; font-size: 22px; font-weight: 700; flex: none; }
+    .connect-sheet .cs-icon { width: 52px; height: 52px; border-radius: 14px; background: #1e2d5c; color: #eaf1fa; display: grid; place-items: center; font-size: 22px; font-weight: 700; flex: none; overflow: hidden; }
+    .connect-sheet .cs-icon:has(.app-icon), .splash .icon:has(.app-icon) { background: none; }
     .connect-sheet .cs-titles { display: flex; flex-direction: column; min-width: 0; }
     .connect-sheet .cs-name { font-size: 17px; }
     .connect-sheet .cs-meta, .connect-sheet .cs-note, .connect-sheet .cs-label { font-size: 11.5px; opacity: .7; }

@@ -40,6 +40,7 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | Agent's start (2026-10-19) | an agent handed a developer key alone found nothing about Saltix; with a brief it built a page-only game, could not publish it without hosting of its own, ran the example's chat on another app's key, and did not know what needs a server | [how-it-works.md](how-it-works.md), the brief Saltix copies, one app one key, pairing (`grain pair`, above); `grain publish` puts a page into the network itself, no hosting (roadmap 6) |
 | Example, then project | `npm run example` serves spec version 3 under the app's key, and the project `grain init --chat` made started at 2, which a wallet holding 3 refuses: the app's own commands never reached Saltix | fixed: a project starts at 4 |
 | `npx grain` in a project | a project did not depend on the command line, so `npx grain …` there fell through to the npm registry's unrelated package named `grain` | fixed: every project `grain init` makes links it from the checkout |
+| A page-only app, start to finish (2026-10-20) | a fresh agent with the public SDK alone built and published a tic-tac-toe page on the test network in 14 minutes, and met: the simulator could not open the page once `grain publish` had sealed it; a second `grain publish` with nothing changed raised the version and sent a transaction; `grain status` sent a page to `grain pair`, exit 1; the way without a phone was scattered; `owner.key` signed a free slug whenever it existed; an app registered from it was public at once; `npm install` missing from a step; placeholder links passing lint; ~100 lines of its own to drive the simulator headless; no icon without a picture; help cut mid-sentence; the init line calling the public key the key; `grain show` printing `null` and exit 1 for a free slug; a fee without its unit; lint saying "ready to register" after publishing; commands missing from the steps' log; npm 11's warnings; a link to a manifest a sealed page has not; a quick path buried under server topics | fixed (see [the SDK's decisions](agents/sdk.md#decisions)): `devPageUrl`; nothing changed, nothing sent; `not_needed`; *No phone, test network* and `grain doctor`'s deposit; the owner's Saltix unless `--key`, the owner said first; registered private; `grain dev --check`; `grain icon --monogram`; `--sign-in`; the quick path in AGENTS.md and the README |
 
 ## The roadmap
 
@@ -317,7 +318,7 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 
 | Step | Reasons |
 |---|---|
-| `init` | `chat`, `page`: the project made |
+| `init` | `chat`, `page`, `page_sign_in`: the project made |
 | `rotate` | `asked` (`--new`), or why `app.key` stopped working: `revoked`, `replaced`, `retired`, `unregistered`, `other_network` |
 | `paired_already` | `app.key` is named: nothing to do |
 | `key_made`, `key_reused` | a new key in `.grain/pair.key`, or the one an earlier offer made |
@@ -327,19 +328,27 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 | `request` | the answer to a request: `accepted`, `used`, `expired`, `unknown`, `other_app`, `not_owner`; a frame that was not a request: `frame_not_pairing`, `frame_malformed`, `frame_slug`, `frame_unread` |
 | `registry` | timeout: `answered_not_named` (Saltix was answered, its transaction has not named the key: a managed owner's delay, a cancelled PIN) or `not_asked` |
 | `paired` | `app.key` and `app.json` written |
-| `status` | the state: `paired`, `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
-| `doctor` | the first thing to do: `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `bundle`, `upload`, `published`, `icon`, `connect_profile` |
+| `status` | the state: `paired`, `not_needed` (a page alone), `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
+| `doctor` | the first thing to do: `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `registry` (a page's slug free: the deposit, the way to it), `bundle`, `upload`, `published`, `icon`, `connect_profile` |
+| `serve` | `grain dev` serves: `page` (`grain init`'s placeholder origin), `sealed`, `hosted` |
+| `check` | `grain dev --check`: `clean`, `warnings`, or the first error's kind (`controls`, `page_error`, `open`, `connect_sheet`, `layout`); `refused` with `no_browser`; `waiting` with `no_sandbox`; `failed` with `browser` |
+| `lint` | `clean`, `warnings`, `errors` |
+| `icon` | `made`, `checked`, `monogram` (`refused` when the icon fails its checks) |
+| `grant`, `wait` | `grain faucet`: `sent` (or `refused` with the reason), then `landed` or `not_landed` |
+| `signer` | who signs an owner's call: `key_named`, `key_owns`, `wallet_asked`, `wallet_no_key`, `wallet_free`, `wallet_not_owner` |
 | `doctor_publish` | where a page's publish stands: `not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, `published` |
 | `network` | `grain publish` reached the network: `protocol_<n>`, the protocol version it runs |
 | `bundle` | `built`; failures end the command (`bundle_no_public`, `bundle_refused`, `bundle_too_large`) |
 | `sources` | the manifest's sources: `network` (protocol version 2: none), `relays` (before it: the network's own copies), `own` (the developer's hosts) |
 | `version` | `raised`: the registry held this version or above, so the next one is published |
 | `upload` | `pending` (held on the server key's statement), `named` (the registry names it), `held` (the network had it); `waiting` with `offset` (resumed), `busy`, `rate_limited`, `unreachable`, `not_named` (the node a block behind), or `after_registry_<why>` (no key vouches: `unpaired`, `revoked`, `replaced`, `other_network`, `other_app`, `unregistered`, `invalid`); `refused` with the node's reason (`kind`, `not_named`, `size`, `format`, `method`, `files`, `name`, `unpacked`, `hash`, `slug`, `key`, `time`, `signature`, `busy`, `pending`, `full`, `store`, `rate_limited`) or the SDK's (`check`, `stuck`, `unreachable`) |
-| `sign` | `key_file`: signed with `owner.key` here |
+| `sign` | `key_file`: signed with `owner.key` here (publish, profile) |
+| `access` | after a registration: `private` (a key file's, made private at once), `public` (a publishing link's: the owner makes it private in Saltix); `failed` or `timeout` when making it private did not land |
 | `link` | `shown`: the publishing link's QR code is shown (`waiting`) |
-| `registry` (publish) | `published`, `published_before` (a run that finishes); `timeout` with `not_signed` or `not_landed`; `waiting` with `no_wait` |
+| `registry` (publish) | `published`, `published_before` (the registry holds this content already); `timeout` with `not_signed` or `not_landed`; `waiting` with `no_wait` |
+| `registry` (show, profile) | `grain show`: `registered`, `free`, `retired`; `grain profile`: `set`, or `timeout` with `not_signed` |
 | `icon` | `uploaded`, `held`, `none` (the manifest names no icon); `refused` with `file_missing` or the node's reason |
-| `published` | the publish is done: `sealed`, `hosted` or `chat` |
+| `published` | the publish is done: `sealed`, `hosted` or `chat`; `unchanged` when nothing was signed, sent or uploaded |
 | `end` | the exit: `ok`, or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `<step>_<reason>` of a publish that stopped (`upload_busy`, `form_hosted_entry`, `sign_no_salt`, `key_key_file_mode`, …), `node_refused`, `network_unreachable`, `fs_<code>`, `exit_<n>` or `error` |
 
 ## For the owner: what needs the protocol or Saltix

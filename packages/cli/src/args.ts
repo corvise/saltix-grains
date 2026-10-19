@@ -11,7 +11,9 @@ export class UsageError extends Error {
 }
 
 /** Flags that take no value: whatever follows one is the next word, never its value. */
-export const SWITCHES: ReadonlySet<string> = new Set(["chat", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline", "new", "json", "hosted", "fix"]);
+export const SWITCHES: ReadonlySet<string> = new Set([
+  "chat", "sign-in", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline", "new", "json", "hosted", "fix", "check",
+]);
 
 /** Where a command reaches the network: its public relays (`--network`), relays named (`--relay`), or your node. */
 const NET = ["network", "relay", "node"];
@@ -25,10 +27,10 @@ const OWNER = [...KEYED, "wallet", "timeout"];
 
 /** The flags each command takes (`--help` aside, which every one does). */
 export const FLAGS: Readonly<Record<string, readonly string[]>> = {
-  init: ["slug", "name", "chat"],
-  dev: ["port", "manifest", "key", "app-key"],
+  init: ["slug", "name", "chat", "sign-in"],
+  dev: ["port", "manifest", "key", "app-key", "check"],
   lint: ["manifest", "key"],
-  icon: ["out", "fit", "background", "preview", "fix", "manifest"],
+  icon: ["out", "fit", "background", "preview", "fix", "monogram", "manifest"],
   sign: ["out", "manifest", "key"],
   bundle: ["sources", "start", "connect", "out", "dir", "manifest"],
   publish: [...OWNER, "manifest", "out", "hosted", "app-key"],
@@ -116,21 +118,38 @@ const ENTRY = /^ {2}grain ([a-z][a-z-]*)/;
 
 /**
  * The part of the whole `help` about `command`: its entries (each with the lines that go on under it), then the notes
- * (the lines that start at the margin's second column) that concern it: the owner's calls' note for those calls, and a
- * note on flags when it names one the command takes. Null for a command it does not name.
+ * that concern it, each whole (`notesOf`): the owner's calls' note for those calls, and a note on flags when it names
+ * one the command takes. Null for a command it does not name.
  */
 export function helpFor(help: string, command: string): string | null {
-  const lines = help.split("\n");
   const out = entriesOf(help, command);
   if (out.length === 0) return null;
   const takes = FLAGS[command] ?? [];
-  const concerns = (line: string) => {
-    if (OWNER_NOTE.test(line)) return OWNER_CALLS.has(command);
-    const named = flagsNamed(line);
+  const concerns = (note: string) => {
+    if (OWNER_NOTE.test(note)) return OWNER_CALLS.has(command);
+    const named = flagsNamed(note);
     return named.length === 0 || named.some((f) => takes.includes(f));
   };
-  const notes = lines.filter((line) => /^ {2}\S/.test(line) && !ENTRY.test(line) && concerns(line));
-  return [lines[0]!, "", ...out, ...(notes.length > 0 ? ["", ...notes] : [])].join("\n") + "\n";
+  const notes = notesOf(help).filter(concerns);
+  return [help.split("\n")[0]!, "", ...out, ...(notes.length > 0 ? ["", ...notes] : [])].join("\n") + "\n";
+}
+
+/** The notes of `help`, each whole: a line at the margin's second column that is no command's entry, with the lines
+ *  indented by four that go on under it. A note is kept or left out as a whole, never cut. */
+export function notesOf(help: string): string[] {
+  const notes: string[] = [];
+  let inNote = false;
+  for (const line of help.split("\n")) {
+    if (/^ {2}\S/.test(line) && !ENTRY.test(line)) {
+      notes.push(line);
+      inNote = true;
+    } else if (inNote && /^ {4}\S/.test(line)) {
+      notes[notes.length - 1] += "\n" + line;
+    } else {
+      inNote = false;
+    }
+  }
+  return notes;
 }
 
 /** The lines of `help` that are `command`'s entries, each with the lines that go on under it. */
@@ -147,7 +166,7 @@ export function entriesOf(help: string, command: string): string[] {
 }
 
 /** The note about the owner's calls, and the commands it concerns. */
-const OWNER_NOTE = /owner's calls|says what to do in the owner's Saltix/;
+const OWNER_NOTE = /owner's calls/;
 const OWNER_CALLS = new Set(["publish", "configure", "access", "bind", "profile"]);
 
 /** Every `--flag` the text names. */

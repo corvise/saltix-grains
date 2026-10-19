@@ -14,6 +14,23 @@ holds everything an app needs of them: [grains](docs/protocol/grains.md) (12-gra
 keys). A grain uses the wallet's identity, payments, storage and relays, and never holds the wallet's keys. It may be a
 page, or a chat and nothing else.
 
+### Quick path for a page-only app
+
+A page that works on its own needs no server, no key to pair and no hosting:
+
+```sh
+git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build
+npx grain init ../my-game --slug my-game --name "My game" && cd ../my-game && npm install
+npx grain dev                    # the simulator; npx grain dev --check tries it headless at every screen, both themes
+npx grain icon --monogram M      # an icon to the standard (or grain icon <picture> --out icon.png)
+npx grain doctor                 # what is left; before the first publish, the deposit the slug keeps
+npx grain publish                # into the network; the owner's Saltix signs from a QR code
+```
+
+No phone, on the test network: `npx grain faucet --wait`, then `npx grain publish --key owner.key`
+([No phone, test network](docs/how-it-works.md#no-phone-test-network)). Servers, keys and pairing are for an app with a
+program (a chat, payments, notifications): [Your first app in ten minutes](docs/first-app.md).
+
 **[How a mini-app works](docs/how-it-works.md)**: what runs where, whether your app needs a server (a page alone needs
 none; a program connects out to the relays, with no domain, open port or certificate), and every step to a published
 app as one checklist. **[Your first app in ten minutes](docs/first-app.md)**: `grain pair` shows a QR code, your Saltix
@@ -37,7 +54,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 
 | Package | What it is |
 |---|---|
-| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `grain.manage.open()` |
+| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `slugLink()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `grain.manage.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, and the grain's chat (`ChatServer`, from a developer key alone); `@saltix/grain-server/web` is what runs in a page |
 | [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
@@ -123,20 +140,24 @@ npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/s
 
 ```sh
 npx grain init ../dice --name "Dice roll"   # grain.json, connect.json, owner.key (owner-only), public/ with the bridge, AGENTS.md, package.json
+npx grain init ../team-board --sign-in    # a page for some people only: its splash until its sign-in decides
 cd ../dice && npm install && npx grain dev   # links the grain command; serves public/, the signed manifest and the simulator
+npx grain dev --check                     # the simulator headless: every screen, both themes; .grain/check/; exit 1 on an error
 npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕
 npx grain icon logo.png --out icon.png    # a 512x512 icon to the standard from any picture; grain.json names it
+npx grain icon --monogram D               # or one with no picture: a letter on a colour (--background #rrggbb)
 npx grain icon icon.png                   # an icon checked as wallets check it, and its hash
-npx grain publish                         # public/ sealed and put into the network, then a QR code: the owner's
-                                          # Saltix signs the version (the network quotes a new slug's deposit);
-                                          # --wallet asks the owner's Saltix even with an owner.key here
+npx grain publish                         # public/ sealed and put into the network, the owner said, then a QR code:
+                                          # the owner's Saltix signs the version (the network quotes a new slug's
+                                          # deposit); with nothing changed, "nothing to publish" and nothing sent
 npx grain publish --no-wait               # the same, returning once the QR code is shown; again later to finish
 npx grain bundle --connect https://api.dice.example   # seal public/ yourself, and name the origins it may reach
 npx grain sign                            # signed.json, for a page at your own origin (/.well-known/saltix-grain)
 npx grain publish --hosted                # that page, hosted by you, instead of the network
 npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
-npx grain publish --key owner.key        # or sign with a key file (test networks): returns once it landed
-npx grain profile --wallet                # a QR code: the owner's Saltix sets the Connect profile (connect.json)
+npx grain publish --key owner.key        # or sign with a key file (test networks, no phone): returns once it landed,
+                                          # the app owner.key's account's and private
+npx grain profile                         # a QR code: the owner's Saltix sets the Connect profile (connect.json)
 npx grain profile --key owner.key        # or sign it with a key file (test networks); --clear removes it
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
                                           # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
@@ -170,6 +191,12 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   account's nonce, and a profile its revision, as the node holds them, so the next call is built above it. A call the
   pool refuses because the account's earlier one is still pending (another command at the same time) is built again
   once that landed. `--no-wait` returns once the pool took it.
+- `grain dev --check` drives that simulator in a headless Chrome, Chromium, Edge or Brave of this computer
+  (`CHROME_PATH` names another), over a pipe, with a profile it removes after: the Connect sheet (a profile a wallet
+  would refuse is an error), the page's load (an exception or a missing page is an error), then every screen in both
+  themes (anything tappable under the wallet's controls is an error; a sideways scroll, something under a system bar,
+  a request the wallet refused, one look for both themes are warnings), with a screenshot of each and `report.json` in
+  `.grain/check/`; exit 1 on an error. No browser is downloaded; with none, it says so.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
@@ -197,34 +224,40 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   node stands after a break and waiting out a busy one: the network holds it pending for a day, so the owner signs
   whenever they like and your computer need not stay on. Without one (a first version), it uploads the bundle once the
   registry names it. Then the icon. Run again, it goes on from where it stopped; a version not above the registry's is
-  raised to the next. A refusal is said in words with what to do, and logged by its reason. `--hosted` publishes a page
-  at your own https origin instead (`grain init`'s placeholder origin `*.example` is sealed); a chat-only app is
-  published as it is.
-- `publish` with `--wallet`, or without a key file, shows `salt:grain-publish?m=…` as a QR code (and
-  `.grain/publish.html`): scan it with the
-  owner's Saltix, which fills in its account's key, checks the manifest and the registry, shows the grain and the deposit
-  and, after the PIN, signs and registers it (or records a newer version). The tool waits for the registry and writes
-  `signed.json`. The owner's key never leaves the phone; an app made in Saltix is its owner's phone's, so with an
-  `owner.key` of another account the tool asks Saltix too.
-- With `owner.key` (or `--key`), for devnets and the test network: it asks the registry for the slug —
-  unregistered → `RegisterGrain` with the deposit; the owner's with a lower version → `UpdateGrain`;
-  anything else is refused before a transaction is made — checks the balance, signs and submits
-  through the network's wallet interface (its public relays, `--relay` or `--node`).
+  raised to the next only when the content changed: what the registry holds already (the same manifest but for its
+  owner, its version and the relays' copies, compared in its canonical form) is never signed again, and with nothing
+  left to upload the command says "nothing to publish" and exits 0. A refusal is said in words with what to do, and
+  logged by its reason. `--hosted` publishes a page at your own https origin instead (`grain init`'s placeholder
+  origin `*.example` is sealed); a chat-only app is published as it is.
+- Who signs is said before anything is signed (`owner: …`): the owner's Saltix by default, from
+  `salt:grain-publish?m=…` as a QR code (and `.grain/publish.html`): scan it with the owner's Saltix, which fills in its
+  account's key, checks the manifest and the registry, shows the grain and the deposit and, after the PIN, signs and
+  registers it (or records a newer version). The tool waits for the registry and writes `signed.json`. The owner's key
+  never leaves the phone. A first version a publishing link registers is public (the wallet registers it so): make it
+  private in Saltix while you develop.
+- A key file signs only when `--key` names it, or for an app the registry already names its account as the owner of
+  (`--wallet` always asks Saltix), for devnets and the test network: it asks the registry for the slug — unregistered →
+  `RegisterGrain` with the deposit, then `SetGrainAccess` private (a new app starts private, as one made in Saltix
+  does); the owner's with a lower version → `UpdateGrain`; another account's → refused (an app made in Saltix is its
+  owner's phone's) — checks the balance, signs and submits through the network's wallet interface (its public relays,
+  `--relay` or `--node`). `grain init`'s `owner.key` never registers an app by itself.
 - `grain init` writes `connect.json`, the app's Connect profile (Saltix [19-connect §11](docs/protocol/connect.md#11-the-connect-profile)): the JSON form's `profile`
   object without `owner` and `revision`, an example in English and Russian that describes the app it makes. `grain lint`
   fails without it, and checks every rule of the format with the field and its limit (a tagline of 1–80 characters in
   one line, about up to 600, up to 4 highlights of 60, a privacy summary of up to 300, required when the manifest asks
-  for `address` or `storage`; `https://` links; support an `https://` link, a `mailto:` address or `@name`; at most
+  for `address` or `storage`; `https://` links, never to a host reserved for examples (`.example`, `example.com`,
+  `.test`), which leads nowhere; support an `https://` link, a `mailto:` address or `@name`; at most
   8 192 bytes in Borsh), the icon file (`icon.png` or `public/icon.png`: one every wallet takes, whose hash `grain.json`
   names, with the standard's warnings: [docs/icons.md](docs/icons.md)),
   and warns about an empty about, English alone, a link too long for a QR code (2 048 characters: set it in the app
   studio, or with a key file) and each permission nothing in the app's sources uses (`address` without
   `requestAddress`, `storage` without `grain.storage`…).
-- `grain profile` without a key file shows `salt:grain-profile?p=…` as a QR code ([12-grains §10](docs/protocol/grains.md#10-for-developers)): the owner's Saltix
+- `grain profile` shows `salt:grain-profile?p=…` as a QR code ([12-grains §10](docs/protocol/grains.md#10-for-developers)): the owner's Saltix
   fills in its account and the registry's revision and one, shows the profile as its Connect sheet will, and sets it
-  (`SetGrainProfile`) after the PIN; the tool waits for the registry. With `owner.key` (test networks) it signs the
-  profile itself at the registry's revision and one, and sends the call; `--clear` removes the profile. `grain show`
-  prints the registry's profile and whether a wallet takes it.
+  (`SetGrainProfile`) after the PIN; the tool waits for the registry. With a key file that owns the app (`--key`, or
+  `owner.key` for an app it registered; test networks) it signs the profile itself at the registry's revision and one,
+  and sends the call; `--clear` removes the profile. A link to a host reserved for examples is refused first. `grain
+  show` prints the registry's profile and whether a wallet takes it.
 - `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
   operator's key file, from the texts and links of `--profile` (`connect.json`), at a revision above the one the site
   serves now and the file it writes (`--out`, `.well-known/saltix-connect`), or `--revision N`; when neither can be
@@ -233,11 +266,12 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
   owner.key's account or `--address` (`faucet_request`): one every 5 minutes an address; a refusal says when to come
   back. A relay whose node runs no faucet passes the request to the next.
-- `grain show --slug S --out signed.json` writes the signed manifest the registry holds; for a free slug it
-  says the deposit registering it keeps: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more ([24-app-studio §5](docs/protocol/app-studio.md#5-the-deposit)).
-- `configure`, `access` and `bind` are the owner's (the handle's holder's) calls: signed with `owner.key` on test
-  networks, refused before a node would refuse them; without a key file the tool says what to do in the owner's Saltix
-  (My apps) and waits for the registry (`--timeout`). `configure` replaces the server keys and the category
+- `grain show --slug S --out signed.json` writes the signed manifest the registry holds, and says the network, the
+  version and the access; for a free slug it says the deposit registering it keeps, and exits 0: 100 SALT for 3–5
+  characters, 30 for 6–7, 10 for 8 or more ([24-app-studio §5](docs/protocol/app-studio.md#5-the-deposit)).
+- `configure`, `access` and `bind` are the owner's (the handle's holder's) calls: the account is said first; signed with
+  a key file when `--key` names it or it is the owner's (test networks), refused before a node would refuse them;
+  otherwise the tool says what to do in the owner's Saltix (My apps) and waits for the registry (`--timeout`). `configure` replaces the server keys and the category
   (`--revoke-all` names no key, which stops every developer key at once); `access` replaces public or private and the
   members. A rating names its account and is signed by the rater's key (`--key`), or given in Saltix.
 - `grain pair` (Saltix [24-app-studio §3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)) makes the server's Ed25519 key on this computer, in
@@ -250,12 +284,14 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `app.json` (the app, the network, the key's public half), and keeps `app.key`, `*.key` and `.grain/` out of git.
   Run again, it shows the same offer while it lives (30 minutes) and finishes once Saltix's transaction landed (a
   managed account's may wait its delay). `--new` pairs a new key and keeps the old `app.key` in `.grain/`.
-- `grain status` prints `paired`, `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`,
-  `other_network`, `invalid` or `unknown`, one line on why, and the command to run next (`--json` for a program; exit 0
-  only when paired). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
+- `grain status` prints `paired`, `not_needed` (a page alone: nothing to pair), `pairing`, `unpaired`, `revoked`,
+  `replaced`, `retired`, `unregistered`, `other_network`, `invalid` or `unknown`, one line on why, and the command to
+  run next (`--json` for a program; exit 0 when paired or not needed). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
   `chat.json`'s version, `npm install`, a page's bundle and where its publish stands, `not_uploaded`, `pending`,
   `waiting_for_owner`, `pending_expired` or `published`, what the registry holds, the icon, the Connect profile) and
-  ends with the exact next step; a page alone needs no paired key. Both only read.
+  ends with the exact next step; a page alone needs no paired key, and before its first publish it says what
+  registering the slug takes (the deposit; on the test network without a phone, `grain faucet --wait` and
+  `grain publish --key owner.key`). Both only read.
 - Every command run in an app's project appends its steps to `.grain/log.jsonl` ([docs/devex.md](docs/devex.md#the-steps-log)):
   the command, the step, its outcome, a reason code, the milliseconds, the network's kind; never a key, an address, a
   slug, a path or anything typed. `SALTIX_GRAIN_LOG=off` turns it off.
@@ -273,14 +309,16 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `--fit crop|contain|mark`, flattened onto `--background` or the picture's own ground, converted to sRGB, stripped of
   metadata, a palette when that is what fits 64 KiB), prints its hash first, checks it, writes a preview of it in the
   mask at 24, 40, 56 and 96 dp on dark and light, and names it in `grain.json`; `grain icon icon.png` checks one
-  ([docs/icons.md](docs/icons.md)).
+  ([docs/icons.md](docs/icons.md)). `grain icon --monogram L` makes one with no picture: one or two letters or digits
+  drawn bold inside the keyline circle on `--background` (else a colour the slug picks), from a stroke font of its own,
+  the same bytes on any computer.
 
 ## The page
 
 ```ts
-import { TEAM, gateOf, grain, inWallet, walletLink } from "@saltix/grain";
+import { TEAM, gateOf, grain, inWallet, slugLink } from "@saltix/grain";
 
-if (!inWallet()) showLink(walletLink("https://chess.example/.well-known/saltix-grain"));
+if (!inWallet()) showLink(slugLink("chess"));     // salt:grain/chess, for a sealed page and a hosted one alike
 
 const info = await grain.info();               // slug, version, form, listing, host, bridge, language, theme, safe_area…
 const layout = await grain.layout();           // the frame: { safeArea, controls }, kept current, and CSS variables
