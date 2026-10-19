@@ -107,8 +107,9 @@ test("a command goes to a relay's gateway trusted by its pin; another certificat
   assert.equal(configured.code, 0, configured.stderr);
   assert.match(configured.stdout, /^owner: dsalt1\S+, owner\.key's account on this computer, which the registry names as the owner$/m);
   assert.match(configured.stdout, new RegExp(`configure: transaction ${"ab".repeat(32)} \\(fee [0-9.]+ SALT\\)`));
-  // Then it waits for the call to land: this gateway's node says nothing of transactions, so it stops there.
-  assert.deepEqual(g.asked.map((a) => a.method), ["grain_get", "node_status", "grain_get", "node_status", "account_get", "transaction_submit", "transaction_get"]);
+  // The registry read again before signing (a call that changes nothing is never sent); then it waits for the call to
+  // land: this gateway's node says nothing of transactions, so it stops there.
+  assert.deepEqual(g.asked.map((a) => a.method), ["grain_get", "node_status", "grain_get", "grain_get", "node_status", "account_get", "transaction_submit", "transaction_get"]);
 });
 
 test("grain faucet asks for test SALT for the key file's account, says a refusal in words, and waits when asked", tls, async (t) => {

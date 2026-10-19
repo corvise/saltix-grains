@@ -98,6 +98,8 @@ export class Browser {
       "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", "--disable-sync",
       "--disable-component-update", "--disable-default-apps", "--mute-audio", "--hide-scrollbars", "--force-color-profile=srgb",
       "--window-size=1900,1300",
+      // No pop-up or window.open ever opens: what a check drives stays in its one tab, on this computer.
+      "--block-new-web-contents",
     ];
     // A container's /dev/shm is small; a root user has no sandbox.
     if (process.platform === "linux") args.push("--disable-dev-shm-usage");

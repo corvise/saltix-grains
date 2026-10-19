@@ -12,7 +12,7 @@ export class UsageError extends Error {
 
 /** Flags that take no value: whatever follows one is the next word, never its value. */
 export const SWITCHES: ReadonlySet<string> = new Set([
-  "chat", "sign-in", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline", "new", "json", "hosted", "fix", "check",
+  "chat", "sign-in", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline", "new", "json", "hosted", "fix", "check", "tap",
 ]);
 
 /** Where a command reaches the network: its public relays (`--network`), relays named (`--relay`), or your node. */
@@ -28,7 +28,7 @@ const OWNER = [...KEYED, "wallet", "timeout"];
 /** The flags each command takes (`--help` aside, which every one does). */
 export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   init: ["slug", "name", "chat", "sign-in"],
-  dev: ["port", "manifest", "key", "app-key", "check"],
+  dev: ["port", "manifest", "key", "app-key", "check", "tap"],
   lint: ["manifest", "key"],
   icon: ["out", "fit", "background", "preview", "fix", "monogram", "manifest"],
   sign: ["out", "manifest", "key"],

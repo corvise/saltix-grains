@@ -44,7 +44,7 @@ import { lint, publicKeyOf, readKey } from "./project.js";
 import { publishCall, salt, submit, walletLink, waitForPublished, type Sent, type Signing } from "./registry.js";
 import { SETTLE_EVERY_MS, SETTLE_MS, STAGES, landed, sendSettled } from "./send.js";
 import { protocolOf, sourcesFor } from "./sources.js";
-import { APP_KEY_ENV, APP_KEY_FILE, privateCall } from "./studio.js";
+import { APP_KEY_ENV, APP_KEY_FILE, privateCall, sameMembers } from "./studio.js";
 import { LANDS_IN, type WaitOut, Waiting } from "./wait.js";
 
 /** Where a publish stands, for `grain doctor` and the next run: nothing secret. */
@@ -67,16 +67,20 @@ export interface PublishState {
   form: PublishForm;
   bundle: string | null;
   size: number | null;
-  /** When the bundle went into the network, and until when it is held pending on the statement (ISO times). */
+  /** When this computer saw the network take the bundle (its own upload, or a node that held it already), and until
+   *  when it is held pending on the statement (ISO times). Null while nobody here saw it in the network: a relay's
+   *  `fetching` alone never counts, as it says the relay looks for the bytes, not that anyone has them. */
   uploaded_at: string | null;
   pending_until: string | null;
   /** When the owner was shown the publishing link. */
   link_shown_at: string | null;
   published_at: string | null;
   icon: string | null;
+  /** When this computer saw the network take the icon, as `uploaded_at` for the bundle. */
   icon_uploaded_at: string | null;
-  /** Transactions a key file here sent that no run has seen land yet: the next run waits for them rather than sending
-   *  them again, and `grain doctor` says they are on their way. */
+  /** Transactions a key file here sent for the app that no command has seen land yet: `grain publish`'s registration or
+   *  update, which the next run waits for rather than sending it again; the call that makes a new app private; and the
+   *  owner's own `grain access` and `grain profile`. `grain doctor` says where each stands until it landed. */
   sent?: SentRecord[];
   /** A key file here registered the app, and the registry has not been seen to make it private yet: the next
    *  `grain publish` sends `SetGrainAccess` private again until it does, and `grain doctor` says the app is public. */
@@ -84,14 +88,37 @@ export interface PublishState {
 }
 
 /** A transaction a key file here sent for the app: what it does, its id, nonce and last slot, the version it is about,
- *  and when it was sent. Nothing secret. */
+ *  when it was sent, and what it makes the registry hold, so that its landing can be told from the registry alone.
+ *  Nothing secret (the members are the registry's own, public on chain). */
 export interface SentRecord {
-  call: "register" | "update" | "access";
+  call: "register" | "update" | "access" | "profile";
   id: string;
   nonce: number;
   valid_until: number;
+  /** The manifest version a registration or an update makes; for another call, the registry's version when it was sent. */
   version: number;
   at: string;
+  /** What an access call makes the app: public or private, and its members. An older tool's record has none: it was
+   *  the call that makes a new app private, with no members. */
+  access?: { public: boolean; members: Array<{ account: string; roles: number }> };
+  /** The Connect profile revision a profile call sets, or null for one that clears the profile. */
+  revision?: number | null;
+}
+
+/** Whether a record is `grain publish`'s own registration or update (its version is what the registry holds). */
+export const isPublishCall = (t: SentRecord): boolean => t.call === "register" || t.call === "update";
+
+/** Whether the registry `g` holds what the transaction recorded as `t` makes: it landed (or something later replaced
+ *  what it made, which is as final for the developer). */
+export function landedIn(t: SentRecord, g: RegisteredGrain | null | undefined): boolean {
+  if (!g) return false;
+  if (isPublishCall(t)) return g.version >= t.version;
+  if (t.call === "access") {
+    const wanted = t.access ?? { public: false, members: [] };
+    return g.public === wanted.public && sameMembers(g.members ?? [], wanted.members);
+  }
+  if (t.revision === null || t.revision === undefined) return !g.profile;
+  return Math.max(g.profile?.profile.revision ?? 0, g.profile_revision ?? 0) >= t.revision;
 }
 
 export function readPublishState(dir: string): PublishState | null {
@@ -112,11 +139,44 @@ export function carried(state: PublishState | null, genesis: string, slug: strin
 }
 
 /** After the owner's own `grain access` in this project: whether the app is public or private is theirs now, so a
- *  registration's pending "make it private" is dropped. */
-export function accessDecided(dir: string, slug: string): void {
+ *  registration's pending "make it private" is dropped, and so is any earlier access call's record; the call they just
+ *  sent (`sent`, when it has not landed yet) is the one `grain doctor` follows. */
+export function accessDecided(dir: string, slug: string, sent?: SentRecord): void {
   const state = readPublishState(dir);
-  if (!state || state.slug !== slug || (!state.private_pending && !(state.sent ?? []).some((t) => t.call === "access"))) return;
-  writePublishState(dir, { ...state, private_pending: false, sent: (state.sent ?? []).filter((t) => t.call !== "access") });
+  if (!state || state.slug !== slug) return;
+  if (!state.private_pending && !(state.sent ?? []).some((t) => t.call === "access") && sent === undefined) return;
+  writePublishState(dir, { ...state, private_pending: false, sent: [...(state.sent ?? []).filter((t) => t.call !== "access"), ...(sent ? [sent] : [])] });
+}
+
+/** Where a transaction is recorded: the app's slug, and the network that took it. */
+export interface SentWhere {
+  network: string;
+  /** The genesis hash, hex (its first 8 bytes are kept). */
+  genesis: string;
+  slug: string;
+}
+
+/**
+ * Keep `record`, a transaction the owner's key file here sent for the project's app (`grain access`, `grain profile`),
+ * until a command sees it land: it replaces an earlier record of the same call, whose outcome it decides now. A project
+ * whose publishing state is of another app or network (or none) gets one that holds only this.
+ */
+export function recordSent(dir: string, where: SentWhere, record: SentRecord): void {
+  const genesis = where.genesis.slice(0, 16);
+  const before = readPublishState(dir);
+  const state: PublishState = before && before.genesis === genesis && before.slug === where.slug ? before : {
+    network: where.network, genesis, slug: where.slug, version: 0, form: "sealed", bundle: null, size: null, uploaded_at: null,
+    pending_until: null, link_shown_at: null, published_at: null, icon: null, icon_uploaded_at: null, sent: [], private_pending: false,
+  };
+  const others = (state.sent ?? []).filter((t) => t.call !== record.call || isPublishCall(t));
+  writePublishState(dir, { ...state, sent: [...others, record] });
+}
+
+/** A recorded transaction seen landing: forgotten. */
+export function forgetSent(dir: string, id: string): void {
+  const state = readPublishState(dir);
+  if (!state || !(state.sent ?? []).some((t) => t.id === id)) return;
+  writePublishState(dir, { ...state, sent: (state.sent ?? []).filter((t) => t.id !== id) });
 }
 
 /**
@@ -351,6 +411,18 @@ export async function publishPage(link: string, slug: string, version: number): 
 `;
 }
 
+/**
+ * A sealed page's manifest as `grain publish` sends it to a network of `protocol`: `given` with the bundle `public/`
+ * makes, and the sources that protocol asks for (`sourcesFor`: none from version 2; before it the network's own copy at
+ * up to 3 relays; the developer's own hosts as grain.json names them). `grain doctor` estimates a first publish's fees
+ * from the same manifest, sources and all.
+ */
+export async function sealedAsSent(node: NodeLike, protocol: number, given: Manifest, made: Bundle): Promise<{ manifest: Manifest; sources: string[]; from: "own" | "relays" | "network" }> {
+  const current = "sealed" in given.entry ? given.entry.sealed.sources : [];
+  const { sources, from } = await sourcesFor(node, protocol, made.hash, made.size, current);
+  return { manifest: sealed(given, made, { sources }), sources, from };
+}
+
 /** The whole of `grain publish`: its exit status. Throws a `PublishError` (or another error) for a failure to report. */
 export async function publishApp(o: PublishOptions): Promise<number> {
   const print = o.print ?? ((line: string) => console.log(line));
@@ -392,8 +464,8 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     }
     o.log.step("bundle", "ok", "built");
     print(`bundle: ${made.files.length} files, ${sizeText(made.size)}, ${made.hash}`);
-    const current = "sealed" in given.entry ? given.entry.sealed.sources : [];
-    const { sources, from } = await sourcesFor(o.node, protocol, made.hash, made.size, current);
+    const asSent = await sealedAsSent(o.node, protocol, given, made);
+    const { sources, from } = asSent;
     if (made.size > MAX_NETWORK_BUNDLE_BYTES && from !== "own") {
       throw new PublishError("bundle", "too_large",
         `the bundle is ${sizeText(made.size)}; the network keeps one of at most 16 MiB: make public/ smaller, or host it yourself (grain bundle --sources URL) and grain publish`);
@@ -404,9 +476,9 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     }
     o.log.step("sources", "ok", from);
     print(from === "network" ? `sources: none: the network keeps the bundle (protocol version ${protocol})`
-      : from === "relays" ? `sources: the network's own copies at ${sources.length} relays (protocol version ${protocol} needs one; wallets ask their own relay first)`
+      : from === "relays" ? `sources: ${sources.length} relays' addresses for the network's own copy (protocol version ${protocol} asks a sealed manifest to name one; the network keeps the bundle either way, and wallets ask their own relay first)`
       : `sources: your own (${sources.length}), as grain.json names them`);
-    manifest = sealed(given, made, { sources });
+    manifest = asSent.manifest;
   }
   // What the registry holds already, with the same content (a run cut short after the owner signed, or nothing changed
   // since the last publish), is nothing new to sign, whatever version grain.json says: grain.json takes the registry's
@@ -430,7 +502,8 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     network: status.network, genesis: status.genesis.slice(0, 16), slug, version: manifest.version, form, bundle: made?.hash ?? null,
     size: made?.size ?? null, uploaded_at: null, pending_until: null, link_shown_at: null, published_at: null, icon: null, icon_uploaded_at: null,
     ...sameRun(readPublishState(dir), status.genesis, slug, manifest.version, made?.hash ?? null),
-    sent: carry.sent.filter((t) => t.call === "access"), private_pending: carry.private_pending,
+    // The registration or update is settled above; the other calls stay recorded until the registry shows them landed.
+    sent: carry.sent.filter((t) => !isPublishCall(t) && !landedIn(t, before)), private_pending: carry.private_pending,
   };
   if (JSON.stringify(manifest) !== JSON.stringify(given)) writeFileSync(o.manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   if (made) writeFileSync(join(dir, "bundle.zip"), made.zip);
@@ -481,10 +554,13 @@ export async function publishApp(o: PublishOptions): Promise<number> {
         : "the network holds the bundle");
     } else {
       o.log.step("upload", "waiting", `after_registry_${why}`);
-      // A key file signs here and now: no owner to wait for, and nothing a paired key would change but the order.
+      // A key file signs here and now: no owner to wait for, and nothing a paired key would change but the order. With
+      // --no-wait this run returns before either, and the next one uploads.
       print(signer?.by === "key"
-        ? "upload: once the registry names the bundle, after the transaction lands; this command waits for it"
-        : `upload: once the registry names the bundle (${vouchWords(why)}); keep this command running until the owner has signed`);
+        ? `upload: once the registry names the bundle, after the transaction lands; ${o.wait ? "this command waits for it"
+          : `--no-wait returns before that, so grain publish${o.flags} again puts it up once grain doctor${o.flags} says the transaction landed`}`
+        : `upload: once the registry names the bundle (${vouchWords(why)}); ${o.wait ? "keep this command running until the owner has signed"
+          : `--no-wait returns before that, so grain publish${o.flags} again puts it up once the owner has signed`}`);
     }
   }
 
@@ -511,11 +587,11 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     state.published_at = new Date(now()).toISOString();
     writePublishState(dir, state);
     if (before === null) {
-      // The publishing link registers a free slug and nothing else (12-grains §10): the app is public from its first
-      // version. Making it private is the owner's, in Saltix.
-      o.log.step("access", "ok", "public");
-      print(`${slug} is public from its first version (a publishing link registers it so). To keep it to its owner and members ` +
-        `while you develop it: in Saltix, My apps → ${slug} → Access → Private (an app made in Saltix's New app starts private)`);
+      // The publishing link registers a free slug (12-grains §10); whether the app is then public is the owner's choice on
+      // Saltix's sheet: Saltix 0.1.61 and later make it private (one more transaction, sent by Saltix once the
+      // registration landed) unless the owner switched on Public in the Marketplace; older ones leave it public.
+      o.log.step("access", "ok", "wallet");
+      print(walletAccessWords(slug, o.flags));
     }
   }
   writeFileSync(o.out, JSON.stringify(signed, null, 2) + "\n");
@@ -538,6 +614,11 @@ export async function publishApp(o: PublishOptions): Promise<number> {
       if (held === "held") {
         o.log.step("upload", "ok", "held");
         print("the network holds the bundle");
+        // Seen in the network from here: grain doctor counts it, even when the relay it asks is still fetching a copy.
+        if (state.uploaded_at === null) {
+          state.uploaded_at = new Date(now()).toISOString();
+          writePublishState(dir, state);
+        }
       } else {
         print("upload: the registry names the bundle; putting it into the network");
         await upload(o, print, made, null);
@@ -574,9 +655,18 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   o.log.step("published", "ok", form);
   print(`${slug} v${manifest.version} is published${form === "sealed" ? ", its bundle in the network" : ""}; ${o.out} written.`);
   const after = await grainGet(o.node, slug).catch(() => null);
-  print(whoOpens(slug, after, o.keyPath, o.flags, form));
+  // A first version the owner's Saltix registered: public for now may be private a block or two later (its own call),
+  // so the line above says how it goes rather than "anyone opens it".
+  if (!(before === null && signer?.by === "wallet" && after?.public !== false)) print(whoOpens(slug, after, o.keyPath, o.flags, form));
   return 0;
 }
+
+/** What a first version registered from a publishing link becomes, in words: private unless the owner switched on
+ *  Public in the Marketplace on Saltix's sheet; an older Saltix's, public, and the command that makes it private. */
+export const walletAccessWords = (slug: string, flags = ""): string =>
+  `${slug}: Saltix registers it private unless you switched on Public in the Marketplace on the sheet (Saltix 0.1.61 and later, ` +
+  `which sends that call itself once the registration landed, a minute or two later: grain doctor${flags} says which it is). An older ` +
+  `Saltix registers it public: then grain access --slug ${slug} --private${flags} (or My apps → ${slug} → Access → Private)`;
 
 /**
  * Who can open the app now, and how to try it: anyone, from Saltix's Apps section, when it is public; its owner and
@@ -585,9 +675,20 @@ export async function publishApp(o: PublishOptions): Promise<number> {
  * simulator, which runs the page sealed as Saltix will.
  */
 export function whoOpens(slug: string, g: RegisteredGrain | null, keyPath: string, flags: string, form: PublishForm): string {
-  const open = `salt:grain/${slug}`;
   const simulator = form === "sealed" ? " Without a phone, grain dev runs this page sealed in the simulator, as Saltix will (grain dev --check tries it headless)." : "";
-  if (!g || g.public !== false) return `Anyone opens it in Saltix: the Apps section, or ${open}.${simulator}`;
+  if (!g || g.public !== false) return `Anyone opens it in Saltix: the Apps section, or salt:grain/${slug}.${simulator}`;
+  return `It is ${whoOpensNow(slug, g, keyPath, flags)}.${simulator}`;
+}
+
+/**
+ * Who opens the app in Saltix as the registry `g` holds it, and how to change that, in the same words `grain publish`
+ * ends with and `grain doctor` says: public, anyone; private with a phone's owner, its owner and members; private with
+ * this computer's key file as its owner, which no phone holds, nobody until a member is named, and the command that
+ * names one.
+ */
+export function whoOpensNow(slug: string, g: RegisteredGrain, keyPath: string, flags: string): string {
+  const open = `salt:grain/${slug}`;
+  if (g.public !== false) return `public: anyone opens it in Saltix (the Apps section, or ${open})`;
   let keyAccount: string | null = null;
   try {
     keyAccount = existsSync(keyPath) ? accountOf(readKey(keyPath)) : null;
@@ -597,12 +698,12 @@ export function whoOpens(slug: string, g: RegisteredGrain | null, keyPath: strin
   const file = basename(keyPath);
   const members = g.members?.length ?? 0;
   if (keyAccount !== null && keyAccount === g.owner) {
-    return `It is private, and its owner is ${file}'s account, which no phone holds: ${members === 0 ? "nobody opens it in Saltix yet" : `its ${members} member${members === 1 ? "" : "s"} open it in Saltix (${open})`}. ` +
+    return `private, and its owner is ${file}'s account, which no phone holds: ${members === 0 ? "nobody opens it in Saltix yet" : `its ${members} member${members === 1 ? "" : "s"} open it in Saltix (${open})`}. ` +
       `To open it in your own Saltix: grain access --slug ${slug} --private --member <your Saltix address>:user --key ${file}${flags} ` +
-      `(the address: Saltix → Receive), or --public for anyone.${simulator}`;
+      `(the address: Saltix → Receive), or --public for anyone`;
   }
   const who = members > 0 ? `its owner and its ${members} member${members === 1 ? "" : "s"} open it` : "its owner alone opens it";
-  return `It is private: ${who} in Saltix (My apps → ${slug}, or ${open}); My apps → ${slug} → Access adds members or makes it public.${simulator}`;
+  return `private: ${who} in Saltix (My apps → ${slug}, or ${open}); My apps → ${slug} → Access adds members or makes it public`;
 }
 
 /** What `readManifest` reads, without its signature: `grain publish` signs anew. */
@@ -676,13 +777,16 @@ async function upload(o: PublishOptions, print: (line: string) => void, made: Bu
 }
 
 /** A transaction sent here, as `.grain/publish.json` keeps it. */
-const recordOf = (sent: Sent, version: number, at: number): SentRecord => ({
-  call: sent.call === "register" ? "register" : sent.call === "access" ? "access" : "update", id: sent.id, nonce: sent.nonce,
-  valid_until: sent.validUntil, version, at: new Date(at).toISOString(),
+export const recordOf = (sent: Sent, version: number, at: number, makes: Pick<SentRecord, "access" | "revision"> = {}): SentRecord => ({
+  call: sent.call === "register" ? "register" : sent.call === "access" ? "access" : sent.call === "profile" ? "profile" : "update", id: sent.id,
+  nonce: sent.nonce, valid_until: sent.validUntil, version, at: new Date(at).toISOString(), ...makes,
 });
 
+/** What the call that makes a new app private makes it: private, with no members. */
+const PRIVATE: Pick<SentRecord, "access"> = { access: { public: false, members: [] } };
+
 /** Where a transaction stands at the node: `pending`, `included`, `unknown`, or null when the node cannot say. */
-async function txStatus(node: NodeLike, id: string): Promise<string | null> {
+export async function txStatus(node: NodeLike, id: string): Promise<string | null> {
   try {
     const status = (await nodeCall<{ status?: unknown } | undefined>(node, "transaction_get", { id }))?.status;
     return typeof status === "string" ? status : null;
@@ -693,7 +797,7 @@ async function txStatus(node: NodeLike, id: string): Promise<string | null> {
 
 /** How long a transaction recorded here stays worth waiting for once it left the pool without the registry showing what
  *  it makes: a block, then the beacon chain, take about 2 minutes; past 10 it is gone, or the registry refused it. */
-const STALE_MS = 600_000;
+export const STALE_MS = 600_000;
 
 /**
  * A registration or update an earlier run sent (`sent`) and did not see land: when the registry holds its version, it
@@ -704,7 +808,7 @@ const STALE_MS = 600_000;
  */
 async function settleEarlier(o: PublishOptions, print: (line: string) => void, slug: string, before: RegisteredGrain | null,
   sent: SentRecord[], slot: number): Promise<RegisteredGrain | null | "waiting"> {
-  const tx = sent.find((t) => t.call !== "access");
+  const tx = sent.find(isPublishCall);
   if (!tx || (before !== null && before.version >= tx.version)) return before;
   const at = await txStatus(o.node, tx.id);
   if (at !== "pending" && at !== "included" && slot > tx.valid_until) return before;
@@ -766,12 +870,12 @@ async function signWithKey(o: PublishOptions, print: (line: string) => void, man
     throw e;
   }
   const registered = sent.call === "register";
-  state.sent = [...(state.sent ?? []).filter((t) => t.call === "access"), recordOf(sent, manifest.version, now())];
+  state.sent = [...(state.sent ?? []).filter((t) => !isPublishCall(t)), recordOf(sent, manifest.version, now())];
   if (registered) {
     state.private_pending = true;
     const access = await sendPrivateBehind(o, print, privacy, secret, sent);
     if (access) {
-      state.sent = [...state.sent.filter((t) => t.call !== "access"), recordOf(access, manifest.version, now())];
+      state.sent = [...state.sent.filter((t) => t.call !== "access"), recordOf(access, manifest.version, now(), PRIVATE)];
       fresh.add(access.id);
     }
   }
@@ -838,8 +942,8 @@ async function ensurePrivate(o: PublishOptions, print: (line: string) => void, s
     state.sent = (state.sent ?? []).filter((t) => t.call !== "access");
     writePublishState(o.dir, state);
     o.log.step("access", "ok", "private");
-    print(`${slug} is private: only its owner's account and the members it names open it, as an app made in Saltix starts. ` +
-      `grain access --slug ${slug} --private --member <address>:user --key ${key}${o.flags} adds someone; --public opens it to anyone`);
+    // Who opens it (with a key file's owner, nobody until a member is named) is said once, at the end.
+    print(`${slug} is private, as an app made in Saltix starts`);
     return outcome;
   };
   let tx: SentRecord | null = (state.sent ?? []).find((t) => t.call === "access") ?? null;
@@ -856,7 +960,7 @@ async function ensurePrivate(o: PublishOptions, print: (line: string) => void, s
     if (tx === null) {
       try {
         const { sent } = await sendSettled(async () => privateCall(slug), secret, o.signing, { wait: false, every, ms: end - Date.now() });
-        tx = recordOf(sent, g.version, now());
+        tx = recordOf(sent, g.version, now(), PRIVATE);
         sentHere = true;
         state.sent = [...(state.sent ?? []).filter((t) => t.call !== "access"), tx];
         writePublishState(o.dir, state);
@@ -945,6 +1049,7 @@ async function iconStep(o: PublishOptions, print: (line: string) => void, manife
   if (held === "held") {
     o.log.step("icon", "ok", "held");
     print("icon: the network holds it");
+    state.icon_uploaded_at ??= new Date((o.now ?? Date.now)()).toISOString();
     return "held";
   }
   if (!file) {

@@ -93,8 +93,10 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
    `app.key`. Never reuse another app's key or slug, and never run a second program on a key that already has one (the
    SDK's example included: it is an app of its own): two programs on one key both answer in its chat, and the users see
    both. The owner makes the app in Saltix (**My apps → New app**: it starts private and chat-only), when pairing the
-   project (a free slug makes the app in place), or from `grain publish`'s QR code (public from its first version: a
-   publishing link registers it so; the owner makes it private in Saltix, My apps → the app → Access).
+   project (a free slug makes the app in place), or from `grain publish`'s QR code: Saltix 0.1.61 and later register it
+   private unless the owner switches on **Public in the Marketplace** on the publishing sheet (Saltix sends that call
+   itself once the registration landed); an older Saltix registers it public, and `grain access --slug <slug>
+   --private` (or My apps → the app → Access) makes it private.
 2. **Set up and pair.**
    - The SDK is not on npm yet: clone it, `npm install && npm run build`, and make the app's project beside it with
      `npx grain init ../<slug> --chat --slug <slug>` (a chat) or `npx grain init ../<slug> --slug <slug>` (a page), then
@@ -123,8 +125,11 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
    Galaxy Z Fold's sizes and holds it to Saltix's rules; a debug Saltix in the Android emulator opens the link it
    prints. `npx grain dev --check` drives the simulator headless in this computer's Chrome, Chromium or Edge: the Connect
    sheet, the page loading without errors, and at every size in both themes nothing tappable under the wallet's
-   controls; screenshots in `.grain/check/`, exit 1 on an error. A chat: `npm start` in the project, then in Saltix tap the app in **My apps**: its home shows the commands,
-   and an answer is marked "from <slug>, verified".
+   controls; screenshots in `.grain/check/`, exit 1 on an error. `npx grain dev --check --tap` then taps each of the
+   page's buttons once, as a person would: a tap that throws or asks Saltix for something it refuses is an error, one
+   that changes nothing a warning (the page never leaves, and no payment is made). A chat: `npm start` in the project,
+   then in Saltix tap the app in **My apps**: its home shows the commands, and an answer is marked "from <slug>,
+   verified".
 6. **Publish.** A chat goes live as soon as its program runs: there is nothing to upload. A page is a new version of
    the manifest: `grain publish` puts its bundle into the network, and the owner signs it ([below](#publish-a-page));
    with nothing changed it publishes nothing. Going **public** (from private) is the owner's, in Saltix or
@@ -143,8 +148,8 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
 ## Publish a page
 
 The owner's phone signs every version of the manifest. **The network keeps the bundle**: `grain publish` seals
-`public/` and puts it from your computer straight into the Saltix network, onto the servers that keep it (storage cities
-and relays offering space), and every Saltix fetches it from its own relay by its hash (Saltix
+`public/` and puts it from your computer straight into the Saltix network, which keeps it at the servers chosen for it
+([where the bundle goes](#where-the-bundle-goes)), and every Saltix fetches it from its own relay by its hash (Saltix
 [32-images §7.3](protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)). No host, domain or
 certificate of your own, and no file to upload anywhere.
 
@@ -157,11 +162,13 @@ npx grain publish                  # seal, check, upload into the network, then 
 - **With `app.key` paired** (`grain pair`), the bundle goes up before the owner signs, on the paired key's statement,
   and the network holds it for a day: the owner scans the QR code whenever they like. Without it (an app's first
   version), it goes up once the registry names the version, so the command keeps running until the owner signed.
-- **The sources** a manifest names are the SDK's to fill in: none on a network that runs protocol version 2; before it
-  (the test network runs version 1), copies the network itself serves at up to 3 relays of its relay list.
+- **The sources** a manifest names are the SDK's to fill in, by the network's protocol version: [where the bundle
+  goes](#where-the-bundle-goes).
 - **`--no-wait`** returns once the QR code is shown (also `.grain/publish.html`); `grain publish` again finishes (the
   bundle if it waited, the icon). A break or a busy node: run it again. `grain doctor` says where it stands
-  (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, `published`).
+  (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, or `published`: the registry names the version
+  and the network holds its bundle), and exits 0 when nothing is left, 1 when something is to do, 75 while it only
+  waits for the network ([its exit statuses](../README.md#grain-doctor-where-a-project-stands-and-its-exit-status)).
 - **Nothing changed, nothing sent.** What the registry holds already (the same manifest but for its owner, its version
   and the relays' copies) is never signed again: `grain publish` finishes its uploads if any are missing, else says
   "nothing to publish" and exits 0. A change to `public/` or `grain.json` (the bundle, the icon, a name) is the next
@@ -179,6 +186,30 @@ time, and Saltix tells users so.
 
 **While you develop**, `grain dev` serves the page from your computer to the simulator and to a debug Saltix in the
 emulator; a release Saltix never opens such a development origin.
+
+### Where the bundle goes
+
+This is the one account of it; the other pages link here (Saltix 32-images [§6](protocol/images.md#6-named-blobs),
+[§7.3](protocol/images.md#73-bundles-from-the-developers-machine-into-the-network),
+[§10](protocol/images.md#10-what-is-a-protocol-change)).
+
+- **Into the network, on every protocol version.** `grain publish` sends the bundle in pieces to the relay that answers
+  it (its gateway's `blob_put`). The node behind it offers the bundle to its **keepers**, 3 storage cities of different
+  governors and the first 5 relays offering space, chosen by the bundle's hash, until 3 of them hold it (a young network
+  with neither keeps every bundle at every node with a store). They keep it while a live manifest names it. Every relay
+  serves it to its wallets, fetching it from a keeper the first time it is asked: meanwhile `blob_get` answers
+  `fetching`, which says the relay knows the hash, never that anyone has the bytes.
+- **What the manifest names as `sources`** depends on the network's protocol version (`node_status`'s
+  `protocol.version`):
+  - **version 2 and later**: none; the network is the bundle's source.
+  - **version 1** (the test network today): a sealed manifest must name 1 to 8 sources, so `grain publish` names the
+    network's own copy at up to 3 relays of its relay list, those offering space first
+    (`https://<relay>/_blob/grain_bundle/<hash>`). They are addresses where the network serves the copy its keepers
+    hold, not uploads of their own, and never a host of yours.
+- **Wallets** ask their own relay first and turn to the sources only when it has none; whichever way the bytes come,
+  they check the size, the hash and the bundle check before they unpack them.
+- **`grain doctor`** calls the version published once a relay holds the bundle, or this computer saw a node take it
+  (`uploaded_at` in `.grain/publish.json`); until then it says the upload is left, and `grain publish` puts it up.
 
 ### No phone, test network
 
@@ -209,9 +240,10 @@ calls of a first publish land together, so `grain publish --key owner.key` takes
 6**; `grain profile` and `grain access` about 2 each. While it waits, a command says what it waits for and how long it
 has: one line rewritten on a terminal, a line every 15 seconds elsewhere. **A coding agent runs these commands in the
 background, or with a timeout of 10 minutes or more**, or passes `--no-wait`, which returns once the pool took the
-transactions, and then asks `npx grain doctor` until it says they landed; `grain publish` again finishes (the bundle and
-the icon), waiting for what was sent rather than sending it again. A run cut short (Ctrl-C, a tool's timeout) is
-resumed the same way.
+transactions, and then asks `npx grain doctor` until it says they landed (meanwhile it says where each stands, `wait`,
+and exits 75; then `ok registry … landed`, and `grain publish` as the next step); `grain publish` again finishes (the
+bundle and the icon), waiting for what was sent rather than sending it again. A run cut short (Ctrl-C, a tool's
+timeout) is resumed the same way. `grain profile` and `grain access` with `--no-wait` are followed the same way.
 
 **Public for a moment, at most.** A new grain is public until its owner says otherwise (24-app-studio §2a), so
 `SetGrainAccess` private goes right behind the registration with the next nonce: an account's calls apply in order and a

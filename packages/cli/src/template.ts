@@ -259,7 +259,9 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
   \`npx grain dev --check\` drives the same simulator in headless Chrome: the Connect sheet, the page loading without
   errors, and at every size in both themes nothing tappable under the wallet's controls and no sideways scroll;
-  screenshots and \`report.json\` in \`.grain/check/\`, exit 1 when something is wrong.
+  screenshots and \`report.json\` in \`.grain/check/\`, exit 1 when something is wrong. \`--check --tap\` then taps
+  each button once: a tap that throws or asks Saltix for what it refuses is an error, one that changes nothing a
+  warning (the page never leaves, and no payment is made).
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\`, warnings about the page, placeholders and permissions
   nothing uses, and whether this is the version the registry took at the last publish.
 - \`npx grain icon <picture> --out icon.png\`: the app's icon to Saltix's standard from any PNG or JPEG (512 × 512,
@@ -268,7 +270,9 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   the preview it writes (\`.grain/icon-preview.png\`); never draw rounded corners or transparency yourself.
 - \`npx grain publish\`: **a page needs no server and no hosting.** It seals \`public/\`, puts it into the Saltix network
   from this computer, says which account will own the app, shows the QR code the owner's Saltix signs the version from,
-  waits for the registry and uploads the icon. \`--no-wait\` returns once the QR code is shown: show it to the user (or
+  waits for the registry and uploads the icon. A new app is private unless the owner switches on Public in the
+  Marketplace on Saltix's sheet (Saltix 0.1.61 and later; an older one registers it public: \`npx grain access --slug
+  <slug> --private\`). \`--no-wait\` returns once the QR code is shown: show it to the user (or
   \`.grain/publish.html\`), then \`npx grain publish\` again finishes. Run again with nothing changed, it says "nothing to
   publish" and sends nothing; a change makes the next version. Never set up hosting, a domain or \`--sources\` for it.
   A key file signs only when \`--key\` names it, or by itself for an app its account owns: the way without a phone is
@@ -276,7 +280,9 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   its public relays, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
 - **A command that waits for the chain** (\`grain publish\`, \`profile\`, \`access\` signed with a key file) takes about
   1.5 to 2.5 minutes a transaction, up to about 6 for a first publish: run it in the background or with a timeout of 10
-  minutes or more, or with \`--no-wait\` and then \`npx grain doctor\` until it landed.
+  minutes or more, or with \`--no-wait\` and then \`npx grain doctor\` until it says it landed. \`grain doctor\` exits
+  0 when nothing is left, 1 when something is to do (\`next:\` says what), and 75 while it only waits for the network:
+  ask again in a minute. A call that would change nothing says "nothing to change" and sends nothing.
 - \`npx grain profile\`: once the app is registered, sets its Connect profile from \`connect.json\` the same way (a QR
   code, or the key file that owns the app). Rewrite \`connect.json\` for this app first: \`grain init\`'s describes its
   counter, \`grain lint\` warns while it does (\`connect-template\`) and \`grain profile\` refuses it.`;
@@ -375,11 +381,13 @@ const PAGE_START = `1. \`npx grain status\`: a page alone needs no server, so it
    step. When the app gets a server (a chat, payments, a sign-in), that server is paired by a QR code the owner scans
    (\`npx grain pair\`, rule 1): never a key pasted by the user.
 2. \`npx grain dev\`: the page in the simulator, framed as Saltix frames it. \`npx grain dev --check\` drives it headless at
-   every size and in both themes and says what is wrong (screenshots in \`.grain/check/\`).
+   every size and in both themes and says what is wrong (screenshots in \`.grain/check/\`); with \`--tap\` it also taps
+   each button once.
 3. \`npx grain doctor\`, then \`npx grain publish\`: what is left before publishing, then the page into the network. The
    owner's Saltix signs from a QR code; without a phone, on the test network: [No phone, test
    network](${HOW_IT_WORKS}#no-phone-test-network) (\`npx grain faucet --wait\`, \`npx grain publish --key owner.key\`;
-   minutes of waiting for the chain: in the background, or with \`--no-wait\` and \`npx grain doctor\`).`;
+   minutes of waiting for the chain: in the background, or with \`--no-wait\` and \`npx grain doctor\`, which exits 75
+   while it only waits).`;
 
 /** The first steps of a chat's project: pair its server, never take a key. */
 const CHAT_START = `1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
@@ -481,7 +489,7 @@ A grain: an app that opens inside a Saltix wallet (Saltix 12-grains: the SDK's [
 - \`grain dev\` serves \`public/\` with the manifest signed for this computer: open the link it prints in a
   debug Saltix (the emulator reaches this computer at 10.0.2.2), or the simulator it prints in a browser.
   \`grain dev --check\` tries it headless in this computer's Chrome at every screen in both themes, and says what is
-  wrong (screenshots in \`.grain/check/\`).
+  wrong (screenshots in \`.grain/check/\`); \`grain dev --check --tap\` also taps each button once.
 - Saltix lays the page inside the safe area unless it declares \`viewport-fit=cover\` (this one does): \`AGENTS.md\` says
   how the page keeps clear of the system's bars and the wallet's controls (coding agents read it too; \`CLAUDE.md\`
   points to it).
@@ -493,7 +501,8 @@ ${signIn ? `- Check first, render after: \`public/index.html\` shows only a spla
   icon.png\` (or \`grain icon --monogram <letter>\`, with no picture) makes the icon to Saltix's standard and names it.
 - ${PERMISSIONS_LINE}
 - \`grain publish\` puts the page into the Saltix network itself, no hosting: it seals \`public/\`, uploads it from this
-  computer, shows the QR code your Saltix signs the version from, and uploads the icon. A new slug keeps a deposit by
+  computer, shows the QR code your Saltix signs the version from (a new app is private unless you switch on Public in
+  the Marketplace there, Saltix 0.1.61 and later), and uploads the icon. A new slug keeps a deposit by
   its length (100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain retire\`). With
   \`grain pair\` first, the bundle goes up before you sign. On the test network without a phone, \`--key owner.key\` signs
   here instead: [No phone, test network](${HOW_IT_WORKS}#no-phone-test-network). Run again with nothing changed, it says
