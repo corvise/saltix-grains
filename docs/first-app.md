@@ -8,7 +8,7 @@ certificate.
 
 What you need: Saltix on your phone with some SALT for the deposit (the test network's faucet gives it), Node 20 or
 newer, and a checkout of this repository. How the pieces fit, and whether your app needs a server at all (a page alone
-needs none): [How a mini-app works](how-it-works.md). Building it with a coding agent? Make the app (step 1), then see
+needs none): [How a mini-app works](how-it-works.md). Building it with a coding agent? Saltix copies a brief for it:
 [Building with a coding agent](#building-with-a-coding-agent).
 
 ## 1. A project, paired with its app (3 minutes)
@@ -193,10 +193,10 @@ grain doctor                                                       # everything 
 
 ## Building with a coding agent
 
-Wherever Saltix shows a developer key it offers **Copy brief for a coding agent**: on New app's last step, on the app's
-page (Program, and How to build it while no program has answered), on its home, on a developer's key in their chat, and
-on the console's notices of the app made and of a key added or replaced. Paste the brief into Claude Code or another
-agent in an empty folder. It is everything the agent needs to start, in English, with one line asking it to answer you
+Wherever Saltix shows an app's key it offers **Copy brief for a coding agent**: on New app's last step, on the app's
+page (its key, and How to build it while no program has answered), on its home, on a developer's key in their chat,
+and on the console's notices of the app made and of a key added or replaced (from the Saltix release after 0.1.59).
+Paste the brief into Claude Code or another agent in an empty folder. It is everything the agent needs to start, in English, with one line asking it to answer you
 in the language your Saltix is in, and never the key, so it is safe in a chat. This is the brief of a chat-only app on
 the test network; Saltix fills in the name, the slug, the network's genesis and what the app is for, and an app with a
 page of its own gets its page's rule, `grain init` without `--chat` and `npx grain dev` in place of `npm start`:
