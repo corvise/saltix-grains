@@ -5,11 +5,11 @@
 // into every project, and a developer with a phone who runs `grain publish` gets the QR code for their own Saltix, never
 // an app owned by a throwaway key. `--wallet` always asks Saltix. The account that will own the app is said before
 // anything is signed (`ownerLine`).
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { type NetworkName, accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server";
 import { UsageError } from "./args.js";
-import { publicKeyOf, readKey } from "./project.js";
+import { KEY_FILE, publicKeyOf, readKey } from "./project.js";
 
 /** Who signs: a key file here (named by `--key`, or the owner the registry names), or the owner's Saltix. */
 export type Signer =
@@ -59,6 +59,15 @@ export function signerFor(c: SignerChoice): Signer {
   if (c.named) return { by: "key", secret, account, why: "named" };
   return { by: "key", secret, account, why: "owns" };
 }
+
+/**
+ * `--key F` for a command this tool suggests, only when F is not the own `owner.key` of the project in `dir`. One rule for every hint
+ * and page: a key file that owns the app signs its owner's calls by itself (`signerFor`), so after the first publish the
+ * suggested command never names `owner.key`, and is the same whoever owns the app (a phone's account: the QR code); a
+ * key file elsewhere is not found by itself, so it is named. A first publish (`grain publish --key owner.key`) names it
+ * on purpose: a free slug is never registered to a key file unasked.
+ */
+export const keyFlag = (keyPath: string, dir: string): string => (resolve(dir, keyPath) === resolve(dir, KEY_FILE) ? "" : ` --key ${keyPath}`);
 
 /** An account's address on `network`, for people. */
 export const addressOf = (network: string, account: string): string =>

@@ -10,7 +10,7 @@ import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor
 import QRCode from "qrcode";
 import { retireCall, show, salt, type Sent, type Signing } from "./registry.js";
 import { type Signer, addressOf, ownerLine, signerFor } from "./owner.js";
-import { sendSettled } from "./send.js";
+import { SETTLE_MS, sendSettled } from "./send.js";
 import { LANDS_IN, type WaitOut, Waiting, rewriteLine } from "./wait.js";
 import {
   APP_KEY_ENV, APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, handleGet, inSaltix, membersOf, profileHeld, rateCall, readAppKey,
@@ -29,7 +29,7 @@ import * as template from "./template.js";
 import * as chatTemplate from "./chat-template.js";
 import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
 import { UsageError, helpFor, parse } from "./args.js";
-import { DevLog, reasonOf } from "./devlog.js";
+import { DevLog, endOnSignals, reasonOf } from "./devlog.js";
 import { pair } from "./pair.js";
 import { DOCTOR_EXIT, doctor, keyState, settled } from "./status.js";
 import {
@@ -47,7 +47,8 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            a chat-only one (no page: grain.json, connect.json and chat.json); each
                                            with a package.json whose npm install links the grain command
   grain dev [--port 8090] [--app-key F] [--check [--tap]]
-                                           serve public/ with the manifest signed for this computer, and the
+                                           serve public/ with the manifest signed for this computer until Ctrl-C
+                                           (a coding agent: in the background, or --check), and the
                                            simulator: your page framed as Saltix frames it, with the wallet's
                                            controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704, held
                                            to Saltix's rules; a development registry (the team, members) at
@@ -57,14 +58,17 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            CHROME_PATH) and exits: the Connect sheet, the page loading without
                                            errors, and at every size in both themes nothing tappable under the
                                            wallet's controls and no sideways scroll; --tap then taps each button
-                                           once (at most 30, never a link: an exception or a request Saltix
-                                           refuses is an error, a tap that changes nothing a warning; the page
-                                           never leaves, and no payment is made); screenshots and report.json in
+                                           once, and those a tap brings up (at most 30 in all, never a link: an
+                                           exception or a request Saltix refuses is an error, a tap that changes
+                                           nothing a warning; the page never leaves, and no payment is made);
+                                           screenshots and report.json in
                                            .grain/check/; exit 1 when something is wrong
   grain lint [--manifest grain.json]       what stops the manifest and connect.json (the Connect profile) from
                                            being registered, the icon file, and warnings: public/ (a top bar under
                                            the wallet's controls), placeholders, permissions nothing uses; and
-                                           whether this is the version the registry took at the last grain publish
+                                           its last line, where the last grain publish left it and what is left
+                                           (public/ changed since v1: grain publish seals v2; connect.json still
+                                           grain init's words), in grain doctor's words
   grain icon <picture> --out icon.png [--fit crop|contain|mark] [--background #rrggbb] [--preview F]
                                            a 512x512 icon to Saltix's standard from any PNG or JPEG: opaque, sRGB,
                                            no metadata, at most 64 KiB (a palette when that is what fits); crop
@@ -271,8 +275,9 @@ async function ownerCall(signer: Signer, build: (secret?: Uint8Array) => Promise
     const call = await build();
     if (await unchanged(reach.node, call)) return said(call);
     console.log(inSaltix(call));
-    const w = new Waiting(waitOut(), "waiting for the owner's Saltix, then the registry");
-    const ok = await waitForRegistry(reach.node, call, Number(text(flags, "timeout", "600")) * 1000, 3000, () => w.at("not in the registry yet"));
+    const limit = Number(text(flags, "timeout", "600")) * 1000;
+    const w = new Waiting(waitOut(), "waiting for the owner's Saltix, then the registry", limit);
+    const ok = await waitForRegistry(reach.node, call, limit, 3000, () => w.at("not in the registry yet"));
     w.done();
     log.step("registry", ok ? "ok" : "timeout", ok ? "set" : "not_signed");
     console.log(ok ? "the registry has it" : "not in the registry yet: check with grain show");
@@ -305,18 +310,20 @@ async function keyCall(build: () => Promise<GrainCall>, secret: Uint8Array, flag
   // Who says when it landed: grain doctor for a call the project keeps, grain show for any other.
   const ask = keep ? `grain doctor${reach.flags}` : "grain show";
   let w: Waiting | null = null;
+  // One deadline for the whole wait, an earlier call of the account's included: each line says how long is left of it.
+  const end = Date.now() + SETTLE_MS;
   const { sent, landed } = await sendSettled(build, secret, signing(flags, reach), {
-    wait,
+    wait, end,
     onSent: (s) => {
       (w as Waiting | null)?.done();
       console.log(said(s));
       // Kept before the wait: a run cut short (Ctrl-C, a tool's timeout) leaves grain doctor something to follow.
       keep?.record(s);
       if (wait) console.log(`Waiting for it to land: ${LANDS_IN} (Ctrl-C stops waiting; the transaction stays sent, and ${ask} says when it landed)`);
-      w = new Waiting(waitOut(), s.call);
+      w = new Waiting(waitOut(), s.call, end - Date.now());
     },
     // Before the pool took it: the account's earlier call still pending.
-    onWait: (stage) => (w ??= new Waiting(waitOut(), "waiting")).at(stage),
+    onWait: (stage) => (w ??= new Waiting(waitOut(), "waiting", end - Date.now())).at(stage),
   });
   (w as Waiting | null)?.done();
   if (!wait) {
@@ -735,13 +742,15 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const r = reach();
       const state = await keyState(process.cwd(), r.node, r.flags);
       log.step("status", settled(state.status) ? "ok" : "refused", state.status);
+      // The same words for a person and a program: `next` is never null, "nothing: …" when nothing is to run.
+      const next = state.next ?? "nothing: the server is paired (npm start runs it; grain doctor checks the rest)";
       if (flags.get("json") === true) {
         const { grain: _grain, ...shown } = state;
-        console.log(JSON.stringify(shown, null, 2));
+        console.log(JSON.stringify({ ...shown, next }, null, 2));
       } else {
         console.log(`status: ${state.status}`);
         console.log(`  ${state.detail}`);
-        console.log(`next: ${state.next ?? "nothing: the server is paired (npm start runs it; grain doctor checks the rest)"}`);
+        console.log(`next: ${next}`);
       }
       return settled(state.status) ? 0 : 1;
     }
@@ -753,7 +762,8 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       log.step("doctor", outcome === "fix" ? "refused" : outcome === "waiting" ? "waiting" : "ok", first ? first.what.replace(/ /g, "_") : "done");
       if (publish !== null) log.step("doctor_publish", publish === "published" ? "ok" : "waiting", publish);
       if (flags.get("json") === true) {
-        console.log(JSON.stringify({ status: state.status, publish, outcome, exit: DOCTOR_EXIT[outcome], findings, next: outcome === "done" ? null : next }, null, 2));
+        // `next` as the text's last line says it, "nothing: …" included: one answer for a person and a program.
+        console.log(JSON.stringify({ status: state.status, publish, outcome, exit: DOCTOR_EXIT[outcome], findings, next }, null, 2));
       } else {
         for (const f of findings) {
           const tag = f.ok ? "ok  " : f.waiting ? "wait" : "fix ";
@@ -829,8 +839,9 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       console.log(`The link: ${link}`);
       console.log(`Waiting for the owner's Saltix, then the registry (${LANDS_IN} once they confirm)…`);
       log.step("link", "waiting", "shown");
-      const w = new Waiting(waitOut(), "waiting for the owner's Saltix, then the registry");
-      const set = await waitForProfile(r.node, slug, profile, before, Number(text(flags, "timeout", "600")) * 1000, 3000, () => w.at("not in the registry yet"));
+      const limit = Number(text(flags, "timeout", "600")) * 1000;
+      const w = new Waiting(waitOut(), "waiting for the owner's Saltix, then the registry", limit);
+      const set = await waitForProfile(r.node, slug, profile, before, limit, 3000, () => w.at("not in the registry yet"));
       w.done();
       log.step("registry", set ? "ok" : "timeout", set ? "set" : "not_signed");
       console.log(set ? `the registry has it: revision ${set.profile.revision}` : `not in the registry yet: grain show --slug ${slug}${r.flags} says when it is`);
@@ -921,14 +932,9 @@ try {
   // A misuse is still logged, as "other": main says what was wrong.
 }
 const log = new DevLog(process.cwd(), commandName, toolVersion());
-// Stopped by Ctrl-C or SIGTERM: the log's last line says so (a server stopped, or a wait given up), and the exit status
-// is the shell's for that signal.
-for (const [signal, number] of [["SIGINT", 2], ["SIGTERM", 15]] as const) {
-  process.once(signal, () => {
-    log.step("end", stopsOk ? "ok" : "failed", signal.toLowerCase());
-    process.exit(128 + number);
-  });
-}
+// Stopped by Ctrl-C, SIGTERM or a closed terminal, however it was launched (`npx grain`, `npm run`, the command itself):
+// the log's last line says so (a server stopped, or a wait given up), and the exit status is the shell's for that signal.
+endOnSignals(log, () => stopsOk);
 main(argv, log).then((code) => {
   log.end(code);
   if (code !== 0) process.exitCode = code;

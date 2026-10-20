@@ -36,10 +36,11 @@ import {
   keyFingerprint, manifestProblem, minimumFee, nodeCall, putBundle, putIcon, registeredKeyStatus, signBundleUpload, signManifest, toHex,
 } from "@saltix/grain-server";
 import { makeBundle, sealed, type Bundle } from "./bundle.js";
+import { TEMPLATE_NEXT, stillTemplate } from "./connect.js";
 import { ICON_FILES } from "./icon.js";
 import { type DevLog, GRAIN_DIR, grainDir } from "./devlog.js";
 import { ensureGitignore, terminalQr } from "./pair.js";
-import { type Signer, accountOf, ownerLine, signerFor } from "./owner.js";
+import { type Signer, accountOf, keyFlag, ownerLine, signerFor } from "./owner.js";
 import { lint, publicKeyOf, readKey } from "./project.js";
 import { publishCall, salt, submit, walletLink, waitForPublished, type Sent, type Signing } from "./registry.js";
 import { SETTLE_EVERY_MS, SETTLE_MS, STAGES, landed, sendSettled } from "./send.js";
@@ -179,30 +180,50 @@ export function forgetSent(dir: string, id: string): void {
   writePublishState(dir, { ...state, sent: (state.sent ?? []).filter((t) => t.id !== id) });
 }
 
+/** The version `grain publish` sends when the registry holds `held` and grain.json says `ours`: grain.json's, unless the
+ *  registry holds it or one above already. */
+export const nextVersion = (held: number, ours: number): number => (held >= ours ? held + 1 : ours);
+
+/** A page changed since the version the registry holds, in the words `grain lint` and `grain doctor` both use. */
+export const publicChanged = (held: number, next: number): string => `public/ changed since v${held}: grain publish seals v${next}`;
+
 /**
- * What `grain lint` says of a manifest it finds no error in, by what the last `grain publish` here left (`state`): the
- * version the registry took and whether grain.json (and `public/`, for a sealed page) still say what it took; or ready
- * to publish. The registry itself is `grain doctor`'s to ask: a lint reads nothing from the network.
+ * What `grain lint` says of a manifest it finds no error in: where the last `grain publish` here left it (`state`: not
+ * published yet, published as it is here, or changed since the version the registry took), and what is left, in the
+ * words `grain doctor` uses: `public/` or grain.json changed since (`grain publish seals v2`), `connect.json` still
+ * `grain init`'s words, a first publish. Never "ready" while something is left. The registry itself is `grain doctor`'s
+ * to ask: a lint reads nothing from the network.
  */
 export function readiness(m: Manifest, state: PublishState | null, dir: string): string {
   const took = state && state.slug === m.slug && state.published_at ? state : null;
-  if (took === null) return `${m.slug} v${m.version}: no errors; ready to publish (grain publish)`;
-  const where = `${took.network} ${took.genesis}`;
+  const left: string[] = [];
+  let where: string;
   const bundle = "sealed" in m.entry ? m.entry.sealed.bundle : null;
-  let built: string | null = bundle;
-  if (bundle !== null && existsSync(join(dir, "public"))) {
-    try {
-      built = makeBundle(join(dir, "public")).hash;
-    } catch {
-      built = null;
+  if (took === null) {
+    where = "not published yet";
+    left.push("grain publish (grain doctor says what registering the slug takes)");
+  } else {
+    const on = `${took.network} ${took.genesis}`;
+    let built: string | null = bundle;
+    if (bundle !== null && existsSync(join(dir, "public"))) {
+      try {
+        built = makeBundle(join(dir, "public")).hash;
+      } catch {
+        built = null;
+      }
+    }
+    if (took.version === m.version && (bundle === null || (took.bundle === bundle && built === bundle))) {
+      where = `published on ${on} as it is here (the registry took it at ${took.published_at}; grain doctor asks the registry now)`;
+    } else {
+      where = `the registry took v${took.version} on ${on} at the last grain publish`;
+      const next = nextVersion(took.version, m.version);
+      left.push(bundle !== null && built !== took.bundle ? publicChanged(took.version, next) : `grain.json changed since v${took.version}: grain publish sends v${next}`);
     }
   }
-  if (took.version === m.version && (bundle === null || (took.bundle === bundle && built === bundle))) {
-    return `${m.slug} v${m.version}: no errors; published on ${where} as it is here (the registry took it at ${took.published_at}; ` +
-      `grain doctor asks the registry now). A change to ${bundle !== null ? "public/ or " : ""}grain.json: grain publish makes v${m.version + 1}`;
-  }
-  return `${m.slug} v${m.version}: no errors; the registry took v${took.version} on ${where} at the last grain publish, and this has changed ` +
-    `since: grain publish makes the next version`;
+  if (stillTemplate(dir)) left.push(TEMPLATE_NEXT);
+  const head = `${m.slug} v${m.version}: no errors; ${where}`;
+  if (left.length > 0) return `${head}; left: ${left.join("; ")}`;
+  return `${head}. A change to ${bundle !== null ? "public/ or " : ""}grain.json: grain publish makes v${m.version + 1}`;
 }
 
 function writePublishState(dir: string, state: PublishState): void {
@@ -529,6 +550,9 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   if (published) {
     print(`${slug} v${manifest.version}: the registry holds it as grain.json describes it, so there is nothing to sign`);
     o.log.step("registry", "ok", "published_before");
+    // Taken by the registry, though the run that sent it returned before it landed (--no-wait, a run cut short): seen
+    // now, so that grain lint knows this version from a change made after it.
+    state.published_at ??= new Date(now()).toISOString();
   } else if (made && made.size <= MAX_NETWORK_BUNDLE_BYTES) {
     // 3. Into the network before the owner signs, on a registered server key's statement.
     let vouch: ReturnType<typeof vouchingKey> = null;
@@ -657,7 +681,7 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   const after = await grainGet(o.node, slug).catch(() => null);
   // A first version the owner's Saltix registered: public for now may be private a block or two later (its own call),
   // so the line above says how it goes rather than "anyone opens it".
-  if (!(before === null && signer?.by === "wallet" && after?.public !== false)) print(whoOpens(slug, after, o.keyPath, o.flags, form));
+  if (!(before === null && signer?.by === "wallet" && after?.public !== false)) print(whoOpens(slug, after, o.keyPath, o.flags, form, o.dir));
   return 0;
 }
 
@@ -674,10 +698,10 @@ export const walletAccessWords = (slug: string, flags = ""): string =>
  * nobody's to open until a member is named: then the way to name one (the tester's own Saltix address), and the
  * simulator, which runs the page sealed as Saltix will.
  */
-export function whoOpens(slug: string, g: RegisteredGrain | null, keyPath: string, flags: string, form: PublishForm): string {
+export function whoOpens(slug: string, g: RegisteredGrain | null, keyPath: string, flags: string, form: PublishForm, dir: string): string {
   const simulator = form === "sealed" ? " Without a phone, grain dev runs this page sealed in the simulator, as Saltix will (grain dev --check tries it headless)." : "";
   if (!g || g.public !== false) return `Anyone opens it in Saltix: the Apps section, or salt:grain/${slug}.${simulator}`;
-  return `It is ${whoOpensNow(slug, g, keyPath, flags)}.${simulator}`;
+  return `It is ${whoOpensNow(slug, g, keyPath, flags, dir)}.${simulator}`;
 }
 
 /**
@@ -686,7 +710,7 @@ export function whoOpens(slug: string, g: RegisteredGrain | null, keyPath: strin
  * this computer's key file as its owner, which no phone holds, nobody until a member is named, and the command that
  * names one.
  */
-export function whoOpensNow(slug: string, g: RegisteredGrain, keyPath: string, flags: string): string {
+export function whoOpensNow(slug: string, g: RegisteredGrain, keyPath: string, flags: string, dir: string): string {
   const open = `salt:grain/${slug}`;
   if (g.public !== false) return `public: anyone opens it in Saltix (the Apps section, or ${open})`;
   let keyAccount: string | null = null;
@@ -699,7 +723,7 @@ export function whoOpensNow(slug: string, g: RegisteredGrain, keyPath: string, f
   const members = g.members?.length ?? 0;
   if (keyAccount !== null && keyAccount === g.owner) {
     return `private, and its owner is ${file}'s account, which no phone holds: ${members === 0 ? "nobody opens it in Saltix yet" : `its ${members} member${members === 1 ? "" : "s"} open it in Saltix (${open})`}. ` +
-      `To open it in your own Saltix: grain access --slug ${slug} --private --member <your Saltix address>:user --key ${file}${flags} ` +
+      `To open it in your own Saltix: grain access --slug ${slug} --private --member <your Saltix address>:user${keyFlag(keyPath, dir)}${flags} ` +
       `(the address: Saltix → Receive), or --public for anyone`;
   }
   const who = members > 0 ? `its owner and its ${members} member${members === 1 ? "" : "s"} open it` : "its owner alone opens it";
@@ -815,8 +839,9 @@ async function settleEarlier(o: PublishOptions, print: (line: string) => void, s
   print(`${tx.call} ${slug} v${tx.version}: an earlier grain publish sent it at ${tx.at} (transaction ${tx.id}), and the registry does not hold it yet: ` +
     `waiting for it rather than sending it again (${LANDS_IN})`);
   o.log.step("registry", "waiting", "earlier");
-  const w = new Waiting(waitOut(o, print), `${tx.call} ${slug} v${tx.version}`);
-  const end = Date.now() + (o.settleMs ?? SETTLE_MS);
+  const limit = o.settleMs ?? SETTLE_MS;
+  const w = new Waiting(waitOut(o, print), `${tx.call} ${slug} v${tx.version}`, limit);
+  const end = Date.now() + limit;
   for (;;) {
     const g = await grainGet(o.node, slug);
     if (g !== null && g.version >= tx.version) {
@@ -865,7 +890,7 @@ async function signWithKey(o: PublishOptions, print: (line: string) => void, man
     }));
   } catch (e) {
     if (/base units of SALT; this needs/.test((e as Error).message)) {
-      throw new PublishError("sign", "no_salt", `${(e as Error).message}: grain faucet --wait --key ${o.keyPath}${o.flags} gives the key file's account test SALT; or, without --key, the owner's Saltix signs and pays (a QR code)`);
+      throw new PublishError("sign", "no_salt", `${(e as Error).message}: grain faucet --wait${keyFlag(o.keyPath, o.dir)}${o.flags} gives the key file's account test SALT; or, without --key, the owner's Saltix signs and pays (a QR code)`);
     }
     throw e;
   }
@@ -887,7 +912,7 @@ async function signWithKey(o: PublishOptions, print: (line: string) => void, man
     return "no_wait";
   }
   print(`waiting for it to land: ${LANDS_IN}; Ctrl-C stops waiting, and grain publish${o.flags} again goes on from here`);
-  const w = new Waiting(waitOut(o, print), `${sent.call} ${manifest.slug} v${manifest.version}`);
+  const w = new Waiting(waitOut(o, print), `${sent.call} ${manifest.slug} v${manifest.version}`, Math.max(0, end - Date.now()));
   const ok = await landed(o.signing.node, call!, sent.id, end, every, (stage) => w.at(stage));
   w.done();
   if (ok === false) {
@@ -933,9 +958,8 @@ async function ensurePrivate(o: PublishOptions, print: (line: string) => void, s
   const now = o.now ?? Date.now;
   const every = o.pollMs ?? SETTLE_EVERY_MS;
   const end = Date.now() + (o.settleMs ?? SETTLE_MS);
-  const key = basename(o.keyPath);
-  const next = `grain access --slug ${slug} --private --key ${key}${o.flags}`;
-  const w = new Waiting(waitOut(o, print), `access ${slug}: private`);
+  const next = `grain access --slug ${slug} --private${keyFlag(o.keyPath, o.dir)}${o.flags}`;
+  const w = new Waiting(waitOut(o, print), `access ${slug}: private`, o.settleMs ?? SETTLE_MS);
   const done = (outcome: "already" | "sent") => {
     w.done();
     state.private_pending = false;
@@ -1021,7 +1045,7 @@ async function signInWallet(o: PublishOptions, print: (line: string) => void, ma
     return "no_wait";
   }
   print(`Waiting for the owner's Saltix and the registry: once they confirm, ${LANDS_IN} (Ctrl-C stops; grain publish again goes on from here)`);
-  const w = new Waiting(waitOut(o, print), `publish ${manifest.slug} v${manifest.version}`);
+  const w = new Waiting(waitOut(o, print), `publish ${manifest.slug} v${manifest.version}`, o.timeoutMs);
   const signed = await waitForPublished(o.node, manifest, o.timeoutMs, o.pollMs, () => w.at("waiting for the owner's Saltix, then the registry"));
   w.done();
   if (signed === null) {

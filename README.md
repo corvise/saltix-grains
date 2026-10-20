@@ -21,8 +21,8 @@ A page that works on its own needs no server, no key to pair and no hosting:
 ```sh
 git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build
 npx grain init ../my-game --slug my-game --name "My game" && cd ../my-game && npm install
-npx grain dev                    # the simulator; npx grain dev --check tries it headless at every screen, both themes
-npx grain dev --check --tap      # the same, then each button tapped once: a throw or a refused request is an error
+npx grain dev                    # a server until Ctrl-C: the simulator, for a person (an agent: in the background, or not at all)
+npx grain dev --check --tap      # headless, and exits: every screen, both themes, each button tapped once (those a tap brings up too)
 npx grain icon --monogram M      # an icon to the standard (or grain icon <picture> --out icon.png)
 npx grain doctor                 # what is left; before the first publish, the deposit and the fees; exit 75: wait
 npx grain publish                # into the network; the owner's Saltix signs from a QR code
@@ -57,7 +57,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 
 | Package | What it is |
 |---|---|
-| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `slugLink()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `grain.manage.open()` |
+| [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `slugLink()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `shortAddress()` (an address as Saltix shortens it, `dsalt1qabcd…uvwxyz`), `grain.manage.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, and the grain's chat (`ChatServer`, from a developer key alone); `@saltix/grain-server/web` is what runs in a page |
 | [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
@@ -148,7 +148,7 @@ npx grain init ../team-board --sign-in    # a page for some people only: its spl
 cd ../dice && npm install && npx grain dev   # links the grain command; serves public/, the signed manifest and the simulator
 npx grain dev --check                     # the simulator headless: every screen, both themes; .grain/check/; exit 1 on an error
 npx grain dev --check --tap               # then each button tapped once: a throw or a refused request is an error
-npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕
+npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕; what is left
 npx grain icon logo.png --out icon.png    # a 512x512 icon to the standard from any picture; grain.json names it
 npx grain icon --monogram D               # or one with no picture: a letter on a colour (--background #rrggbb)
 npx grain icon icon.png                   # an icon checked as wallets check it, and its hash
@@ -195,8 +195,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - A registry call signed with a key file (`publish`, `retire`, `configure`, `access`, `rate`, `bind`, `profile`)
   returns once its transaction landed and the registry holds what it makes: **about 1.5 to 2.5 minutes on the test
   network** (a shard block, then the beacon chain's registry), a first `grain publish --key` about 2 to 4, up to about
-  6 (it gives up after 6 minutes a transaction, and the next run goes on). Meanwhile it says what it waits for and for
-  how long: one line rewritten on a terminal, a line every 15 seconds elsewhere. **A coding agent runs these commands in
+  6 (it gives up after 6 minutes a transaction, and the next run goes on). Meanwhile it says what it waits for, for how
+  long and for how long at most (`in the pool, waiting for a shard block (1:39 of up to 6:00)`): one line rewritten on a
+  terminal, a line every 15 seconds elsewhere. **A coding agent runs these commands in
   the background or with a timeout of 10 minutes or more**, or passes `--no-wait`, which returns once the pool took the
   transaction, then asks `grain doctor` until it says it landed: what `publish`, `access` and `profile` sent for the
   project's app is kept in `.grain/publish.json`, and `grain doctor` says where each stands until it landed (`grain show`
@@ -214,13 +215,18 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   sticky to the bottom, there as the page opens; or one that scrolls with the page still there with it scrolled to its
   end (a page with no room below its last button); a button at a long page's fold, which the page scrolls clear, is
   not. No browser is downloaded; with none, it says so. `--check --tap` then taps each of the page's buttons once, as a
-  person would, at the phone's size in the dark theme (buttons only, never a link; at most 30): a tap after which the
-  page throws, or asks Saltix for something it refuses (a permission the manifest lacks, a call without a tap's right),
-  is an error; one that changes nothing on the page and asks Saltix for nothing, a button something else covers, and a
-  page that would leave for another origin are warnings. It stays on this computer: the page is never navigated away
+  person would, at the phone's size in the dark theme (buttons only, never a link), and after each tap the buttons it
+  brought up ("Clear history" once there is a history: shown now, never seen before by element or by name) in their
+  turn; at most 30 in all, in 40 s, and buttons brought up past that are a warning (`N buttons appeared later and were
+  not tapped`). A tap after which the page throws, or asks Saltix for something it refuses (a permission the manifest
+  lacks, a call without a tap's right), is an error, and then no line says the taps went well; one that changes nothing
+  on the page and asks Saltix for nothing, a button something else covers, and a page that would leave for another
+  origin are warnings. `next:` names the command that found it (`grain dev --check --tap` again). It stays on this computer: the page is never navigated away
   (the check stops such a document before it loads), no window opens, and a payment is declined (4001, as a user may
   decline one); a user's own "no" is never an error. A screenshot of the page after each tap goes to `.grain/check/`.
-- `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
+- `grain dev` is a server: it runs until Ctrl-C (or SIGTERM, or its terminal closing), and its log's last line says it
+  stopped, however it was launched (`npx grain dev`, `npm run dev`, the command itself). A coding agent runs it in the
+  background, or not at all, and checks the page with `--check`, which exits. It signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
   the page's colours as Saltix takes them, and Saltix's splash while the page loads, on a phone, the Galaxy Z Fold's
@@ -279,7 +285,10 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain init` writes `connect.json`, the app's Connect profile (Saltix [19-connect §11](docs/protocol/connect.md#11-the-connect-profile)):
   the JSON form's `profile` object without `owner` and `revision`, an example in English and Russian that describes the
   counter it makes, to rewrite for your app: `grain lint` warns while any language still says the template's words
-  (`connect-template`), and `grain profile` refuses them.
+  (`connect-template`), and `grain profile` refuses them. `grain lint`'s last line says where the last `grain publish`
+  left the project (not published yet; published as it is here; the version the registry took) and what is left, in
+  `grain doctor`'s words: `left: public/ changed since v1: grain publish seals v2`, `rewrite connect.json for this app`;
+  never "ready" while something is.
   `grain lint` fails without it, and checks every rule of the format with the field and its limit (a tagline of 1–80
   characters in one line, about up to 600, up to 4 highlights of 60, a privacy summary of up to 300, required when the
   manifest asks for `address` or `storage`; `https://` links, never to a host reserved for examples (`.example`,
@@ -324,7 +333,8 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   managed account's may wait its delay). `--new` pairs a new key and keeps the old `app.key` in `.grain/`.
 - `grain status` prints `paired`, `not_needed` (a page alone: nothing to pair), `pairing`, `unpaired`, `revoked`,
   `replaced`, `retired`, `unregistered`, `other_network`, `invalid` or `unknown`, one line on why, and the command to
-  run next (`--json` for a program; exit 0 when paired or not needed). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
+  run next (`--json` for a program, `next` in the same words, `nothing: …` once paired, never null; exit 0 when paired
+  or not needed). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
   `chat.json`'s version, `npm install`, a page's bundle and where its publish stands, `not_uploaded`, `pending`,
   `waiting_for_owner`, `pending_expired` or `published`, what the registry holds, each transaction a key file here sent
   until it landed, who opens the app (and **public, but should be private** while a key file's registration is still to
@@ -335,8 +345,10 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   --key owner.key`). Both only read; what `grain doctor` says, and its exit status, [below](#grain-doctor-where-a-project-stands-and-its-exit-status).
 - Every command run in an app's project appends its steps to `.grain/log.jsonl` ([docs/devex.md](docs/devex.md#the-steps-log)):
   the command, the step, its outcome, a reason code, the milliseconds, the network's kind; never a key, an address, a
-  slug, a path or anything typed; its last line the exit, a stop by Ctrl-C or SIGTERM included. `SALTIX_GRAIN_LOG=off`
-  turns it off.
+  slug, a path or anything typed; its last line the exit, a stop by Ctrl-C, SIGTERM or a closed terminal included,
+  however the command was launched (`npx grain …` too: npm passes on the Ctrl-C the command gets from the terminal as
+  well, and the second signal is ignored while the line is written). Only `kill -9` leaves a run with no last line.
+  `SALTIX_GRAIN_LOG=off` turns it off.
 - `grain app-key` reads a developer key from `SALTIX_APP_KEY`, `--file` or stdin, never from the command line (shells
   keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
   (through the network's public relays, or `--node`).
@@ -362,7 +374,8 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 Each line is a finding: `ok` (in order), `fix` (something to do: the arrow says what), or `wait` (nothing to do but wait
 for the network: a transaction on its way). The last line, `next:`, is the first thing to do, else what to wait for,
 else `nothing: …`. `--json` gives the same as `{status, publish, outcome, exit, findings, next}`, each finding
-`{ok, what, detail, next?, waiting?}`.
+`{ok, what, detail, next?, waiting?}`; `next` is the `next:` line's words, `nothing: …` included (never null: an older
+tool gave `null` when nothing was left; read `outcome` or `exit` to tell).
 
 | Exit | `outcome` | Means |
 |---|---|---|

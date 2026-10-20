@@ -36,9 +36,20 @@ test("every project's AGENTS.md links the SDK's guide and keeps the rules, a pag
   // rules before the server's, which wait until the app has a server.
   const page = agentsMd("dice", false);
   const pageStart = page.slice(page.indexOf("## Start here"), page.indexOf("## The one rule to keep"));
-  for (const words of ["`not_needed`", "`npx grain dev --check`", "`npx grain publish`", "`npx grain publish --key owner.key`", "`npx grain faucet --wait`"]) {
+  for (const words of ["`not_needed`", "`npx grain dev --check --tap`", "`npx grain publish`", "`npx grain publish --key owner.key`", "`npx grain faucet --wait`"]) {
     assert.ok(pageStart.includes(words), `a page's first steps: ${words}`);
   }
+  // `npx grain dev` alone is a server that never returns: an agent runs it in the background, or checks with --check.
+  assert.match(pageStart.replace(/\s+/g, " "), /`npx grain dev` alone is a server that runs until Ctrl-C, .*a coding agent runs it in the background \(and stops it after\), or not at all/);
+  assert.match(page.replace(/\s+/g, " "), /It is a server: it runs until Ctrl-C .*, so a coding agent runs it in the background, or not at all, and checks with `--check`, which exits/);
+  // And the SDK's own quick path: no bare `npx grain dev` among its steps, and the same words.
+  const root = readFileSync(new URL("../../../AGENTS.md", import.meta.url), "utf8");
+  const quick = root.slice(root.indexOf("## Quick path: a page-only app"), root.indexOf("## Start here: Saltix's brief"));
+  assert.ok(quick.includes("npx grain dev --check --tap"));
+  assert.doesNotMatch(quick, /^npx grain dev +#/m, "a step that never returns");
+  assert.match(quick.replace(/\s+/g, " "), /`npx grain dev` without `--check` is a server.*A coding agent runs it in the background \(and stops it after\), or not at all/);
+  // One rule for --key: after the first publish, no page names owner.key on an owner's call.
+  for (const text of [page, root, guide]) assert.doesNotMatch(text, /grain (access|profile)[^`\n]*--key owner\.key/);
   assert.ok(!pageStart.includes(".grain/pair.html"), "nothing to pair for a page alone");
   assert.ok(page.indexOf("## The page's frame") < page.indexOf("## The rules every app follows"), "a page's rules first");
   assert.match(page, /A page alone keeps rules 9 to 11 and the frame's rules above; rules 1 to 8 are for the app's server/);

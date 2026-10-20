@@ -171,7 +171,7 @@ test("lint warns, and passes: about empty, English only, owner or revision given
     for (const [i, lang] of ["de", "es", "fr", "it", "pt", "uk"].entries()) c.texts[lang] = { ...c.texts.en, tagline: noise(80, i), about: noise(600, i + 9) };
   });
   assert.deepEqual(long.errors, []);
-  assert.match(long.warnings.join("\n"), /too long for a QR code; set it in Saltix's app studio .* or with a key file/);
+  assert.match(long.warnings.join("\n"), /too long for a QR code; set it in Saltix's app studio .*, or with grain profile when a key file here owns the app \(it signs by itself\)$/m);
   // Eight languages of every text at its longest: each field in bounds, the whole past 8 KiB.
   const big = w((c) => {
     const full = { tagline: "t".repeat(80), about: "a".repeat(600), highlights: Array(4).fill("h".repeat(60)), privacy: "p".repeat(300) };

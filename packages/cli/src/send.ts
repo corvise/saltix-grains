@@ -69,7 +69,9 @@ export async function landed(node: NodeLike, call: GrainCall, id: string, end: n
 export interface Settle {
   /** Wait for the call to land (true), or return once the pool took it. */
   wait: boolean;
+  /** How long at most, from now (`SETTLE_MS`); or until `end`, a time. */
   ms?: number;
+  end?: number;
   every?: number;
   /** Told once the pool took the call, before the wait. */
   onSent?: (sent: Sent) => void;
@@ -86,7 +88,7 @@ export interface Settle {
  */
 export async function sendSettled(build: () => Promise<GrainCall>, secret: Uint8Array, s: Signing, o: Settle): Promise<{ sent: Sent; landed: boolean | null }> {
   const every = o.every ?? SETTLE_EVERY_MS;
-  const end = Date.now() + (o.ms ?? SETTLE_MS);
+  const end = o.end ?? Date.now() + (o.ms ?? SETTLE_MS);
   for (;;) {
     const call = await build();
     let sent: Sent;

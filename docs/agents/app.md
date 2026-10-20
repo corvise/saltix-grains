@@ -6,8 +6,9 @@ needs a program at all (a page alone needs none), and the lifecycle as one check
 rules every app follows, and what to do with an error report.
 
 **A page alone** (a game, a tool) needs no program, no key and no pairing: `npx grain status` says `not_needed`, and the
-path is `grain dev` (and `grain dev --check`), `grain icon`, `grain lint`, `grain doctor`, `grain publish`, as
-[AGENTS.md's quick path](../../AGENTS.md#quick-path-a-page-only-app) lists them; then
+path is `grain dev --check` (and `--tap`), `grain icon`, `grain lint`, `grain doctor`, `grain publish`, as
+[AGENTS.md's quick path](../../AGENTS.md#quick-path-a-page-only-app) lists them (`grain dev` without `--check` is a
+server that runs until Ctrl-C, for a person: in the background, if at all); then
 [Publish a page, and its icon](#publish-a-page-and-its-icon) below, and the rules of an app's page. The sections on the
 server's key, the chat spec, handlers, tests and shipping are for an app with a program.
 
@@ -134,6 +135,13 @@ The first time someone opens your app, Saltix shows its **Connect sheet** (Salti
 Connect" on top, your app's icon, name and owner, then **In its own words**: your profile. Below it, "To continue, sign
 in" with a row for each permission the manifest asks for, and Continue. `connect.json` is that profile: the JSON form's
 `profile` object without `owner` and `revision`, which are filled in when it is set.
+
+Two rows are on every sheet, whatever the manifest asks for: **Recognise you** (the app's pseudonymous ID for the user)
+and **Payments and contacts** (Saltix 19-connect [§12.1](../protocol/connect.md#121-what-it-shows-top-to-bottom)):
+any app may ask the user to pay or to pick a contact, and the user confirms each in Saltix's own sheet (or by quick pay
+within their daily limit). No permission bit turns it on or off, so it is not something your manifest asks for and
+there is nothing to drop; `grain lint` never warns of it. The owner is named by a username, else a short address
+(`dsalt1qabcd…uvwxyz`, `shortAddress` in `@saltix/grain`), as `grain dev`'s preview shows it.
 
 ```json
 {
@@ -442,8 +450,8 @@ publish --key owner.key`, `grain profile`, `grain access`. What an agent adds to
   into the network first, on the server key's statement) ([publishing a page](../how-it-works.md#publish-a-page)).
 - **Public**: an app starts private (its owner and members), made in Saltix, registered by a key file, or from a
   publishing link unless the owner switched on **Public in the Marketplace** on its sheet (Saltix 0.1.61 and later; an
-  older Saltix registers it public, and its owner makes it private in Saltix or with `grain access --private`). The owner makes it public in Saltix (My apps → the app), or `grain access --public --key owner.key` on the
-  test network for an app that key owns.
+  older Saltix registers it public, and its owner makes it private in Saltix or with `grain access --private`). The owner makes it public in Saltix (My apps → the app), or `grain access --public` on the
+  test network for an app the project's `owner.key` owns (it signs by itself).
 
 ## An error report from the console
 

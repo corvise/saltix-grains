@@ -86,13 +86,16 @@ export interface CheckRun {
   /** Whether grain.json names an icon. */
   icon: boolean;
   /** The taps of `--tap`, each button once; null without it. Exceptions and refusals they caused are here, not in
-   *  `errors` and `refused`. */
-  taps?: { seen: TapSeen[]; total: number; device: string; theme: string } | null;
+   *  `errors` and `refused`. `total`: the buttons shown when the taps began; `later`: those a tap brought up (shown
+   *  after it, never seen before), tapped too while there was room. */
+  taps?: { seen: TapSeen[]; total: number; later?: number; device: string; theme: string } | null;
 }
 
 /** One button tapped by `--tap`, and what followed it. */
 export interface TapSeen {
   name: string;
+  /** Brought up by an earlier tap: not on the page when the taps began. */
+  later?: boolean;
   /** `tapped`; or why it was not: taken away (`gone`, `hidden`) by an earlier tap, or `covered` by another element. */
   state: "tapped" | "gone" | "hidden" | "covered";
   /** What covers it, for `covered`. */
@@ -111,7 +114,16 @@ export interface TapSeen {
 /** The refusal a user's own "no" is: never a fault of the page. */
 const USER_REFUSED = 4001;
 
-/** What is wrong with `--tap`'s taps, and what is right. */
+/** `--tap`'s bounds: at most this many buttons (those a tap brought up included), in at most this long. */
+export const MAX_TAPS = 30;
+const TAP_BUDGET_MS = 40_000;
+
+/**
+ * What is wrong with `--tap`'s taps, and what is right: an error for each tap that threw or asked Saltix for what it
+ * refuses; warnings for a tap that changed nothing, a page that would leave, a covered button, and buttons a tap brought
+ * up that the bounds left untapped; and, only when no tap failed, the count of those tapped, so that the output never
+ * says a tap failed and that all went well.
+ */
 export function judgeTaps(taps: NonNullable<CheckRun["taps"]>): CheckFinding[] {
   const out: CheckFinding[] = [];
   let tapped = 0;
@@ -134,12 +146,26 @@ export function judgeTaps(taps: NonNullable<CheckRun["taps"]>): CheckFinding[] {
       out.push({ level: "warning", what: "tap", detail: `tapping ${t.name} changed nothing on the screen and asked Saltix for nothing`, where: [] });
     }
   }
+  const first = taps.seen.filter((t) => !t.later);
+  const later = taps.seen.length - first.length;
+  // Brought up by a tap and left untapped: past the 30 buttons, or past the time.
+  const left = Math.max(0, (taps.later ?? 0) - later);
+  if (left > 0) {
+    out.push({
+      level: "warning", what: "tap",
+      detail: `${left} button${left === 1 ? "" : "s"} appeared later and ${left === 1 ? "was" : "were"} not tapped: the check taps at most ${MAX_TAPS} ` +
+        `buttons, in at most ${TAP_BUDGET_MS / 1000} s; try them in grain dev's simulator`,
+      where: [],
+    });
+  }
+  if (out.some((f) => f.level === "error")) return out;
   const skipped = taps.seen.length - tapped;
-  const more = taps.total > taps.seen.length ? ` (the first ${taps.seen.length} of ${taps.total})` : "";
+  const more = taps.total > first.length ? ` (the first ${first.length} of ${taps.total})` : "";
+  const brought = later > 0 ? `, ${later} of them brought up by an earlier tap` : "";
   out.push({
     level: "ok", what: "tap",
     detail: taps.seen.length === 0 ? "no button to tap"
-      : `tapped ${tapped} button${tapped === 1 ? "" : "s"} once each${more} at ${taps.device} ${taps.theme}` +
+      : `tapped ${tapped} button${tapped === 1 ? "" : "s"} once each${more} at ${taps.device} ${taps.theme}${brought}` +
         `${skipped > 0 ? `; ${skipped} not tapped (taken away by an earlier tap, or covered)` : ""}`,
     where: [],
   });
@@ -288,8 +314,6 @@ async function until<T>(check: () => Promise<T | null | undefined | false>, ms: 
 
 /** How long the page has to answer a tap before the screen is looked at again. */
 const TAP_SETTLE_MS = 400;
-/** `--tap` at most, for all its taps. */
-const TAP_BUDGET_MS = 40_000;
 
 /** Drive the simulator at `origin` in `browser`: the sheet, the page, every screen in both themes, the screenshots;
  *  with `tap`, each button tapped once. */
@@ -430,16 +454,20 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
   await send("Fetch.enable", { patterns: [{ urlPattern: "*", resourceType: "Document", requestStage: "Request" }] });
   const seen: TapSeen[] = [];
   let total = 0;
+  /** Buttons a tap brought up: tapped in their turn while there is room, all counted. */
+  let later = 0;
   try {
-    const found = await evaluate<{ names: string[]; total: number }>("window.saltixSimulator.buttons()");
+    const found = await evaluate<{ names: string[]; total: number }>(`window.saltixSimulator.buttons(${MAX_TAPS})`);
     total = found.total;
+    const names = [...found.names];
     const end = Date.now() + TAP_BUDGET_MS;
-    for (let i = 0; i < found.names.length && Date.now() < end; i++) {
-      const name = found.names[i]!;
+    for (let i = 0; i < names.length && Date.now() < end; i++) {
+      const name = names[i]!;
+      const isLater = i >= found.names.length ? { later: true } : {};
       const aim = await evaluate<{ state: string; x?: number; y?: number; by?: string }>(`window.saltixSimulator.aim(${i})`);
       const none = { thrown: [], asked: [], dialogs: 0, blocked: [], changed: false };
       if (aim.state !== "ready") {
-        seen.push({ name, state: aim.state as TapSeen["state"], ...(aim.by ? { by: aim.by } : {}), ...none });
+        seen.push({ name, ...isLater, state: aim.state as TapSeen["state"], ...(aim.by ? { by: aim.by } : {}), ...none });
         continue;
       }
       const at = { x: aim.x!, y: aim.y! };
@@ -455,18 +483,24 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
       // What each tap left on the page, for a person to look at.
       writeFileSync(join(out, `tap-${seen.length + 1}.png`), after.png);
       seen.push({
-        name, state: "tapped",
+        name, ...isLater, state: "tapped",
         thrown: errors.slice(mark.errors).filter((e) => e.where === "page").map((e) => e.text),
         asked, dialogs: dialogs.length - mark.dialogs, blocked: blocked.slice(mark.blocked),
         changed: !look.rests || !after.rests || !after.pixels.equals(look.pixels),
       });
+      // What the tap brought up ("Clear history" once there is one) is tapped in its turn, within the same bounds.
+      const brought = await evaluate<{ names: string[]; over: number } | undefined>("window.saltixSimulator.more?.()");
+      if (brought) {
+        names.push(...brought.names);
+        later += brought.names.length + brought.over;
+      }
     }
   } finally {
     await send("Fetch.disable").catch(() => undefined);
   }
   return {
     sheet, load: first.page, measures, errors: errors.slice(0, before.errors), refused, dialogs: dialogs.slice(0, before.dialogs), icon,
-    taps: { seen, total, device, theme: "dark" },
+    taps: { seen, total, later, device, theme: "dark" },
   };
 }
 
@@ -531,8 +565,10 @@ export async function runCheck(o: CheckOptions): Promise<number> {
       (tapped === null ? "" : `, then ${tapped} of its buttons tapped once each`));
     for (const line of findingLines(findings)) print(line);
     print(`screenshots and report.json: ${out}`);
+    // The command that checks again is the one that found it: a tap's error shows only with --tap.
+    const again = `grain dev --check${o.tap ? " --tap" : ""}`;
     print(errors > 0
-      ? `next: fix the ${errors === 1 ? "error" : `${errors} errors`} above, then grain dev --check again`
+      ? `next: fix the ${errors === 1 ? "error" : `${errors} errors`} above, then ${again} again`
       : warnings > 0 ? "next: nothing stops the page; look at the warnings above and the screenshots"
       : `next: nothing: the page checks at every screen in both themes${run.taps ? " and answers every tap" : ""} (grain doctor, then grain publish)`);
     return errors > 0 ? 1 : 0;

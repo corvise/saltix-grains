@@ -256,14 +256,18 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
 - \`npx grain status\` first, every session (a page alone: \`not_needed\`, nothing to pair), and \`npx grain doctor\`:
   where the project stands and the exact next step; before the first publish, what registering the slug takes.
 - \`npx grain dev\`: serves \`public/\` and prints the simulator's address: your page framed as Saltix frames it, with
-  the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark.
+  the wallet's controls, at a phone's, the Galaxy Z Fold's and an iPhone-like screen's sizes, light and dark. It is a
+  server: it runs until Ctrl-C (its log's last line says it stopped), so a coding agent runs it in the background, or
+  not at all, and checks with \`--check\`, which exits.
   \`npx grain dev --check\` drives the same simulator in headless Chrome: the Connect sheet, the page loading without
   errors, and at every size in both themes nothing tappable under the wallet's controls and no sideways scroll;
   screenshots and \`report.json\` in \`.grain/check/\`, exit 1 when something is wrong. \`--check --tap\` then taps
-  each button once: a tap that throws or asks Saltix for what it refuses is an error, one that changes nothing a
-  warning (the page never leaves, and no payment is made).
+  each button once, and the buttons a tap brings up in their turn (at most 30 in all): a tap that throws or asks
+  Saltix for what it refuses is an error, one that changes nothing a warning (the page never leaves, and no payment is
+  made).
 - \`npx grain lint\`: what stops \`grain.json\` and \`connect.json\`, warnings about the page, placeholders and permissions
-  nothing uses, and whether this is the version the registry took at the last publish.
+  nothing uses, and a last line with where the last publish left it and what is left (\`left: public/ changed since v1:
+  grain publish seals v2\`, \`connect.json\` still \`grain init\`'s words), in \`grain doctor\`'s words.
 - \`npx grain icon <picture> --out icon.png\`: the app's icon to Saltix's standard from any PNG or JPEG (512 × 512,
   opaque, at most 64 KiB, the mark inside the keyline circle); it names it in \`grain.json\`. No picture yet:
   \`npx grain icon --monogram <letter>\`, a letter on a colour (\`--background #rrggbb\`) to the same standard. Look at
@@ -380,9 +384,10 @@ export const appRules = `1. **The server's key is made where it runs and never l
 const PAGE_START = `1. \`npx grain status\`: a page alone needs no server, so it says \`not_needed\` (nothing to pair) and names the next
    step. When the app gets a server (a chat, payments, a sign-in), that server is paired by a QR code the owner scans
    (\`npx grain pair\`, rule 1): never a key pasted by the user.
-2. \`npx grain dev\`: the page in the simulator, framed as Saltix frames it. \`npx grain dev --check\` drives it headless at
-   every size and in both themes and says what is wrong (screenshots in \`.grain/check/\`); with \`--tap\` it also taps
-   each button once.
+2. \`npx grain dev --check --tap\`: the page in the simulator, framed as Saltix frames it, headless at every size and in
+   both themes, each button tapped once (and those a tap brings up); it exits 1 with what is wrong (screenshots in
+   \`.grain/check/\`). \`npx grain dev\` alone is a server that runs until Ctrl-C, for a person to look at the simulator
+   in a browser: a coding agent runs it in the background (and stops it after), or not at all.
 3. \`npx grain doctor\`, then \`npx grain publish\`: what is left before publishing, then the page into the network. The
    owner's Saltix signs from a QR code; without a phone, on the test network: [No phone, test
    network](${HOW_IT_WORKS}#no-phone-test-network) (\`npx grain faucet --wait\`, \`npx grain publish --key owner.key\`;

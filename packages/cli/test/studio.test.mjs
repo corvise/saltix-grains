@@ -281,7 +281,7 @@ test("init --chat makes a chat-only grain with a spec to build on", async () => 
   assert.equal(m.permissions, 4);
   assert.ok(!existsSync(join(dir, "public")));
   const lint = await run(["lint"], dir);
-  assert.match(lint.stdout, /coach v1: no errors; ready to publish/);
+  assert.match(lint.stdout, /coach v1: no errors; not published yet; left: grain publish .*; rewrite connect\.json for this app/);
   const spec = JSON.parse(readFileSync(join(dir, "chat.json"), "utf8"));
   assert.equal(spec.slug, "coach");
   assert.ok(readFileSync(join(dir, ".gitignore"), "utf8").includes("app.key"));

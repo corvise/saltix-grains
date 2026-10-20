@@ -89,6 +89,20 @@ export function placeholderLinks(value: unknown): string[] {
 /** `grain lint`'s warning for a profile that still says what `grain init` wrote. */
 export const TEMPLATE_RULE = "connect-template";
 
+/** What is left while `connect.json` holds `grain init`'s words: said the same by `grain lint`'s last line and `grain
+ *  doctor`. */
+export const TEMPLATE_NEXT = "rewrite connect.json for this app (docs/agents/app.md: the Connect profile): it still holds grain init's words, which grain profile refuses";
+
+/** Whether the project in `dir` has a `connect.json` that still holds `grain init`'s words (none, or one that does not
+ *  read, is `grain lint`'s to say). */
+export function stillTemplate(dir: string): boolean {
+  try {
+    return templateTexts(readConnectFile(join(dir, CONNECT_FILE))).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** A text of the template with the app's name in it, as a pattern that takes any name: the project's name may have
  *  changed since `grain init` wrote it. */
 const NAME_MARK = "\u0000";
@@ -231,7 +245,7 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
   try {
     profileLink(profile);
   } catch {
-    warnings.push(`${where}: its link is longer than ${MAX_PROFILE_LINK} characters, too long for a QR code; set it in Saltix's app studio (My apps → ${m.slug} → Connect profile) or with a key file (grain profile --key owner.key)`);
+    warnings.push(`${where}: its link is longer than ${MAX_PROFILE_LINK} characters, too long for a QR code; set it in Saltix's app studio (My apps → ${m.slug} → Connect profile), or with grain profile when a key file here owns the app (it signs by itself)`);
   }
   return { errors, warnings };
 }

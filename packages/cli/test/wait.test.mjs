@@ -52,3 +52,18 @@ test("on a terminal: one line rewritten in place at every look, ended once the w
   assert.equal(elapsed(59_999), "0:59");
   assert.equal(elapsed(125_000), "2:05");
 });
+
+test("a wait with an end says how long it waits at most beside the time waited", () => {
+  let now = 0;
+  const printed = [];
+  const w = new Waiting({ tty: false, print: (l) => printed.push(l), now: () => now }, "register dice v1", 360_000);
+  now += 99_000;
+  w.at("in a shard block, on its way to the registry (the beacon chain)");
+  assert.deepEqual(printed, ["  register dice v1: in a shard block, on its way to the registry (the beacon chain) (1:39 of up to 6:00)"]);
+  // On a terminal, the same words rewritten.
+  const rewritten = [];
+  const t = new Waiting({ tty: true, print: () => {}, progress: (l) => rewritten.push(l), now: () => now }, "waiting for the owner's Saltix, then the registry", 600_000);
+  now += 5_000;
+  t.at("not in the registry yet");
+  assert.deepEqual(rewritten, ["  waiting for the owner's Saltix, then the registry: not in the registry yet (0:05 of up to 10:00)"]);
+});

@@ -32,12 +32,15 @@ and no hosting. From an empty folder to an app published in the network, every c
 git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build
 npx grain init ../<slug> --slug <slug> --name "<Name>" && cd ../<slug> && npm install
 npx grain status                 # not_needed: a page alone has nothing to pair
-npx grain dev                    # write public/; the simulator frames it as Saltix does
-npx grain dev --check --tap      # headless: the Connect sheet, every screen, both themes, each button tapped once; .grain/check/
+npx grain dev --check --tap      # write public/, then this; it exits: the Connect sheet, every screen, both themes, each button tapped
 npx grain icon --monogram <L>    # or grain icon <picture> --out icon.png
 npx grain lint && npx grain doctor   # what is left; before the first publish, what registering the slug takes
 npx grain publish                # says who will own the app; the owner's Saltix signs from a QR code
 ```
+
+**`npx grain dev` without `--check` is a server**: it serves the simulator until Ctrl-C, for a person to look at in a
+browser, and never returns. A coding agent runs it in the background (and stops it after), or not at all: it checks
+the page with `npx grain dev --check --tap`, which exits 0, or 1 with what is wrong.
 
 Run `grain publish` again with nothing changed and it says "nothing to publish" and sends nothing; a change to `public/`
 or `grain.json` makes the next version. Write `connect.json` for the app before `grain profile`: `grain init`'s is about
@@ -163,7 +166,9 @@ show it (or `.grain/publish.html`) to the user, then run `grain publish` again a
 left. With nothing changed it says "nothing to publish" and sends nothing; a version is raised only when `grain.json` or
 `public/` changed. **A key file signs only when `--key` names it, or by itself for an app its account owns**
 ([No phone, test network](docs/how-it-works.md#no-phone-test-network)); `grain init`'s `owner.key` never registers an
-app by itself.
+app by itself. So `--key owner.key` goes on the first `grain publish` only: after it, `grain profile`, `grain access`
+and `grain publish` in the project sign with the `owner.key` that owns the app by themselves, and the commands the tools
+suggest never name it (only a key file elsewhere: `--key <its path>`).
 `grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, or
 `published`: the registry names the version and the network holds its bundle, never on a relay's `fetching` alone), and
 before the first one what registering the slug takes; a refusal says what to do. The bundle goes to the network's

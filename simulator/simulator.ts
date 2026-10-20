@@ -20,7 +20,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 // Module by module: the package's index also exports the relay client, which needs Node.
 import { derive, fromHex, toHex } from "../packages/server/src/bytes";
-import { accountId, encodeAddress } from "../packages/server/src/address";
+import { type NetworkName, accountId, encodeAddress } from "../packages/server/src/address";
 import { loginMessage } from "../packages/server/src/login";
 import { invoiceProblem, decodeInvoice } from "../packages/server/src/invoice";
 import { notificationProblem, decodeNotification } from "../packages/server/src/notification";
@@ -316,6 +316,7 @@ let driven = false;
  *  switches as set; Cancel opens nothing and sends nothing. Whether the app may open. */
 async function connectFirst(): Promise<boolean> {
   if (!loaded || consents.has("login") || !$<HTMLInputElement>("connect-first").checked) return true;
+  await devInfo;
   const { profile, problem } = await fetchProfile(loaded.url, loaded.manifest.owner);
   if (problem) write(`connect.json ✖ ${problem}: a wallet shows the app as having no Connect profile`);
   const choice = await showConnectSheet({
@@ -325,6 +326,7 @@ async function connectFirst(): Promise<boolean> {
     theme: () => settings().theme,
     log: write,
     icon: iconUrl,
+    network: () => network,
   }, loaded.manifest, profile, problem);
   if (choice === null) {
     write("Connect sheet: Cancel; Saltix opens nothing and sends nothing");
@@ -392,9 +394,17 @@ $<HTMLButtonElement>("frame").onclick = () => {
   emit("relay", { from, payload: toHex(new TextEncoder().encode(text)) });
   write(`relay ← ${from}: ${text.length} characters`);
 };
-/** The server keys the development registry names, if `npm run dev` serves one: a notification may be signed by one. */
+/** What the development registry says of itself, when one serves the simulator (`grain dev`, `npm run dev`): its
+ *  network (the owner's address on the Connect sheet is of it) and the server keys it names (a notification may be signed
+ *  by one). */
+const devInfo: Promise<{ chain?: { network?: string }; servers?: string[] } | null> = fetch("/api/dev").then((r) => r.json()).catch(() => null);
 let registered: string[] = [];
-void fetch("/api/dev").then((r) => r.json()).then((d: { servers?: string[] }) => { registered = d.servers ?? []; }).catch(() => {});
+let network: NetworkName = "devnet";
+void devInfo.then((d) => {
+  registered = d?.servers ?? [];
+  const named = d?.chain?.network;
+  if (named === "mainnet" || named === "testnet" || named === "devnet") network = named;
+});
 
 $<HTMLButtonElement>("notification").onclick = () => {
   const s = settings();
@@ -552,10 +562,17 @@ function measure() {
 
 /** What `grain dev --check --tap` taps: the page's buttons (never a link, which leaves the page), each once. */
 const BUTTONS = 'button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]';
-/** At most this many buttons are tapped: a page with more is a list of the same, and the check stays bounded. */
+/** At most this many buttons are tapped, those a tap brought up included, unless the tool says another bound (`buttons(max)`):
+ *  a page with more is a list of the same, and the check stays bounded. */
 const MAX_TAPS = 30;
-/** The buttons `buttons()` found, held to be tapped one by one while the page changes under them. */
+let maxTaps = MAX_TAPS;
+/** The buttons to tap, held one by one while the page changes under them: those `buttons()` found, then those a tap
+ *  brought up (`more()`). */
 let toTap: Element[] = [];
+/** Every button seen so far, and their names: a button shown later is new only when neither it nor its name was seen
+ *  (a page that draws its buttons again, or a counter's, is not new). */
+let seenButtons = new Set<Element>();
+let seenNames = new Set<string>();
 
 /** The page's document, when it has loaded one. */
 function pageDocument(): Document | null {
@@ -576,14 +593,42 @@ function shownAndEnabled(el: Element, view: Window): boolean {
   return !((el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true");
 }
 
-/** The page's buttons a user can tap, in the document's order, at most `MAX_TAPS`: their names, and how many there are. */
-function buttons(): { names: string[]; total: number } {
+/** The page's buttons a user can tap now, in the document's order. */
+function shownButtons(): Element[] {
   const doc = pageDocument();
   const view = doc?.defaultView;
-  if (!doc || !view) return { names: [], total: 0 };
-  const all = Array.from(doc.querySelectorAll(BUTTONS)).filter((el) => shownAndEnabled(el, view));
-  toTap = all.slice(0, MAX_TAPS);
+  return doc && view ? Array.from(doc.querySelectorAll(BUTTONS)).filter((el) => shownAndEnabled(el, view)) : [];
+}
+
+/** A button's name as `more()` compares it: its words with the numbers in them left out, so that a counter's label
+ *  ("Rolled 3 times") is the same button after a tap. */
+const nameKey = (el: Element): string => nameOf(el).replace(/\d+/g, "#");
+
+/** The page's buttons a user can tap, in the document's order, at most `max`: their names, and how many there are. */
+function buttons(max = MAX_TAPS): { names: string[]; total: number } {
+  const all = shownButtons();
+  maxTaps = max;
+  seenButtons = new Set(all);
+  seenNames = new Set(all.map(nameKey));
+  toTap = all.slice(0, maxTaps);
   return { names: toTap.map(nameOf), total: all.length };
+}
+
+/**
+ * After a tap: the buttons it brought up (shown now, never seen before, by element and by name), added to those to tap
+ * while there is room under the bound; their names, and how many more there were than room. "Clear history", shown once
+ * there is a history, is tapped too.
+ */
+function more(): { names: string[]; over: number } {
+  const fresh = shownButtons().filter((el) => !seenButtons.has(el) && !seenNames.has(nameKey(el)));
+  for (const el of fresh) {
+    seenButtons.add(el);
+    seenNames.add(nameKey(el));
+  }
+  const room = Math.max(0, maxTaps - toTap.length);
+  const added = fresh.slice(0, room);
+  toTap.push(...added);
+  return { names: added.map(nameOf), over: fresh.length - added.length };
 }
 
 /**
@@ -648,6 +693,7 @@ const select = (id: string, value: string) => {
     driven = true;
   },
   buttons,
+  more,
   aim,
   measure,
 };

@@ -403,6 +403,10 @@ test("the command line over HTTP: grain publish --no-wait, the owner signs, grai
   const clean = await grain(["doctor"]);
   assert.equal(clean.status, 0, clean.out);
   assert.match(clean.out, /^next: nothing: the page is published/m);
+  // --json says the same words, never null: one answer for a person and a program.
+  const cleanJson = JSON.parse((await grain(["doctor", "--json"])).out);
+  assert.deepEqual([cleanJson.outcome, cleanJson.exit], ["done", 0]);
+  assert.equal(`next: ${cleanJson.next}`, clean.out.trim().split("\n").at(-1));
   assert.deepEqual(steps(dir).slice(-3), ["doctor:ok:done", "doctor_publish:ok:published", "end:ok"]);
   // A mistyped flag is refused before anything happens.
   assert.equal((await grain(["publish", "--hostd"])).status, 2);
@@ -497,7 +501,7 @@ test("--key owner.key on a test network: the owner said, signed and sent here, m
   assert.equal(said.match(/open it|opens it/g).length, 2, "the last line alone says who opens it");
   // Nobody holds the owner's key on a phone: who can open it, and how to try it without one.
   assert.equal(lines.at(-1), "It is private, and its owner is owner.key's account, which no phone holds: nobody opens it in Saltix yet. " +
-    "To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner.key " +
+    "To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user " +
     "(the address: Saltix → Receive), or --public for anyone. Without a phone, grain dev runs this page sealed in the simulator, " +
     "as Saltix will (grain dev --check tries it headless).");
   assert.doesNotMatch(said, /Saltix opens it from the Apps section/);
@@ -522,7 +526,7 @@ test("--key owner.key on a test network: the owner said, signed and sent here, m
   keyed(dir2);
   const broke = ledgerOf(node({ registered: false }), dir2, OWNER_FILE, "0");
   await assert.rejects(run(dir2, broke, { signing: { node: broke, validFor: 600 }, keyNamed: true }).done,
-    (e) => e instanceof PublishError && e.reason === "no_salt" && /grain faucet --wait --key .*owner\.key.*without --key, the owner's Saltix signs and pays/.test(e.message));
+    (e) => e instanceof PublishError && e.reason === "no_salt" && /grain faucet --wait gives the key file's account test SALT; or, without --key, the owner's Saltix signs and pays/.test(e.message));
 });
 
 test("an app made in Saltix is its owner's phone's: owner.key here never signs for it, and --key naming it is refused", async () => {
@@ -545,12 +549,17 @@ test("an app made in Saltix is its owner's phone's: owner.key here never signs f
   assert.equal(phones.calls.blob_put ?? 0, puts, "nothing uploaded on a refused key's word");
 });
 
-test("lint says what the last publish left: published as it is, changed since, or ready to publish", async () => {
+test("lint says what the last publish left and what is left, in doctor's words: published as it is, changed since, not published yet", async () => {
   const registry = node();
   const dir = project();
   const manifest = () => JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
   const state = () => JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
-  assert.equal(readiness(manifest(), null, dir), "space-game v1: no errors; ready to publish (grain publish)");
+  assert.equal(readiness(manifest(), null, dir), "space-game v1: no errors; not published yet; left: grain publish (grain doctor says what registering the slug takes)");
+  // connect.json still grain init's words: never "ready", and what to do, as doctor says it.
+  writeFileSync(join(dir, "connect.json"), connectJson(SLUG, "Space", false));
+  assert.equal(readiness(manifest(), null, dir), "space-game v1: no errors; not published yet; left: grain publish (grain doctor says what registering the slug takes); " +
+    "rewrite connect.json for this app (docs/agents/app.md: the Connect profile): it still holds grain init's words, which grain profile refuses");
+  rmSync(join(dir, "connect.json"));
   const first = run(dir, registry);
   wallet(registry, await linkIn(first.lines));
   assert.equal(await first.done, 0);
@@ -559,13 +568,20 @@ test("lint says what the last publish left: published as it is, changed since, o
   // The page changed since: grain.json still names the bundle published, public/ makes another.
   writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space 2</title>");
   assert.equal(readiness(manifest(), state(), dir),
-    "space-game v2: no errors; the registry took v2 on devnet 5a5a5a5a5a5a5a5a at the last grain publish, and this has changed since: grain publish makes the next version");
-  // The command line says the same, for a project lint finds no error in.
+    "space-game v2: no errors; the registry took v2 on devnet 5a5a5a5a5a5a5a5a at the last grain publish; left: public/ changed since v2: grain publish seals v3");
+  // grain.json raised by hand: that version is the next.
+  assert.match(readiness({ ...manifest(), version: 5 }, state(), dir), /; left: public\/ changed since v2: grain publish seals v5$/);
+  // The command line says the same, for a project lint finds no error in, and the template's words besides.
   writeFileSync(join(dir, "connect.json"), connectJson(SLUG, "Space", false));
   const linted = spawnSync("node", [main, "lint"], { cwd: dir, encoding: "utf8" });
   assert.equal(linted.status, 0, linted.stderr);
-  assert.match(linted.stdout, /space-game v2: no errors; the registry took v2/);
-  assert.doesNotMatch(linted.stdout, /ready to register/);
+  assert.match(linted.stdout, /^warning: connect-template: /m);
+  assert.match(linted.stdout, /^space-game v2: no errors; the registry took v2 on devnet 5a5a5a5a5a5a5a5a at the last grain publish; left: public\/ changed since v2: grain publish seals v3; rewrite connect\.json for this app/m);
+  assert.doesNotMatch(linted.stdout, /ready to/);
+  // Doctor, asked about the registered app with no profile, says to rewrite it before grain profile, which refuses it.
+  registry.grain.profile = null;
+  assert.equal((await doctor(dir, registry)).findings.find((f) => f.what === "connect profile").next,
+    "rewrite connect.json for this app (docs/agents/app.md: the Connect profile): it still holds grain init's words, which grain profile refuses; then grain profile");
 });
 
 test("a page alone: grain status says not_needed and exits 0 without the network; doctor's last line is a page's", async () => {
@@ -725,10 +741,11 @@ test("a key file's registration and the call that makes it private go together: 
   assert.equal(registry.grain.public, false);
   assert.deepEqual(steps(dir).filter((s) => s.startsWith("access:")), ["access:waiting:sent", "access:ok:private"]);
   assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, false);
-  // The wait is said as it goes, off a terminal a line when its stage changes: in the pool, then on its way.
+  // The wait is said as it goes, off a terminal a line when its stage changes: in the pool, then on its way; each with
+  // the time waited and how long at most (settleMs, 3 s here, less what sending took).
   const said = lines.join("\n");
-  assert.match(said, /^ {2}register space-game v1: in the pool, waiting for a shard block \(\d+:\d\d\)$/m);
-  assert.match(said, /^ {2}register space-game v1: in a shard block, on its way to the registry \(the beacon chain\) \(\d+:\d\d\)$/m);
+  assert.match(said, /^ {2}register space-game v1: in the pool, waiting for a shard block \(\d+:\d\d of up to 0:0[0-3]\)$/m);
+  assert.match(said, /^ {2}register space-game v1: in a shard block, on its way to the registry \(the beacon chain\) \(\d+:\d\d of up to 0:0[0-3]\)$/m);
 });
 
 test("a pool that will not take the access call ahead: it goes once the registration landed, and the app is private in the end", async () => {
@@ -801,7 +818,7 @@ test("the call that makes it private does not land: doctor says public, should b
   const lossy = poolOf(registry, dir, OWNER_FILE, { polls: 1, drop: (tag) => tag === 36 });
   const first = keyRun(dir, lossy, { settleMs: 400 });
   assert.equal(await first.done, 1, first.lines.join("\n"));
-  assert.match(first.lines.join("\n"), /^space-game is registered but still public: the call that makes it private has not landed yet\. grain doctor says when it has; grain publish again sends it again if it is needed \(or: grain access --slug space-game --private --key owner\.key\)$/m);
+  assert.match(first.lines.join("\n"), /^space-game is registered but still public: the call that makes it private has not landed yet\. grain doctor says when it has; grain publish again sends it again if it is needed \(or: grain access --slug space-game --private\)$/m);
   assert.equal(registry.grain.public, true);
   assert.ok(steps(dir).includes("access:timeout:not_landed"));
   assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, true);
@@ -810,7 +827,7 @@ test("the call that makes it private does not land: doctor says public, should b
   const access = d.findings.find((f) => f.what === "access");
   assert.equal(access.ok, false);
   assert.match(access.detail, /^public, but should be private: owner\.key registered it here, and the call that makes it private has not landed/);
-  assert.equal(access.next, "grain access --slug space-game --private --key owner.key (or grain publish, which sends it again)");
+  assert.equal(access.next, "grain access --slug space-game --private (owner.key signs it by itself, as the app's owner; or grain publish, which sends it again)");
   // The next run: nothing new to publish, the call sent again (with the account's nonce now), the first submission
   // failing on the way and tried again; it lands, and the app is private.
   const sound = poolOf(registry, dir, OWNER_FILE, { polls: 1, failures: 1 });
@@ -825,7 +842,7 @@ test("the call that makes it private does not land: doctor says public, should b
   // Who opens it, in the words grain publish ends with: owner.key's account owns it, and no phone holds that key.
   assert.equal((await doctor(dir, sound)).findings.find((f) => f.what === "access").detail,
     "private, and its owner is owner.key's account, which no phone holds: nobody opens it in Saltix yet. To open it in your own Saltix: " +
-    "grain access --slug space-game --private --member <your Saltix address>:user --key owner.key (the address: Saltix → Receive), or --public for anyone");
+    "grain access --slug space-game --private --member <your Saltix address>:user (the address: Saltix → Receive), or --public for anyone");
   // An owner who decides with grain access in the project: the pending "make it private" is theirs no more.
   writeFileSync(join(dir, ".grain", "publish.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")), private_pending: true }));
   accessDecided(dir, SLUG);
@@ -855,16 +872,21 @@ test("who opens the app, said once it is published: anyone, its owner and member
   keyed(dir);
   const keyPath = join(dir, "owner.key");
   const grain = (over) => ({ slug: SLUG, owner: ownerFileAccount, version: 1, retired: null, public: false, members: [], ...over });
-  assert.match(whoOpens(SLUG, grain({ public: true }), keyPath, "", "sealed"), /^Anyone opens it in Saltix: the Apps section, or salt:grain\/space-game\. Without a phone, grain dev runs this page sealed/);
-  assert.equal(whoOpens(SLUG, grain({ public: true }), keyPath, "", "chat"), "Anyone opens it in Saltix: the Apps section, or salt:grain/space-game.", "no page, no simulator");
+  assert.match(whoOpens(SLUG, grain({ public: true }), keyPath, "", "sealed", dir), /^Anyone opens it in Saltix: the Apps section, or salt:grain\/space-game\. Without a phone, grain dev runs this page sealed/);
+  assert.equal(whoOpens(SLUG, grain({ public: true }), keyPath, "", "chat", dir), "Anyone opens it in Saltix: the Apps section, or salt:grain/space-game.", "no page, no simulator");
   // A phone's app: its owner (and members) in Saltix.
   const phones = grain({ owner: "77".repeat(32) });
-  assert.match(whoOpens(SLUG, phones, keyPath, "", "chat"), /^It is private: its owner alone opens it in Saltix \(My apps → space-game, or salt:grain\/space-game\); My apps → space-game → Access adds members/);
-  assert.match(whoOpens(SLUG, { ...phones, members: [{ account: "88".repeat(32), roles: 1 }] }, keyPath, "", "chat"), /^It is private: its owner and its 1 member open it in Saltix/);
-  // owner.key's app: no phone holds the owner's key, so nobody opens it until a member is named.
-  const said = whoOpens(SLUG, grain({}), keyPath, " --network devnet", "sealed");
-  assert.match(said, /^It is private, and its owner is owner\.key's account, which no phone holds: nobody opens it in Saltix yet\. To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner\.key --network devnet/);
-  assert.match(whoOpens(SLUG, grain({ members: [{ account: "88".repeat(32), roles: 1 }, { account: "99".repeat(32), roles: 1 }] }), keyPath, "", "sealed"), /its 2 members open it in Saltix \(salt:grain\/space-game\)/);
+  assert.match(whoOpens(SLUG, phones, keyPath, "", "chat", dir), /^It is private: its owner alone opens it in Saltix \(My apps → space-game, or salt:grain\/space-game\); My apps → space-game → Access adds members/);
+  assert.match(whoOpens(SLUG, { ...phones, members: [{ account: "88".repeat(32), roles: 1 }] }, keyPath, "", "chat", dir), /^It is private: its owner and its 1 member open it in Saltix/);
+  // owner.key's app: no phone holds the owner's key, so nobody opens it until a member is named. The project's owner.key
+  // signs by itself as the owner, so the command names no key file: the same command whoever owns the app.
+  const said = whoOpens(SLUG, grain({}), keyPath, " --network devnet", "sealed", dir);
+  assert.match(said, /^It is private, and its owner is owner\.key's account, which no phone holds: nobody opens it in Saltix yet\. To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --network devnet \(/);
+  // A key file elsewhere is not found by itself: the command names it.
+  const elsewhere = join(scratch("grain-key-elsewhere-"), "tester.key");
+  writeFileSync(elsewhere, readFileSync(keyPath), { mode: 0o600 });
+  assert.match(whoOpens(SLUG, grain({}), elsewhere, "", "sealed", dir), new RegExp(`--member <your Saltix address>:user --key ${elsewhere.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(`));
+  assert.match(whoOpens(SLUG, grain({ members: [{ account: "88".repeat(32), roles: 1 }, { account: "99".repeat(32), roles: 1 }] }), keyPath, "", "sealed", dir), /its 2 members open it in Saltix \(salt:grain\/space-game\)/);
 });
 
 test("a registration needs the deposit and both fees in the account: refused before anything is sent when the second's is short", async () => {
@@ -1044,7 +1066,7 @@ test("a key file's first publish with --no-wait, as round three met it: doctor w
   assert.equal(landed.publish, "not_uploaded");
   assert.match(landed.findings.find((f) => f.what === "upload").detail, /nobody may hold it yet/);
   assert.match(landed.findings.find((f) => f.what === "access").detail,
-    /^private, and its owner is owner\.key's account, which no phone holds: nobody opens it in Saltix yet\. To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner\.key/);
+    /^private, and its owner is owner\.key's account, which no phone holds: nobody opens it in Saltix yet\. To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user \(the address/);
   assert.deepEqual([landed.outcome, landed.next], ["fix", "grain publish (it uploads the bundle, then the icon)"]);
   const fix = await cli(dir, ["doctor", "--node", url]);
   assert.equal(fix.status, 1, fix.out);
@@ -1068,7 +1090,10 @@ test("a key file's first publish with --no-wait, as round three met it: doctor w
   writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space, again</title>");
   const changed = await doctor(dir, ledger);
   const bundle = changed.findings.find((f) => f.what === "bundle");
-  assert.deepEqual([bundle.ok, bundle.detail, bundle.next], [false, "public/ changed since grain.json's bundle: grain publish seals it again, as v2", "grain publish"]);
+  // In grain lint's words: the same line for the same change.
+  assert.deepEqual([bundle.ok, bundle.detail, bundle.next], [false, "public/ changed since v1: grain publish seals v2", "grain publish"]);
+  assert.match(readiness(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")), JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")), dir),
+    /; left: public\/ changed since v1: grain publish seals v2$/);
   assert.deepEqual([changed.outcome, changed.next], ["fix", "grain publish"]);
   const unpublished = await cli(dir, ["doctor", "--node", url]);
   assert.equal(unpublished.status, 1);
