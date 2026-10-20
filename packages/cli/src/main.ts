@@ -14,8 +14,9 @@ import { SETTLE_MS, sendSettled } from "./send.js";
 import { LANDS_IN, type WaitOut, Waiting, rewriteLine } from "./wait.js";
 import {
   APP_KEY_ENV, APP_KEY_FILE, accessCall, bindCall, configureCall, describeAppKey, handleGet, inSaltix, membersOf, profileHeld, rateCall, readAppKey,
-  serverKeyOf, unchanged, unchangedWords, waitForRegistry, writeAppKey,
+  serverKeyArgOf, unchanged, unchangedWords, waitForRegistry, writeAppKey,
 } from "./studio.js";
+import { type VersionStatus, networkVersion } from "./versions.js";
 import { type Reach, reachOf } from "./network.js";
 import { grantAddress, granted, requestGrant, saltOf, waitForSalt } from "./faucet.js";
 import { serve, linkFor, simulatorFor } from "./dev.js";
@@ -128,9 +129,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            the owner key certifies the server key for the grain (31 days at most
                                            for chats: issue a new one before it ends)
   grain configure --slug S --server KEY [--server KEY…] [--category C]
-                                           name the grain's server keys (hex, or a key file such as server.key; at
-                                           most 4) and its category: both replace the registry's. --revoke-all
-                                           names none: every developer key stops at once
+                                           name the grain's server keys (a key file such as server.key, or its hex
+                                           while the network runs protocol version 1; at most 4) and its category:
+                                           both replace the registry's. From version 2 each key goes with its
+                                           proof, which its key file signs here. --revoke-all names none: every
+                                           developer key stops at once
   grain access --slug S --public|--private [--member ADDRESS:ROLES…]
                                            who may use the grain: anyone, or its owner and members (roles user,
                                            developer, viewer joined by +; at most 64); both replace the registry's
@@ -652,7 +655,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
     }
     case "configure": {
       const slug = text(flags, "slug");
-      const servers = all("server").map(serverKeyOf);
+      const servers = all("server").map(serverKeyArgOf);
       if (servers.length === 0 && flags.get("revoke-all") !== true) {
         throw new Error("--server KEY (up to 4), or --revoke-all to name none: every developer key would stop at once");
       }
@@ -660,6 +663,16 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const category = typeof flags.get("category") === "string" ? (flags.get("category") as string) : undefined;
       const r = reach();
       const signer = await ownerSigner(slug, (await grainGet(r.node, slug))?.owner ?? null, keyPath, flags, r, log);
+      // From protocol version 2 a key is named with its proof (24-app-studio §2), which only reaches the owner's Saltix
+      // with the key's pairing: a key this computer holds goes in by grain pair, not by hand in My apps.
+      if (signer.by === "wallet" && servers.length > 0) {
+        const version = networkVersion(await nodeCall<VersionStatus>(r.node, "node_status"));
+        if (version >= 2) {
+          throw new Error(`the network runs protocol version ${version}: the owner's Saltix names a server key with its proof, ` +
+            `which comes with its pairing: run grain pair --slug ${slug} on the computer that holds the key and scan its QR code ` +
+            `in Saltix (or sign here with --key, the owner's key file, on the test network)`);
+        }
+      }
       return ownerCall(signer, (secret) => configureCall(r.node, slug, servers, category, secret), flags, r, log);
     }
     case "access": {
@@ -714,7 +727,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         writeAppKey(out, key);
         console.log(`${out}: the developer key of ${key.slug} on ${status.network} ${key.genesis}, server key ${key.publicKey} (owner-only; keep it secret)`);
         const described = await describeAppKey(key, r.node);
-        if (described.registered !== true) console.log(`the registry does not name it yet: grain configure --slug ${key.slug} --server ${key.publicKey}${r.flags}`);
+        if (described.registered !== true) console.log(`the registry does not name it yet: grain configure --slug ${key.slug} --server ${text(flags, "server", "server.key")}${r.flags}`);
         return 0;
       }
       if (positional.length > 0) {

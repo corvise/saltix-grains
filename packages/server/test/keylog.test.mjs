@@ -123,3 +123,135 @@ test("a log made here: the root and a device, a root used again, a bad device si
   const weak = tx(0, addDevice(identity));
   assert.throws(() => checkLog(account, build([[10, { signed: concat(weak, root(weak, 0)) }]]), G, pol), /not a valid device key/);
 });
+
+test("a quorum signed in either form proves, all its signers in one; a quorum cut to one signer of version 2 does not", () => {
+  // From protocol version 2 a quorum's signers sign its quorum message, derive("Saltix quorum v1", id ‖ [tag] ‖
+  // indexes), the root its use of it (13-accounts §6.1); before it, the id. A log takes either form (§7).
+  const G = new Uint8Array(32).fill(7);
+  const roots = [1, 2, 3, 4].map(() => crypto.getRandomValues(new Uint8Array(32)));
+  const digests = roots.map((r) => rootDigest(ed25519.getPublicKey(r)));
+  const account = accountId(digests[0], 5);
+  const [phone, browser] = [1, 2].map(() => crypto.getRandomValues(new Uint8Array(32)));
+  const [phoneKey, browserKey] = [phone, browser].map((k) => ed25519.getPublicKey(k));
+  const pol = { delay: 1200n, disputeTimeout: 7200n };
+  const tx = (nonce, action) => new Writer().u8(1).fixed(account, 32).u64(BigInt(nonce)).u64(5000n).u64(90000n).raw(action).done();
+  const addDevice = (key, kind) => new Writer().u8(7).u8(0).u8(0).fixed(key, 32).u8(kind).u64(0n).u64(0n).done();
+  // Weaker than the network's: only a quorum applies it at once; one signer registers it for later.
+  const setPolicy = new Writer().u8(7).u8(4).u64(600n).u64(3600n).done();
+  const idOf = (t) => derive("Saltix transaction v3", G, t);
+  const quorum = (t, shape) => derive("Saltix quorum v1", idOf(t), Uint8Array.of(...shape));
+  const rootUse = (r, message) =>
+    new Writer().u8(0).fixed(ed25519.getPublicKey(roots[r]), 32).fixed(digests[r + 1], 32).fixed(ed25519.sign(derive("Saltix root use v1", message, digests[r + 1]), roots[r]), 64).done();
+  const sig = (index, key, message) => new Writer().u8(index).fixed(ed25519.sign(message, key), 64).done();
+  const build = (bodies) => {
+    const out = [];
+    let prev = new Uint8Array(32);
+    bodies.forEach(([slot, signed], i) => {
+      const e = new Writer().fixed(account, 32).u32(i + 1).fixed(prev, 32).u64(BigInt(slot)).u8(0).raw(signed).done();
+      out.push(e);
+      prev = derive("Saltix key event v1", e);
+    });
+    return out;
+  };
+  const first = tx(0, addDevice(phoneKey, 0));
+  const e1 = [10, concat(first, Uint8Array.of(3), rootUse(0, idOf(first)))];
+  const keys = (events) => checkLog(account, build(events), G, pol).devices.map((d) => d.key.ed25519);
+
+  // The root and the phone add the browser: a quorum, at once, in either form.
+  const add = tx(1, addDevice(browserKey, 1));
+  const q = quorum(add, [4, 0]);
+  const rootAndPhone = (rootMessage, phoneMessage) => concat(add, Uint8Array.of(4), rootUse(1, rootMessage), sig(0, phone, phoneMessage));
+  for (const [form, signed] of [["v2", rootAndPhone(q, q)], ["v1", rootAndPhone(idOf(add), idOf(add))]]) {
+    assert.deepEqual(keys([e1, [20, signed]]), [toHex(phoneKey), toHex(browserKey)], form);
+  }
+  // One form for every signer: the root's of one version and the phone's of the other prove nothing.
+  for (const signed of [rootAndPhone(q, idOf(add)), rootAndPhone(idOf(add), q)]) {
+    assert.throws(() => checkLog(account, build([e1, [20, signed]]), G, pol), LogError, "a quorum of two forms");
+  }
+  // Cut to its root alone: a version 2 quorum's root signed the quorum's message, not the id, so the cut proof fails;
+  // a version 1 quorum's root signed the id, and alone it only registers the device for later (the attack version 2
+  // ends).
+  const rootOf = (rootMessage) => concat(add, Uint8Array.of(3), rootUse(1, rootMessage));
+  assert.throws(() => checkLog(account, build([e1, [20, rootOf(q)]]), G, pol), LogError, "a version 2 quorum cut to its root");
+  assert.deepEqual(keys([e1, [20, rootOf(idOf(add))]]), [toHex(phoneKey)], "a root alone registers, never adds at once");
+
+  // Two devices weaken the policy: a quorum, at once, in either form; cut to one device of version 2, nothing.
+  const e2 = [20, rootAndPhone(q, q)];
+  const weaken = tx(2, setPolicy);
+  const q2 = quorum(weaken, [2, 0, 1]);
+  const both = (first, second) => concat(weaken, Uint8Array.of(2), sig(0, phone, first), sig(1, browser, second));
+  const policyOf = (events) => checkLog(account, build(events), G, pol).policy;
+  for (const [form, signed] of [["v2", both(q2, q2)], ["v1", both(idOf(weaken), idOf(weaken))]]) {
+    assert.deepEqual(policyOf([e1, e2, [30, signed]]), { delay: 600n, disputeTimeout: 3600n }, form);
+  }
+  for (const signed of [both(q2, idOf(weaken)), both(idOf(weaken), q2)]) {
+    assert.throws(() => checkLog(account, build([e1, e2, [30, signed]]), G, pol), LogError, "two devices of two forms");
+  }
+  const phoneAlone = (message) => concat(weaken, Uint8Array.of(1), sig(0, phone, message));
+  assert.throws(() => checkLog(account, build([e1, e2, [30, phoneAlone(q2)]]), G, pol), LogError, "a version 2 quorum cut to one device");
+  // A device alone signs the id in every version: it registers the weaker policy, which applies only when it matures.
+  assert.deepEqual(policyOf([e1, e2, [30, phoneAlone(idOf(weaken))]]), pol);
+  // Indexes are part of the message: the phone's and the browser's signatures of the shape [2, 1, 0] do not hold for
+  // the proof [2, 0, 1].
+  const swapped = quorum(weaken, [2, 1, 0]);
+  assert.throws(() => checkLog(account, build([e1, e2, [30, both(swapped, swapped)]]), G, pol), LogError, "another shape");
+});
+
+test("the protocol's version 2 quorums prove the log's keys in place of version 1's; mixed or cut, nothing", () => {
+  // vectors/accounts-v1.json: its log's events 2 and 3 are quorums signed in version 1's form (the id); `quorums_v2`
+  // signs the same transactions in version 2's (13-accounts §6.1). The log rebuilt with them proves what the file says.
+  const a = JSON.parse(readFileSync(new URL("../../../vectors/accounts-v1.json", import.meta.url), "utf8"));
+  const G = fromHex(a.chain.genesis_hash_hex, 32);
+  const pol = policyOf(a.chain.account_policy);
+  const account = fromHex(a.account.account_hex, 32);
+  const original = a.log.events.map((e) => fromHex(e.event_hex));
+  const v1 = Object.fromEntries(a.transactions.map((t) => [t.name, t]));
+  const proves = a.log.proves;
+  for (const q of a.quorums_v2) {
+    assert.equal(q.version, 2);
+    assert.equal(q.id_hex, v1[q.name].id_hex, "the same transaction");
+    assert.equal(q.transaction_hex, v1[q.name].transaction_hex);
+    const id = fromHex(q.id_hex, 32);
+    const proof = fromHex(q.proof_hex);
+    const shape = proof[0] === 2 ? Uint8Array.of(2, proof[1], proof[66]) : Uint8Array.of(4, proof[130]);
+    assert.equal(toHex(derive("Saltix quorum v1", id, shape)), q.quorum_message_hex, q.name);
+  }
+  // An event's signed transaction swapped for another form, the log re-linked as the node links it.
+  const header = 32 + 4 + 32 + 8;
+  const relink = (swaps) => {
+    let prev = new Uint8Array(32);
+    return original.map((e, i) => {
+      // A signed event's body is tag 0 and the signed transaction; a matured one's (tag 1) stays as it is.
+      const body = swaps.has(i) ? concat(Uint8Array.of(0), swaps.get(i)) : e.subarray(header);
+      if (swaps.has(i)) assert.equal(e[header], 0, "a signed event");
+      const out = concat(e.subarray(0, 36), prev, e.subarray(68, header), body);
+      prev = derive("Saltix key event v1", out);
+      return out;
+    });
+  };
+  const at = (name) => original.findIndex((e) => toHex(e).includes(v1[name].signed_hex));
+  const v2 = new Map(a.quorums_v2.map((q) => [at(q.name), fromHex(q.signed_hex)]));
+  assert.deepEqual([...v2.keys()].sort(), [1, 2]);
+  const checked = checkLog(account, relink(v2), G, pol);
+  assert.deepEqual(checked.devices.map((d) => ("p256" in d.key ? `01${d.key.p256}` : `00${d.key.ed25519}`)), proves.devices);
+  assert.equal(toHex(checked.rootDigest), proves.root_digest_hex);
+  assert.deepEqual({ delay: Number(checked.policy.delay), dispute_timeout: Number(checked.policy.disputeTimeout) }, proves.policy);
+  assert.equal(checked.seq, proves.seq);
+  // The file's own log, in version 1's form, proves the same.
+  assert.deepEqual(checkLog(account, original, G, pol).devices.map((d) => d.kind), checked.devices.map((d) => d.kind));
+  // One quorum's root of version 2 with its device of version 1: two forms in one proof.
+  const name = "root-and-phone-add-browser";
+  const q = a.quorums_v2.find((x) => x.name === name);
+  const body = fromHex(q.transaction_hex);
+  const newProof = fromHex(q.proof_hex);
+  const oldProof = fromHex(v1[name].signed_hex).subarray(body.length);
+  assert.equal(oldProof.length, newProof.length);
+  const rootPart = 1 + 129;
+  const mixed = [concat(body, newProof.subarray(0, rootPart), oldProof.subarray(rootPart)), concat(body, oldProof.subarray(0, rootPart), newProof.subarray(rootPart))];
+  for (const signed of mixed) {
+    assert.throws(() => checkLog(account, relink(new Map([[at(name), signed]])), G, pol), LogError, "a quorum of two forms");
+  }
+  // Cut to its root: version 2's root signed its use of the quorum's message, not of the id.
+  const cut = concat(body, Uint8Array.of(3), newProof.subarray(1, rootPart));
+  assert.throws(() => checkLog(account, relink(new Map([[at(name), cut]])), G, pol), LogError, "a version 2 quorum cut to its root");
+});

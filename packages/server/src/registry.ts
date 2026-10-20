@@ -78,8 +78,8 @@ export type GrainCall =
   | { retire: string }
   | { configure: { slug: string; servers: string[]; category: number } }
   /** `ConfigureGrain` of protocol version 2 (tag 39, 24-app-studio §2): each key with its proof that its holder names it
-   *  for this app and owner (`signServerKeyProof`; a paired key's comes in its pairing answer, §3a). No network runs
-   *  version 2 yet: tag 34 (`configure`) until then. */
+   *  for this app and owner (`signServerKeyProof`; a paired key's comes in its pairing answer, §3a). Tag 34
+   *  (`configure`) while the network runs version 1 (`callVersions`). */
   | { configureProven: { slug: string; servers: Array<{ key: string; proof: string }>; category: number } }
   | { bind: { handle: Handle; slug: string | null } }
   | { access: { slug: string; public: boolean; members: Array<{ account: string; roles: number }> } }
@@ -92,6 +92,22 @@ export type GrainCall =
 // BindHandle, SetGrainAccess and RateGrain 34 to 37; SetGrainProfile 38; ConfigureGrain with proofs 39.
 const ACTION_REGISTRY = 1;
 const CALL = { register: 7, update: 8, retire: 9, configure: 34, bind: 35, access: 36, rate: 37, profile: 38, configureProven: 39 } as const;
+
+/**
+ * The protocol versions whose blocks take `call` (23-upgrades §6a: every tag applies from a version, a retired one until
+ * a later one): `since`, the first; `until`, the first that refuses it, or null. `ConfigureGrain` with bare keys (tag
+ * 34) is version 1's only, the one with proofs (tag 39) version 2's on; a sealed manifest that names no source is
+ * version 2's on (12-grains §2, 32-images §10). Every other call here is version 1's, and every version's after it.
+ */
+export function callVersions(call: GrainCall): { since: number; until: number | null } {
+  if ("configure" in call) return { since: 1, until: 2 };
+  if ("configureProven" in call) return { since: 2, until: null };
+  if ("register" in call || "update" in call) {
+    const entry = ("register" in call ? call.register : call.update).manifest.entry;
+    if ("sealed" in entry && entry.sealed.sources.length === 0) return { since: 2, until: null };
+  }
+  return { since: 1, until: null };
+}
 
 /** Why `call` would be refused before it leaves the shard (24-app-studio §9), or null; the registry checks the rest. */
 export function grainCallProblem(call: GrainCall, sender?: string): string | null {

@@ -10,9 +10,9 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
-import { AppKey, accountId, encodeAddress, toHex, fromHex, signManifest } from "@saltix/grain-server";
+import { AppKey, accountId, encodeAddress, toHex, fromHex, signManifest, verifyServerKeyProof } from "@saltix/grain-server";
 import { publish } from "../dist/registry.js";
-import { accessCall, bindCall, configureCall, membersOf, rateCall, readAppKey, serverKeyOf, waitForRegistry, describeAppKey } from "../dist/studio.js";
+import { accessCall, bindCall, configureCall, membersOf, rateCall, readAppKey, serverKeyArgOf, serverKeyOf, waitForRegistry, describeAppKey } from "../dist/studio.js";
 import { sendSettled } from "../dist/send.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
@@ -35,7 +35,10 @@ async function fakeNode(state) {
     req.on("end", () => {
       const { method, params } = JSON.parse(body);
       const result = {
-        node_status: { genesis: GENESIS, slot: 1000, network: "testnet", beacon: { height: 1, hash: "b1" } },
+        node_status: {
+          genesis: GENESIS, slot: state.slot ?? 1000, network: "testnet", beacon: { height: 1, hash: "b1" },
+          ...(state.protocol ? { protocol: state.protocol, epoch_slots: state.epochSlots ?? 100 } : {}),
+        },
         account_get: { nonce: 4, salt: state.salt ?? "200000000000", controller: null, shard: "" },
         grain_get: { grain: state.grain === undefined ? null : state.grain, ...(state.noQuote ? {} : { deposit: state.deposit ?? "10000000000" }) },
         handle_get: { handle: state.handle ?? null },
@@ -107,6 +110,75 @@ test("configure names the server keys and the category, the owner's live grain o
   assert.equal(serverKeyOf(join(dir, "server.key")), server);
   assert.equal(serverKeyOf(server.toUpperCase()), server);
   assert.throws(() => serverKeyOf("00".repeat(32)), /not a valid/);
+});
+
+test("from protocol version 2 configure names each key with its proof, which its key file signs; version 1 bare keys", async () => {
+  // 24-app-studio §2, 23-upgrades §6a: tag 39 with ServerKeyProof { key, proof } over (genesis, slug, owner) once the
+  // network runs version 2; tag 34 before.
+  const dir = scratch("configure-v2-");
+  writeFileSync(join(dir, "server.key"), "63".repeat(32) + "\n", { mode: 0o600 });
+  const file = serverKeyArgOf(join(dir, "server.key"));
+  assert.equal(file.key, server);
+  assert.equal(toHex(file.secret), "63".repeat(32));
+  assert.equal(serverKeyArgOf(server).secret, null, "a bare key in hex has no secret");
+  const node = await fakeNode({ grain: grain({ category: 4 }), protocol: { version: 2, supported: [1, 2], next: null, outdated: null } });
+  const call = await configureCall(node.url, "chess-bot", [file], undefined, secret);
+  assert.deepEqual(Object.keys(call), ["configureProven"]);
+  const [proven] = call.configureProven.servers;
+  assert.equal(proven.key, server);
+  assert.ok(verifyServerKeyProof(server, proven.proof, GENESIS, "chess-bot", ownerId), "the key's proof for this app and owner");
+  assert.ok(!verifyServerKeyProof(server, proven.proof, GENESIS, "chess-bot", "99".repeat(32)), "for this owner only");
+  const { sent } = await sendCall(call, secret, signing(node.url));
+  assert.equal(sent.call, "configure");
+  assert.equal(callTag(node.submitted[0]), 39);
+  // A bare key cannot be proven here: refused before anything is signed, pointing to its key file or grain pair.
+  await assert.rejects(configureCall(node.url, "chess-bot", [server], undefined, secret), /proof, which its key file signs.*grain pair/);
+  await assert.rejects(configureCall(node.url, "chess-bot", [file, file], undefined, secret), /servers/, "checked before a proof is signed");
+  // No key revokes every key, in version 2's form too.
+  assert.deepEqual(await configureCall(node.url, "chess-bot", [], "games", secret), { configureProven: { slug: "chess-bot", servers: [], category: 4 } });
+  // A node left behind saw a block of version 2: the network runs it.
+  node.state.protocol = { version: 1, supported: [1], next: null, outdated: { version: 2, chain: "beacon", height: 9, slot: 990 } };
+  assert.ok("configureProven" in (await configureCall(node.url, "chess-bot", [file], undefined, secret)));
+  // Version 1: bare keys (tag 34), a key file's included.
+  node.state.protocol = { version: 1, supported: [1, 2], next: null, outdated: null };
+  assert.deepEqual(await configureCall(node.url, "chess-bot", [file], undefined, secret), { configure: { slug: "chess-bot", servers: [server], category: 4 } });
+  assert.equal(node.submitted.length, 1);
+  node.close();
+});
+
+test("version 1's form is sent valid only until the scheduled switch to version 2, and not at all just before it", async () => {
+  // Version 2 at epoch 20 of 100 slots: its first slot is 2000. A transaction of tag 34 valid past it would wait in a
+  // pool into blocks that refuse it.
+  const node = await fakeNode({ grain: grain({ category: 4 }), protocol: { version: 1, supported: [1, 2], next: { version: 2, epoch: 20 }, outdated: null }, slot: 1000 });
+  const v1 = await configureCall(node.url, "chess-bot", [server], undefined, secret);
+  const { sent } = await sendCall(v1, secret, signing(node.url));
+  assert.equal(sent.validUntil, 1600, "the whole window when it ends before the switch");
+  node.state.slot = 1500;
+  assert.equal((await sendCall(v1, secret, signing(node.url))).sent.validUntil, 1999, "cut at the slot before the switch");
+  node.state.slot = 1975;
+  await assert.rejects(sendCall(v1, secret, signing(node.url)), /moves to protocol version 2 at slot 2000, in 25 slots/);
+  // Version 2's form is refused while the network runs version 1.
+  const v2 = { configureProven: { slug: "chess-bot", servers: [], category: 4 } };
+  await assert.rejects(sendCall(v2, secret, signing(node.url)), /runs protocol version 1; this call is protocol version 2's/);
+  node.state.protocol = { version: 2, supported: [1, 2], next: null, outdated: null };
+  await assert.rejects(sendCall(v1, secret, signing(node.url)), /no longer takes this form/);
+  assert.equal(node.submitted.length, 2);
+  node.close();
+});
+
+test("from protocol version 2 the owner's Saltix names a key of this computer by its pairing, never by hand", async () => {
+  const node = await fakeNode({ grain: grain({ servers: [server] }), protocol: { version: 2, supported: [1, 2], next: null, outdated: null } });
+  const dir = scratch("configure-wallet-v2-");
+  writeFileSync(join(dir, "server.key"), "63".repeat(32) + "\n", { mode: 0o600 });
+  const out = await run(["configure", "--slug", "chess-bot", "--server", "server.key", "--node", node.url, "--timeout", "1"], dir);
+  assert.equal(out.code, 1);
+  assert.match(out.stderr, /protocol version 2: the owner's Saltix names a server key with its proof, which comes with its pairing: run grain pair --slug chess-bot/);
+  assert.doesNotMatch(out.stdout, /My apps → chess-bot → Developer key/);
+  // Revoking every key needs no proof: Saltix does it.
+  const revoke = await run(["configure", "--slug", "chess-bot", "--revoke-all", "--node", node.url, "--timeout", "1"], dir);
+  assert.match(revoke.stdout, /My apps → chess-bot → Developer key: revoke every developer key/);
+  assert.equal(node.submitted.length, 0);
+  node.close();
 });
 
 test("access makes the grain private with its members; rate and bind are refused as the registry would", async () => {
