@@ -98,6 +98,8 @@ export class Browser {
       "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", "--disable-sync",
       "--disable-component-update", "--disable-default-apps", "--mute-audio", "--hide-scrollbars", "--force-color-profile=srgb",
       "--window-size=1900,1300",
+      // No pop-up or window.open ever opens: what a check drives stays in its one tab, on this computer.
+      "--block-new-web-contents",
     ];
     // A container's /dev/shm is small; a root user has no sandbox.
     if (process.platform === "linux") args.push("--disable-dev-shm-usage");
@@ -165,6 +167,14 @@ export class Browser {
 
   on(listen: (e: CdpEvent) => void): void {
     this.listeners.push(listen);
+  }
+
+  /** Wait until the browser answers at all (`Browser.getVersion`), at most `ms`: a cold start (a first launch, a busy
+   *  computer or CI runner) may take far longer than a running browser takes to answer a call (15 s each), and the
+   *  first call would time out while the browser was still starting. A browser that exits meanwhile fails it at once,
+   *  with its last words. */
+  async ready(ms = 45_000): Promise<void> {
+    await this.send("Browser.getVersion", {}, undefined, ms);
   }
 
   /** A new tab, attached: its session's id. */

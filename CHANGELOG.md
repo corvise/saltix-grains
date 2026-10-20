@@ -4,6 +4,26 @@
 
 ### Added
 
+- **`grain dev --check --tap`**: after the layout pass, each of the page's buttons tapped once (at most 30, never a link)
+  by real pointer events, as a person taps: a tap after which the page throws, or asks Saltix for something it refuses,
+  is an error; one that changes nothing on the page and asks for nothing, a button something covers, and a page that
+  would leave for another origin are warnings; a screenshot after each tap in `.grain/check/`. Bounded and safe: 40 s
+  for all taps, documents from elsewhere stopped before they load, no window opened, and payments declined (4001) by the
+  simulator, which a tool now drives (`saltixSimulator.drive()`, `buttons()`, `aim()`, `calls()`).
+- **`grain doctor`'s exit status**: 0 nothing left to do, 1 something to do (`next:` says what), 75 nothing but waiting
+  for the network (sysexits' EX_TEMPFAIL); `wait` lines, `outcome` and `exit` in `--json`; the log says `waiting`, and
+  `end` `waiting` `exit_75`. Documented in the README with a note for agents and scripts written for exit 1.
+- **Doctor follows every transaction a key file here sent until it lands**: `grain access` and `grain profile` keep
+  theirs in `.grain/publish.json` beside `grain publish`'s, and doctor says where each stands (in the pool, in a block,
+  not seen yet), that it landed (`ok registry v1 registered (the transaction sent at … landed)`), or that it can land no
+  more, with the command that sends it again.
+- **Nothing to change, nothing sent, for every owner's call**: `grain access`, `configure`, `bind` and `profile` compare
+  with the registry (a profile by its words) and say "nothing to change" (exit 0) instead of signing the same again;
+  checked again when a call is built anew after the account's earlier one landed.
+- **Where the bundle goes**, said once in docs/how-it-works.md for every protocol version (the network's keepers
+  always; the manifest's `sources` none from version 2, addresses of the network's own copy at up to 3 relays before
+  it) and linked from the README, AGENTS.md and first-app.md.
+
 - **A key file's first publish makes the app private in the same breath**: `grain publish --key owner.key` sends
   `SetGrainAccess` private right behind `RegisterGrain`, with the next nonce, before the registration lands (the pool
   takes a nonce ahead; a shard's registry calls reach the registry in their order), so the app is never public in
@@ -371,6 +391,27 @@
 
 ### Fixed
 
+- **`grain doctor` said "published: the network holds its bundle" with nothing uploaded**: a relay that knows a
+  bundle's or an icon's hash from the manifest answers `blob_get` with `{blob: null, fetching: true}` while it looks for
+  the bytes, and doctor took that for held. Now `published` needs a relay that holds the blob, or an upload this
+  computer saw a node take (`uploaded_at`, `icon_uploaded_at`, also recorded when `grain publish` finds them held);
+  otherwise the upload is left and `next` is `grain publish`. The development registry answers `fetching` for a named
+  blob nobody brought, as a node does.
+- `grain doctor` said `next: nothing` while `public/` (or `grain.json`) had changed since the published version: a
+  change not published is something to do, `grain publish`.
+- `grain doctor`'s access line read "private: its owner alone open it", untrue for an app a key file owns: it says who
+  opens it in the words `grain publish` ends with ("nobody opens it in Saltix yet", and the command that names a member).
+- `grain doctor`'s first-publish fees left out the relays' sources `grain publish` adds on protocol version 1: they are
+  the fees of the manifest as it will be sent.
+- `grain publish` said "only its owner's account and the members it names open it" and then "nobody opens it in Saltix
+  yet": who opens it is said once, at the end. With `--no-wait` it no longer says "this command waits for it".
+- A first version the owner's Saltix registers from the publishing QR code is said to be private unless the owner
+  switched on **Public in the Marketplace** on the sheet (Saltix 0.1.61 and later, saltix-wallet #411; an older Saltix
+  registers it public: `grain access --private`), never "public from its first version"; the log's `access` reason for
+  it is `wallet`.
+- An owner's call with `--no-wait` sent a reader to `grain show`; it names `grain doctor`, which says when it landed.
+- `grain dev --check` waits for a cold browser to answer (up to 45 s) before its first call, which on a busy CI runner's
+  first launch timed out at 15 s (`Target.createTarget: no answer`).
 - The steps' log as docs/devex.md has it: an owner's call signed with a key file logs `registry` (`set`, `not_landed`,
   `no_wait`), `grain profile` among them; an icon refused logs its reason (`alpha`, `hash`, …), not `checked`;
   `doctor` with nothing left logs `done`; a command stopped by Ctrl-C or SIGTERM logs its `end` (`grain dev`: `ok`, any

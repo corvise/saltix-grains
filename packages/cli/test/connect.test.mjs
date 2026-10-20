@@ -318,7 +318,9 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   const dir = project();
   written(dir);
   writeFileSync(join(dir, "owner.key"), "61".repeat(32) + "\n", { mode: 0o600 });
-  const before = signProfile(profileOfProject(connectOf(dir), ownerId, 4), secret);
+  // The registry holds revision 4 of other words.
+  const earlier = { ...connectOf(dir), texts: { ...connectOf(dir).texts, en: { ...connectOf(dir).texts.en, tagline: "An older tagline" } } };
+  const before = signProfile(profileOfProject(earlier, ownerId, 4), secret);
   const node = await fakeNode({ grain: {}, profile: before });
   const r = await run(["profile", "--node", node.url], dir);
   assert.equal(r.code, 0, r.stderr);
@@ -328,6 +330,13 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   assert.equal(sent.profile.owner, ownerId);
   assert.equal(checkGrainProfile(sent, "dice", ownerId), null);
   assert.deepEqual(sent.profile.texts, connectOf(dir).texts);
+  // Once the registry holds these words, asking again changes nothing and sends nothing, whoever signs.
+  node.state.profile = sent;
+  const same = await run(["profile", "--node", node.url], dir);
+  assert.equal(same.code, 0, same.stderr);
+  assert.match(same.stdout, /^nothing to change: the registry holds dice's Connect profile with these words already; nothing signed or sent$/m);
+  assert.equal(node.submitted.length, 1);
+  node.state.profile = before;
   // Cleared, and refused for another owner's grain or a broken profile before anything is sent.
   const cleared = await run(["profile", "--clear", "--node", node.url], dir);
   assert.equal(cleared.code, 0, cleared.stderr);

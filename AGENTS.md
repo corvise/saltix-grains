@@ -33,7 +33,7 @@ git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && np
 npx grain init ../<slug> --slug <slug> --name "<Name>" && cd ../<slug> && npm install
 npx grain status                 # not_needed: a page alone has nothing to pair
 npx grain dev                    # write public/; the simulator frames it as Saltix does
-npx grain dev --check            # headless: the Connect sheet, every screen, both themes; screenshots in .grain/check/
+npx grain dev --check --tap      # headless: the Connect sheet, every screen, both themes, each button tapped once; .grain/check/
 npx grain icon --monogram <L>    # or grain icon <picture> --out icon.png
 npx grain lint && npx grain doctor   # what is left; before the first publish, what registering the slug takes
 npx grain publish                # says who will own the app; the owner's Saltix signs from a QR code
@@ -46,7 +46,9 @@ its counter, and `grain profile` refuses it. **No phone, on the test network**: 
 [No phone, test network](docs/how-it-works.md#no-phone-test-network) walks them. **A command that waits for the chain**
 (`grain publish`, `profile`, `access` signed with a key file: about 1.5 to 2.5 minutes a transaction, up to about 6 for a
 first publish) **runs in the background or with a timeout of 10 minutes or more**, or with `--no-wait` and then
-`grain doctor` until it landed. The rest of this page, and of [docs/agents/app.md](docs/agents/app.md), about servers,
+`grain doctor` until it says it landed: it exits 75 while it only waits for the network, 1 when something is to do
+(`next:` says what), 0 when nothing is left ([its exit statuses](README.md#grain-doctor-where-a-project-stands-and-its-exit-status)).
+A call that would change nothing the registry holds says "nothing to change" and sends nothing. The rest of this page, and of [docs/agents/app.md](docs/agents/app.md), about servers,
 keys and pairing is for an app with a program: a chat, payments, notifications, a page for some people only.
 
 ## Start here: Saltix's brief, or a developer key
@@ -140,7 +142,9 @@ That line closes every report Saltix copies for an AI agent. In full (Saltix 12-
   iPhone-like screen in the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, in both
   ways, and says which. `grain dev --check` does it headless in the Chrome, Chromium or Edge of this computer and exits
   1 on an error (something tappable under the controls, a page that throws or does not load, a Connect profile a
-  wallet refuses), with a screenshot of every screen in `.grain/check/`. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
+  wallet refuses), with a screenshot of every screen in `.grain/check/`; `--check --tap` also taps each button once and
+  fails on a tap that throws or asks Saltix for what it refuses (a tap that changes nothing is a warning; the page
+  never leaves, and no payment is made). `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
   (`cover-without-insets`), and about a bar pinned to the top of such a page whose rule keeps clear of nothing
   (`full-screen-top-bar`).
 
@@ -160,8 +164,13 @@ left. With nothing changed it says "nothing to publish" and sends nothing; a ver
 `public/` changed. **A key file signs only when `--key` names it, or by itself for an app its account owns**
 ([No phone, test network](docs/how-it-works.md#no-phone-test-network)); `grain init`'s `owner.key` never registers an
 app by itself.
-`grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`,
-`published`), and before the first one what registering the slug takes; a refusal says what to do. `--hosted` only for
+`grain doctor` says where a publish stands (`not_uploaded`, `pending`, `waiting_for_owner`, `pending_expired`, or
+`published`: the registry names the version and the network holds its bundle, never on a relay's `fetching` alone), and
+before the first one what registering the slug takes; a refusal says what to do. The bundle goes to the network's
+keepers on every protocol version, and only the manifest's `sources` differ:
+[where the bundle goes](docs/how-it-works.md#where-the-bundle-goes). A first version the owner's Saltix registers from
+the QR code is private unless they switch on **Public in the Marketplace** on its sheet (Saltix 0.1.61 and later; an
+older Saltix registers it public: then `grain access --slug <slug> --private`). `--hosted` only for
 a page the user hosts at their own origin.
 
 **The icon** is a 512 × 512 opaque PNG, sRGB, no metadata, at most 64 KiB, its mark inside the keyline circle

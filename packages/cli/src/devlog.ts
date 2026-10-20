@@ -14,6 +14,10 @@ export const LOG_FILE = join(GRAIN_DIR, "log.jsonl");
 /** Past this size the log moves to `log.1.jsonl` (the one before it is dropped). */
 export const MAX_LOG_BYTES = 1 << 20;
 
+/** The exit status of a command that has nothing to do but wait for the network (`grain doctor` while a transaction is
+ *  on its way): sysexits' EX_TEMPFAIL, "try again later". Its log's last line is `waiting`, never `failed`. */
+export const EXIT_WAITING = 75;
+
 /** What became of a step. */
 export type Outcome = "ok" | "waiting" | "refused" | "failed" | "timeout";
 
@@ -82,9 +86,9 @@ export class DevLog {
     }
   }
 
-  /** The command's last line: its exit status and, for a failure, why. */
+  /** The command's last line: its exit status and, for a failure, why (`waiting` for `EXIT_WAITING`). */
   end(exit: number, reason?: string): void {
-    this.step("end", exit === 0 ? "ok" : "failed", exit === 0 ? undefined : reason ?? `exit_${exit}`);
+    this.step("end", exit === 0 ? "ok" : exit === EXIT_WAITING ? "waiting" : "failed", exit === 0 ? undefined : reason ?? `exit_${exit}`);
   }
 }
 

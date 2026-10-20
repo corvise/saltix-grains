@@ -35,7 +35,9 @@ one in a chat when pairing can be done.
    then run `npx grain pair` to wait (the same offer, for 30 minutes). Or run `grain pair` in the background and read
    its output.
 4. **`npx grain doctor`** checks the rest (the key, `.gitignore`, `chat.json`'s version, `npm install`, the bundle, what
-   the registry holds, the Connect profile) and names the exact next step.
+   the registry holds, the Connect profile) and names the exact next step. It exits 0 when nothing is left, 1 when
+   something is to do, and 75 while it only waits for the network (a transaction on its way: ask again in a minute)
+   ([its exit statuses](../../README.md#grain-doctor-where-a-project-stands-and-its-exit-status)).
 
 A wait that ended (`Saltix did not ask in time`, or a managed account's call that waits its delay) is resumed by
 `grain pair` again: the same key, the same offer while it lives. `grain pair --new` pairs a new key, to rotate one or to
@@ -372,7 +374,8 @@ a CDN, a domain or a certificate for it, and never ask the user for one.
    it names it in `grain.json`. No picture yet: `npx grain icon --monogram <letter>`, a letter or two on a colour. Look
    at `.grain/icon-preview.png` (the icon in Saltix's rounded square at 24 to 96 dp): if the mark does not read at 24 dp,
    make it bolder. Never draw rounded corners, transparency or a border.
-2. `npx grain dev --check`: the page in the simulator, headless, at every size and in both themes; fix its errors first.
+2. `npx grain dev --check --tap`: the page in the simulator, headless, at every size and in both themes, then each
+   button tapped once (a tap that throws or asks Saltix for what it refuses is an error); fix its errors first.
 3. `npx grain doctor`: what is left, and before the first publish what registering the slug takes (its deposit). With
    `app.key` paired, the bundle goes up before the owner signs (held pending for a day); without it (a page alone needs
    none), it goes up once the registry names the version, so the command must keep running until the owner signed.
@@ -381,7 +384,9 @@ a CDN, a domain or a certificate for it, and never ask the user for one.
    `npx grain publish` again: it finishes (the bundle if it waited, the icon) and ends with `is published`. Its
    `publish` state in `grain doctor`: `not_uploaded` (run `grain publish`), `pending` (the bundle is in the network; show
    the QR code), `waiting_for_owner` (the user has the QR code), `pending_expired` (the day passed: `grain publish`
-   again), `published`.
+   again), `published` (the registry names the version and the network holds its bundle). A new app the user's Saltix
+   registers from the QR code is private unless they switch on **Public in the Marketplace** on its sheet (Saltix
+   0.1.61 and later); an older Saltix registers it public, and `grain access --slug <slug> --private` makes it private.
 
 A refusal comes in words with the next step (`the bundle was refused: busy (…). Next: grain publish again in a few
 minutes`); act on the next step, never work around it. Run again with nothing changed, `grain publish` says "nothing to
@@ -397,8 +402,10 @@ publish --key owner.key`, `grain profile`, `grain access`. What an agent adds to
 - **Give the chain its time.** Each registry call lands in about 1.5 to 2.5 minutes on the test network, and a first
   `grain publish --key owner.key` takes about 2 to 4, up to about 6. Run it in the background, or with a tool timeout of
   10 minutes or more; or pass `--no-wait` (it returns once the pool took the transactions), then run `grain doctor`
-  until it no longer says they are on their way, and `grain publish` again for the bundle and the icon. A command cut
-  short is never sent twice: the next run waits for what it sent.
+  until it says they landed (it exits 75 while it only waits; `ok registry … landed`, then `grain publish` as the next
+  step), and `grain publish` again for the bundle and the icon. A command cut short is never sent twice: the next run
+  waits for what it sent. `grain access` and `grain profile` with `--no-wait` are followed the same way, and one that
+  would change nothing says "nothing to change" and sends nothing.
 - **Say whose the app is and who can open it.** It is the key file's account's, not a person's, and private: nobody
   opens it until `grain access --slug <slug> --private --member <their Saltix address>:user` names someone (the user's
   address: Saltix → Receive), or `--public`. Tell the user so, and that an app people will use is made in Saltix.
@@ -433,9 +440,9 @@ publish --key owner.key`, `grain profile`, `grain access`. What an agent adds to
   the new bundle into the network and shows the QR code the owner scans; or `await chat.proposeUpdate(next)` sends the
   manifest to the owner's console as **Review and approve** (`chat.proposeUpdate(next, { bundle })` puts its bundle
   into the network first, on the server key's statement) ([publishing a page](../how-it-works.md#publish-a-page)).
-- **Public**: an app starts private (its owner and members), made in Saltix or registered by a key file; one whose
-  first version a publishing link registered starts public (the wallet registers it so), and its owner makes it private
-  in Saltix. The owner makes it public in Saltix (My apps → the app), or `grain access --public --key owner.key` on the
+- **Public**: an app starts private (its owner and members), made in Saltix, registered by a key file, or from a
+  publishing link unless the owner switched on **Public in the Marketplace** on its sheet (Saltix 0.1.61 and later; an
+  older Saltix registers it public, and its owner makes it private in Saltix or with `grain access --private`). The owner makes it public in Saltix (My apps → the app), or `grain access --public --key owner.key` on the
   test network for an app that key owns.
 
 ## An error report from the console

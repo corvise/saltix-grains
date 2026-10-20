@@ -9,7 +9,9 @@
 // - `createDevRegistry`: what a node's wallet interface says of one grain (`node_status`, `grain_get`, `account_get`,
 //   `relay_list`): its owner, server keys, access and team, changed in place, each change a new beacon block; and a node's
 //   named blobs (`blob_put`, `blob_get`, 32-images §7–§8) as the node takes them: an icon the registry names, a bundle in
-//   pieces, named or held pending on a registered server key's statement, refused with the node's reasons.
+//   pieces, named or held pending on a registered server key's statement, refused with the node's reasons; and a blob
+//   the registry names that nobody brought yet answered as a node answers it, `{blob: null, fetching: true}` (it knows
+//   the hash from the manifest and looks for the bytes), never as held.
 //
 //   const relay = await createDevRelay();                   // its own server on 127.0.0.1, a free port
 //   const relay = createDevRelay({ server, path: "/relay" }) // or beside your routes: call relay.handle(req, res)
@@ -491,12 +493,13 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
     blobs.set(hash, { kind, bytes: whole, pendingUntil: isNamed ? null : pendingFor.get(hash) ?? null });
     return { kind, hash, received: size, kept: true, pending: !isNamed };
   };
-  /** `blob_get` as a node answers it (32-images §8.1). */
+  /** `blob_get` as a node answers it (32-images §8.1): a blob it does not hold but the registry names is one it starts
+   *  to fetch from its peers (`fetching`), which says nothing of whether anyone holds it. */
   const blobGet = (p: Record<string, unknown>): Record<string, unknown> => {
     const kind = p.kind as NamedKind;
     const hash = String(p.hash);
     const held = blobs.get(hash);
-    if (!held || held.kind !== kind) return { blob: null, fetching: false };
+    if (!held || held.kind !== kind) return { blob: null, fetching: (kind === "grain_icon" || kind === "grain_bundle") && named(kind, hash) };
     const from = Number(p.from ?? 0);
     const len = Math.min(Number(p.len ?? 1 << 20), 1 << 20);
     if (kind !== "grain_bundle") return { blob: { kind, hash, type: NAMED_KINDS[kind].type, size: held.bytes.length, from: 0, data: toBase64(held.bytes) }, fetching: false };

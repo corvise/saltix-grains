@@ -4,11 +4,17 @@
 // sheet, the page's load, the requests it refused, the page's geometry); what is wrong in it is judged here by pure
 // functions (`judge`, `overlap`), tested on their own: an error for what a user would meet as broken (the page does not
 // open or throws, something tappable under the wallet's controls ⋯ | ✕, a Connect profile a wallet refuses), a warning
-// for what is worth a look (a sideways scroll, a request the wallet refused, the same look in both themes). A screenshot
-// of each screen and `report.json` go to `.grain/check/`. Nothing leaves this computer.
+// for what is worth a look (a sideways scroll, a request the wallet refused, the same look in both themes). With `--tap`
+// it then taps each of the page's buttons once, as a person would (`judgeTaps`): a tap that throws, or asks Saltix for
+// something it refuses, is an error; one that changes nothing on the screen and asks for nothing is a warning. The
+// taps stay bounded and safe: buttons only (never a link), at most 30, the page never navigated away from (the check
+// stops any document it would load from elsewhere), no window opened, and no payment (the simulator declines one,
+// 4001, as a user may). A screenshot of each screen and `report.json` go to `.grain/check/`. Nothing leaves this
+// computer.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Manifest } from "@saltix/grain-server";
+import { PNG } from "pngjs";
 import { Browser, findBrowser } from "./browser.js";
 import { simulatorFor, serve } from "./dev.js";
 import { type DevLog, GRAIN_DIR } from "./devlog.js";
@@ -79,6 +85,65 @@ export interface CheckRun {
   dialogs: string[];
   /** Whether grain.json names an icon. */
   icon: boolean;
+  /** The taps of `--tap`, each button once; null without it. Exceptions and refusals they caused are here, not in
+   *  `errors` and `refused`. */
+  taps?: { seen: TapSeen[]; total: number; device: string; theme: string } | null;
+}
+
+/** One button tapped by `--tap`, and what followed it. */
+export interface TapSeen {
+  name: string;
+  /** `tapped`; or why it was not: taken away (`gone`, `hidden`) by an earlier tap, or `covered` by another element. */
+  state: "tapped" | "gone" | "hidden" | "covered";
+  /** What covers it, for `covered`. */
+  by?: string;
+  /** The page's exceptions and console errors after the tap. */
+  thrown: string[];
+  /** The requests to Saltix the tap made, answered or refused. */
+  asked: Array<{ method: string; ok: boolean; code?: number; message?: string }>;
+  /** The dialogs the page opened (`alert`, `confirm`, `prompt`), and the documents it tried to load from elsewhere. */
+  dialogs: number;
+  blocked: string[];
+  /** Whether the screen looks other than before the tap. */
+  changed: boolean;
+}
+
+/** The refusal a user's own "no" is: never a fault of the page. */
+const USER_REFUSED = 4001;
+
+/** What is wrong with `--tap`'s taps, and what is right. */
+export function judgeTaps(taps: NonNullable<CheckRun["taps"]>): CheckFinding[] {
+  const out: CheckFinding[] = [];
+  let tapped = 0;
+  for (const t of taps.seen) {
+    if (t.state === "covered") {
+      out.push({ level: "warning", what: "tap", detail: `${t.name} cannot be tapped: ${t.by ?? "another element"} is over its middle, and a tap there reaches that instead`, where: [] });
+      continue;
+    }
+    if (t.state !== "tapped") continue;
+    tapped++;
+    for (const e of t.thrown) out.push({ level: "error", what: "tap", detail: `tapping ${t.name} threw ${e}`, where: [] });
+    for (const a of t.asked) {
+      if (a.ok || a.code === USER_REFUSED) continue;
+      out.push({ level: "error", what: "tap", detail: `tapping ${t.name} asked Saltix for ${a.method}, which it refuses: ${a.code} ${a.message ?? ""}`.trimEnd(), where: [] });
+    }
+    for (const url of t.blocked) {
+      out.push({ level: "warning", what: "tap", detail: `tapping ${t.name} tried to leave the page for ${url}: stopped here; Saltix opens a page outside the app's origins in its browser, without the bridge (grain.openLink says so on purpose)`, where: [] });
+    }
+    if (!t.changed && t.asked.length === 0 && t.dialogs === 0 && t.blocked.length === 0 && t.thrown.length === 0) {
+      out.push({ level: "warning", what: "tap", detail: `tapping ${t.name} changed nothing on the screen and asked Saltix for nothing`, where: [] });
+    }
+  }
+  const skipped = taps.seen.length - tapped;
+  const more = taps.total > taps.seen.length ? ` (the first ${taps.seen.length} of ${taps.total})` : "";
+  out.push({
+    level: "ok", what: "tap",
+    detail: taps.seen.length === 0 ? "no button to tap"
+      : `tapped ${tapped} button${tapped === 1 ? "" : "s"} once each${more} at ${taps.device} ${taps.theme}` +
+        `${skipped > 0 ? `; ${skipped} not tapped (taken away by an earlier tap, or covered)` : ""}`,
+    where: [],
+  });
+  return out;
 }
 
 export interface CheckFinding {
@@ -187,6 +252,7 @@ export function judge(run: CheckRun): CheckFinding[] {
   if (measured > 0 && ![...found.values()].some((f) => f.what === "controls" || f.what === "layout")) {
     add("ok", "layout", `nothing tappable under the wallet's controls at ${new Set(run.measures.map((m) => m.device)).size} screens in ${themes.size} themes`);
   }
+  if (run.taps) for (const f of judgeTaps(run.taps)) add(f.level, f.what, f.detail);
   const order = { error: 0, warning: 1, ok: 2 } as const;
   return [...found.values()].sort((a, b) => order[a.level] - order[b.level]);
 }
@@ -220,14 +286,23 @@ async function until<T>(check: () => Promise<T | null | undefined | false>, ms: 
   }
 }
 
-/** Drive the simulator at `origin` in `browser`: the sheet, the page, every screen in both themes, the screenshots. */
-async function drive(browser: Browser, origin: string, out: string, icon: boolean): Promise<CheckRun> {
+/** How long the page has to answer a tap before the screen is looked at again. */
+const TAP_SETTLE_MS = 400;
+/** `--tap` at most, for all its taps. */
+const TAP_BUDGET_MS = 40_000;
+
+/** Drive the simulator at `origin` in `browser`: the sheet, the page, every screen in both themes, the screenshots;
+ *  with `tap`, each button tapped once. */
+async function drive(browser: Browser, origin: string, out: string, icon: boolean, tap = false): Promise<CheckRun> {
+  await browser.ready();
   const session = await browser.tab();
   const send = <T = Record<string, unknown>>(method: string, params: object = {}) => browser.send<T>(method, params, session);
   const contexts = new Map<number, string>();
   let mainFrame = "";
   const errors: CheckRun["errors"] = [];
   const dialogs: string[] = [];
+  /** Documents a tap tried to load from elsewhere, stopped before they left this computer. */
+  const blocked: string[] = [];
   const whereOf = (context: unknown): "page" | "simulator" => {
     const frame = typeof context === "number" ? contexts.get(context) : undefined;
     return frame !== undefined && frame !== mainFrame ? "page" : "simulator";
@@ -253,6 +328,16 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
     } else if (e.method === "Page.javascriptDialogOpening") {
       dialogs.push(String(p.message ?? ""));
       void send("Page.handleJavaScriptDialog", { accept: true, promptText: "" }).catch(() => undefined);
+    } else if (e.method === "Fetch.requestPaused") {
+      // Only while --tap taps (the Fetch domain is on then, for documents only): the page may go to another page of its
+      // own; anything else (another origin, the simulator replaced) is stopped before it leaves this computer.
+      const url = String(p.request?.url ?? "");
+      const own = url.startsWith(`${origin}/`) && !url.startsWith(`${origin}/_simulator/`) && p.frameId !== mainFrame;
+      if (own) void send("Fetch.continueRequest", { requestId: p.requestId }).catch(() => undefined);
+      else {
+        blocked.push(url.slice(0, 200));
+        void send("Fetch.failRequest", { requestId: p.requestId, errorReason: "Aborted" }).catch(() => undefined);
+      }
     }
   });
   await send("Page.enable");
@@ -278,6 +363,8 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
   await send("Page.navigate", { url: simulatorFor(origin) });
   const ready = await until(() => evaluate<boolean>("typeof window.saltixSimulator === 'object' && window.saltixSimulator.version === 1"), 20_000);
   if (!ready) throw new Error("the simulator did not load in the browser");
+  // A tool drives it: no payment is asked for and no link opened.
+  await evaluate("window.saltixSimulator.drive?.()");
   // The Connect sheet comes first, read once its icon has loaded (or is known to be none); then the page opens.
   let sheet = await until(() => evaluate<SheetSeen | null>("window.saltixSimulator.sheet()"), 8_000);
   if (sheet) {
@@ -309,7 +396,78 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
     }
   }
   const refused = await evaluate<CheckRun["refused"]>("window.saltixSimulator.refused()").catch(() => []);
-  return { sheet, load: first?.page ?? null, measures, errors, refused, dialogs, icon };
+  if (!tap || !first) return { sheet, load: first?.page ?? null, measures, errors, refused, dialogs, icon, taps: null };
+
+  // --tap: each button once, at the first screen in the dark theme, from the page as the layout pass left it. What the
+  // page threw and asked after a tap is that tap's.
+  const before = { errors: errors.length, dialogs: dialogs.length };
+  const devices = await evaluate<string[]>("window.saltixSimulator.devices()");
+  const device = devices[0] ?? "";
+  await evaluate(`window.saltixSimulator.set(${JSON.stringify({ device, theme: "dark" })})`);
+  await sleep(450);
+  // The page's own frame, never the phone's bars (the status bar's clock moves on its own), as a PNG and its pixels: two
+  // encodings of the same pixels may differ, so the pixels are what is compared.
+  const snap = async () => {
+    const m = await evaluate<Measure>("window.saltixSimulator.measure()");
+    const { data } = await send<{ data: string }>("Page.captureScreenshot", {
+      format: "png", clip: { x: m.phone.page.x + m.frame.x, y: m.phone.page.y + m.frame.y, width: m.frame.width, height: m.frame.height, scale: 1 },
+    });
+    const png = Buffer.from(data, "base64");
+    return { png, pixels: PNG.sync.read(png).data };
+  };
+  // The page as it rests: looked at until two looks agree (a hover's or a tap's effect drawn), at most 5 times; a page
+  // that never rests (an animation) cannot be told unchanged, and is not.
+  const steady = async () => {
+    let last = await snap();
+    for (let i = 0; i < 5; i++) {
+      await sleep(80);
+      const next = await snap();
+      if (next.pixels.equals(last.pixels)) return { ...next, rests: true };
+      last = next;
+    }
+    return { ...last, rests: false };
+  };
+  await send("Fetch.enable", { patterns: [{ urlPattern: "*", resourceType: "Document", requestStage: "Request" }] });
+  const seen: TapSeen[] = [];
+  let total = 0;
+  try {
+    const found = await evaluate<{ names: string[]; total: number }>("window.saltixSimulator.buttons()");
+    total = found.total;
+    const end = Date.now() + TAP_BUDGET_MS;
+    for (let i = 0; i < found.names.length && Date.now() < end; i++) {
+      const name = found.names[i]!;
+      const aim = await evaluate<{ state: string; x?: number; y?: number; by?: string }>(`window.saltixSimulator.aim(${i})`);
+      const none = { thrown: [], asked: [], dialogs: 0, blocked: [], changed: false };
+      if (aim.state !== "ready") {
+        seen.push({ name, state: aim.state as TapSeen["state"], ...(aim.by ? { by: aim.by } : {}), ...none });
+        continue;
+      }
+      const at = { x: aim.x!, y: aim.y! };
+      // The pointer over it first, and the page at rest, so that a hover's look is not taken for the tap's.
+      await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...at });
+      const look = await steady();
+      const mark = { errors: errors.length, dialogs: dialogs.length, blocked: blocked.length, calls: (await evaluate<unknown[]>("window.saltixSimulator.calls()")).length };
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", ...at, button: "left", clickCount: 1 });
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", ...at, button: "left", clickCount: 1 });
+      await sleep(TAP_SETTLE_MS);
+      const asked = await evaluate<TapSeen["asked"]>(`window.saltixSimulator.calls(${mark.calls})`);
+      const after = await steady();
+      // What each tap left on the page, for a person to look at.
+      writeFileSync(join(out, `tap-${seen.length + 1}.png`), after.png);
+      seen.push({
+        name, state: "tapped",
+        thrown: errors.slice(mark.errors).filter((e) => e.where === "page").map((e) => e.text),
+        asked, dialogs: dialogs.length - mark.dialogs, blocked: blocked.slice(mark.blocked),
+        changed: !look.rests || !after.rests || !after.pixels.equals(look.pixels),
+      });
+    }
+  } finally {
+    await send("Fetch.disable").catch(() => undefined);
+  }
+  return {
+    sheet, load: first.page, measures, errors: errors.slice(0, before.errors), refused, dialogs: dialogs.slice(0, before.dialogs), icon,
+    taps: { seen, total, device, theme: "dark" },
+  };
 }
 
 export interface CheckOptions {
@@ -320,8 +478,10 @@ export interface CheckOptions {
   print?: (line: string) => void;
   /** The browser to drive (tests); `findBrowser()`'s by default, null for none. */
   browser?: string | null;
-  /** The whole check, at most (90 s). */
+  /** The whole check, at most (90 s; 45 s more with `tap`). */
   timeoutMs?: number;
+  /** `--tap`: each button tapped once after the layout pass. */
+  tap?: boolean;
 }
 
 /** `grain dev --check`: its exit status, 1 when the page has an error, or when there is no browser to check it with. */
@@ -343,13 +503,14 @@ export async function runCheck(o: CheckOptions): Promise<number> {
   const profile = join(o.dir, GRAIN_DIR, "browser");
   let browser = Browser.launch(path, profile);
   let timer: NodeJS.Timeout | undefined;
+  const limit = o.timeoutMs ?? (o.tap ? 135_000 : 90_000);
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`the check took longer than ${(o.timeoutMs ?? 90_000) / 1000} s`)), o.timeoutMs ?? 90_000);
+    timer = setTimeout(() => reject(new Error(`the check took longer than ${limit / 1000} s`)), limit);
   });
   try {
     let run: CheckRun;
     try {
-      run = await Promise.race([drive(browser, origin, out, icon), deadline]);
+      run = await Promise.race([drive(browser, origin, out, icon, o.tap === true), deadline]);
     } catch (e) {
       // Linux without user namespaces for the browser's sandbox (Ubuntu 24.04's default, many containers): the page is
       // this computer's own, served here, so it is driven without one rather than not at all.
@@ -358,19 +519,22 @@ export async function runCheck(o: CheckOptions): Promise<number> {
       o.log.step("check", "waiting", "no_sandbox");
       print("check: the browser has no sandbox here (the system does not give it one): driving it without one, for this page served on this computer");
       browser = Browser.launch(path, profile, false);
-      run = await Promise.race([drive(browser, origin, out, icon), deadline]);
+      run = await Promise.race([drive(browser, origin, out, icon, o.tap === true), deadline]);
     }
     const findings = judge(run);
     writeFileSync(join(out, "report.json"), JSON.stringify({ findings, run }, null, 2) + "\n");
     const errors = findings.filter((f) => f.level === "error").length;
     const warnings = findings.filter((f) => f.level === "warning").length;
     o.log.step("check", errors > 0 ? "refused" : "ok", checkReason(findings));
-    print(`check: ${basename(path)} headless drove grain dev's simulator: the Connect sheet, then the page at ${new Set(run.measures.map((m) => m.device)).size} screens in both themes`);
+    const tapped = run.taps ? run.taps.seen.filter((t) => t.state === "tapped").length : null;
+    print(`check: ${basename(path)} headless drove grain dev's simulator: the Connect sheet, then the page at ${new Set(run.measures.map((m) => m.device)).size} screens in both themes` +
+      (tapped === null ? "" : `, then ${tapped} of its buttons tapped once each`));
     for (const line of findingLines(findings)) print(line);
     print(`screenshots and report.json: ${out}`);
     print(errors > 0
       ? `next: fix the ${errors === 1 ? "error" : `${errors} errors`} above, then grain dev --check again`
-      : warnings > 0 ? "next: nothing stops the page; look at the warnings above and the screenshots" : "next: nothing: the page checks at every screen in both themes (grain doctor, then grain publish)");
+      : warnings > 0 ? "next: nothing stops the page; look at the warnings above and the screenshots"
+      : `next: nothing: the page checks at every screen in both themes${run.taps ? " and answers every tap" : ""} (grain doctor, then grain publish)`);
     return errors > 0 ? 1 : 0;
   } catch (e) {
     o.log.step("check", "failed", "browser");

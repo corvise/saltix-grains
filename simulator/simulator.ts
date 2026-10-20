@@ -170,6 +170,8 @@ async function handle(origin: string, method: string, params: Record<string, unk
       return { address: a };
     }
     case "grain_pay": {
+      // Driven by grain dev --check: no payment is ever asked for, as a user may decline one.
+      if (driven) throw new Refusal(4001, "declined: grain dev --check makes no payment");
       let line: string;
       if (typeof params.invoice === "string") {
         if (s.owner && s.genesis) {
@@ -226,6 +228,11 @@ async function handle(origin: string, method: string, params: Record<string, unk
       await navigator.clipboard?.writeText(String(params.text));
       return null;
     case "grain_openLink":
+      // Driven by grain dev --check: nothing outside this computer is opened.
+      if (driven) {
+        write(`grain_openLink ${String(params.url)}: not opened (grain dev --check)`);
+        return null;
+      }
       window.open(String(params.url), "_blank", "noopener");
       return null;
     case "grain_manage_open": {
@@ -275,11 +282,13 @@ window.addEventListener("message", async (event) => {
   try {
     const result = await handle(event.origin, m.method, m.params ?? {}, typeof m.activation === "boolean" ? m.activation : null);
     write(`${m.method} ${JSON.stringify(m.params)} → ${JSON.stringify(result)}`);
+    calls.push({ method: m.method, ok: true });
     reply({ result });
   } catch (e) {
     const err = e instanceof Refusal ? { code: e.code, message: e.message } : { code: 5000, message: String(e) };
     write(`${m.method} ${JSON.stringify(m.params)} ✖ ${err.code} ${err.message}`);
     refused.push({ method: m.method, code: err.code, message: err.message });
+    calls.push({ method: m.method, ok: false, code: err.code, message: err.message });
     reply({ error: err });
   }
 });
@@ -298,6 +307,10 @@ const iconUrl = (): string | null => (loaded && loaded.manifest.icon && !/^0+$/.
 
 /** Requests the simulator refused, as the page got them: what `grain dev --check` reports. */
 const refused: Array<{ method: string; code: number; message: string }> = [];
+/** Every request the page made, answered or refused, in order: what `grain dev --check --tap` reads after each tap. */
+const calls: Array<{ method: string; ok: boolean; code?: number; message?: string }> = [];
+/** Whether a tool drives the simulator (`grain dev --check`): no payment is asked for and no link is opened. */
+let driven = false;
 
 /** The Connect sheet the first time this account opens the app (19-connect §12.2): Continue records the sign-in and the
  *  switches as set; Cancel opens nothing and sends nothing. Whether the app may open. */
@@ -537,6 +550,63 @@ function measure() {
   };
 }
 
+/** What `grain dev --check --tap` taps: the page's buttons (never a link, which leaves the page), each once. */
+const BUTTONS = 'button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]';
+/** At most this many buttons are tapped: a page with more is a list of the same, and the check stays bounded. */
+const MAX_TAPS = 30;
+/** The buttons `buttons()` found, held to be tapped one by one while the page changes under them. */
+let toTap: Element[] = [];
+
+/** The page's document, when it has loaded one. */
+function pageDocument(): Document | null {
+  try {
+    const doc = frame.contentDocument;
+    return doc && doc.URL !== "about:blank" ? doc : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a user can see and tap `el` now. */
+function shownAndEnabled(el: Element, view: Window): boolean {
+  const style = view.getComputedStyle(el);
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1 || style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) return false;
+  if ((el as HTMLElement).closest("[hidden]")) return false;
+  return !((el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true");
+}
+
+/** The page's buttons a user can tap, in the document's order, at most `MAX_TAPS`: their names, and how many there are. */
+function buttons(): { names: string[]; total: number } {
+  const doc = pageDocument();
+  const view = doc?.defaultView;
+  if (!doc || !view) return { names: [], total: 0 };
+  const all = Array.from(doc.querySelectorAll(BUTTONS)).filter((el) => shownAndEnabled(el, view));
+  toTap = all.slice(0, MAX_TAPS);
+  return { names: toTap.map(nameOf), total: all.length };
+}
+
+/**
+ * Where to tap the `i`th button, in the coordinates of the simulator's own viewport (where a tool's pointer goes): its
+ * middle, scrolled into view inside the page. `gone` or `hidden` when an earlier tap took it away; `covered` when another
+ * element is over its middle, which a user's tap would reach instead.
+ */
+function aim(i: number): { state: "ready"; x: number; y: number } | { state: "gone" | "hidden" } | { state: "covered"; by: string } {
+  const el = toTap[i];
+  const doc = pageDocument();
+  const view = doc?.defaultView;
+  if (!el || !doc || !view || !el.isConnected || el.ownerDocument !== doc) return { state: "gone" };
+  if (!shownAndEnabled(el, view)) return { state: "hidden" };
+  el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  const hit = doc.elementFromPoint(cx, cy);
+  if (hit === null || (hit !== el && !el.contains(hit))) return { state: "covered", by: hit ? nameOf(hit) : "nothing of the page (it is outside the frame)" };
+  const f = frame.getBoundingClientRect();
+  return { state: "ready", x: f.left + cx, y: f.top + cy };
+}
+
 const select = (id: string, value: string) => {
   const el = $<HTMLSelectElement>(id);
   if (!Array.from(el.options).some((o) => o.value === value)) throw new Error(`${id}: no ${value}`);
@@ -571,5 +641,13 @@ const select = (id: string, value: string) => {
     return go !== null;
   },
   refused: () => refused.slice(),
+  /** Every request the page made, in order (`from`: the first one to give). */
+  calls: (from = 0) => calls.slice(from),
+  /** A tool drives the simulator from now on: no payment is asked for (declined, 4001) and no link opened. */
+  drive() {
+    driven = true;
+  },
+  buttons,
+  aim,
   measure,
 };

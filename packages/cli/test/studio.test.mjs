@@ -155,10 +155,19 @@ test("without a key file, the tool says what to do in Saltix and waits for the r
   node.state.grain = grain({ servers: [server], category: 4 });
   assert.equal(await waitForRegistry(node.url, call, 1_000, 10), true);
   const dir = scratch("wallet-way-");
-  const out = await run(["configure", "--slug", "chess-bot", "--server", server, "--category", "games", "--node", node.url, "--timeout", "1"], dir);
+  node.state.grain = grain();
+  // The owner does it in Saltix while the tool waits.
+  const later = setTimeout(() => (node.state.grain = grain({ servers: [server], category: 4 })), 500);
+  const out = await run(["configure", "--slug", "chess-bot", "--server", server, "--category", "games", "--node", node.url, "--timeout", "5"], dir);
+  clearTimeout(later);
   assert.match(out.stdout, /My apps → chess-bot → Developer key/);
   assert.match(out.stdout, /the registry has it/);
   assert.equal(node.submitted.length, 0, "nothing signed here");
+  // Asked again with the registry holding it so: nothing to change, nothing asked of the owner.
+  const again = await run(["configure", "--slug", "chess-bot", "--server", server, "--category", "games", "--node", node.url, "--timeout", "1"], dir);
+  assert.equal(again.code, 0, again.stderr);
+  assert.match(again.stdout, /^nothing to change: the registry names these server keys and category games for chess-bot already; nothing signed or sent$/m);
+  assert.doesNotMatch(again.stdout, /My apps/);
   const none = await run(["configure", "--slug", "chess-bot", "--node", node.url], dir);
   assert.match(none.stderr, /--revoke-all/, "no keys only on purpose");
   node.close();
@@ -182,10 +191,17 @@ test("a key file signs an owner's call only for an app it owns, or when --key na
   assert.equal((await run(["access", "--slug", "chess-bot", "--public", "--key", "owner.key", "--wallet", "--node", node.url], dir)).code, 2);
   // Its own app: owner.key signs without --key, and says so.
   node.state.grain = grain();
-  const own = await run(["access", "--slug", "chess-bot", "--public", "--node", node.url, "--no-wait"], dir);
+  const own = await run(["access", "--slug", "chess-bot", "--private", "--node", node.url, "--no-wait"], dir);
   assert.equal(own.code, 0, own.stderr);
   assert.match(own.stdout, /^owner: tsalt1\S+, owner\.key's account on this computer, which the registry names as the owner$/m);
   assert.match(own.stdout, /access: transaction (ab){32} \(fee 0\.\d+ SALT\)/);
+  // Kept for grain doctor (the project's own app), until a command sees it land.
+  const kept = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
+  assert.deepEqual([kept.slug, kept.sent.map((t) => [t.call, t.id, t.access])], ["chess-bot", [["access", "ab".repeat(32), { public: false, members: [] }]]]);
+  // Already so: nothing to change, nothing signed or sent.
+  const same = await run(["access", "--slug", "chess-bot", "--public", "--node", node.url], dir);
+  assert.equal(same.code, 0, same.stderr);
+  assert.match(same.stdout, /^nothing to change: chess-bot is public with no members already, as asked; nothing signed or sent$/m);
   // A slug nobody registered: said, never a call built for it.
   node.state.grain = null;
   const none = await run(["access", "--slug", "chess-bot", "--public", "--node", node.url], dir);

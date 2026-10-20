@@ -122,6 +122,14 @@ test("two calls in a row: the first returns once the registry has it, so the sec
     assert.match(first.stdout, /^Waiting for it to land: usually 1\.5 to 2\.5 minutes on the test network/m);
     assert.match(first.stdout, /^ {2}profile: in the pool, waiting for a shard block \(0:0\d\)$/m);
     assert.ok(logOf(dir).some((l) => l.command === "profile" && l.step === "registry" && l.outcome === "ok" && l.reason === "set"));
+    // The same words again: nothing to change, nothing signed or sent.
+    const same = await run(["profile", "--node", node.url], dir);
+    assert.equal(same.code, 0, same.stderr);
+    assert.match(same.stdout, /^nothing to change: the registry holds dice's Connect profile with these words already; nothing signed or sent$/m);
+    assert.equal(node.state.submitted.length, 1);
+    // New words: the second call goes above the first.
+    const connect = JSON.parse(readFileSync(join(dir, "connect.json"), "utf8"));
+    writeFileSync(join(dir, "connect.json"), JSON.stringify({ ...connect, texts: { en: { ...connect.texts.en, tagline: "Roll dice, fair and fast" } } }));
     const second = await run(["profile", "--node", node.url], dir);
     assert.equal(second.code, 0, second.stderr);
     assert.deepEqual(node.state.submitted.map((s) => [s.nonce, profileOf(s.tx).profile.revision]), [[4, 6], [5, 7]]);
@@ -140,9 +148,11 @@ test("two calls at once: the one the pool refuses is built again from the regist
     assert.equal(a.code, 0, a.stderr);
     assert.equal(b.code, 0, b.stderr);
     assert.ok(node.state.refused >= 1, "one of them met the other's pending transaction");
+    // Built again once the other landed, it finds the registry holding the same words: nothing more is sent.
     const landed = node.state.submitted.map((s) => [s.nonce, profileOf(s.tx).profile.revision]);
-    assert.deepEqual(landed, [[4, 6], [5, 7]]);
-    assert.equal(node.state.revision, 7);
+    assert.deepEqual(landed, [[4, 6]]);
+    assert.equal(node.state.revision, 6);
+    assert.equal([a, b].filter((r) => /^nothing to change: /m.test(r.stdout)).length, 1);
   } finally {
     node.close();
   }
@@ -155,9 +165,21 @@ test("--no-wait returns once the pool took it", async () => {
     const r = await run(["profile", "--node", node.url, "--no-wait"], dir);
     assert.equal(r.code, 0, r.stderr);
     assert.doesNotMatch(r.stdout, /the registry has it/);
-    assert.match(r.stdout, /^sent as [0-9a-f]{64}: grain show says when it is in the registry/m);
+    assert.match(r.stdout, /^sent: it lands in the registry in a few minutes \(usually 1\.5 to 2\.5 minutes on the test network\); grain doctor --node \S+ says when it has landed$/m);
     assert.equal(node.state.pending.size, 1);
     assert.ok(logOf(dir).some((l) => l.step === "registry" && l.outcome === "waiting" && l.reason === "no_wait"));
+    // Kept in .grain/: grain doctor says it is on its way, then that it landed.
+    const kept = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).sent;
+    assert.deepEqual(kept.map((t) => [t.call, t.revision]), [["profile", 6]]);
+    const asked = await run(["doctor", "--json", "--node", node.url], dir);
+    const profile = JSON.parse(asked.stdout).findings.find((f) => f.what === "connect profile");
+    assert.deepEqual([profile.ok, profile.waiting], [false, true]);
+    assert.match(profile.detail, /^Connect profile revision 6 \(transaction [0-9a-f]{64}, sent at \S+\) has not landed yet: in the pool, waiting for a shard block; .*; the registry holds none$/);
+    for (const p of node.state.pending.values()) p.polls = 0;
+    for (const id of node.state.pending.keys()) await fetch(node.url, { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "transaction_get", params: { id } }) });
+    const landed = JSON.parse((await run(["doctor", "--json", "--node", node.url], dir)).stdout).findings.find((f) => f.what === "connect profile");
+    assert.equal(landed.ok, true);
+    assert.match(landed.detail, /^revision 6 in the registry \(Connect profile revision 6 sent at \S+ landed\)$/);
   } finally {
     node.close();
   }

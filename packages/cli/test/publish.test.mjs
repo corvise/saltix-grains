@@ -16,8 +16,9 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { AppKey, RpcError, accountId, fromHex, namedHash, readPublishLink, signManifest, toHex } from "@saltix/grain-server";
 import { createDevRegistry } from "@saltix/grain-server/dev";
 import { DevLog, reasonOf } from "../dist/devlog.js";
-import { BLOB_WORDS, PublishError, accessDecided, formOf, nodeNow, publishApp, readiness, sameContent, whoOpens } from "../dist/publish-flow.js";
-import { doctor, firstPublishFees, keyState } from "../dist/status.js";
+import { BLOB_WORDS, PublishError, accessDecided, formOf, nodeNow, publishApp, readiness, sameContent, sealedAsSent, whoOpens } from "../dist/publish-flow.js";
+import { DOCTOR_EXIT, doctor, firstPublishFees, inNetwork, keyState, outcomeOf } from "../dist/status.js";
+import { makeBundle } from "../dist/bundle.js";
 import { salt } from "../dist/registry.js";
 import { ensureGitignore } from "../dist/pair.js";
 import { isRelaySource } from "../dist/sources.js";
@@ -460,8 +461,13 @@ test("owner.key signs only when --key names it: a free slug otherwise goes to th
   wallet(registry, link);
   assert.equal(await done, 0);
   assert.equal(registry.grain.owner, toHex(accountId(ed25519.getPublicKey(OWNER))), "the phone's account owns it");
-  assert.match(lines.join("\n"), /space-game is public from its first version \(a publishing link registers it so\)/);
-  assert.ok(steps(dir).includes("access:ok:public"));
+  // Public or private is the owner's choice on Saltix's sheet: private unless Public in the Marketplace is on (Saltix
+  // 0.1.61 and later), public with an older one. Never "anyone opens it" while the registry may still change that.
+  assert.ok(lines.includes("space-game: Saltix registers it private unless you switched on Public in the Marketplace on the sheet (Saltix 0.1.61 " +
+    "and later, which sends that call itself once the registration landed, a minute or two later: grain doctor says which it is). An older Saltix " +
+    "registers it public: then grain access --slug space-game --private (or My apps → space-game → Access → Private)"), lines.join("\n"));
+  assert.doesNotMatch(lines.join("\n"), /Anyone opens it|is public from its first version/);
+  assert.ok(steps(dir).includes("access:ok:wallet"));
 });
 
 test("--key owner.key on a test network: the owner said, signed and sent here, made private, the bundle and the icon once it landed", async () => {
@@ -485,8 +491,10 @@ test("--key owner.key on a test network: the owner said, signed and sent here, m
   assert.match(said, /^access space-game: private, sent right behind it with the next nonce/m);
   assert.equal(registry.grain.public, false);
   assert.deepEqual(registry.grain.members, []);
-  assert.match(said, /space-game is private: only its owner's account and the members it names open it/);
-  assert.match(said, /grain access --slug space-game --private --member <address>:user --key owner\.key adds someone; --public opens it to anyone/);
+  // Said private once, and who opens it once, at the end: never "its owner opens it" before "nobody opens it".
+  assert.match(said, /^space-game is private, as an app made in Saltix starts$/m);
+  assert.doesNotMatch(said, /only its owner's account and the members it names open it/);
+  assert.equal(said.match(/open it|opens it/g).length, 2, "the last line alone says who opens it");
   // Nobody holds the owner's key on a phone: who can open it, and how to try it without one.
   assert.equal(lines.at(-1), "It is private, and its owner is owner.key's account, which no phone holds: nobody opens it in Saltix yet. " +
     "To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner.key " +
@@ -601,10 +609,15 @@ test("doctor before a page's first publish: the deposit, the owner's Saltix, and
   const registry = d.findings.find((f) => f.what === "registry");
   assert.equal(registry.ok, false);
   assert.match(registry.detail, /^space-game is free: its first grain publish registers it, keeping a deposit of 10 SALT until it retires, and fees of about 0\.0000\d+ SALT \(registering, then making it private\); owner\.key's account holds 0 SALT$/);
-  // The fees said are what the two transactions take at the pool's floor.
-  const fees = firstPublishFees(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")), 10_000_000_000n);
+  // The fees said are what the two transactions take at the pool's floor, for the manifest as grain publish sends it:
+  // sealed, with the relays' sources protocol version 1 asks for, more bytes than grain.json names.
+  const given = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
+  const { manifest: asSent } = await sealedAsSent(free, 1, given, makeBundle(join(dir, "public")));
+  assert.equal(asSent.entry.sealed.sources.length, 3);
+  const fees = firstPublishFees(asSent, 10_000_000_000n);
+  assert.ok(fees > firstPublishFees(given, 10_000_000_000n), "the sources cost bytes");
   assert.ok(fees > 0n && fees < 1_000_000n, String(fees));
-  assert.ok(registry.detail.includes(`fees of about ${salt(fees)} SALT`));
+  assert.ok(registry.detail.includes(`fees of about ${salt(fees)} SALT`), registry.detail);
   assert.equal(firstPublishFees("not a manifest", 1n), null);
   assert.equal(registry.next, "grain publish: a QR code, and the owner's Saltix registers the app and pays the deposit; without a phone, on the test network: " +
     "grain faucet --wait, then grain publish --key owner.key (the app is then owner.key's account's)");
@@ -743,7 +756,8 @@ test("--no-wait with a key file returns once the pool took both; doctor says the
   const dir = project({ paired: false });
   keyed(dir);
   ensureGitignore(dir);
-  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 4 });
+  // Each read of the node moves its pool on: long enough for doctor's reads between the two runs.
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 20 });
   const first = keyRun(dir, ledger, { wait: false });
   assert.equal(await first.done, 0, first.lines.join("\n"));
   assert.match(first.lines.join("\n"), /^sent: it lands in the registry in a few minutes \(usually 1\.5 to 2\.5 minutes on the test network\)\. grain doctor says when/m);
@@ -752,12 +766,16 @@ test("--no-wait with a key file returns once the pool took both; doctor says the
   assert.deepEqual(state.sent.map((t) => [t.call, t.nonce]), [["register", 0], ["access", 1]]);
   assert.equal(state.private_pending, true);
   assert.ok(steps(dir).includes("registry:waiting:no_wait"));
-  // grain doctor meanwhile: on its way, never to be sent again; not the deposit to pay.
+  // grain doctor meanwhile: on its way, never to be sent again; not the deposit to pay. Waiting, not something to fix: the
+  // bundle goes up once it landed; what can be done meanwhile (connect.json, here) comes first.
   const d = await doctor(dir, ledger);
   const way = d.findings.find((f) => f.what === "registry");
-  assert.equal(way.ok, false);
-  assert.match(way.detail, /^the registration of space-game was sent at \S+ \(transaction [0-9a-f]{64}\) and has not landed yet: a registry call takes usually 1\.5 to 2\.5 minutes/);
-  assert.match(way.next, /grain publish waits for it \(never sending it again\)/);
+  assert.deepEqual([way.ok, way.waiting], [false, true]);
+  assert.match(way.detail, /^the registration of space-game v1 \(transaction [0-9a-f]{64}, sent at \S+\) has not landed yet: in the pool, waiting for a shard block; a registry call takes usually 1\.5 to 2\.5 minutes/);
+  assert.match(way.next, /grain publish waits for it, never sending it again/);
+  assert.deepEqual(d.findings.filter((f) => f.waiting).map((f) => f.what), ["registry", "upload"]);
+  assert.equal(d.outcome, "fix", "no connect.json yet: that can be written meanwhile");
+  assert.equal(d.next, d.findings.find((f) => f.what === "connect profile").next);
   assert.doesNotMatch(d.findings.map((f) => f.detail).join("\n"), /is free/);
   // The next run, without --key: it waits for that registration, sends nothing again, and finishes the bundle and icon.
   const second = run(dir, ledger, { signing: { node: ledger, validFor: 600 }, settleMs: 3_000 });
@@ -804,7 +822,10 @@ test("the call that makes it private does not land: doctor says public, should b
   assert.match(second.lines.join("\n"), /^access space-game: private \(transaction [0-9a-f]{64}, fee /m);
   assert.match(second.lines.join("\n"), /^ {2}access space-game: private: not sent \(fetch failed\): trying again/m);
   assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).private_pending, false);
-  assert.equal((await doctor(dir, sound)).findings.find((f) => f.what === "access").detail, "private: its owner alone open it");
+  // Who opens it, in the words grain publish ends with: owner.key's account owns it, and no phone holds that key.
+  assert.equal((await doctor(dir, sound)).findings.find((f) => f.what === "access").detail,
+    "private, and its owner is owner.key's account, which no phone holds: nobody opens it in Saltix yet. To open it in your own Saltix: " +
+    "grain access --slug space-game --private --member <your Saltix address>:user --key owner.key (the address: Saltix → Receive), or --public for anyone");
   // An owner who decides with grain access in the project: the pending "make it private" is theirs no more.
   writeFileSync(join(dir, ".grain", "publish.json"), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")), private_pending: true }));
   accessDecided(dir, SLUG);
@@ -870,4 +891,242 @@ test("a registration needs the deposit and both fees in the account: refused bef
   const exact = poolOf(node({ registered: false }), exactDir, OWNER_FILE, { salt: String(needs) });
   assert.equal(await keyRun(exactDir, exact, { wait: false }).done, 0);
   assert.deepEqual(exact.pool.sent.map((t) => t.tag), [7, 36]);
+});
+
+/** `nodeLike`'s wallet interface over plain HTTP, as `--node` takes it, closed after the test. */
+async function overHttp(t, nodeLike) {
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      const { id, method, params } = JSON.parse(body);
+      try {
+        res.end(JSON.stringify({ jsonrpc: "2.0", id, result: await nodeLike.call(method, params) }));
+      } catch (e) {
+        res.end(JSON.stringify({ jsonrpc: "2.0", id, error: { code: e instanceof RpcError ? e.code : -32000, message: e.reason ?? e.message, data: e.data ?? undefined } }));
+      }
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(() => server.close());
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+/** The command line in `dir`, its run bounded: its exit status and output. */
+const cli = (dir, args) => new Promise((resolve) => {
+  const child = spawn("node", [main, ...args], { cwd: dir, env: { ...process.env, SALTIX_APP_KEY: "" }, timeout: 60_000 });
+  let out = "";
+  let err = "";
+  child.stdout.on("data", (d) => (out += d));
+  child.stderr.on("data", (d) => (err += d));
+  child.on("close", (status) => resolve({ status, out, err }));
+});
+
+/** connect.json in the app's own words (grain init's are refused). */
+function ownConnect(dir) {
+  const own = JSON.parse(connectJson(SLUG, "Space", false));
+  own.texts = { en: { tagline: "A space game", about: "Fly.", highlights: [], privacy: "Keeps your best score in your Saltix vault." } };
+  writeFileSync(join(dir, "connect.json"), JSON.stringify(own));
+}
+
+test("a relay fetching a blob is no proof anyone holds it: not published, grain publish uploads it, unless an upload from here is recorded", async () => {
+  assert.equal(inNetwork("held", null), true);
+  assert.equal(inNetwork("fetching", null), false, "the relay knows the hash from the manifest, and looks for the bytes");
+  assert.equal(inNetwork("fetching", ""), false);
+  assert.equal(inNetwork("fetching", "2026-10-20T00:00:00.000Z"), true, "uploaded from here: the relay asked is fetching a copy of its own");
+  assert.equal(inNetwork("absent", "2026-10-20T00:00:00.000Z"), false);
+  // The owner's Saltix signed v2 naming a bundle and an icon nobody brought into the network.
+  const registry = node();
+  const dir = project({ paired: false });
+  ensureGitignore(dir);
+  const given = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
+  const made = makeBundle(join(dir, "public"));
+  const m = { ...(await sealedAsSent(registry, 1, given, made)).manifest, version: 2 };
+  writeFileSync(join(dir, "grain.json"), JSON.stringify(m, null, 2));
+  const owner = toHex(ed25519.getPublicKey(OWNER));
+  registry.publish(signManifest({ ...m, owner: toHex(accountId(fromHex(owner, 32))), owner_key: { ed25519: owner } }, OWNER));
+  registry.grain.profile = { profile: { revision: 1 } };
+  // As a node answers: no blob, fetching.
+  assert.deepEqual(await registry.call("blob_get", { kind: "grain_bundle", hash: made.hash }), { blob: null, fetching: true });
+  assert.deepEqual(await registry.call("blob_get", { kind: "grain_icon", hash: ICON.hash }), { blob: null, fetching: true });
+  assert.deepEqual(await registry.call("blob_get", { kind: "grain_icon", hash: "ee".repeat(32) }), { blob: null, fetching: false }, "a hash nothing names");
+  const d = await doctor(dir, registry);
+  assert.equal(d.publish, "not_uploaded");
+  const upload = d.findings.find((f) => f.what === "upload");
+  assert.equal(upload.ok, false);
+  assert.match(upload.detail, /^the registry names the bundle, but nobody may hold it yet: the relay asked knows its hash from the manifest and is still looking for the bytes \(fetching\)/);
+  assert.equal(upload.next, "grain publish (it uploads the bundle, then the icon)");
+  assert.equal(d.findings.find((f) => f.what === "icon").ok, false);
+  assert.match(d.findings.find((f) => f.what === "icon").detail, /nobody may hold it yet/);
+  assert.equal(d.findings.find((f) => f.what === "registry").detail, "v2 in the registry; grain publish finishes the upload");
+  assert.deepEqual([d.outcome, d.next], ["fix", "grain publish (it uploads the bundle, then the icon)"]);
+  assert.doesNotMatch(d.findings.map((f) => f.detail).join("\n"), /network holds its bundle/);
+  // Uploaded from here (a node kept it whole), the relay asked still fetching its copy: published.
+  const genesis = (await registry.call("node_status", {})).genesis.slice(0, 16);
+  const at = "2026-10-20T00:00:00.000Z";
+  mkdirSync(join(dir, ".grain"), { recursive: true });
+  writeFileSync(join(dir, ".grain", "publish.json"), JSON.stringify({
+    network: "devnet", genesis, slug: SLUG, version: 2, form: "sealed", bundle: made.hash, size: made.size, uploaded_at: at, pending_until: null,
+    link_shown_at: null, published_at: at, icon: ICON.hash, icon_uploaded_at: at, sent: [], private_pending: false,
+  }));
+  const seen = await doctor(dir, registry);
+  assert.equal(seen.publish, "published");
+  assert.equal(seen.findings.find((f) => f.what === "upload").detail, `published: uploaded from here at ${at}; the relay asked is still fetching a copy of its own`);
+  assert.equal(seen.outcome, "done");
+  // grain publish puts both up: nothing to sign, the uploads finished; then the relay holds them.
+  writeFileSync(join(dir, ".grain", "publish.json"), "{}");
+  const { lines, done } = run(dir, registry);
+  assert.equal(await done, 0, lines.join("\n"));
+  assert.ok(registry.blobs.has(made.hash) && registry.blobs.has(ICON.hash));
+  const after = await doctor(dir, registry);
+  assert.equal(after.findings.find((f) => f.what === "upload").detail, "published: the network holds its bundle");
+  assert.equal(after.findings.find((f) => f.what === "registry").detail, "v2 in the registry; published");
+  assert.equal(after.outcome, "done");
+  const state = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
+  assert.ok(state.uploaded_at && state.icon_uploaded_at, "seen in the network from here");
+  // A run that finds both held (nothing to publish) records that it saw them in the network, as an upload does.
+  writeFileSync(join(dir, ".grain", "publish.json"), JSON.stringify({ ...state, uploaded_at: null, icon_uploaded_at: null }));
+  const again = run(dir, registry);
+  assert.equal(await again.done, 0, again.lines.join("\n"));
+  assert.match(again.lines.at(-1), /^nothing to publish: /);
+  const seenAgain = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
+  assert.ok(seenAgain.uploaded_at && seenAgain.icon_uploaded_at, "found held: seen in the network");
+});
+
+test("doctor's outcome: nothing to do (0), something to do (1), or only waiting for the network (75), which outweighs nothing", () => {
+  assert.deepEqual(DOCTOR_EXIT, { done: 0, fix: 1, waiting: 75 });
+  const ok = { ok: true, what: "a", detail: "" };
+  const waiting = { ok: false, waiting: true, what: "b", detail: "" };
+  const fix = { ok: false, what: "c", detail: "" };
+  assert.equal(outcomeOf([]), "done");
+  assert.equal(outcomeOf([ok, ok]), "done");
+  assert.equal(outcomeOf([ok, waiting]), "waiting");
+  assert.equal(outcomeOf([waiting, fix]), "fix", "something to do comes first: it can be done meanwhile");
+  assert.equal(outcomeOf([fix, waiting]), "fix");
+});
+
+test("a key file's first publish with --no-wait, as round three met it: doctor waits (75), says it landed and that the upload is left (1), then published", async (t) => {
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  ensureGitignore(dir);
+  ownConnect(dir);
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 1_000 });
+  const url = await overHttp(t, ledger);
+  // The fees doctor says are those the two transactions pay.
+  const quoted = (await doctor(dir, ledger)).findings.find((f) => f.what === "registry").detail.match(/fees of about ([0-9.]+) SALT/)[1];
+  const first = keyRun(dir, ledger, { wait: false });
+  assert.equal(await first.done, 0, first.lines.join("\n"));
+  assert.equal(salt(ledger.pool.sent.reduce((sum, tx) => sum + tx.fee, 0n)), quoted, "the estimate is the manifest as sent, its sources included");
+  const said = first.lines.join("\n");
+  assert.match(said, /^upload: once the registry names the bundle, after the transaction lands; --no-wait returns before that, so grain publish again puts it up once grain doctor says the transaction landed$/m);
+  assert.doesNotMatch(said, /this command waits for it/, "--no-wait never says it waits");
+
+  // On their way: nothing to do but wait. Exit 75, said and logged as waiting, never a refusal.
+  const waiting = await cli(dir, ["doctor", "--node", url]);
+  assert.equal(waiting.status, 75, waiting.out + waiting.err);
+  assert.match(waiting.out, /^wait registry {8}the registration of space-game v1 \(transaction [0-9a-f]{64}, sent at \S+\) has not landed yet: in the pool, waiting for a shard block/m);
+  assert.match(waiting.out, /^wait upload {10}the bundle goes up once the registry names it, after the transaction lands/m);
+  assert.match(waiting.out, /^next: grain doctor --node \S+ again in a minute \(it exits 75 while it only waits\); grain publish --node \S+ waits for it/m);
+  assert.deepEqual(steps(dir).slice(-3), ["doctor:waiting:registry", "doctor_publish:waiting:not_uploaded", "end:waiting:exit_75"]);
+  const json = JSON.parse((await cli(dir, ["doctor", "--json", "--node", url])).out);
+  assert.deepEqual([json.outcome, json.exit, json.publish], ["waiting", 75, "not_uploaded"]);
+
+  // The blocks come: it landed. Doctor says so, and that the upload is left: the relay knows the bundle's hash, nobody
+  // brought the bytes. Never "published" before the bundle is in the network.
+  for (const p of ledger.pool.pending) p.due = 0;
+  await ledger.call("grain_get", { slug: SLUG });
+  assert.deepEqual([registry.grain.version, registry.grain.public], [1, false]);
+  const landed = await doctor(dir, ledger);
+  const reg = landed.findings.find((f) => f.what === "registry");
+  assert.equal(reg.ok, true);
+  assert.match(reg.detail, /^v1 registered \(the transaction sent at \S+ landed\); grain publish finishes the upload$/);
+  assert.equal(landed.publish, "not_uploaded");
+  assert.match(landed.findings.find((f) => f.what === "upload").detail, /nobody may hold it yet/);
+  assert.match(landed.findings.find((f) => f.what === "access").detail,
+    /^private, and its owner is owner\.key's account, which no phone holds: nobody opens it in Saltix yet\. To open it in your own Saltix: grain access --slug space-game --private --member <your Saltix address>:user --key owner\.key/);
+  assert.deepEqual([landed.outcome, landed.next], ["fix", "grain publish (it uploads the bundle, then the icon)"]);
+  const fix = await cli(dir, ["doctor", "--node", url]);
+  assert.equal(fix.status, 1, fix.out);
+  assert.match(fix.out, /^ok {3}registry {8}v1 registered \(the transaction sent at \S+ landed\); grain publish --node \S+ finishes the upload$/m);
+  assert.doesNotMatch(fix.out, /^ok {3}upload/m);
+  assert.deepEqual(steps(dir).slice(-3), ["doctor:refused:upload", "doctor_publish:waiting:not_uploaded", "end:failed:exit_1"]);
+
+  // grain publish finishes the uploads: published.
+  const second = run(dir, ledger, { signing: { node: ledger, validFor: 600 }, settleMs: 3_000 });
+  assert.equal(await second.done, 0, second.lines.join("\n"));
+  const after = await doctor(dir, ledger);
+  assert.equal(after.publish, "published");
+  assert.equal(after.findings.find((f) => f.what === "registry").detail, "v1 in the registry; published");
+  assert.equal(after.next, "grain profile");
+  registry.grain.profile = { profile: { revision: 1 } };
+  const clean = await cli(dir, ["doctor", "--node", url]);
+  assert.equal(clean.status, 0, clean.out);
+  assert.match(clean.out, /^next: nothing: the page is published and the project is in order/m);
+
+  // A change to public/ not published yet: grain publish is next, exit 1, never "nothing".
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space, again</title>");
+  const changed = await doctor(dir, ledger);
+  const bundle = changed.findings.find((f) => f.what === "bundle");
+  assert.deepEqual([bundle.ok, bundle.detail, bundle.next], [false, "public/ changed since grain.json's bundle: grain publish seals it again, as v2", "grain publish"]);
+  assert.deepEqual([changed.outcome, changed.next], ["fix", "grain publish"]);
+  const unpublished = await cli(dir, ["doctor", "--node", url]);
+  assert.equal(unpublished.status, 1);
+  assert.doesNotMatch(unpublished.out, /^next: nothing/m);
+  // grain.json changed (its name), public/ as published: the registry's finding says so.
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space</title><script src=\"js/game.js\"></script>");
+  const m = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
+  writeFileSync(join(dir, "grain.json"), JSON.stringify({ ...m, name: { ...m.name, en: "Space, renamed" } }, null, 2));
+  const renamed = await doctor(dir, ledger);
+  const regAgain = renamed.findings.find((f) => f.what === "registry");
+  assert.equal(regAgain.ok, false);
+  assert.match(regAgain.detail, /^v1 in the registry, but grain\.json says something else \(its name, icon, permissions or page\): grain publish makes v2$/);
+  assert.equal(renamed.next, "grain publish");
+});
+
+test("grain access: nothing to change sends nothing; what it sends is kept, and doctor waits for it until it landed or can land no more", async (t) => {
+  const registry = node({ registered: false });
+  const dir = project({ paired: false });
+  keyed(dir);
+  ensureGitignore(dir);
+  ownConnect(dir);
+  const ledger = poolOf(registry, dir, OWNER_FILE, { polls: 1 });
+  const first = keyRun(dir, ledger);
+  assert.equal(await first.done, 0, first.lines.join("\n"));
+  registry.grain.profile = { profile: { revision: 1 } };
+  const url = await overHttp(t, ledger);
+  const sent = ledger.pool.sent.length;
+  // Private with no members, as the registry holds it: nothing to change, nothing signed or sent, exit 0.
+  const same = await cli(dir, ["access", "--slug", SLUG, "--private", "--node", url]);
+  assert.equal(same.status, 0, same.err);
+  assert.match(same.out, /^nothing to change: space-game is private with no members already, as asked; nothing signed or sent$/m);
+  assert.equal(ledger.pool.sent.length, sent);
+  assert.ok(steps(dir).includes("registry:ok:unchanged"));
+  // A member: sent with --no-wait, kept in .grain/publish.json, and grain doctor says when it landed.
+  const member = "88".repeat(32);
+  const added = await cli(dir, ["access", "--slug", SLUG, "--private", "--member", `${member}:user`, "--no-wait", "--node", url]);
+  assert.equal(added.status, 0, added.err);
+  assert.match(added.out, /^sent: it lands in the registry in a few minutes \(usually 1\.5 to 2\.5 minutes on the test network\); grain doctor --node \S+ says when it has landed$/m);
+  assert.equal(ledger.pool.sent.length, sent + 1);
+  const kept = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).sent;
+  assert.deepEqual(kept.map((r) => [r.call, r.access]), [["access", { public: false, members: [{ account: member, roles: 1 }] }]]);
+  // On its way (the node's block took it; the registry does not show the member yet): waiting.
+  const waiting = await doctor(dir, ledger);
+  const access = waiting.findings.find((f) => f.what === "access");
+  assert.deepEqual([access.ok, access.waiting], [false, true]);
+  assert.match(access.detail, /^the access call \(private, 1 member\) \(transaction [0-9a-f]{64}, sent at \S+\) has not landed yet: in (the pool|a shard block)[^;]*; a registry call takes .*; until then private, and its owner is owner\.key's account/);
+  assert.equal(waiting.outcome, "waiting");
+  // The network lost it: it can land no more, and the command that sends it again is said.
+  ledger.pool.txs.clear();
+  const gone = (await doctor(dir, ledger)).findings.find((f) => f.what === "access");
+  assert.equal(gone.ok, false);
+  assert.ok(!gone.waiting);
+  assert.match(gone.detail, /can no longer land: the network does not know it/);
+  assert.equal(gone.next, `grain access --slug space-game --private --member ${member}:1`);
+  // Landed: said, in the words of who opens it.
+  registry.setAccess(false, [{ account: member, roles: 1 }]);
+  const landed = await doctor(dir, ledger);
+  assert.match(landed.findings.find((f) => f.what === "access").detail,
+    /^private, and its owner is owner\.key's account, which no phone holds: its 1 member open it in Saltix \(salt:grain\/space-game\)\..* \(the access call \(private, 1 member\) sent at \S+ landed\)$/);
+  assert.equal(landed.outcome, "done");
 });

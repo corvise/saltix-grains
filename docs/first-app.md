@@ -197,7 +197,7 @@ grain doctor                                                       # everything 
 
 An app with a page of its own (`grain init` without `--chat`; `grain dev` shows it as Saltix frames it) needs **no server
 and no hosting**: `grain publish` seals `public/` into one bundle and puts it into the Saltix network from your computer,
-onto the servers that keep it (three storage cities and five relays offering space); your Saltix signs the version from
+onto the servers that keep it ([where the bundle goes](how-it-works.md#where-the-bundle-goes)); your Saltix signs the version from
 a QR code, and every wallet fetches the bundle from its own relay by its hash (Saltix
 [32-images §7.3](protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)). There is no domain, no
 certificate and no file to upload anywhere.
@@ -206,7 +206,7 @@ certificate and no file to upload anywhere.
 npx grain init ../space-game --slug space-game --name "Space"   # grain.json, connect.json, public/ with the bridge
 cd ../space-game && npm install                                # links the grain command from the checkout
 npx grain dev                                                  # write the game; the simulator shows it
-npx grain dev --check                                          # the same headless: every screen, both themes
+npx grain dev --check --tap                                    # the same headless: every screen, both themes, each button tapped
 npx grain icon ~/Pictures/logo.png --out icon.png             # its icon, to the standard (or grain icon --monogram S)
 npx grain pair                                                 # optional: lets the bundle go up before you sign
 npx grain publish
@@ -217,7 +217,7 @@ of that name.
 
 ```text
 bundle: 14 files, 1.8 MiB, 9e41c0…
-sources: the network's own copies at 3 relays (protocol version 1 needs one; wallets ask their own relay first)
+sources: 3 relays' addresses for the network's own copy (protocol version 1 asks a sealed manifest to name one; the network keeps the bundle either way, and wallets ask their own relay first)
 version: the registry holds space-game v1; this one is v2 (grain.json says so now)
 owner: dsalt1q…, as the registry names it: its Saltix signs
 upload: into the network now, vouched for by the server key 1476ff04 (app.key)
@@ -242,8 +242,9 @@ What happens, step by step:
    and checked as every node checks it; `grain.json` names it and `bundle.zip` is written. A bundle the network keeps is
    at most 16 MiB.
 2. **The sources.** A network that runs protocol version 2 needs none. Before it (the test network runs version 1), a
-   sealed manifest must name one, so the tool names copies the network itself serves, at up to 3 relays of its own relay
-   list; you never host anything.
+   sealed manifest must name one, so the tool names where the network itself serves its copy, at up to 3 relays of its
+   own relay list; you never host anything. The bundle goes to the network's keepers either way:
+   [where the bundle goes](how-it-works.md#where-the-bundle-goes).
 3. **The upload.** With a server key the registry names for the app (`grain pair`'s `app.key`; or `SALTIX_APP_KEY`,
    `--app-key`), the bundle goes up now, in pieces of 256 KiB, on that key's signed statement: the network holds it
    **pending** for a day. A break is no loss: run `grain publish` again and it goes on where the node stands; a busy node
@@ -251,7 +252,9 @@ What happens, step by step:
    keeps running until then.
 4. **Your signature.** Scan the QR code with your Saltix: it shows the app, the version and what changed, and after the
    PIN signs the manifest and registers it (a new slug's deposit: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
-   more). Your key never leaves the phone. On the test network without a phone, `--key owner.key` signs here instead
+   more). A new app is private unless you switch on **Public in the Marketplace** on that sheet (Saltix 0.1.61 and
+   later, which then sends the call that makes it private, one more fee; an older Saltix registers it public:
+   `grain access --slug <slug> --private` makes it private). Your key never leaves the phone. On the test network without a phone, `--key owner.key` signs here instead
    ([No phone, test network](how-it-works.md#no-phone-test-network)); the app is then that key's account's.
 5. **The registry and the icon.** Once the registry holds the version, the icon goes into the network, and
    `signed.json` is written. Run again, `grain publish` finishes whatever a break left; with nothing changed it says
@@ -259,7 +262,9 @@ What happens, step by step:
 
 `--no-wait` returns once the QR code is shown (a coding agent shows it to you, then runs `grain publish` again after you
 scanned it). `grain doctor` says where a publish stands: `not_uploaded`, `pending`, `waiting_for_owner`,
-`pending_expired` or `published`. A refusal is said in words with what to do (`busy`: again in a few minutes; `key`: the
+`pending_expired` or `published` (the registry names the version and the network holds its bundle), and exits 0 when
+nothing is left, 1 when something is to do, 75 while it only waits for the network
+([its exit statuses](../README.md#grain-doctor-where-a-project-stands-and-its-exit-status)). A refusal is said in words with what to do (`busy`: again in a few minutes; `key`: the
 registry no longer names this computer's key, `grain pair --new`; …), and every step is in `.grain/log.jsonl` by its
 reason. A page you host yourself is published with `--hosted` instead.
 
@@ -392,7 +397,8 @@ An app with a screen of its own (a page: `grain init`, then `grain dev`) opens a
   iPhone-like screen in the simulator `grain dev` prints, light and dark: it frames the page as Saltix does, inside the
   safe area or edge to edge by your meta, draws the bars, the cutout and the controls where a phone and Saltix do, and
   its ✕ and **Back** close the app as the phone's do. `grain dev --check` goes through every one of them headless and
-  says what is under the controls, what threw, and what scrolls sideways, with a screenshot of each. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
+  says what is under the controls, what threw, and what scrolls sideways, with a screenshot of each; `--tap` then taps
+  each button once and says which throws, asks Saltix for what it refuses, or changes nothing. `grain lint` warns about a page that declares `viewport-fit=cover` and reads no inset
   (`cover-without-insets`), and about a bar pinned to the top of such a page that keeps clear of nothing
   (`full-screen-top-bar`).
 

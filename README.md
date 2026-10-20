@@ -22,8 +22,9 @@ A page that works on its own needs no server, no key to pair and no hosting:
 git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build
 npx grain init ../my-game --slug my-game --name "My game" && cd ../my-game && npm install
 npx grain dev                    # the simulator; npx grain dev --check tries it headless at every screen, both themes
+npx grain dev --check --tap      # the same, then each button tapped once: a throw or a refused request is an error
 npx grain icon --monogram M      # an icon to the standard (or grain icon <picture> --out icon.png)
-npx grain doctor                 # what is left; before the first publish, the deposit and the fees
+npx grain doctor                 # what is left; before the first publish, the deposit and the fees; exit 75: wait
 npx grain publish                # into the network; the owner's Saltix signs from a QR code
 ```
 
@@ -39,7 +40,8 @@ scans it and makes (or pairs) the app, `npm start`. The server's key is made on 
 nothing to copy.
 
 **A page needs no server and no hosting**: `grain publish` seals `public/` into a bundle and puts it straight into the
-Saltix network, onto the servers that keep it, from your computer; the owner's Saltix signs the version from a QR code
+Saltix network, onto the servers that keep it ([where the bundle goes](docs/how-it-works.md#where-the-bundle-goes)), from
+your computer; the owner's Saltix signs the version from a QR code
 ([Publish a page](docs/first-app.md#publish-a-page-straight-into-the-network)). Its icon follows one standard, and
 `grain icon` makes one from any picture ([docs/icons.md](docs/icons.md)).
 
@@ -125,7 +127,8 @@ a developer key names the genesis it was made on, and the SDK refuses a key of a
 - **Test SALT**: `grain faucet` asks the test network's faucet for owner.key's account (or `--address`), once every 5
   minutes; `--wait` until it is there. Then `grain publish --key owner.key` can pay the deposit.
 - **Uploads go through the same relays**: `grain publish` puts a page's bundle and its icon into the network through
-  the relay that answers (its gateway's `blob_put`), and the network carries them on to the servers that keep them.
+  the relay that answers (its gateway's `blob_put`), and the network carries them on to the servers that keep them
+  ([where the bundle goes](docs/how-it-works.md#where-the-bundle-goes)).
 
 ## The command line
 
@@ -144,6 +147,7 @@ npx grain init ../dice --name "Dice roll"   # grain.json (sealed), connect.json,
 npx grain init ../team-board --sign-in    # a page for some people only: its splash until its sign-in decides
 cd ../dice && npm install && npx grain dev   # links the grain command; serves public/, the signed manifest and the simulator
 npx grain dev --check                     # the simulator headless: every screen, both themes; .grain/check/; exit 1 on an error
+npx grain dev --check --tap               # then each button tapped once: a throw or a refused request is an error
 npx grain lint                            # what stops grain.json and connect.json; warns of a top bar under ⋯ | ✕
 npx grain icon logo.png --out icon.png    # a 512x512 icon to the standard from any picture; grain.json names it
 npx grain icon --monogram D               # or one with no picture: a letter on a colour (--background #rrggbb)
@@ -170,7 +174,7 @@ npx grain status                          # is this project's server paired with
 npx grain pair                            # a QR code for the owner's Saltix: pairs this computer's own server key
 npx grain pair --no-wait                  # the offer only (a coding agent shows it), then grain pair to wait
 npx grain pair --new                      # a new key for the same app: rotation, or a key that stopped working
-npx grain doctor                          # the project's state and the exact next step
+npx grain doctor                          # the project's state and the exact next step; exit 0, 1 or 75 (below)
 npx grain configure --slug dice --server server.key --category games   # the registry names the server key
 npx grain app-key make --slug dice        # app.key: its developer key, owner-only, never printed
 npx grain app-key --file app.key          # a developer key's public parts, and whether the registry names it
@@ -185,7 +189,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain help <command>` (or `grain <command> --help`, `-h`) prints that command's part of the help and runs nothing;
   `grain --version` names the tool's version. A flag's value is the next word or comes after `=` (`--node=URL`); a
   switch (`--chat`, `--wallet`, `--wait`, `--no-wait`, `--public`, `--private`, `--clear`, `--offline`, `--revoke-all`, `--new`,
-  `--json`, `--hosted`, `--fix`)
+  `--json`, `--hosted`, `--fix`, `--check`, `--tap`)
   takes none, so `grain init --chat coach` makes `coach`. A flag a command does not take is refused (exit 2), never
   ignored.
 - A registry call signed with a key file (`publish`, `retire`, `configure`, `access`, `rate`, `bind`, `profile`)
@@ -194,7 +198,11 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   6 (it gives up after 6 minutes a transaction, and the next run goes on). Meanwhile it says what it waits for and for
   how long: one line rewritten on a terminal, a line every 15 seconds elsewhere. **A coding agent runs these commands in
   the background or with a timeout of 10 minutes or more**, or passes `--no-wait`, which returns once the pool took the
-  transaction, then asks `grain doctor` (or `grain show`) until it landed. Each call carries the account's nonce, and a
+  transaction, then asks `grain doctor` until it says it landed: what `publish`, `access` and `profile` sent for the
+  project's app is kept in `.grain/publish.json`, and `grain doctor` says where each stands until it landed (`grain show`
+  for any other call). An owner's call that would change nothing the registry holds (`access`, `profile`, `configure`,
+  `bind`: the same access, words, keys or app) says "nothing to change", signs and sends nothing, and exits 0, as
+  `grain publish` does with nothing changed. Each call carries the account's nonce, and a
   profile its revision, as the node holds them, so the next call is built above it; a call the pool refuses because the
   account's earlier one is still pending (another command at the same time) is built again once that landed.
 - `grain dev --check` drives that simulator in a headless Chrome, Chromium, Edge or Brave of this computer
@@ -205,7 +213,13 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   and `report.json` in `.grain/check/`; exit 1 on an error. What stays under the navigation bar: an element fixed, or
   sticky to the bottom, there as the page opens; or one that scrolls with the page still there with it scrolled to its
   end (a page with no room below its last button); a button at a long page's fold, which the page scrolls clear, is
-  not. No browser is downloaded; with none, it says so.
+  not. No browser is downloaded; with none, it says so. `--check --tap` then taps each of the page's buttons once, as a
+  person would, at the phone's size in the dark theme (buttons only, never a link; at most 30): a tap after which the
+  page throws, or asks Saltix for something it refuses (a permission the manifest lacks, a call without a tap's right),
+  is an error; one that changes nothing on the page and asks Saltix for nothing, a button something else covers, and a
+  page that would leave for another origin are warnings. It stays on this computer: the page is never navigated away
+  (the check stops such a document before it loads), no window opens, and a payment is declined (4001, as a user may
+  decline one); a user's own "no" is never an error. A screenshot of the page after each tap goes to `.grain/check/`.
 - `grain dev` signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
@@ -233,7 +247,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain publish` puts an app's page straight into the network (Saltix [12-grains §10](docs/protocol/grains.md#10-for-developers),
   [32-images §7](docs/protocol/images.md#7-uploading)): it seals `public/` (the bundle check every node runs, run here
   first), names the bundle's sources by the network's protocol (none from version 2; before it, the network's own copies
-  at up to 3 relays of its relay list), and with a server key the registry names for the app (`grain pair`'s `app.key`,
+  at up to 3 relays of its relay list: [where the bundle goes](docs/how-it-works.md#where-the-bundle-goes)), and with a server key the registry names for the app (`grain pair`'s `app.key`,
   `--app-key`, or `SALTIX_APP_KEY`) uploads the bundle at once on that key's statement, in pieces, resuming where the
   node stands after a break and waiting out a busy one: the network holds it pending for a day, so the owner signs
   whenever they like and your computer need not stay on. Without one (a first version), it uploads the bundle once the
@@ -248,8 +262,10 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `salt:grain-publish?m=…` as a QR code (and `.grain/publish.html`): scan it with the owner's Saltix, which fills in its
   account's key, checks the manifest and the registry, shows the grain and the deposit and, after the PIN, signs and
   registers it (or records a newer version). The tool waits for the registry and writes `signed.json`. The owner's key
-  never leaves the phone. A first version a publishing link registers is public (the wallet registers it so): make it
-  private in Saltix while you develop.
+  never leaves the phone. A first version a publishing link registers is private unless the owner switches on **Public
+  in the Marketplace** on Saltix's sheet (Saltix 0.1.61 and later, which sends that call itself once the registration
+  landed); an older Saltix registers it public: then `grain access --slug <slug> --private` (or My apps → the app →
+  Access). `grain publish` says so, and `grain doctor` says which it became.
 - **A key file signs an owner's call by itself when its account owns the app** (one it registered); `--key` names one
   explicitly, which a registration needs (`grain init`'s `owner.key` never registers an app by itself), and `--wallet`
   always asks Saltix. For devnets and the test network ([No phone, test network](docs/how-it-works.md#no-phone-test-network)):
@@ -310,12 +326,13 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `replaced`, `retired`, `unregistered`, `other_network`, `invalid` or `unknown`, one line on why, and the command to
   run next (`--json` for a program; exit 0 when paired or not needed). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
   `chat.json`'s version, `npm install`, a page's bundle and where its publish stands, `not_uploaded`, `pending`,
-  `waiting_for_owner`, `pending_expired` or `published`, what the registry holds, a transaction a key file sent that has
-  not landed yet, whether the app is public or private (and **public, but should be private** while a key file's
-  registration is still to be made private), the icon, the Connect profile: `connect.json` as `grain lint` checks it
-  before the app is registered, the registry's after) and ends with the exact next step; a page alone needs no paired
-  key, and before its first publish it says what registering the slug takes (the deposit and the fees; on the test
-  network without a phone, `grain faucet --wait` and `grain publish --key owner.key`). Both only read.
+  `waiting_for_owner`, `pending_expired` or `published`, what the registry holds, each transaction a key file here sent
+  until it landed, who opens the app (and **public, but should be private** while a key file's registration is still to
+  be made private), the icon, the Connect profile: `connect.json` as `grain lint` checks it before the app is
+  registered, the registry's after) and ends with the exact next step; a page alone needs no paired key, and before its
+  first publish it says what registering the slug takes (the deposit and the fees of the manifest as `grain publish`
+  will send it, its sources included; on the test network without a phone, `grain faucet --wait` and `grain publish
+  --key owner.key`). Both only read; what `grain doctor` says, and its exit status, [below](#grain-doctor-where-a-project-stands-and-its-exit-status).
 - Every command run in an app's project appends its steps to `.grain/log.jsonl` ([docs/devex.md](docs/devex.md#the-steps-log)):
   the command, the step, its outcome, a reason code, the milliseconds, the network's kind; never a key, an address, a
   slug, a path or anything typed; its last line the exit, a stop by Ctrl-C or SIGTERM included. `SALTIX_GRAIN_LOG=off`
@@ -339,6 +356,32 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   one with no picture: one or two letters or digits drawn bold (a stroke near a quarter of their height) inside the
   keyline circle on `--background` (else a colour the slug picks), from a stroke font of its own, the same bytes on any
   computer.
+
+### `grain doctor`: where a project stands, and its exit status
+
+Each line is a finding: `ok` (in order), `fix` (something to do: the arrow says what), or `wait` (nothing to do but wait
+for the network: a transaction on its way). The last line, `next:`, is the first thing to do, else what to wait for,
+else `nothing: …`. `--json` gives the same as `{status, publish, outcome, exit, findings, next}`, each finding
+`{ok, what, detail, next?, waiting?}`.
+
+| Exit | `outcome` | Means |
+|---|---|---|
+| 0 | `done` | nothing left to do |
+| 1 | `fix` | something to do or fix: `next` says what (it comes first even while a transaction is on its way, since it can be done meanwhile) |
+| 75 | `waiting` | nothing to do but wait for the network: a registration, an update, an access or a profile call on its way to the registry. Ask again in a minute; a line says when it landed (`ok registry … (the transaction sent at … landed)`) |
+
+- **What is waited for**: what `grain publish`, `grain access` and `grain profile` sent with a key file for the
+  project's app, kept in `.grain/publish.json` until a command sees it land: in the pool, in a shard block on its way to
+  the registry, or not seen yet by the relay asked. One that can land no more (its last slot passed unknown to the
+  network, or the registry refused it) is something to do: the command that sends it again.
+- **`published`** means the registry names the version and the network holds its bundle: a relay that answers
+  `blob_get` with `fetching` knows the hash from the manifest and looks for the bytes, which says nothing of whether
+  anyone has them, so it counts only when this computer saw a node take them (`uploaded_at`); otherwise `grain publish`
+  is the next step. A change to `public/` or `grain.json` not published yet is something to do too (`grain publish`).
+- **Compatibility, for an agent or a script**: exit 1 used to cover waiting too, and the log's `doctor` step said
+  `refused`. Treat any status but 0 as "not done"; 75 means run `grain doctor` again later, never fix something. 75 is
+  sysexits' EX_TEMPFAIL ("try again later"), as a server that cannot work exits with 78; 2 stays the command line's
+  exit for a misuse (`grain doctor --typo`). The log says `waiting` (`doctor`) and `end` `waiting` with `exit_75`.
 
 ## The page
 

@@ -4,8 +4,8 @@
 // apps), which the tool then waits for in the registry.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
-  type GrainCall, type Handle, type RegisteredGrain, type NodeLike, AppKey, CATEGORIES, accountId, categoryOf, decodeAddress, displayHandle,
-  fromHex, grainCallProblem, grainGet, nodeCall, parseHandle, parseRoles, roleNames, toHex, serverKeyOk,
+  type ConnectProfile, type GrainCall, type Handle, type RegisteredGrain, type NodeLike, AppKey, CATEGORIES, accountId, categoryOf, decodeAddress,
+  displayHandle, encodeProfile, fromHex, grainCallProblem, grainGet, nodeCall, parseHandle, parseRoles, roleNames, toHex, serverKeyOk, unownedProfile,
 } from "@saltix/grain-server";
 import { publicKeyOf, readKey } from "./project.js";
 
@@ -114,6 +114,13 @@ export async function bindCall(node: NodeLike, typed: string, slug: string | nul
   return checked({ bind: { handle, slug } });
 }
 
+/** Whether two lists name the same members with the same roles, in any order. */
+export function sameMembers(a: ReadonlyArray<{ account: string; roles: number }>, b: ReadonlyArray<{ account: string; roles: number }>): boolean {
+  const sorted = (m: ReadonlyArray<{ account: string; roles: number }>) =>
+    JSON.stringify([...m].map(({ account, roles }) => ({ account, roles })).sort((x, y) => x.account.localeCompare(y.account)));
+  return sorted(a) === sorted(b);
+}
+
 /** Whether the registry's record is what `call` makes it (a rating: never, as nothing shows whose it is). */
 export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
   if ("register" in call || "update" in call) {
@@ -133,8 +140,7 @@ export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
   }
   if ("access" in call) {
     const g = await grainGet(node, call.access.slug);
-    const sorted = (m: Array<{ account: string; roles: number }>) => JSON.stringify([...m].sort((a, b) => a.account.localeCompare(b.account)));
-    return g !== null && g.public === call.access.public && sorted(g.members ?? []) === sorted(call.access.members);
+    return g !== null && g.public === call.access.public && sameMembers(g.members ?? [], call.access.members);
   }
   if ("bind" in call) {
     const h = await handleGet(node, call.bind.handle);
@@ -146,6 +152,39 @@ export async function holds(node: NodeLike, call: GrainCall): Promise<boolean> {
     return g !== null && (wanted === null ? (g.profile ?? null) === null : g.profile?.signature === wanted.signature);
   }
   return false;
+}
+
+/** Whether `g` holds a Connect profile that says what `profile` says: the same texts, links and subject, whatever its
+ *  owner, revision and signature (a new one always carries other ones). */
+export function profileHeld(g: RegisteredGrain | null, profile: ConnectProfile): boolean {
+  const held = g?.profile?.profile;
+  return held !== undefined && held !== null && toHex(encodeProfile(unownedProfile(held))) === toHex(encodeProfile(unownedProfile(profile)));
+}
+
+/**
+ * Whether the registry holds already what `call` would make it, so that nothing is signed or sent: the access, the
+ * server keys and category, a username's app as they are; a profile by its content (`profileHeld`). A registration, an
+ * update, a retirement and a rating are never "unchanged": each command says what it does with them.
+ */
+export async function unchanged(node: NodeLike, call: GrainCall): Promise<boolean> {
+  if ("profile" in call && call.profile.profile !== null) return profileHeld(await grainGet(node, call.profile.slug), call.profile.profile.profile);
+  if ("access" in call || "configure" in call || "configureProven" in call || "bind" in call || "profile" in call) return holds(node, call);
+  return false;
+}
+
+/** What the registry holds already, for a call that changes nothing (`unchanged`), in words. */
+export function unchangedWords(call: GrainCall): string {
+  if ("access" in call) {
+    const a = call.access;
+    const n = a.members.length;
+    return `${a.slug} is ${a.public ? "public" : "private"} with ${n === 0 ? "no members" : `these ${n} member${n === 1 ? "" : "s"}`} already, as asked`;
+  }
+  if ("configure" in call) return `the registry names these server keys and category ${CATEGORIES[call.configure.category]} for ${call.configure.slug} already`;
+  if ("bind" in call) return `${displayHandle(call.bind.handle)} ${call.bind.slug === null ? "opens no app" : `opens ${call.bind.slug}`} already`;
+  if ("profile" in call) {
+    return call.profile.profile === null ? `${call.profile.slug} has no Connect profile already` : `the registry holds ${call.profile.slug}'s Connect profile with these words already`;
+  }
+  return "the registry holds it already";
 }
 
 /** Wait until the registry holds what `call` makes it, at most `ms`: the transaction landed, or the owner did it in
