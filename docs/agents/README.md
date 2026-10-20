@@ -8,7 +8,8 @@ and the lifecycle as one checklist. A page alone needs none of the server's step
 [quick path](../../AGENTS.md#quick-path-a-page-only-app) is all of it. These pages go on from it:
 
 - [Building an app](app.md): from `grain status` and `grain pair` (the server's key is paired by a QR code, never
-  copied) to an app that runs, is tested and ships; the Connect profile; publishing a page into the network
+  copied; on a test network closed by access codes, with the code the person gives) to an app that runs, is tested and
+  ships; the Connect profile; publishing a page into the network
   (`grain publish`, no hosting) and its icon (`grain icon`); the rules every app follows; how to act on an error report
   pasted from Saltix's console.
 - [Working on the SDK](sdk.md): this repository's map, its commands and tests, the golden vectors, the decisions the
@@ -22,7 +23,8 @@ publishing), [grain chats](../protocol/grain-chats.md) (22-grain-chats: specs, r
 [app studio](../protocol/app-studio.md) (24-app-studio: pairing a server, developer keys, private apps, members),
 [connect](../protocol/connect.md) (19-connect: the Connect profile and sheet, Sign in with Saltix),
 [images](../protocol/images.md) (32-images: the icon standard, bundles the network keeps and their upload),
-[relays](../protocol/relays.md) (09-relay: relays, files), [the wallet interface](../protocol/wallet-interface.md) and
+[relays](../protocol/relays.md) (09-relay: relays, files), [the gate](../protocol/gate.md) (33-gate: a test network's
+access grants, which a paired server never needs), [the wallet interface](../protocol/wallet-interface.md) and
 [the basics](../protocol/basics.md) (addresses, amounts, keys, people's names). When a page here and a protocol page
 disagree, the protocol page wins and this page is a bug; when a protocol page and a golden vector disagree, the vector
 wins.

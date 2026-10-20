@@ -329,7 +329,8 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 | `key_made`, `key_reused` | a new key in `.grain/pair.key`, or the one an earlier offer made |
 | `offer_made`, `offer_shown_again` | a new offer, or the one still living |
 | `offer` | `no_wait` (`--no-wait`: shown, not waited for); `offer_expired` (timeout: nobody asked in 30 minutes) |
-| `relay` | `ok`, or `network_unreachable`: no relay took the key's registration |
+| `gate` | this computer's access on a test network closed by access codes: `ok` with `kept` (the grant kept here, still good) or `redeemed` (a code's, from the network's gate); `refused` with `code_needed` (no code, nobody at a terminal), `code_length`, `code_letters` (mistyped: the gate was not asked), or the gate's word (`rejected`, `rate_limited`, `locked`, `unattested_off`, `network`, `challenge`, `unavailable`, `storage`, `malformed`, `attestation`, `unreachable`, `answer`) |
+| `relay` | `ok`, or `network_unreachable`: no relay took the key's registration; `refused` with `access_<reason>` (the relays refused this computer's access, or it ended while it waited: `access_expired`, `access_gate`, `access_time`, …) |
 | `request` | the answer to a request: `accepted`, `used`, `expired`, `unknown`, `other_app`, `not_owner`; a frame that was not a request: `frame_not_pairing`, `frame_malformed`, `frame_slug`, `frame_unread` |
 | `registry` | timeout: `answered_not_named` (Saltix was answered, its transaction has not named the key: a managed owner's delay, a cancelled PIN) or `not_asked` |
 | `paired` | `app.key` and `app.json` written |
@@ -356,7 +357,8 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 | `profile` | `refused` before anything is signed: `connect_template` (`connect.json` still holds `grain init`'s words), `placeholder_link` |
 | `icon` | `uploaded`, `held`, `none` (the manifest names no icon); `refused` with `file_missing` or the node's reason |
 | `published` | the publish is done: `sealed`, `hosted` or `chat`; `unchanged` when nothing was signed, sent or uploaded |
-| `end` | the exit: `ok` (with `sigint`, `sigterm` or `sighup` for `grain dev` stopped while it served: Ctrl-C, a supervisor, a closed terminal, however it was launched, `npx grain dev` included), `waiting` with `exit_75` (`grain doctor` while it only waits for the network), or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `<step>_<reason>` of a publish that stopped (`upload_busy`, `form_hosted_entry`, `sign_no_salt`, `key_key_file_mode`, …), `icon_<reason>`, `node_refused`, `network_unreachable`, `fs_<code>`, `sigint`, `sigterm` or `sighup` (a run cut short: Ctrl-C, a tool's timeout, a closed terminal), `exit_<n>` or `error`; only `kill -9` leaves a run with no `end` |
+| `end` | the exit: `ok` (with `sigint`, `sigterm` or `sighup` for `grain dev` stopped while it served: Ctrl-C, a supervisor, a closed terminal, however it was launched, `npx grain dev` included), `waiting` with `exit_75` (`grain doctor` while it only waits for the network), or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `access_code_needed`, `access_<reason>`
+(the relays refused this computer's access), `gate_<error>` (the gate refused the code), `<step>_<reason>` of a publish that stopped (`upload_busy`, `form_hosted_entry`, `sign_no_salt`, `key_key_file_mode`, …), `icon_<reason>`, `node_refused`, `network_unreachable`, `fs_<code>`, `sigint`, `sigterm` or `sighup` (a run cut short: Ctrl-C, a tool's timeout, a closed terminal), `exit_<n>` or `error`; only `kill -9` leaves a run with no `end` |
 
 ## For the owner: what needs the protocol or Saltix
 

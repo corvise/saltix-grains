@@ -58,7 +58,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | Package | What it is |
 |---|---|
 | [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `slugLink()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `shortAddress()` (an address as Saltix shortens it, `dsalt1qabcd…uvwxyz`), `grain.manage.open()` |
-| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, and the grain's chat (`ChatServer`, from a developer key alone); `@saltix/grain-server/web` is what runs in a page |
+| [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, the grain's chat (`ChatServer`, from a developer key alone), and access grants where a test network's relays require them (`access.ts`, `gate.ts`); `@saltix/grain-server/web` is what runs in a page |
 | [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: a preview of Saltix's Connect sheet from `connect.json` before the app opens, the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
@@ -80,9 +80,9 @@ the registry transactions of [12-grains](docs/protocol/grains.md) and [24-app-st
 chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
 apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json`, the
 Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json`, the pairing offers, frames
-and judgments of `vectors/server-pairing-v1.json` and the named blobs of `vectors/images-v1.json` (the image and bundle
-checks, a bundle as `grain bundle` writes it, the server key's statement for an upload, the frames) byte for byte,
-refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
+and judgments of `vectors/server-pairing-v1.json`, the named blobs of `vectors/images-v1.json` (the image and bundle
+checks, a bundle as `grain bundle` writes it, the server key's statement for an upload, the frames) and a test network's
+access grants, tokens and the relay's refusals of `vectors/gate-v1.json` byte for byte, refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
 `vectors/SOURCE` names the protocol commit and each file's blob id, which CI holds them to
 (`node scripts/check-vectors.mjs`).
 
@@ -126,6 +126,18 @@ a developer key names the genesis it was made on, and the SDK refuses a key of a
   through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`.
 - **Test SALT**: `grain faucet` asks the test network's faucet for owner.key's account (or `--address`), once every 5
   minutes; `--wait` until it is there. Then `grain publish --key owner.key` can pay the deposit.
+- **A test network closed by access codes** (its gate: Saltix [33-gate](docs/protocol/gate.md)): its relays let a
+  connection in only with an access grant, and their wallet interface takes writes (`faucet_request`,
+  `transaction_submit`) only with one; `node_status` says so (`access`). A paired server needs nothing: relays let a
+  registered server key in. What needs a grant on this computer is `grain pair` before its key is paired, and a write
+  through the relays (`grain faucet`, a key file's transaction): the command asks for an **access code** (the network's
+  operator gives them, made in Saltix Pass or with the operator's bot) by `--access-code XXXXX-XXXXX`, the environment
+  (`SALTIX_ACCESS_CODE`, for a coding agent) or at the terminal, redeems it at the network's gate
+  (`https://api.saltix.io`; `SALTIX_GATE` names another) for an unattested grant, since a computer cannot attest its
+  key (**at most 24 hours** of the code's access length), says when it ends, and keeps it in `.grain/access.json` with
+  its P-256 key in `.grain/access.key` (owner-only, out of git, never printed) for the commands after it. Every
+  refusal, the gate's and the relays', is said in plain words with what to do; `grain status` names `--access-code`
+  while a code is needed.
 - **Uploads go through the same relays**: `grain publish` puts a page's bundle and its icon into the network through
   the relay that answers (its gateway's `blob_put`), and the network carries them on to the servers that keep them
   ([where the bundle goes](docs/how-it-works.md#where-the-bundle-goes)).
@@ -174,6 +186,7 @@ npx grain status                          # is this project's server paired with
 npx grain pair                            # a QR code for the owner's Saltix: pairs this computer's own server key
 npx grain pair --no-wait                  # the offer only (a coding agent shows it), then grain pair to wait
 npx grain pair --new                      # a new key for the same app: rotation, or a key that stopped working
+npx grain pair --access-code XXXXX-XXXXX  # on a test network closed by access codes: this computer's grant first
 npx grain doctor                          # the project's state and the exact next step; exit 0, 1 or 75 (below)
 npx grain configure --slug dice --server server.key --category games   # the registry names the server key
 npx grain app-key make --slug dice        # app.key: its developer key, owner-only, never printed
@@ -330,7 +343,11 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   (`--timeout`, 600 seconds) until it names the key, then writes `app.key` (owner-only, the developer key's form) and
   `app.json` (the app, the network, the key's public half), and keeps `app.key`, `*.key` and `.grain/` out of git.
   Run again, it shows the same offer while it lives (30 minutes) and finishes once Saltix's transaction landed (a
-  managed account's may wait its delay). `--new` pairs a new key and keeps the old `app.key` in `.grain/`.
+  managed account's may wait its delay). `--new` pairs a new key and keeps the old `app.key` in `.grain/`. On a test
+  network closed by access codes it first gets this computer's grant (above, *Networks*): the kept one while it lasts,
+  else one for the code given, before the offer is shown, so a missing or refused code stops it before anyone scans; if
+  the access ends while it waits, it says so and the next run (with a new code) shows the same offer. Once paired it
+  never asks for a code.
 - `grain status` prints `paired`, `not_needed` (a page alone: nothing to pair), `pairing`, `unpaired`, `revoked`,
   `replaced`, `retired`, `unregistered`, `other_network`, `invalid` or `unknown`, one line on why, and the command to
   run next (`--json` for a program, `next` in the same words, `nothing: …` once paired, never null; exit 0 when paired
@@ -549,7 +566,13 @@ The wallet checks the grant against the manifest's sponsor and network; the exch
 itself, its messaging key derived from that key (`serverMessagingSecret`); it trusts a relay's self-signed
 certificate only by the hash in the relay's record, takes users' messaging keys only from records it checked,
 acknowledges kept frames with a signed proof, and reconnects on its own, to another relay when one fails. Its
-frames use the free share for now. `notificationProblem` checks a notification as a wallet does: signed by the owner key,
+frames use the free share for now. On a test network closed by access codes ([the gate](docs/protocol/gate.md)) a key
+the registry names for a live grain registers as anywhere else; any other key (a certified one: `ChatServer`'s
+`access`) passes `access`, an `AccessCredential` (`AccessKey` and the grant), and shows a token only where a relay's
+hello asks. A refusal is an `AccessRefused` (its `reason` the relay's word, `ACCESS_REASONS` in words) from `connect`,
+and the `accessRefused` and `accessEnded` events and `accessLost` later. `RelayGateways.useAccess` does the same for
+writes through the relays' wallet interface, and `@saltix/grain-server/dev` has a relay that requires access
+(`createDevRelay({ access })`) and a gate (`createDevGate`) to test against. `notificationProblem` checks a notification as a wallet does: signed by the owner key,
 a certified key, or a key the registry names (`servers`).
 
 The manifest your site serves at `/.well-known/saltix-grain` is `signManifest(manifest,

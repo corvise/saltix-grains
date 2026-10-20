@@ -2,7 +2,8 @@
 
 > Reflects Saltix 09-relay §1.1–§1.3, §2, §3, §5, §6, §10.1, §10.3, §10.5, §10.5.2 and §10.7 (version 2, with the
 > changes of 2026-10-15 to 2026-10-19), 10-storage §4 and 11-access §2–§5 (approved 2026-10-05), as of corvise/saltix
-> `7d3744c5` (2026-10-19). Only the client side an app's server or a Connect page uses.
+> `7d3744c5` (2026-10-19); and what 33-gate added to 09-relay §3 and §10.7 (a test network's access grants), as of
+> corvise/saltix `6c965007` (2026-10-21). Only the client side an app's server or a Connect page uses.
 
 Relays carry messages between clients: Saltix wallets, grains' servers, Connect pages. Clients encrypt the content themselves; a relay cannot read it. Any relay is an entry point: a client connects to one,
 and relays pass frames to each other and keep mailboxes for addresses that are offline.
@@ -33,12 +34,14 @@ WebSocket; every frame is a JSON object with a `type`. Binary values are base64u
 padding); addresses are Bech32m of the relay's network. The relay speaks first:
 
 ```text
-hello {nonce, sts, relay, network, prices}
+hello {nonce, sts, relay, network, prices, access?}
   nonce:   16 random bytes of this connection: an address record must name it
   sts:     the relay's clock, Unix ms
   relay:   its node key
   network: "mainnet", "testnet" or "devnet"
   prices:  {frame, file_mib, turn_kib}: µWORK on the paid lane, decimal strings
+  access:  {gates: [base64url key, …]} where the relay's node runs a test network's gate: every register then
+           carries an access token, unless a registered server key signed its record ([the gate](gate.md#5-at-the-relays-and-the-wallet-interface))
 ```
 
 The relay may also send frames nobody asked for (such as `account {…}` when a registered address's account changes on
@@ -83,10 +86,18 @@ ahead, at most 400 days long, issued at or after `devices_after`); and the recor
 of one address the newer binding wins, then the newer record.
 
 ```text
-register {record, invisible?}   record: base64url Borsh(AddressRecord)
+register {record, invisible?, access?}   record: base64url Borsh(AddressRecord); access: base64url Borsh(AccessToken)
   → registered {pubkey, keyEpoch, turn, profile}
-  → error {message: "auth_failed", detail, keyEpoch?, keyIssuedAt?, issuedAt?, binding?}
+  → error {message: "auth_failed", detail, keyEpoch?, keyIssuedAt?, issuedAt?, binding?, access?}
 ```
+
+**On a test network with a gate** (the hello names `access`), a record self-signed by a registered server key of a live
+grain registers as anywhere else: a paired server shows nothing. Any other key shows an access token
+([the gate §3](gate.md#3-what-a-client-presents)): without a valid one the answer is `auth_failed` with `detail:
+"access"` and `access` the reason (`required`, `expired`, `gate`, …). When the access ends the relay sends `error
+{message: "access_ended"}` and closes the connection. `RelayClient` shows the grant its `access` option gives, only
+where the hello asks; a round of relays that all refused access rejects `connect` with an `AccessRefused`, and the
+events `accessRefused` and `accessEnded` say what happened later.
 
 `detail` `"stale"` means the relays know a newer binding of the address, or a newer record of this signer
 (`keyIssuedAt`, `issuedAt` and `binding` say which): a server signs a new binding and a new record dated after both,
@@ -303,7 +314,8 @@ the app's to do: the sponsor keeps WORK in its channel, and the certificate caps
 | Files | 50 MiB + 16 bytes each; 4 uploads in progress; 100 MiB a day free; 8 requests at once per IP |
 | `grain_stats` | one a minute, burst 4 |
 
-Errors are `error {message, detail?}`: `auth_failed`, `not_registered`, `already_registered`, `too_many_aliases`,
+Errors are `error {message, detail?}`: `auth_failed` (`detail: "access"` with `access: <reason>` on a gated network),
+`access_ended` (the connection's access ended: the relay closes it), `not_registered`, `already_registered`, `too_many_aliases`,
 `bad_frame`, `frame_too_large`, `payload_too_large`, `bad_address` (`to` is not of this network), `bad_proof`,
 `rate_limited` (`detail` names what was refused), `file_refused`, `payment_required`, `too_many_connections`, `busy`,
 `sid_taken`, `unsupported` (an unknown frame type, `detail` naming it). A frame refused for the rate is not served and
@@ -312,4 +324,8 @@ not billed.
 ## The wallet interface at a relay
 
 Every relay also serves the wallet interface at `POST /rpc` on its client port, over the same pinned TLS: that is how
-the SDK reaches the network without a node of its own ([wallet interface](wallet-interface.md)).
+the SDK reaches the network without a node of its own ([wallet interface](wallet-interface.md)). Where the relay's node
+runs a gate, `transaction_submit` and `faucet_request` there need the header `X-Saltix-Access` with an access token for
+that relay's node key (`relay_list`'s `key`); without a valid one the answer is HTTP 401 with the JSON-RPC error
+`-32001`, message `"access"`, `data: {access: <reason>}`. Reads stay open. `RelayGateways.useAccess` gives the
+credential: a write refused for want of one goes again with a token ([the gate §5](gate.md#5-at-the-relays-and-the-wallet-interface)).

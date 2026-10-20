@@ -4,6 +4,22 @@
 
 ### Added
 
+- **A test network closed by access codes** (Saltix 33-gate, [the gate](docs/protocol/gate.md)): `grain pair` on such a
+  network (`node_status.access`) gets this computer's access grant before it shows the offer, from an access code given
+  by `--access-code`, `SALTIX_ACCESS_CODE` or typed at the terminal, redeemed at the network's gate
+  (`https://api.saltix.io`, `SALTIX_GATE`) as an unattested grant (`unattested: "computer"`, at most 24 hours), kept in
+  `.grain/access.json` with its P-256 key in `.grain/access.key` (owner-only, never printed or logged) and reused while
+  it lasts; it says when the access ends, and stops in words if it ends while it waits. A paired server needs no code
+  and is never asked for one. `grain faucet` and a key file's transactions through the relays show the same grant when
+  a relay asks (`RelayGateways.useAccess`). Every refusal of the gate and of the relays is said in plain words with what
+  to do; `grain status` names `--access-code` while a code is needed. In `@saltix/grain-server`: the grant, the token
+  and the relay's check byte for byte with `vectors/gate-v1.json` (`AccessKey`, `accessToken`, `checkAccessToken`),
+  `RelayClient`'s `access` (shown only where a relay's hello asks; `AccessRefused`, `accessEnded`, `accessLost`),
+  `ChatServer`'s `access` for a certified key, `redeemComputerAccess` and `GATE_WORDS`; in `/dev`, `createDevGate` and
+  `createDevRelay({ access })`.
+- **`scripts/sync-vectors.sh <checkout> <file>…`** syncs the files named alone, each `vectors/SOURCE` line then naming
+  its own commit; `check-vectors.mjs` reads it. `gate-v1.json` came that way, from the protocol's `6c96500`.
+
 - **`grain dev --check --tap` taps the buttons a tap brings up** ("Clear history" once there is a history): after each
   tap the simulator names the buttons shown that were never seen (`saltixSimulator.more()`), tapped in their turn within
   30 buttons and 40 s; those left are a warning ("N buttons appeared later and were not tapped").

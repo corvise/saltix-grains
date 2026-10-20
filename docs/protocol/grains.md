@@ -2,7 +2,8 @@
 
 > Reflects Saltix 12-grains (approved 2026-10-05; bridge version 3, the page's frame, check-first sign-in, invoices
 > from a registered server key and the Connect profile, 2026-10-16; the icon standard and bundles the network keeps,
-> 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19). Section numbers are the specification's.
+> 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19); with §5.5's sentence on a gated test network, as of
+> corvise/saltix `6c965007` (2026-10-21). Section numbers are the specification's.
 
 A **grain** is an app that opens inside a Saltix wallet, from the Apps section, a chat or a link, with the wallet's
 identity, payments, storage and relays at hand and never its keys. Saltix calls grains *mini-apps* in what users read;
@@ -438,7 +439,9 @@ closed, anything else to its alias is taken off the mailbox and dropped: a grain
 with an address record that key signs itself and a binding to its messaging key, whose secret is
 `derive("Saltix grain server messaging key v1", the key's Ed25519 secret)`: one key keeps one messaging key across
 restarts and SDKs, and users' wallets keep sealing to it ([relays](relays.md#registering-an-address)). It pays for its
-frames like any sender. The SDK: `RelayClient`, `signNotification`, `notificationProblem`.
+frames like any sender. On a test network with a gate ([the gate](gate.md)), a relay lets a record self-signed by a
+registered server key of a live grain in without an access grant; a server under the owner's key, or a certified one,
+needs one like any client (`RelayClient`'s `access`). The SDK: `RelayClient`, `signNotification`, `notificationProblem`.
 
 ## 6. Permissions
 

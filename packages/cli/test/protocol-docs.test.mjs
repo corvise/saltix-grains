@@ -109,7 +109,7 @@ test("nothing links to the private repositories, nor sends a reader to the proto
 test("the protocol's pages each name the protocol commit they reflect, and the index lists them all", () => {
   const dir = join(root, "docs", "protocol");
   const pages = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "README.md").sort();
-  assert.deepEqual(pages, ["app-studio.md", "basics.md", "connect.md", "grain-chats.md", "grains.md", "images.md", "relays.md", "wallet-interface.md"]);
+  assert.deepEqual(pages, ["app-studio.md", "basics.md", "connect.md", "gate.md", "grain-chats.md", "grains.md", "images.md", "relays.md", "wallet-interface.md"]);
   const index = readFileSync(join(dir, "README.md"), "utf8");
   for (const page of pages) {
     const text = readFileSync(join(dir, page), "utf8");

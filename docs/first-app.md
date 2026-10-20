@@ -52,6 +52,11 @@ The terminal ends with `Paired: this server speaks for your-app on devnet (key 1
 - A managed account's call may wait its delay: `npx grain pair` again finishes once the registry names the key.
 - A coding agent that cannot leave a command running while it shows you the QR code runs `npx grain pair --no-wait`
   first, then `npx grain pair` to wait.
+- **A test network closed by access codes** asks for one first: `grain pair` says `This test network lets in only
+  people with an access code` and waits for you to type it (`XXXXX-XXXXX`, from the network's operator: made in Saltix
+  Pass or with the operator's bot), or takes `--access-code` (a coding agent asks you for the code and passes it). It
+  says until when this computer's access lasts (at most 24 hours of the code's length) and keeps it in `.grain/`; the
+  paired server needs no code ([the gate](protocol/gate.md)).
 - **To rotate the key**, or replace one that stopped working (a reset network, a key removed): `npx grain pair --new`,
   then **Use only this server** in Saltix.
 

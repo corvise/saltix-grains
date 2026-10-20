@@ -83,7 +83,12 @@ you were given, an app is waiting for you:
    or My apps → Pair a server), check that Saltix shows the same code, keep **Add this server** and confirm with the
    PIN. `grain pair` writes `app.key` and `app.json` once the registry names the key; the
    key is made on this computer and never leaves it. Then `npx grain doctor` names what is left. **Never ask the person
-   to paste, type or send a key.**
+   to paste, type or send a key.** **On a test network closed by access codes** (`grain status`'s `next` names
+   `--access-code`), `grain pair` first needs one: ask the person for an access code (the network's operator gives
+   them, made in Saltix Pass or with the operator's bot), run `npx grain pair --access-code XXXXX-XXXXX` (or set
+   `SALTIX_ACCESS_CODE`), and never repeat the code back or write it anywhere. A computer's access lasts at most 24
+   hours and is kept in `.grain/`; the paired server needs none, so never ask for a code then
+   ([on a test network closed by access codes](docs/agents/app.md#on-a-test-network-closed-by-access-codes)).
 4. **A developer key is only for a host where no command runs.** If one reaches you anyway, read only its public parts:
    `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network (`dsalt`: Saltix's test network, of the devnet
    kind; `tsalt`: a testnet; `salt`: the main network), `genesis` the first 8 bytes of its genesis hash in hex, `slug`
@@ -228,12 +233,16 @@ not open: update Saltix ([docs/payments.md](docs/payments.md)).
 **The server's key is paired, never copied** (Saltix 24-app-studio [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). Start every session in an app's project
 with `grain status` (a page alone: `not_needed`, nothing to pair); when it is not `paired`, run `grain pair`, show the user its QR code (or `.grain/pair.html`) and the
 6-digit code, and wait while they scan it with Saltix and confirm: the key is made on this computer and never leaves it,
-and `grain pair` writes `app.key` once the registry names it. Never ask the user to paste, type or send a key; a developer
+and `grain pair` writes `app.key` once the registry names it. On a test network closed by access codes, `grain pair`
+(and, without a phone, `grain faucet` and a key file's transactions) first gets this computer's access grant from a code
+the person gives (`--access-code`, `SALTIX_ACCESS_CODE`): at most 24 hours, kept in `.grain/access.json`; the paired
+server needs none. Never ask the user to paste, type or send a key; a developer
 key is only for a host where no command runs. `grain doctor` names the next step. Every command logs its steps to
 `.grain/log.jsonl`, codes and timings only.
 
-Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, a developer key `saltix-app:1:…`) are never committed,
-printed, logged or pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
+Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, `.grain/access.key` and `.grain/access.json`, a
+developer key `saltix-app:1:…`) are never committed, printed, logged or pasted into a chat; an access code the person
+gives is passed to `grain pair --access-code` once, never repeated back or written anywhere. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
 status of a dead key, payments, the Connect profile, people's names) are in
 [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows). Two of them, in short:
 raise `chat.json`'s `version` with every change of it (the server refuses to start on a spec changed under a version it
