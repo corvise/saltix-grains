@@ -34,3 +34,16 @@ test("a vector edited by hand, one SOURCE does not name, or one missing, is refu
   assert.match(problems.join("\n"), /extra-v1\.json: not in SOURCE/);
   assert.match(problems.join("\n"), /handles-v1\.json: in SOURCE, missing here/);
 });
+
+test("a file synced alone names the commit it came from; any other line is refused", () => {
+  const { commit, ids, commits } = readSource(vectors);
+  for (const [f] of ids) assert.match(commits.get(f), /^[0-9a-f]{40}$/, f);
+  // gate-v1.json came alone from the commit that added it, after SOURCE's first line.
+  assert.notEqual(commits.get("gate-v1.json"), commit);
+  assert.equal(commits.get("grains-v1.json"), commit, "the rest: the first line's");
+  const dir = scratch("vectors-");
+  cpSync(vectors, dir, { recursive: true });
+  const source = readFileSync(join(dir, "SOURCE"), "utf8");
+  writeFileSync(join(dir, "SOURCE"), source.replace(/^(gate-v1\.json [0-9a-f]{40}) [0-9a-f]{40}$/m, "$1 not-a-commit"));
+  assert.throws(() => readSource(dir), /is not "<file> <blob id>" or "<file> <blob id> <commit>"/);
+});

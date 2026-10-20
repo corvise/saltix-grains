@@ -6,16 +6,19 @@ client, in any language, reproduces them byte for byte, refusals included. The S
 (`packages/*/test/vectors.test.mjs` and the tests each format has).
 
 - **They are never edited by hand.** `SOURCE` names the protocol commit they were copied from (its first line,
-  `corvise/saltix <commit>`) and each file's git blob id at that commit; `node scripts/check-vectors.mjs`, which CI runs,
-  refuses a file whose bytes differ, one `SOURCE` does not name, and one missing. A new version of a file arrives by
-  `scripts/sync-vectors.sh` from the protocol's repository, which only its maintainers can run while that repository is
-  private.
+  `corvise/saltix <commit>`) and each file's git blob id at that commit; a file copied alone from a later commit names
+  that commit after its id (`<file> <blob id> <commit>`). `node scripts/check-vectors.mjs`, which CI runs, refuses a file
+  whose bytes differ, one `SOURCE` does not name, and one missing. A new version of a file arrives by
+  `scripts/sync-vectors.sh` from the protocol's repository (every file, or `scripts/sync-vectors.sh <checkout> <file>…`
+  for those named alone), which only its maintainers can run while that repository is private.
 - **When they and a page disagree**, the vector is right, unless the page names a protocol change made after
   `SOURCE`'s commit (below). [docs/protocol/](../docs/protocol/README.md) explains every format they hold; a file's own
   `spec` field (`"specs/12-grains.md"`, …) names the protocol document, which those pages reflect under the same name
   and section numbers.
 - **`SOURCE`'s commit** (`b9019fd`) is the protocol's change that added `images-v1.json` (named blobs: icons, avatars
-  and bundles the network keeps, 32-images); every other file's bytes are those of the commit before it. Earlier syncs
+  and bundles the network keeps, 32-images); every other file's bytes are those of the commit before it, but
+  `gate-v1.json`'s, copied alone from `6c96500` (33-gate, a test network's access grants), whose line names it: the
+  protocol's other files changed since `b9019fd` (names and numbers, images, profiles) wait for a sync of their own. Earlier syncs
   brought `ConfigureGrain` tag 39 of protocol version 2 (`grains-v1.json`, `configure-v2`), which no network runs yet,
   and the member proof's 5 minutes of clock skew (`grain-chats-v1.json`).
 - **Using one.** A file holds its `version`; the genesis hash and network its network-bound signatures use (`chain`, or
@@ -36,4 +39,5 @@ client, in any language, reproduces them byte for byte, refusals included. The S
 | `access-v1.json` | channel and stake transactions, an allowance and its request, a voucher, sponsor certificates signed by a plain key (`grant`) and a phone (`phone_grant`) | [relays](../docs/protocol/relays.md#paying-for-relays-lanes-and-sponsors) |
 | `server-pairing-v1.json` | pairing a server by QR code: offers (one for an app, one for any app with a name in Russian) with their Borsh, link, code, fingerprint and the server's address; a request and every answer as `SGP1` frames, with the proof and the payload it signs; how the computer judges requests; what readers and the wallet refuse | [app studio §3a](../docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code) |
 | `images-v1.json` | named blobs: the kinds (tag, name, hash domain, bound, type, sides); icons and avatars each kind takes with their hashes, and those the image check refuses with the reason; the monogram's colours; profiles of version 2 with an avatar; bundles as `grain bundle` writes them and as other tools do, and those the bundle check refuses; a server key's statement for a pending upload (Borsh, message, signature, and refused ones with the node's clock); the frames that carry them (`blob_put`'s pieces, answers and every refusal reason, `blob_get`, `GET /_blob/…`) | [images](../docs/protocol/images.md) |
+| `gate-v1.json` | a test network's gate: grants of each kind (TEE, StrongBox, an unlocked phone, unattested) with their Borsh, signing message and the gate's signature; a phone's delegation to a browser; tokens of a phone and of a browser to a relay with their proofs; the redemption's proof of possession; a code's canonical form and id; the tokens a relay refuses with the word it says; the limits | [the gate](../docs/protocol/gate.md) |
 | `handles-v1.json` | usernames and numbers: their forms and Borsh, what a typed text reads as, how wallets display them, and every handle transaction (`BindHandle` among them) | [basics](../docs/protocol/basics.md#usernames-and-numbers), [app studio §2](../docs/protocol/app-studio.md#2-the-registry) |
