@@ -2,10 +2,13 @@
 // public relays, each trusted only with the certificate its relay record pins (09-relay §10.7: every relay serves the
 // node's wallet interface at `POST /rpc` on its client port), the relays they know of (`relay_list`), and a view of the
 // chain the server reads its grain's registry record and its members' keys from, cached per tip.
+import { type AccessCredential, AccessRefused, accessReasonOf, accessToken } from "./access.js";
 import type { NetworkName } from "./address.js";
+import { fromHex } from "./bytes.js";
 import type { Controller } from "./member.js";
 import { RpcError, nodeOnly, rpc } from "./node.js";
 import type { RegisteredGrain } from "./registry.js";
+import { toBase64Url } from "./records.js";
 import { type RelayEndpoint, usableEndpoint } from "./relay.js";
 import { relayRequest } from "./upload.js";
 
@@ -37,6 +40,25 @@ export function nodeInterface(url: string): WalletInterface {
 
 type Request = typeof relayRequest;
 
+/** The wallet interface's calls a relay whose node runs a gate takes only with an access token (33-gate §5, 09-relay
+ *  §10.7): every read stays open. */
+export const ACCESS_METHODS: ReadonlySet<string> = new Set(["transaction_submit", "faucet_request"]);
+
+/** The JSON-RPC error of a write refused for its access (`-32001`, message `"access"`, `data: {access: <reason>}`). */
+export const ACCESS_ERROR = -32001;
+
+/** Where a relay's wallet interface refused a write for its access, its word; null for any other answer. */
+function accessRefusalOf(status: number, body: Uint8Array): AccessRefused | null {
+  if (status !== 401) return null;
+  try {
+    const reply = JSON.parse(new TextDecoder().decode(body)) as { error?: { code?: unknown; message?: unknown; data?: { access?: unknown } } };
+    if (reply.error?.code !== ACCESS_ERROR || reply.error.message !== "access") return null;
+    return new AccessRefused(accessReasonOf(reply.error.data?.access ?? "required"));
+  } catch {
+    return null;
+  }
+}
+
 /** How `RelayGateways` finds relays besides those it starts from. */
 export interface GatewayOptions {
   /**
@@ -45,6 +67,8 @@ export interface GatewayOptions {
    * replaces an older pin for the same endpoint. Off by default.
    */
   discover?: boolean;
+  /** The access a write shows where a relay requires one (`useAccess`). */
+  access?: () => Promise<AccessCredential>;
 }
 
 /**
@@ -53,14 +77,71 @@ export interface GatewayOptions {
  * alone (it does not follow the account's shard, it runs no faucet: another relay's node may); a relay that does not
  * answer, shows another certificate than its pin (nothing is sent to it), or answers with an HTTP error (`429`, say), is
  * passed over.
+ *
+ * On a test network whose relays run a gate (33-gate §5), a write (`ACCESS_METHODS`) a relay refuses for want of access
+ * is sent to it again with a token of the credential `useAccess` gives, asked for then and kept for later writes; a
+ * refusal with a token, or with no credential to give, is an `AccessRefused`. Reads never ask for one.
  */
 export class RelayGateways implements WalletInterface {
   private list: RelayEndpoint[] = [];
   private good = 0;
   private discovered = false;
+  private access: (() => Promise<AccessCredential>) | null;
+  /** The credential asked for, once: two writes at once ask for one code. */
+  private credential: Promise<AccessCredential> | null = null;
+  /** The relays' node keys by endpoint, from `relay_list`: a token names the relay it is shown to. */
+  private keys: Map<string, Uint8Array> | null = null;
 
   constructor(endpoints: readonly RelayEndpoint[], private readonly request: Request = relayRequest, private readonly options: GatewayOptions = {}) {
     this.add(endpoints);
+    this.access = options.access ?? null;
+  }
+
+  /**
+   * Where the network's relays require access for writes, the credential to show (a computer's grant, `grain faucet`
+   * and a key file's transactions): asked for only when a relay refuses a write without one, then kept. Null: none.
+   */
+  useAccess(access: (() => Promise<AccessCredential>) | null): this {
+    this.access = access;
+    this.credential = null;
+    return this;
+  }
+
+  /** The node key of the relay at `endpoint`, from `relay_list` (asked once, and again for an endpoint it did not name). */
+  private async relayKeyOf(endpoint: RelayEndpoint): Promise<Uint8Array | null> {
+    const url = new URL(endpoint.url).href;
+    if (this.keys?.has(url)) return this.keys.get(url)!;
+    let relays: Array<{ key?: unknown; endpoints?: RelayEndpoint[] }>;
+    try {
+      ({ relays } = await this.call<{ relays: typeof relays }>("relay_list"));
+    } catch {
+      return null;
+    }
+    this.keys = new Map();
+    for (const r of relays) {
+      if (typeof r.key !== "string" || !/^[0-9a-f]{64}$/.test(r.key)) continue;
+      for (const e of r.endpoints ?? []) {
+        try {
+          this.keys.set(new URL(e.url).href, fromHex(r.key, 32));
+        } catch {
+          // An endpoint that does not read is none we call.
+        }
+      }
+    }
+    return this.keys.get(url) ?? null;
+  }
+
+  /** The `X-Saltix-Access` header for `endpoint`, with the credential kept or asked for now (`ask`); null without. */
+  private async accessHeader(endpoint: RelayEndpoint, ask: boolean): Promise<Record<string, string> | null> {
+    if (this.credential === null && (!ask || !this.access)) return null;
+    const key = await this.relayKeyOf(endpoint);
+    if (!key) return null;
+    // A credential that could not be had (no code, a refused one) is asked for again by the next write.
+    this.credential ??= this.access!().catch((e: unknown) => {
+      this.credential = null;
+      throw e;
+    });
+    return { "x-saltix-access": toBase64Url(accessToken(await this.credential, key, Date.now())) };
   }
 
   /** The relays it calls. */
@@ -110,15 +191,37 @@ export class RelayGateways implements WalletInterface {
   /** `method` at the relays `order` names (indexes into the list), in turn: the first final answer, or none. */
   private async ask<T>(method: string, params: object, order: number[], failures: string[]): Promise<{ ok: true; value: T } | { ok: false }> {
     const body = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
+    const write = ACCESS_METHODS.has(method);
+    const send = (endpoint: RelayEndpoint, shown: Record<string, string> | null) =>
+      this.request(endpoint, "POST", "/rpc", { "content-type": "application/json", ...shown }, body);
     for (const at of order) {
       const endpoint = this.list[at]!;
+      let shown = write ? await this.accessHeader(endpoint, false) : null;
       let answer;
       try {
-        answer = await this.request(endpoint, "POST", "/rpc", { "content-type": "application/json" }, body);
+        answer = await send(endpoint, shown);
       } catch (e) {
         failures.push(`${endpoint.url}: ${(e as Error).message}`);
         continue;
       }
+      let refused = write ? accessRefusalOf(answer.status, answer.body) : null;
+      if (refused && shown === null && this.access) {
+        // The relay requires access: the credential is asked for now (a code, the first time), and the write sent again.
+        shown = await this.accessHeader(endpoint, true);
+        if (shown === null) {
+          failures.push(`${endpoint.url}: requires access, and the network's relay list does not name its key`);
+          continue;
+        }
+        try {
+          answer = await send(endpoint, shown);
+        } catch (e) {
+          failures.push(`${endpoint.url}: ${(e as Error).message}`);
+          continue;
+        }
+        refused = accessRefusalOf(answer.status, answer.body);
+      }
+      // Every relay of the network trusts the same gates: a refusal of access is final.
+      if (refused) throw refused;
       if (answer.status !== 200) {
         failures.push(`${endpoint.url}: HTTP ${answer.status}`);
         continue;

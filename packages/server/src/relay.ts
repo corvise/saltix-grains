@@ -4,6 +4,7 @@ import type { IncomingMessage } from "node:http";
 import type { TLSSocket } from "node:tls";
 import WebSocket from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
+import { type AccessCredential, AccessRefused, accessReasonOf, accessToken, helloGates } from "./access.js";
 import { type NetworkName, accountId, encodeAddress } from "./address.js";
 import { toHex } from "./bytes.js";
 import { rpc } from "./node.js";
@@ -41,6 +42,13 @@ export interface RelayOptions {
    * again after a restart (`ChatServer` does this, and answers each request once).
    */
   ackKept?: "on_receipt" | "by_handler";
+  /**
+   * An access grant and its key (33-gate), shown at registration where a relay requires access (its hello names
+   * `access`): for a key the registry does not name yet, such as a computer's while `grain pair` pairs it, or a
+   * certified one. A registered server key of a live grain needs none and shows none: relays let it in (12-grains §5.5).
+   * Where a relay requires access and none is given, the client registers without and the relay decides.
+   */
+  access?: AccessCredential | null;
 }
 
 /** What a relay's node made of the numbers `reportStats` sent (Saltix 09-relay §3): taken, or why not. */
@@ -104,6 +112,11 @@ export function usableEndpoint(endpoint: RelayEndpoint): boolean {
  *
  * Your frames use the relay's free share (11-access §3); a paid lane for servers comes later.
  *
+ * On a test network whose relays require access grants (33-gate), a key the registry names for a live grain registers as
+ * anywhere else; any other shows the grant `access` gives. A refusal of access is the `accessRefused` event (an
+ * `AccessRefused`, its `reason` the relay's word); a round of relays that all refused rejects `ready()` (and `connect`)
+ * with it. `accessEnded` says a relay ended the connection's access (the grant ended): it closes the connection.
+ *
  * ```ts
  * const relay = await RelayClient.connect({ node: "http://127.0.0.1:30334", secret, network: "testnet" });
  * await relay.notify(userAddress, signNotification({ slug, title: "Your move", body: "", at: Date.now() }, secret, genesis, cert));
@@ -134,6 +147,8 @@ export class RelayClient extends EventEmitter {
   private readonly slots = new Map<string, { resolve: (slot: FileSlot) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   /** The newest numbers the app reported: sent again whenever the client registers. */
   private stats: SignedGrainStats | null = null;
+  /** The access the client lost since it last registered (`accessLost`). */
+  private lost: AccessRefused | null = null;
 
   private constructor(private readonly options: RelayOptions) {
     super();
@@ -213,6 +228,14 @@ export class RelayClient extends EventEmitter {
   }
 
   /**
+   * The access this client lost since it last registered: an `AccessRefused` (`expired` once a relay ended it), or null
+   * while it holds. What the `accessEnded` and `accessRefused` events said, kept for a reader that came after them.
+   */
+  get accessLost(): AccessRefused | null {
+    return this.lost;
+  }
+
+  /**
    * Reserve an upload of `size` bytes of ciphertext next to the relay (`file_new`, 09-relay §10.5): resolves with the
    * file's id and the endpoint to send its pieces to; rejects with `FileRefused` when the relay says no.
    */
@@ -272,6 +295,13 @@ export class RelayClient extends EventEmitter {
     waiters.forEach((w) => w(new Error("relay client closed")));
   }
 
+  /** Those who wait for a registration hear why none came. */
+  private fail(error: Error): void {
+    const waiters = this.waiters;
+    this.waiters = [];
+    waiters.forEach((w) => w(error));
+  }
+
   private answerSlot(ref: string, outcome: FileSlot | Error): void {
     const pending = this.slots.get(ref);
     if (!pending) return;
@@ -321,15 +351,25 @@ export class RelayClient extends EventEmitter {
   private async run(): Promise<void> {
     let failures = 0;
     while (!this.closed) {
+      // A round in which no relay took the registration and one refused access: waiting for another round would not
+      // help those who wait, as every relay of the network trusts the same gates.
+      let refused: AccessRefused | null = null;
+      let took = false;
       for (const endpoint of await this.endpoints()) {
         if (this.closed) return;
-        const registered = await this.session(endpoint).catch((e: Error) => {
+        const outcome = await this.session(endpoint).catch((e: Error) => {
           this.log("warn", "relay_failed", { url: endpoint.url, reason: e.message });
-          return false;
+          return e;
         });
-        if (registered) failures = 0;
+        if (outcome === true) {
+          failures = 0;
+          took = true;
+        } else if (outcome instanceof AccessRefused) {
+          refused = outcome;
+        }
         if (this.closed) return;
       }
+      if (!took && refused) this.fail(refused);
       failures++;
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, Math.min(30_000, 1000 * 2 ** Math.min(failures, 5)));
@@ -371,6 +411,7 @@ export class RelayClient extends EventEmitter {
         const r = this.onFrame(ws, frame, endpoint);
         if (r === "registered") {
           registered = true;
+          this.lost = null;
           this.dialing = null;
           this.ws = ws;
           this.current = endpoint;
@@ -413,12 +454,27 @@ export class RelayClient extends EventEmitter {
         const relay = fromBase64Url(String(f.relay));
         const sts = Number(f.sts);
         if (nonce.length !== 16 || relay.length !== 32 || !Number.isSafeInteger(sts)) return new Error("malformed hello");
-        this.register(ws, relay, nonce, sts);
+        this.register(ws, relay, nonce, sts, helloGates(f.access, fromBase64Url) !== null, endpoint);
         return;
       }
       case "registered":
         return "registered";
       case "error": {
+        if (f.message === "auth_failed" && f.detail === "access") {
+          const refused = new AccessRefused(accessReasonOf(f.access ?? "required"));
+          this.log("warn", "relay_access_refused", { url: endpoint.url, reason: refused.reason });
+          this.lost = refused;
+          this.emit("accessRefused", refused);
+          return refused;
+        }
+        if (f.message === "access_ended") {
+          // The relay closes the connection after it; the next registration shows the grant again, and a relay refuses an
+          // ended one (`expired`).
+          this.log("warn", "relay_access_ended", { url: endpoint.url });
+          this.lost = new AccessRefused("expired");
+          this.emit("accessEnded");
+          return;
+        }
         if (f.message === "auth_failed" && f.detail === "stale" && this.binding) {
           // The relays know a later binding of ours (another relay's clock was ahead): sign one after it.
           this.bindingAfter = Math.max(Number(f.keyIssuedAt ?? 0), Number(f.issuedAt ?? 0), this.binding.issuedAt) + 1;
@@ -466,11 +522,18 @@ export class RelayClient extends EventEmitter {
     }
   }
 
-  private register(ws: WebSocket, relay: Uint8Array, nonce: Uint8Array, sts: number): void {
+  private register(ws: WebSocket, relay: Uint8Array, nonce: Uint8Array, sts: number, requiresAccess: boolean, endpoint: RelayEndpoint): void {
     if (!this.binding) this.binding = signKeyBinding(this.secret, messagingPublic(this.messagingSecret), Math.max(sts, this.bindingAfter));
     const issuedAt = Math.max(sts, this.binding.issuedAt);
     const record = signAddressRecord(this.secret, this.binding, relay, nonce, issuedAt);
-    ws.send(JSON.stringify({ type: "register", record: toBase64Url(encodeAddressRecord(record)) }));
+    const frame: Record<string, unknown> = { type: "register", record: toBase64Url(encodeAddressRecord(record)) };
+    if (requiresAccess) {
+      const credential = this.options.access ?? null;
+      // Made at the relay's own moment (the hello's `sts`), so this computer's clock does not decide whether it is taken.
+      if (credential) frame.access = toBase64Url(accessToken(credential, relay, sts));
+      this.log("info", "relay_access", { url: endpoint.url, shown: credential !== null });
+    }
+    ws.send(JSON.stringify(frame));
   }
 
   private async onMessage(f: Record<string, unknown>): Promise<void> {

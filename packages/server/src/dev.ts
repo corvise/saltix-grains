@@ -5,7 +5,10 @@
 //   `from`, keeps kept frames in the addressee's mailbox until a signed ack (and delivers them again on the next
 //   registration), keeps files (`file_new`, then `PUT /_file/<id>` with `X-Offset`, `GET …/status`, `POST …/done`,
 //   `GET /_file/<id>`) and an app's numbers (`grain_stats`, the newest of each grain). Plain `ws://` and `http://`:
-//   loopback only.
+//   loopback only. With `access`, it requires access grants as a test network's relay does (33-gate §5): its hello
+//   names the gates, and `register` needs a token unless the record's key is exempt (a registered server key).
+// - `createDevGate`: the test network's gate (saltix-api's interface, 33-gate §4.5) for development and tests: codes
+//   redeemed once for a grant it signs, unattested ones only (it judges no attestation), with the gate's refusals.
 // - `createDevRegistry`: what a node's wallet interface says of one grain (`node_status`, `grain_get`, `account_get`,
 //   `relay_list`): its owner, server keys, access and team, changed in place, each change a new beacon block; and a node's
 //   named blobs (`blob_put`, `blob_get`, 32-images §7–§8) as the node takes them: an icon the registry names, a bundle in
@@ -22,6 +25,7 @@ import { randomBytes } from "node:crypto";
 import { type WebSocket, WebSocketServer } from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
 import { type NetworkName, accountId, encodeAddress } from "./address.js";
+import { checkAccessToken } from "./access.js";
 import { Reader, derive, fromBase64, fromHex, toBase64, toHex } from "./bytes.js";
 import { verifyEd25519 } from "./keys.js";
 import { bundleUploadNames, bundleUploadProblem, decodeSignedBundleUpload, pendingUntil } from "./bundle-upload.js";
@@ -34,6 +38,8 @@ import type { RegisteredGrain } from "./registry.js";
 import type { RelayEndpoint } from "./relay.js";
 import { type SignedGrainStats, decodeSignedGrainStats, encodeSignedGrainStats } from "./stats.js";
 
+export { type DevGate, type DevGateOptions, type DevGateRefusal, createDevGate } from "./dev-gate.js";
+
 const MAX_FILE = 50 * 1024 * 1024 + 16;
 const MAX_PIECE = 1024 * 1024;
 const SKEW_MS = 10 * 60_000;
@@ -43,6 +49,19 @@ export type DevFrame = { type: string } & Record<string, unknown>;
 
 interface Session extends WebSocket {
   address?: string;
+  /** Ends the connection's access (33-gate §5): set while a token it showed holds. */
+  accessTimer?: NodeJS.Timeout;
+}
+
+/** A development relay that requires access grants, as a test network's relay does (33-gate §5). */
+export interface DevRelayAccess {
+  /** The gates the relay trusts: their Ed25519 public keys. */
+  gates: Uint8Array[];
+  /** The network's genesis hash (hex): the network a grant must name. */
+  genesis: string;
+  /** Whether a record's key (hex) is a registered server key of a live grain, which relays let in without a grant
+   *  (12-grains §5.5). None by default. */
+  exempt?: (key: string) => boolean;
 }
 
 interface DevFile {
@@ -72,13 +91,16 @@ export interface DevRelay {
   next(type: string): Promise<DevFrame>;
   /** Close every connection of `address` (its clients reconnect). */
   kick(address: string): void;
+  /** End the access of every connection of `address` that showed a token: `access_ended`, then the connection closes, as
+   *  a relay does when a grant ends (it does so by itself at the grant's `not_after`). */
+  endAccess(address: string): void;
   close(): Promise<void>;
 }
 
 /** A relay on its own server (127.0.0.1, `port` or a free one), or beside `server`'s routes at `path`. */
-export function createDevRelay(options?: { network?: NetworkName; port?: number }): Promise<DevRelay>;
-export function createDevRelay(options: { network?: NetworkName; server: Server; path?: string }): DevRelay;
-export function createDevRelay(options: { network?: NetworkName; port?: number; server?: Server; path?: string } = {}): DevRelay | Promise<DevRelay> {
+export function createDevRelay(options?: { network?: NetworkName; port?: number; access?: DevRelayAccess }): Promise<DevRelay>;
+export function createDevRelay(options: { network?: NetworkName; server: Server; path?: string; access?: DevRelayAccess }): DevRelay;
+export function createDevRelay(options: { network?: NetworkName; port?: number; server?: Server; path?: string; access?: DevRelayAccess } = {}): DevRelay | Promise<DevRelay> {
   const network = options.network ?? "devnet";
   const path = options.path ?? "/relay";
   const relayKey = new Uint8Array(32).fill(9);
@@ -107,8 +129,12 @@ export function createDevRelay(options: { network?: NetworkName; port?: number; 
   wss.on("connection", (ws: Session) => {
     const nonce = randomBytes(16);
     const sts = Date.now();
-    send(ws, { type: "hello", nonce: toBase64Url(nonce), sts, relay: toBase64Url(relayKey), network, prices: { frame: "0", file_mib: "0", turn_kib: "0" } });
+    send(ws, {
+      type: "hello", nonce: toBase64Url(nonce), sts, relay: toBase64Url(relayKey), network, prices: { frame: "0", file_mib: "0", turn_kib: "0" },
+      ...(options.access ? { access: { gates: options.access.gates.map(toBase64Url) } } : {}),
+    });
     ws.on("close", () => {
+      clearTimeout(ws.accessTimer);
       if (ws.address) sessions.get(ws.address)?.delete(ws);
     });
     ws.on("message", (data) => {
@@ -167,6 +193,21 @@ export function createDevRelay(options: { network?: NetworkName; port?: number; 
     const ok = recordProblem(r, Date.now()) === null && toHex(r.relay) === toHex(relayKey) && toHex(r.nonce) === toHex(nonce) &&
       Math.abs(r.issuedAt - sts) <= SKEW_MS;
     if (!ok) return send(ws, { type: "error", message: "auth_failed", detail: "invalid" });
+    if (options.access && !options.access.exempt?.(toHex(r.key.accountKey))) {
+      const refuse = (reason: string) => send(ws, { type: "error", message: "auth_failed", detail: "access", access: reason });
+      if (typeof f.access !== "string") return refuse("required");
+      let token: Uint8Array;
+      try {
+        token = fromBase64Url(f.access);
+      } catch {
+        return refuse("malformed");
+      }
+      const verdict = checkAccessToken(token, { gates: options.access.gates, network: fromHex(options.access.genesis, 32), relay: relayKey, now: Date.now() });
+      if ("refused" in verdict) return refuse(verdict.refused);
+      const timer = setTimeout(() => endAccess(ws), Math.min(Math.max(0, verdict.admitted.until - Date.now()), 2 ** 31 - 1));
+      timer.unref();
+      ws.accessTimer = timer;
+    }
     const address = encodeAddress(network, accountId(r.key.accountKey));
     records.set(address, String(f.record));
     ws.address = address;
@@ -175,6 +216,13 @@ export function createDevRelay(options: { network?: NetworkName; port?: number; 
     send(ws, { type: "registered", pubkey: address, keyEpoch: r.key.keyEpoch, turn: null });
     // The mailbox: every kept frame not yet acknowledged.
     for (const frame of mailbox(address).values()) send(ws, frame);
+  }
+
+  function endAccess(ws: Session) {
+    clearTimeout(ws.accessTimer);
+    ws.accessTimer = undefined;
+    send(ws, { type: "error", message: "access_ended" });
+    ws.close();
   }
 
   function message(ws: Session, f: DevFrame) {
@@ -271,6 +319,9 @@ export function createDevRelay(options: { network?: NetworkName; port?: number; 
     kick(address) {
       live(address).forEach((ws) => ws.terminate());
     },
+    endAccess(address) {
+      live(address).filter((ws) => ws.accessTimer !== undefined).forEach(endAccess);
+    },
     async close() {
       for (const ws of wss.clients) ws.terminate();
       await new Promise<void>((r) => wss.close(() => r()));
@@ -306,6 +357,9 @@ export interface DevRegistryOptions {
   name?: string;
   /** The protocol version `node_status` names (23-upgrades §6): 1 by default, as the test network runs. */
   protocol?: number;
+  /** The gates whose grants the node's relay requires (`node_status.access`, 33-gate §5): hex Ed25519 keys. None by
+   *  default (`access: null`). */
+  gates?: string[];
   /** False: nobody registered the slug yet, until `publish` (a wallet's `RegisterGrain`). */
   registered?: boolean;
   /** The clock statements are checked against (Unix ms). */
@@ -396,6 +450,7 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
     beacon: { height, hash: height.toString(16).padStart(64, "0") },
     shards: [{ shard: "", hash: (height + 0x8000).toString(16).padStart(64, "0") }],
     protocol: { version: o.protocol ?? 1, supported: [1, 2], next: null, outdated: null },
+    access: o.gates && o.gates.length > 0 ? { gates: [...o.gates] } : null,
   });
   const relayList = (): DevRelayEntry[] => {
     const given = o.relays ?? [];

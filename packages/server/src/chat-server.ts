@@ -34,6 +34,7 @@ import {
   type GrainAccess, type MemberProblem, type Rights, type SignedMemberProof, TEAM_ROLES, admits, holdsButSigner,
   introductionProblem, memberProofProblem, memberProofTimely, needsController, needsTeamController, onTeam, rightsOf, rolesOf, teamMemberOf,
 } from "./member.js";
+import type { AccessCredential } from "./access.js";
 import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
 import { readPublishText, publishTextOf } from "./publish.js";
@@ -86,6 +87,9 @@ export interface ChatServerOptions {
   /** The owner key's certificate for the server key (`grain cert`): at most 31 days long for chat. Without one, the key
    *  must be one the grain's registry record names. */
   cert?: InvoiceKeyCert;
+  /** With a certificate, on a test network whose relays require access grants (33-gate): the grant to show, as a key
+   *  the registry does not name needs one. A registered server key (a developer key) needs none and takes none. */
+  access?: AccessCredential;
   /** The network: its genesis hash (hex) and kind. Read from the node when there is one (and checked against this). */
   chain?: ChainParams;
   /** The manifest's `owner_key`: the spec's signature and a certificate are checked with it as a wallet checks them.
@@ -611,6 +615,9 @@ export class ChatServer {
     const appKey = options.appKey === undefined ? null : typeof options.appKey === "string" ? AppKey.parse(options.appKey) : options.appKey;
     if (appKey && options.secret) throw new Error("pass the developer key or a secret, not both");
     if (appKey && options.cert) throw new Error("a developer key is a registered server key: it takes no certificate");
+    if (options.access && !options.cert) {
+      throw new Error("access: only a certified key shows an access grant; relays let a registered server key in without one");
+    }
     if (appKey && options.slug !== undefined && options.slug !== appKey.slug) throw new Error(`the developer key is ${appKey.slug}'s, not ${options.slug}'s`);
     const cap = options.helloChecksPerMinute;
     if (cap !== undefined && (!Number.isSafeInteger(cap) || cap < 1)) throw new Error("helloChecksPerMinute: a whole number, 1 or more");
@@ -687,7 +694,7 @@ export class ChatServer {
         gateways?.add(found);
         return found;
       } : undefined,
-      secret, network: chain.network, ackKept: "by_handler",
+      secret, network: chain.network, ackKept: "by_handler", access: options.access ?? null,
       log: (level, event, meta) => log(level, event, meta),
     });
     const server = new ChatServer(options, setup, relay, signed, store, served);
