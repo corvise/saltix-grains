@@ -367,12 +367,7 @@ export async function pair(o: PairOptions): Promise<number> {
     queue = queue.then(() => answer(o, frame, relay, offer!, secret!, genesis, state, dir, out, now)).catch(() => {});
   };
   relay.on("frame", onFrame);
-  const stop = () => {
-    relay.close();
-    process.exitCode = 130;
-    process.exit();
-  };
-  process.once("SIGINT", stop);
+  // Ctrl-C is the command line's to handle (`endOnSignals`): the log's last line, then exit 130, which closes the relay.
   try {
     const deadline = now() + o.timeoutMs;
     for (;;) {
@@ -396,7 +391,6 @@ export async function pair(o: PairOptions): Promise<number> {
       await new Promise((r) => setTimeout(r, o.pollMs ?? POLL_MS));
     }
   } finally {
-    process.removeListener("SIGINT", stop);
     relay.off("frame", onFrame);
     relay.close();
   }

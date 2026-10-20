@@ -123,11 +123,13 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
    card keeps the [card standard](agents/cards.md), which `assertCardStandard` checks in the tests.
 5. **Try it.** A page: `npx grain dev` serves it with the simulator, which frames it as Saltix does at a phone's and the
    Galaxy Z Fold's sizes and holds it to Saltix's rules; a debug Saltix in the Android emulator opens the link it
-   prints. `npx grain dev --check` drives the simulator headless in this computer's Chrome, Chromium or Edge: the Connect
+   prints. It is a server: it runs until Ctrl-C, so a coding agent runs it in the background (or not at all) and checks
+   with `--check`, which exits. `npx grain dev --check` drives the simulator headless in this computer's Chrome, Chromium or Edge: the Connect
    sheet, the page loading without errors, and at every size in both themes nothing tappable under the wallet's
    controls; screenshots in `.grain/check/`, exit 1 on an error. `npx grain dev --check --tap` then taps each of the
-   page's buttons once, as a person would: a tap that throws or asks Saltix for something it refuses is an error, one
-   that changes nothing a warning (the page never leaves, and no payment is made). A chat: `npm start` in the project,
+   page's buttons once, as a person would, and the buttons a tap brings up in their turn (at most 30 in all, in 40 s;
+   those left are a warning): a tap that throws or asks Saltix for something it refuses is an error, one that changes
+   nothing a warning (the page never leaves, and no payment is made). A chat: `npm start` in the project,
    then in Saltix tap the app in **My apps**: its home shows the commands, and an answer is marked "from <slug>,
    verified".
 6. **Publish.** A chat goes live as soon as its program runs: there is nothing to upload. A page is a new version of
@@ -227,7 +229,8 @@ the owner's phone signs.
    it with the next nonce, `SetGrainAccess` private (as an app made in Saltix starts), waits for both to land, then puts
    the bundle and the icon into the network. Later versions are signed by `owner.key` without `--key`: **a key file
    signs an owner's call by itself when its account owns the app** (one it registered); `--key` names a key file
-   explicitly, `--wallet` asks Saltix instead.
+   explicitly, `--wallet` asks Saltix instead. This first publish is the one command that names `--key owner.key`: the
+   commands below, and those the tools suggest, never do (a key file elsewhere is named, `--key <its path>`).
 4. `npx grain profile`: the Connect profile from `connect.json`, signed by `owner.key` (it owns the app now). It refuses
    `grain init`'s own words about its counter: write the profile for your app first.
 5. Who opens it: nobody yet, since it is private and no phone holds its owner's key. `npx grain access --slug <slug>
@@ -249,8 +252,8 @@ timeout) is resumed the same way. `grain profile` and `grain access` with `--no-
 `SetGrainAccess` private goes right behind the registration with the next nonce: an account's calls apply in order and a
 shard's registry calls reach the registry in their order, so the app is private from the block that registers it, or
 the one after. If that call is lost, the app stays public until it lands: `.grain/publish.json` remembers it,
-`grain doctor` says **public, but should be private** with the fix (`grain access --slug <slug> --private --key
-owner.key`), and the next `grain publish` sends it again.
+`grain doctor` says **public, but should be private** with the fix (`grain access --slug <slug> --private`, which the
+`owner.key` that owns the app signs by itself), and the next `grain publish` sends it again.
 
 ## Run the program
 

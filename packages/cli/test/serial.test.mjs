@@ -37,7 +37,7 @@ async function poolNode(polls = 2) {
       switch (method) {
         case "node_status": return answer({ genesis: GENESIS, slot: 1000, network: "devnet", beacon: { height: 1, hash: "b1" } });
         case "account_get": return answer({ nonce: state.nonce, salt: "200000000000", controller: null, shard: "" });
-        case "grain_get": return answer({ grain: { slug: "dice", owner: ownerId, version: 1, retired: null, servers: [], category: 0, public: true, members: [],
+        case "grain_get": return answer({ grain: { slug: "dice", owner: ownerId, version: 1, retired: null, servers: state.servers ?? [], category: 0, public: true, members: [],
           profile: state.profile, profile_revision: state.revision }, deposit: "10000000000" });
         case "transaction_submit": {
           const tx = fromHex(params.transaction);
@@ -120,7 +120,7 @@ test("two calls in a row: the first returns once the registry has it, so the sec
     // The wait said as it goes (off a terminal: a line when its stage changes), how long a call takes, and the log's
     // registry step.
     assert.match(first.stdout, /^Waiting for it to land: usually 1\.5 to 2\.5 minutes on the test network/m);
-    assert.match(first.stdout, /^ {2}profile: in the pool, waiting for a shard block \(0:0\d\)$/m);
+    assert.match(first.stdout, /^ {2}profile: in the pool, waiting for a shard block \(0:0\d of up to (6:00|5:59)\)$/m);
     assert.ok(logOf(dir).some((l) => l.command === "profile" && l.step === "registry" && l.outcome === "ok" && l.reason === "set"));
     // The same words again: nothing to change, nothing signed or sent.
     const same = await run(["profile", "--node", node.url], dir);
@@ -180,6 +180,28 @@ test("--no-wait returns once the pool took it", async () => {
     const landed = JSON.parse((await run(["doctor", "--json", "--node", node.url], dir)).stdout).findings.find((f) => f.what === "connect profile");
     assert.equal(landed.ok, true);
     assert.match(landed.detail, /^revision 6 in the registry \(Connect profile revision 6 sent at \S+ landed\)$/);
+  } finally {
+    node.close();
+  }
+});
+
+test("grain status --json says next in the text's words: never null, \"nothing: …\" once paired", async () => {
+  const { AppKey } = await import("@saltix/grain-server");
+  const dir = project();
+  const key = AppKey.of("devnet", GENESIS, "dice", fromHex("63".repeat(32), 32));
+  writeFileSync(join(dir, "app.key"), key.reveal() + "\n", { mode: 0o600 });
+  const node = await poolNode();
+  node.state.servers = [key.publicKey];
+  try {
+    const text = await run(["status", "--node", node.url], dir);
+    assert.equal(text.code, 0, text.stderr);
+    assert.match(text.stdout, /^status: paired$/m);
+    const json = await run(["status", "--json", "--node", node.url], dir);
+    assert.equal(json.code, 0, json.stderr);
+    const said = JSON.parse(json.stdout);
+    assert.equal(said.status, "paired");
+    assert.equal(`next: ${said.next}`, text.stdout.trim().split("\n").at(-1));
+    assert.match(said.next, /^nothing: the server is paired/);
   } finally {
     node.close();
   }

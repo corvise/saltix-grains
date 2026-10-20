@@ -4,6 +4,12 @@
 
 ### Added
 
+- **`grain dev --check --tap` taps the buttons a tap brings up** ("Clear history" once there is a history): after each
+  tap the simulator names the buttons shown that were never seen (`saltixSimulator.more()`), tapped in their turn within
+  30 buttons and 40 s; those left are a warning ("N buttons appeared later and were not tapped").
+- **`shortAddress`** in `@saltix/grain`: an address as Saltix shortens it (`dsalt1qabcd…uvwxyz`).
+- **Wait lines say their limit**: `in the pool, waiting for a shard block (1:39 of up to 6:00)`.
+
 - **`grain dev --check --tap`**: after the layout pass, each of the page's buttons tapped once (at most 30, never a link)
   by real pointer events, as a person taps: a tap after which the page throws, or asks Saltix for something it refuses,
   is an error; one that changes nothing on the page and asks for nothing, a button something covers, and a page that
@@ -390,6 +396,25 @@
   (deflated, compressible ones could exceed that); a host may still compress the download on the wire.
 
 ### Fixed
+
+- **Ctrl-C on `npx grain dev` left no `end` line in `.grain/log.jsonl`**: npm forwards the terminal's SIGINT to the
+  command, which gets it from the terminal too; the handler went after the first signal, and the second killed the
+  process before the line was written. The handler now stays for the life of the process, writes first, and ignores a
+  second signal; SIGHUP (a closed terminal) ends the log too (exit 129). Every command, `grain publish`, `profile` and
+  `access` waiting included.
+- `--tap` said "ok tap tapped 9 buttons once each" beside a tap's error: the count is an "ok" line only when no tap
+  failed, and `next:` says `grain dev --check --tap` again.
+- `grain lint` said "no errors; ready to publish" with `connect.json` still `grain init`'s words, and for a page changed
+  since a version published with `--no-wait`: its last line says what is left in doctor's words (`left: public/ changed
+  since v1: grain publish seals v2`; `rewrite connect.json for this app`), and `grain publish` records a version it
+  finds in the registry as published.
+- Hints named `--key owner.key` for an app that key owns, which signs by itself, and the docs did not: one rule, no
+  hint or page names it after the first publish (a key file elsewhere is named).
+- The simulator's Connect sheet named the owner in hex ("by 0e4bcda5…"): a short address of the network, as Saltix.
+- `grain doctor --json` and `grain status --json` gave `next: null` where the text said `nothing: …`: the same words.
+- AGENTS.md's quick path, every page project's AGENTS.md and the README listed `npx grain dev`, a server that never
+  returns, as a step: they say to run it in the background or not at all, and to check with `--check`.
+- docs/agents/app.md explains the Connect sheet's "Payments and contacts" row, on every sheet whatever the manifest asks.
 
 - **`grain doctor` said "published: the network holds its bundle" with nothing uploaded**: a relay that knows a
   bundle's or an icon's hash from the manifest answers `blob_get` with `{blob: null, fetching: true}` while it looks for

@@ -14,7 +14,7 @@ import {
   grainQuote, iconHash, keyFingerprint, minimumFee, nodeCall, registeredKeyStatus, toHex,
 } from "@saltix/grain-server";
 import { type Bundle, makeBundle } from "./bundle.js";
-import { CONNECT_FILE, lintConnect, readConnectFile, templateTexts } from "./connect.js";
+import { CONNECT_FILE, TEMPLATE_NEXT, lintConnect, readConnectFile, stillTemplate, templateTexts } from "./connect.js";
 import { EXIT_WAITING, GRAIN_DIR } from "./devlog.js";
 import { saltOf } from "./faucet.js";
 import { ICON_FILES, checkIcon } from "./icon.js";
@@ -22,7 +22,8 @@ import { accountOf, addressOf } from "./owner.js";
 import { PAIR_KEY_FILE, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
 import { KEY_FILE, readKey } from "./project.js";
 import {
-  type PublishState, type SentRecord, STALE_MS, isPublishCall, landedIn, readPublishState, sameContent, sealedAsSent, txStatus, whoOpensNow,
+  type PublishState, type SentRecord, STALE_MS, isPublishCall, landedIn, nextVersion, publicChanged, readPublishState, sameContent, sealedAsSent,
+  txStatus, whoOpensNow,
 } from "./publish-flow.js";
 import { salt } from "./registry.js";
 import { STAGES } from "./send.js";
@@ -325,8 +326,8 @@ function flightFinding(f: Flight, what: string, slug: string, flags: string, mea
 
 /** Who may open the app, as the registry holds it (`whoOpensNow`, the words `grain publish` ends with); a key file's
  *  registration still public is to fix, and an access call on its way is waited for. */
-function accessFinding(g: RegisteredGrain, run: PublishState | null, flight: Flight | undefined, slug: string, keyPath: string, flags: string): Finding {
-  const words = whoOpensNow(slug, g, keyPath, flags);
+function accessFinding(g: RegisteredGrain, run: PublishState | null, flight: Flight | undefined, slug: string, dir: string, flags: string): Finding {
+  const words = whoOpensNow(slug, g, join(dir, KEY_FILE), flags, dir);
   const onItsWay = flight !== undefined && flight.stage !== "landed" && flight.stage !== "gone";
   if (g.public !== false && run?.private_pending) {
     if (onItsWay) {
@@ -340,7 +341,7 @@ function accessFinding(g: RegisteredGrain, run: PublishState | null, flight: Fli
     return {
       ok: false, what: "access",
       detail: `public, but should be private: ${KEY_FILE} registered it here, and the call that makes it private has not landed (anyone may open it meanwhile)`,
-      next: `grain access --slug ${slug} --private --key ${KEY_FILE}${flags} (or grain publish${flags}, which sends it again)`,
+      next: `grain access --slug ${slug} --private${flags} (${KEY_FILE} signs it by itself, as the app's owner; or grain publish${flags}, which sends it again)`,
     };
   }
   if (flight !== undefined && flight.stage !== "landed") return flightFinding(flight, "access", slug, flags, `; until then ${words}`);
@@ -358,7 +359,7 @@ function localProfile(dir: string, manifest: unknown): Finding {
     if (errors.length > 0) return { ok: false, what: "connect profile", detail: `connect.json: ${errors.length} error(s)`, next: "grain lint says which" };
     const template = templateTexts(readConnectFile(join(dir, CONNECT_FILE)));
     if (template.length > 0) {
-      return { ok: false, what: "connect profile", detail: `connect.json is grain init's template (${template[0]})`, next: "rewrite connect.json for this app (docs/agents/app.md: the Connect profile)" };
+      return { ok: false, what: "connect profile", detail: `connect.json is grain init's template (${template[0]})`, next: TEMPLATE_NEXT };
     }
   } catch (e) {
     return { ok: false, what: "connect profile", detail: `connect.json: ${(e as Error).message}`, next: "grain lint says more" };
@@ -366,8 +367,9 @@ function localProfile(dir: string, manifest: unknown): Finding {
   return { ok: true, what: "connect profile", detail: "connect.json checks; the registry takes it once the app is registered (grain profile)" };
 }
 
-/** The registry's Connect profile, and a profile call of a key file here on its way. */
-function profileFinding(g: RegisteredGrain, flight: Flight | undefined, slug: string, flags: string): Finding {
+/** The registry's Connect profile, and a profile call of a key file here on its way; none yet, with `connect.json` still
+ *  `grain init`'s words: rewriting it comes first, as `grain profile` refuses them. */
+function profileFinding(g: RegisteredGrain, flight: Flight | undefined, slug: string, flags: string, dir: string): Finding {
   const holds = g.profile ? `revision ${g.profile.profile.revision}` : "none";
   if (flight !== undefined && flight.stage !== "landed") return flightFinding(flight, "connect profile", slug, flags, `; the registry holds ${holds}`);
   if (g.profile) {
@@ -376,7 +378,10 @@ function profileFinding(g: RegisteredGrain, flight: Flight | undefined, slug: st
       detail: `revision ${g.profile.profile.revision} in the registry${flight ? ` (${callWords(flight.record, slug)} sent at ${flight.record.at} landed)` : ""}`,
     };
   }
-  return { ok: false, what: "connect profile", detail: "the registry holds no Connect profile: users see only the description", next: `grain profile${flags}` };
+  return {
+    ok: false, what: "connect profile", detail: "the registry holds no Connect profile: users see only the description",
+    next: stillTemplate(dir) ? `${TEMPLATE_NEXT}; then grain profile${flags}` : `grain profile${flags}`,
+  };
 }
 
 /** Whether grain.json says the same as the registry's manifest, but for what `grain publish` fills in (`sameContent`);
@@ -487,10 +492,11 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
       if (!sealed) {
         bundleFinding = { ok: true, what: "bundle", detail: "public/ is not sealed yet: grain publish seals it and puts it into the network" };
       } else if (built !== null && built.hash !== sealed.bundle) {
-        // A change not published yet is the next thing to do, never "nothing left".
+        // A change not published yet is the next thing to do, never "nothing left"; in grain lint's words once the
+        // registry holds a version.
         bundleFinding = {
           ok: false, what: "bundle",
-          detail: `public/ changed since grain.json's bundle: grain publish seals it again${grain && grain.version >= version ? `, as v${grain.version + 1}` : ""}`,
+          detail: grain ? publicChanged(grain.version, nextVersion(grain.version, version)) : "public/ changed since grain.json's bundle: grain publish seals it again",
           next: `grain publish${flags}`,
         };
       } else {
@@ -634,10 +640,10 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
   // Who may open it: public or private (the words grain publish ends with), a key file's registration still to be made
   // private, and an access call of a key file here on its way.
   if (grain && grain.retired === null && grain.public !== undefined) {
-    findings.push(accessFinding(grain, ours, latest("access"), slug, join(dir, KEY_FILE), flags));
+    findings.push(accessFinding(grain, ours, latest("access"), slug, dir, flags));
   }
   if (grain && state.status !== "unknown") {
-    findings.push(profileFinding(grain, latest("profile"), slug, flags));
+    findings.push(profileFinding(grain, latest("profile"), slug, flags, dir));
   } else if (manifest && grain === null) {
     // Before the app is registered the registry has no profile to hold: connect.json is checked here instead, and set
     // once it is (grain profile).

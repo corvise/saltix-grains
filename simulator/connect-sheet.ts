@@ -5,9 +5,12 @@
  * and notifications behind switches, off by default), the privacy summary and links, then Continue or Cancel. Drawn
  * inside the same frame as a page (the safe area, below the controls' band); it rises from the bottom on a phone and
  * floats in the middle on a wide screen. A preview only: the wallet's own design, and its checks of the profile, are
- * Saltix's (the registry's record adds the username, mark, owner, category and ratings).
+ * Saltix's (the registry's record adds the username, mark, category and ratings). The owner is named as Saltix names it,
+ * by a short address (`shortAddress`), never by hex.
  */
-import type { SafeArea } from "../packages/grain/src/index";
+import { type SafeArea, shortAddress } from "../packages/grain/src/index";
+import { type NetworkName, encodeAddress } from "../packages/server/src/address";
+import { fromHex } from "../packages/server/src/bytes";
 import { PERMISSIONS } from "../packages/server/src/manifest";
 import { type ConnectProfile, profileFromJson, profileProblem, profileText } from "../packages/server/src/profile";
 import { drawIcon } from "./icon";
@@ -91,6 +94,18 @@ export interface SheetHost {
   log(line: string): void;
   /** The app's icon, where the development server serves it (null: none, the monogram). */
   icon(): string | null;
+  /** The network the development registry plays, whose address prefix the owner is shown with. */
+  network(): NetworkName;
+}
+
+/** The owner as the sheet names it (19-connect §12.1: a username, else a short address): the manifest's account as an
+ *  address of the network, shortened as Saltix shortens one; the development registry binds no username. */
+export function ownerWords(owner: string, network: NetworkName): string {
+  try {
+    return shortAddress(encodeAddress(network, fromHex(owner, 32)));
+  } catch {
+    return owner;
+  }
 }
 
 /** The project's profile as `connect.json` holds it, with the manifest's owner and revision 1, and why a wallet would
@@ -140,7 +155,7 @@ export function showConnectSheet(host: SheetHost, m: SheetManifest, profile: Con
   const name = m.name[lang] ?? m.name.en ?? m.slug;
   const who = el("div", "cs-who");
   const titles = el("div", "cs-titles");
-  titles.append(el("strong", "cs-name", name), el("span", "cs-meta", `${m.slug} · ${w.by} ${m.owner.slice(0, 8)}…`));
+  titles.append(el("strong", "cs-name", name), el("span", "cs-meta", `${m.slug} · ${w.by} ${ownerWords(m.owner, host.network())}`));
   const icon = el("div", "cs-icon");
   drawIcon(icon, host.icon(), name);
   who.append(icon, titles);

@@ -341,7 +341,9 @@ test("init makes a project the owner alone can sign for", () => {
   const warned = execFileSync("node", [main, "lint"], { cwd: join(dir, "dice"), stdio: "pipe" }).toString();
   assert.match(warned, new RegExp(`^warning: ${COVER_RULE}: `, "m"));
   assert.match(warned, new RegExp(`^warning: ${TOP_BAR_RULE}: `, "m"));
-  assert.match(warned, /dice v1: no errors; ready to publish/);
+  // grain init's connect.json is still the counter's: never "ready", and what is left.
+  assert.match(warned, /^dice v1: no errors; not published yet; left: grain publish \(grain doctor says what registering the slug takes\); rewrite connect\.json for this app/m);
+  assert.doesNotMatch(warned, /ready to publish/);
   assert.equal(statSync(join(dir, "dice", "owner.key")).mode & 0o777, 0o600);
   const m = JSON.parse(readFileSync(join(dir, "dice", "grain.json"), "utf8"));
   assert.equal(m.slug, "dice");

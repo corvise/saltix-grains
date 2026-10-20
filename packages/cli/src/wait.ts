@@ -1,9 +1,10 @@
 // A long wait, said while it lasts. A registry call signed here lands in about 1.5 to 2.5 minutes on the test network (a
 // shard block takes it, then the beacon chain's registry applies it once the shard block is linked there), a first
 // publish with a key file in up to about 6; the owner's Saltix takes as long as the owner does. A command that waits says
-// what it waits for, where it stands and for how long: on a terminal one line rewritten in place; elsewhere (an agent's
-// tool, a pipe, a log file) a line whenever the stage changes and every 15 seconds besides, so that a reader never meets
-// minutes of silence and can tell a slow network from a stuck command.
+// what it waits for, where it stands, for how long and for how long at most ("(1:39 of up to 6:00)"): on a terminal one
+// line rewritten in place; elsewhere (an agent's tool, a pipe, a log file) a line whenever the stage changes and every 15
+// seconds besides, so that a reader never meets minutes of silence, can tell a slow network from a stuck command, and
+// knows when the command gives up.
 
 /** Off a terminal, a waiting command says where it stands at least this often. */
 export const QUIET_MS = 15_000;
@@ -35,7 +36,8 @@ export class Waiting {
   private stage: string | null = null;
   private rewritten = false;
 
-  constructor(private readonly out: WaitOut, private readonly what: string) {
+  /** `limitMs`: how long the command waits at most from now, said beside the time waited; none for a wait with no end. */
+  constructor(private readonly out: WaitOut, private readonly what: string, private readonly limitMs?: number) {
     this.started = this.now();
   }
 
@@ -50,7 +52,8 @@ export class Waiting {
 
   /** Where the wait stands: rewritten in place on a terminal; printed off one when it changed or every 15 seconds. */
   at(stage: string): void {
-    const line = `  ${this.what}: ${stage} (${elapsed(this.ms)})`;
+    const most = this.limitMs === undefined ? "" : ` of up to ${elapsed(this.limitMs)}`;
+    const line = `  ${this.what}: ${stage} (${elapsed(this.ms)}${most})`;
     if (this.out.tty && this.out.progress) {
       this.out.progress(line);
       this.rewritten = true;

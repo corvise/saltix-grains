@@ -92,6 +92,31 @@ export class DevLog {
   }
 }
 
+/** The signals that stop a command, each with its number: the exit status is the shell's for it, 128 + the number
+ *  (130 Ctrl-C, 143 SIGTERM, 129 SIGHUP: the terminal closed). */
+export const STOP_SIGNALS = [["SIGINT", 2], ["SIGTERM", 15], ["SIGHUP", 1]] as const;
+
+/**
+ * A command stopped by a signal ends its log with it (`end`, the signal's name as the reason: `ok()` says whether that
+ * is the command's own way to end, as for `grain dev` serving, or a run cut short), then exits with the shell's status
+ * for it. The line is written synchronously, first thing, and the handler stays for the life of the process: npm
+ * (`npx grain …`, `npm run …`) forwards to the command the SIGINT a terminal's Ctrl-C sends to the whole process group,
+ * so the command gets it twice, half a millisecond apart. A handler that went after the first (`process.once`) gave the
+ * second back to Node's default action, which killed the process before the line was written; a second signal now
+ * finds the handler still there and is ignored. Only SIGKILL (`kill -9`) ends a run with no line.
+ */
+export function endOnSignals(log: DevLog, ok: () => boolean): void {
+  let stopping = false;
+  for (const [signal, number] of STOP_SIGNALS) {
+    process.on(signal, () => {
+      if (stopping) return;
+      stopping = true;
+      log.step("end", ok() ? "ok" : "failed", signal.toLowerCase());
+      process.exit(128 + number);
+    });
+  }
+}
+
 /** A stable reason code for an error a command ended with: its `problem` or `code` when it has one, else its kind. */
 export function reasonOf(error: unknown): string {
   const e = error as { name?: string; problem?: string; code?: string | number; message?: string; step?: string; reason?: string };

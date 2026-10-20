@@ -196,7 +196,7 @@ test("grain dev logs that it serves, and what form, to the steps' log", async ()
   }
 });
 
-test("grain dev stopped by Ctrl-C or SIGTERM ends its log with the stop; a wait cut short by one says it failed", async () => {
+test("grain dev stopped by Ctrl-C, SIGTERM or a closed terminal ends its log with the stop; a wait cut short by one says it failed", async () => {
   const { spawn } = await import("node:child_process");
   const { readFileSync, existsSync } = await import("node:fs");
   const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
@@ -207,15 +207,29 @@ test("grain dev stopped by Ctrl-C or SIGTERM ends its log with the stop; a wait 
       await new Promise((r) => setTimeout(r, 50));
     }
   };
-  for (const [signal, status] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  /** The child's exit status, or "SIGKILL" when it had not exited 10 seconds after it was told to: a stop that never
+   *  ends fails the test instead of hanging it. */
+  const exitOf = (child) => new Promise((resolve) => {
+    const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve(code ?? signal);
+    });
+  });
+  for (const [signal, status] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) {
     const dir = scratch("grain-dev-stop-");
     mkdirSync(join(dir, "public"));
     writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title>");
     writeFileSync(join(dir, "grain.json"), JSON.stringify(hosted()));
     writeFileSync(join(dir, "owner.key"), "62".repeat(32) + "\n", { mode: 0o600 });
     const child = spawn("node", [main, "dev", "--port", "0"], { cwd: dir });
-    const exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
-    await until("the serve step", () => lines(dir).some((l) => l.step === "serve"));
+    const exited = exitOf(child);
+    try {
+      await until("the serve step", () => lines(dir).some((l) => l.step === "serve"));
+    } catch (e) {
+      child.kill("SIGKILL");
+      throw e;
+    }
     child.kill(signal);
     assert.equal(await exited, status, signal);
     const last = lines(dir).at(-1);
@@ -230,7 +244,7 @@ test("grain dev stopped by Ctrl-C or SIGTERM ends its log with the stop; a wait 
   await new Promise((r) => hang.listen(0, "127.0.0.1", r));
   try {
     const child = spawn("node", [main, "publish", "--node", `http://127.0.0.1:${hang.address().port}`], { cwd: dir });
-    const exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
+    const exited = exitOf(child);
     await new Promise((r) => setTimeout(r, 500));
     child.kill("SIGINT");
     assert.equal(await exited, 130);
@@ -239,5 +253,114 @@ test("grain dev stopped by Ctrl-C or SIGTERM ends its log with the stop; a wait 
   } finally {
     hang.closeAllConnections();
     hang.close();
+  }
+});
+
+test("Ctrl-C on npx grain ends the log with its line: npm's forwarded SIGINT finds the handler still there", {
+  skip: process.platform === "win32" ? "no process groups to signal" : false, timeout: 60_000,
+}, async () => {
+  // A terminal's Ctrl-C signals the whole foreground process group: npm (npx) and the command it runs. npm forwards the
+  // SIGINT it got to the command as well, so the command gets two, half a millisecond apart; the second used to meet
+  // Node's default action (the handler went after the first) and killed it before its log's last line was written.
+  const { spawn } = await import("node:child_process");
+  const { existsSync, readFileSync, symlinkSync } = await import("node:fs");
+  const bin = fileURLToPath(new URL("../bin/grain.js", import.meta.url));
+  const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  const until = async (what, check) => {
+    const end = Date.now() + 20_000;
+    while (!check()) {
+      if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  };
+  /** A project whose node_modules links the grain command, as npm install links it from the checkout. */
+  const project = () => {
+    const dir = scratch("grain-npx-stop-");
+    mkdirSync(join(dir, "public"));
+    mkdirSync(join(dir, "node_modules", ".bin"), { recursive: true });
+    symlinkSync(bin, join(dir, "node_modules", ".bin", "grain"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "dice", version: "0.1.0", private: true }));
+    writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Dice</title>");
+    writeFileSync(join(dir, "grain.json"), JSON.stringify(hosted()));
+    writeFileSync(join(dir, "owner.key"), "62".repeat(32) + "\n", { mode: 0o600 });
+    return dir;
+  };
+  // npm offline, with no log file or update check of its own: nothing leaves this computer, nothing is left behind.
+  const env = { ...process.env, npm_config_offline: "true", npm_config_update_notifier: "false", npm_config_logs_max: "0", npm_config_audit: "false", npm_config_fund: "false" };
+  /** `npx --no grain …` in its own process group, as a terminal runs it, stopped by Ctrl-C once `ready` holds. */
+  const ctrlC = async (dir, args, ready) => {
+    const child = spawn("npx", ["--no", "grain", ...args], { cwd: dir, env, detached: true, stdio: "ignore" });
+    const exited = new Promise((resolve) => child.on("close", (code, signal) => resolve(signal ?? code)));
+    try {
+      await until(ready.what, ready.check);
+      process.kill(-child.pid, "SIGINT");
+      const timer = setTimeout(() => process.kill(-child.pid, "SIGKILL"), 15_000);
+      await exited.finally(() => clearTimeout(timer));
+    } catch (e) {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        // Gone already.
+      }
+      throw e;
+    }
+  };
+  // grain dev serving: Ctrl-C is how it ends. The race was lost most times; a few runs catch it.
+  for (let i = 0; i < 5; i++) {
+    const dir = project();
+    await ctrlC(dir, ["dev", "--port", "0"], { what: "the serve step", check: () => lines(dir).some((l) => l.step === "serve") });
+    const last = lines(dir).at(-1);
+    assert.deepEqual([last.command, last.step, last.outcome, last.reason], ["dev", "end", "ok", "sigint"], `run ${i + 1}`);
+  }
+  // A command that waits (grain publish, as grain profile and grain access do): its run was cut short, and says so.
+  const hang = (await import("node:http")).createServer(() => {});
+  await new Promise((r) => hang.listen(0, "127.0.0.1", r));
+  try {
+    const dir = project();
+    let asked = false;
+    hang.on("request", () => (asked = true));
+    await ctrlC(dir, ["publish", "--node", `http://127.0.0.1:${hang.address().port}`], { what: "the node asked", check: () => asked });
+    const last = lines(dir).at(-1);
+    assert.deepEqual([last.command, last.step, last.outcome, last.reason], ["publish", "end", "failed", "sigint"]);
+  } finally {
+    hang.closeAllConnections();
+    hang.close();
+  }
+});
+
+test("a second signal while the first one's line is being written is ignored, never Node's default kill", {
+  skip: process.platform === "win32" ? "no POSIX signals" : false, timeout: 30_000,
+}, async () => {
+  // The handler of the first signal held up (a slow disk, say) while a second arrives, as npm's forwarded SIGINT does: the
+  // line is still written, and the exit status is the shell's for the first signal.
+  const { spawn } = await import("node:child_process");
+  const { existsSync, readFileSync } = await import("node:fs");
+  const dir = scratch("grain-double-signal-");
+  const marker = join(dir, "end");
+  const devlog = new URL("../dist/devlog.js", import.meta.url).href;
+  const script = `
+    import { writeFileSync } from "node:fs";
+    import { endOnSignals } from ${JSON.stringify(devlog)};
+    const slow = { step(step, outcome, reason) {
+      const until = Date.now() + 400;
+      while (Date.now() < until);
+      writeFileSync(${JSON.stringify(marker)}, [step, outcome, reason].join(" "));
+    } };
+    endOnSignals(slow, () => true);
+    console.log("ready");
+    setInterval(() => {}, 1000);`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+  const exited = new Promise((resolve) => child.on("close", (code, signal) => resolve(signal ?? code)));
+  const timer = setTimeout(() => child.kill("SIGKILL"), 20_000);
+  try {
+    await new Promise((resolve) => child.stdout.once("data", resolve));
+    child.kill("SIGINT");
+    await new Promise((r) => setTimeout(r, 150));
+    child.kill("SIGINT");
+    assert.equal(await exited, 130, "the first signal's status, not killed by the second");
+    assert.ok(existsSync(marker), "the line written");
+    assert.equal(readFileSync(marker, "utf8"), "end ok sigint");
+  } finally {
+    clearTimeout(timer);
   }
 });

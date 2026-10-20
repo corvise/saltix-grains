@@ -594,6 +594,18 @@ export function slugLink(slug: string, start?: string): string {
 }
 
 /**
+ * An address in a few characters, as Saltix shows one where no name stands for it (the owner on the Connect sheet,
+ * 19-connect §12.1; a contact without a profile): its prefix and kind, 4 characters of the account id, `…`, and the last
+ * 6 (`dsalt1qabcd…uvwxyz`). Six at the end, not four: an address ground to look alike at a glance costs about 32^6 tries
+ * there instead of 32^4. One too short to shorten is given whole.
+ */
+export function shortAddress(address: string): string {
+  const separator = address.lastIndexOf("1");
+  const head = separator >= 1 && separator < address.length - 1 ? separator + 2 + 4 : 8;
+  return address.length <= head + 6 + 1 ? address : `${address.slice(0, head)}…${address.slice(-6)}`;
+}
+
+/**
  * The link that opens a registered grain's chat (22-grain-chats §6): `salt:grain/<slug>?chat`, with the server key's
  * certificate (the hex your server's `encodeCert` gives) so the wallet starts without fetching it. A grain whose
  * registry record names its server keys (24-app-studio §2) needs no certificate: the wallet writes to the first key.

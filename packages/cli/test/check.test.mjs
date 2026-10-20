@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { shortAddress } from "@saltix/grain";
+import { encodeAddress, fromHex } from "@saltix/grain-server";
 import { findBrowser } from "../dist/browser.js";
 import { checkReason, findingLines, judge, judgeTaps, overlap, underNavigationBar, underStatusBar } from "../dist/check.js";
 import { scratch } from "../../../scripts/scratch.mjs";
@@ -125,7 +127,7 @@ test("the navigation bar: what is pinned there stays a warning; a button at a lo
 
 test("--tap: a tap that throws, or asks Saltix for what it refuses, is an error; one that changes nothing a warning; a user's no is neither", () => {
   const tapped = (over) => ({ name: 'button#x "X"', state: "tapped", thrown: [], asked: [], dialogs: 0, blocked: [], changed: true, ...over });
-  const taps = (seen, total = seen.length) => ({ seen, total, device: "phone", theme: "dark" });
+  const taps = (seen, total = seen.filter((t) => !t.later).length, later = seen.filter((t) => t.later).length) => ({ seen, total, later, device: "phone", theme: "dark" });
   // A tap that changes the screen, one that asks Saltix for something (a copy, no visible change), one the simulator's
   // declined payment answers (4001, the user's no), one that opens a dialog: all fine.
   const fine = judgeTaps(taps([
@@ -144,6 +146,9 @@ test("--tap: a tap that throws, or asks Saltix for what it refuses, is an error;
     'tapping button#boom "Boom" threw TypeError: board is null',
     'tapping button#send "Send" asked Saltix for grain_relay_send, which it refuses: 4100 the manifest does not ask for this',
   ]);
+  // A tap failed: no line says that all went well (round four read "error tap … threw" beside "ok tap tapped 9 buttons").
+  assert.deepEqual(bad.filter((f) => f.level === "ok"), []);
+  assert.deepEqual(judge(run({ taps: taps([tapped({ thrown: ["TypeError: x"] }), tapped({ name: "b" })]) })).filter((f) => f.what === "tap").map((f) => f.level), ["error"]);
   // Warnings: nothing changed and nothing asked; a document from elsewhere (stopped); a button something covers.
   const warned = judgeTaps(taps([
     tapped({ name: 'button#dead "Dead"', changed: false }),
@@ -158,6 +163,19 @@ test("--tap: a tap that throws, or asks Saltix for what it refuses, is an error;
   ]);
   assert.equal(warned.at(-1).detail, "tapped 2 buttons once each (the first 4 of 40) at phone dark; 2 not tapped (taken away by an earlier tap, or covered)");
   assert.equal(judgeTaps(taps([])).at(-1).detail, "no button to tap");
+  // Buttons a tap brought up ("Clear history" once there is a history) are tapped in their turn and counted; those the
+  // bounds left are a warning, with how many.
+  const brought = judgeTaps(taps([tapped({ name: 'button#roll "Roll"' }), tapped({ name: 'button#clear "Clear history"', later: true })]));
+  assert.deepEqual(brought.filter((f) => f.level !== "ok"), []);
+  assert.equal(brought.at(-1).detail, "tapped 2 buttons once each at phone dark, 1 of them brought up by an earlier tap");
+  const bounded = judgeTaps(taps([tapped({}), tapped({ name: "b", later: true })], 1, 3));
+  assert.deepEqual(bounded.filter((f) => f.level === "warning").map((f) => f.detail), [
+    "2 buttons appeared later and were not tapped: the check taps at most 30 buttons, in at most 40 s; try them in grain dev's simulator",
+  ]);
+  assert.equal(judgeTaps(taps([tapped({})], 1, 1)).find((f) => f.level === "warning").detail.split(":")[0], "1 button appeared later and was not tapped");
+  // A thrown tap among later ones: an error, by its name.
+  const late = judgeTaps(taps([tapped({ name: 'button#roll "Roll"' }), tapped({ name: 'button#clear "Clear history"', later: true, thrown: ["Error: clear failed"] })]));
+  assert.deepEqual(late.map((f) => [f.level, f.detail]), [["error", 'tapping button#clear "Clear history" threw Error: clear failed']]);
   // In the whole judgment: the first error's kind is the log's reason; without --tap nothing of it.
   assert.equal(checkReason(judge(run({ taps: taps([tapped({ thrown: ["TypeError: x"] })]) }))), "tap");
   assert.equal(checkReason(judge(run({ taps: taps([tapped({ changed: false })]) }))), "warnings");
@@ -211,6 +229,12 @@ test("a fresh page passes in a real browser: the sheet, the page, six screens in
   assert.match(r.stdout, /^ok {4}open {11}the page loaded \(\/index\.html, "Dice"\)$/m);
   assert.match(r.stdout, /^next: nothing: the page checks at every screen in both themes/m);
   const report = reportOf(dir);
+  // The sheet names the owner as Saltix does (19-connect §12.1): a short address of the network, never hex.
+  const owner = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).owner;
+  const short = shortAddress(encodeAddress("devnet", fromHex(owner, 32)));
+  assert.match(short, /^dsalt1q\w{4}…\w{6}$/);
+  assert.ok(report.run.sheet.text.includes(`dice · by ${short}`), report.run.sheet.text);
+  assert.ok(!report.run.sheet.text.includes(owner.slice(0, 8)), "no hex");
   assert.equal(report.run.measures.length, 12);
   assert.deepEqual([...new Set(report.run.measures.map((m) => m.theme))], ["dark", "light"]);
   const shots = readdirSync(join(dir, ".grain", "check")).filter((f) => f.endsWith(".png"));
@@ -301,7 +325,8 @@ test("--tap in a real browser: each button once; a throw and a refused request f
   const dir = page((dir) => {
     const html = readFileSync(join(dir, "public", "index.html"), "utf8").replace("</main>", `</main>
 <div id="taps"><button id="boom">Boom</button><button id="dead">Dead</button><button id="away">Away</button><button id="pay">Pay</button>
-<button id="send">Send</button><div style="position:relative"><button id="under">Under</button><div style="position:absolute;inset:0"></div></div></div>
+<button id="send">Send</button><div style="position:relative"><button id="under">Under</button><div style="position:absolute;inset:0"></div></div>
+<button id="roll">Roll</button><button id="clear" hidden>Clear history</button><span id="again"><button>Drawn 0 times</button></span></div>
 <script type="module" src="./taps.js"></script>`);
     writeFileSync(join(dir, "public", "index.html"), html);
     writeFileSync(join(dir, "public", "taps.js"), `import { grain } from "./grain.js";
@@ -309,6 +334,17 @@ document.getElementById("boom").onclick = () => { throw new TypeError("board is 
 document.getElementById("away").onclick = () => { location.href = "https://elsewhere.example/page"; };
 document.getElementById("pay").onclick = () => grain.pay({ to: "dsalt1qqqq", amount: "1" }).catch(() => {});
 document.getElementById("send").onclick = () => grain.relay.send("dsalt1qqqq", new Uint8Array([1])).catch(() => {});
+document.getElementById("roll").onclick = () => { document.getElementById("clear").hidden = false; };
+document.getElementById("clear").onclick = () => { throw new Error("clear failed"); };
+// A button drawn again on every tap, its count in its label: the same button, never one a tap brought up.
+let drawn = 0;
+const draw = () => {
+  const b = document.createElement("button");
+  b.textContent = \`Drawn \${drawn} times\`;
+  b.onclick = () => { drawn++; draw(); };
+  document.getElementById("again").replaceChildren(b);
+};
+draw();
 `);
   });
   // Without --tap: nothing is tapped, and the page passes.
@@ -317,18 +353,26 @@ document.getElementById("send").onclick = () => grain.relay.send("dsalt1qqqq", n
   assert.doesNotMatch(quiet.stdout, /tapped|tapping|^\S+ +tap /m);
   const r = spawnSync("node", [main, "dev", "--check", "--tap"], { cwd: dir, encoding: "utf8", timeout: 170_000 });
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /then 6 of its buttons tapped once each$/m);
+  // Eight shown as the taps began, one covered; "Clear history", which Roll brings up, tapped in its turn; the button
+  // drawn again with a new count, never.
+  assert.match(r.stdout, /then 9 of its buttons tapped once each$/m);
+  assert.match(r.stdout, /^error tap {12}tapping button#clear "Clear history" threw Error: clear failed$/m);
   assert.match(r.stdout, /^error tap {12}tapping button#boom "Boom" threw TypeError: board is null$/m);
   assert.match(r.stdout, /^error tap {12}tapping button#send "Send" asked Saltix for grain_relay_send, which it refuses: 4100 /m);
   assert.match(r.stdout, /^warn {2}tap {12}tapping button#dead "Dead" changed nothing on the screen and asked Saltix for nothing$/m);
   assert.match(r.stdout, /^warn {2}tap {12}tapping button#away "Away" tried to leave the page for https:\/\/elsewhere\.example\/page: stopped here/m);
   assert.match(r.stdout, /^warn {2}tap {12}button#under "Under" cannot be tapped: div is over its middle/m);
+  // A tap failed: no line says all went well, and the next step checks the taps again.
+  assert.doesNotMatch(r.stdout, /^ok {4}tap /m);
+  assert.match(r.stdout, /^next: fix the 3 errors above, then grain dev --check --tap again$/m);
   // The counter changed the screen; the payment was declined by the simulator, as a user may: neither is said.
   assert.doesNotMatch(r.stdout, /button#count|button#pay/);
   const report = reportOf(dir).run;
   const pay = report.taps.seen.find((t) => t.name.startsWith("button#pay"));
   assert.deepEqual(pay.asked.map((a) => [a.method, a.code]), [["grain_pay", 4001]]);
   assert.ok(report.taps.seen.find((t) => t.name.startsWith("button#count")).changed);
+  assert.deepEqual(report.taps.seen.filter((t) => t.later).map((t) => t.name), ['button#clear "Clear history"']);
+  assert.equal(report.taps.later, 1);
   // Tap-time errors are the taps' own, never counted twice as the page's.
   assert.deepEqual(report.errors.filter((e) => e.where === "page"), []);
   assert.ok(existsSync(join(dir, ".grain", "check", "tap-1.png")), "what each tap left on the page");

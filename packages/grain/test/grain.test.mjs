@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  grain, inWallet, walletLink, slugLink, chatLink, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset, layoutOf, cssVariables, controlsFor,
+  grain, inWallet, walletLink, slugLink, chatLink, shortAddress, GrainError, ErrorCode, MAX_RELAY_PAYLOAD, _reset, layoutOf, cssVariables, controlsFor,
   CONTROLS_BOX, LAYOUT_VARIABLES, BAND, viewportFitCover, viewportOf, frameFor, cornerDepth, COVER_GUIDANCE, pageColorOf, frameColors, layoutCss,
 } from "../dist/index.js";
 
@@ -732,4 +732,18 @@ test("in the simulator a request says whether the user's tap is still fresh, as 
     else delete globalThis.navigator.userActivation;
     _reset();
   }
+});
+
+test("shortAddress: Saltix's short form of an address, its prefix and kind, 4 of the id and the last 6", () => {
+  // Made-up addresses of the usual lengths (a personal address: the prefix, "1", the kind q, 52 characters of the id and
+  // the checksum's 6). Every devnet personal address starts "dsalt1q", so a head of 8 told two apart by one character.
+  const id = "abcd" + "x".repeat(46) + "uvwxyz";
+  assert.equal(shortAddress(`dsalt1q${id}`), "dsalt1qabcd…uvwxyz");
+  assert.equal(shortAddress(`salt1q${id}`), "salt1qabcd…uvwxyz");
+  assert.equal(shortAddress(`tsalt1p${id}`), "tsalt1pabcd…uvwxyz", "the kind is kept");
+  assert.equal(shortAddress("tsalt1q"), "tsalt1q", "nothing to shorten");
+  assert.equal(shortAddress("dsalt1qabcdxuvwxyz"), "dsalt1qabcdxuvwxyz", "no shorter for the ellipsis");
+  // A look-alike that matches only the last four is told apart.
+  const real = `dsalt1q${id}`;
+  assert.notEqual(shortAddress(real.slice(0, -6) + "q3" + real.slice(-4)), shortAddress(real));
 });
