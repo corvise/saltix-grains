@@ -410,6 +410,8 @@
   registers it public: `grain access --private`), never "public from its first version"; the log's `access` reason for
   it is `wallet`.
 - An owner's call with `--no-wait` sent a reader to `grain show`; it names `grain doctor`, which says when it landed.
+- `grain dev --check` waits for a cold browser to answer (up to 45 s) before its first call, which on a busy CI runner's
+  first launch timed out at 15 s (`Target.createTarget: no answer`).
 - The steps' log as docs/devex.md has it: an owner's call signed with a key file logs `registry` (`set`, `not_landed`,
   `no_wait`), `grain profile` among them; an icon refused logs its reason (`alpha`, `hash`, …), not `checked`;
   `doctor` with nothing left logs `done`; a command stopped by Ctrl-C or SIGTERM logs its `end` (`grain dev`: `ok`, any

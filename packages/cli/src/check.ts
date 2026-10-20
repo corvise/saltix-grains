@@ -294,6 +294,7 @@ const TAP_BUDGET_MS = 40_000;
 /** Drive the simulator at `origin` in `browser`: the sheet, the page, every screen in both themes, the screenshots;
  *  with `tap`, each button tapped once. */
 async function drive(browser: Browser, origin: string, out: string, icon: boolean, tap = false): Promise<CheckRun> {
+  await browser.ready();
   const session = await browser.tab();
   const send = <T = Record<string, unknown>>(method: string, params: object = {}) => browser.send<T>(method, params, session);
   const contexts = new Map<number, string>();
@@ -414,6 +415,18 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
     const png = Buffer.from(data, "base64");
     return { png, pixels: PNG.sync.read(png).data };
   };
+  // The page as it rests: looked at until two looks agree (a hover's or a tap's effect drawn), at most 5 times; a page
+  // that never rests (an animation) cannot be told unchanged, and is not.
+  const steady = async () => {
+    let last = await snap();
+    for (let i = 0; i < 5; i++) {
+      await sleep(80);
+      const next = await snap();
+      if (next.pixels.equals(last.pixels)) return { ...next, rests: true };
+      last = next;
+    }
+    return { ...last, rests: false };
+  };
   await send("Fetch.enable", { patterns: [{ urlPattern: "*", resourceType: "Document", requestStage: "Request" }] });
   const seen: TapSeen[] = [];
   let total = 0;
@@ -430,22 +443,22 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
         continue;
       }
       const at = { x: aim.x!, y: aim.y! };
-      // The pointer over it first, so that a hover's look is not taken for the tap's.
+      // The pointer over it first, and the page at rest, so that a hover's look is not taken for the tap's.
       await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...at });
-      await sleep(60);
+      const look = await steady();
       const mark = { errors: errors.length, dialogs: dialogs.length, blocked: blocked.length, calls: (await evaluate<unknown[]>("window.saltixSimulator.calls()")).length };
-      const look = await snap();
       await send("Input.dispatchMouseEvent", { type: "mousePressed", ...at, button: "left", clickCount: 1 });
       await send("Input.dispatchMouseEvent", { type: "mouseReleased", ...at, button: "left", clickCount: 1 });
       await sleep(TAP_SETTLE_MS);
       const asked = await evaluate<TapSeen["asked"]>(`window.saltixSimulator.calls(${mark.calls})`);
-      const after = await snap();
+      const after = await steady();
       // What each tap left on the page, for a person to look at.
       writeFileSync(join(out, `tap-${seen.length + 1}.png`), after.png);
       seen.push({
         name, state: "tapped",
         thrown: errors.slice(mark.errors).filter((e) => e.where === "page").map((e) => e.text),
-        asked, dialogs: dialogs.length - mark.dialogs, blocked: blocked.slice(mark.blocked), changed: !after.pixels.equals(look.pixels),
+        asked, dialogs: dialogs.length - mark.dialogs, blocked: blocked.slice(mark.blocked),
+        changed: !look.rests || !after.rests || !after.pixels.equals(look.pixels),
       });
     }
   } finally {

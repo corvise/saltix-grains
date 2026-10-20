@@ -169,6 +169,14 @@ export class Browser {
     this.listeners.push(listen);
   }
 
+  /** Wait until the browser answers at all (`Browser.getVersion`), at most `ms`: a cold start (a first launch, a busy
+   *  computer or CI runner) may take far longer than a running browser takes to answer a call (15 s each), and the
+   *  first call would time out while the browser was still starting. A browser that exits meanwhile fails it at once,
+   *  with its last words. */
+  async ready(ms = 45_000): Promise<void> {
+    await this.send("Browser.getVersion", {}, undefined, ms);
+  }
+
   /** A new tab, attached: its session's id. */
   async tab(): Promise<string> {
     const { targetId } = await this.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
