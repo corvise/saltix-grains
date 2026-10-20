@@ -11,8 +11,9 @@ import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   AppKey, APP_KEY_FILE, type Manifest, type NodeLike, type RegisteredGrain, NO_ICON, UNOWNED, blobHeld, decodeOffer, encodeManifest, fromHex, grainGet,
-  grainQuote, iconHash, keyFingerprint, minimumFee, nodeCall, registeredKeyStatus, toHex,
+  grainQuote, iconHash, keyFingerprint, minimumFee, nodeCall, registeredKeyStatus, statusGates, toHex,
 } from "@saltix/grain-server";
+import { WHERE_CODES, keptAccess } from "./access.js";
 import { type Bundle, makeBundle } from "./bundle.js";
 import { CONNECT_FILE, TEMPLATE_NEXT, lintConnect, readConnectFile, stillTemplate, templateTexts } from "./connect.js";
 import { EXIT_WAITING, GRAIN_DIR } from "./devlog.js";
@@ -79,7 +80,7 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
       next: `grain doctor${flags}`,
     };
   }
-  let status: { network: string; genesis: string };
+  let status: { network: string; genesis: string; access?: unknown };
   try {
     status = await nodeCall(node, "node_status");
   } catch (e) {
@@ -88,19 +89,25 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
       next: `grain status${flags} again once the network answers (or pass --relay or --node)`,
     };
   }
+  // Where the relays require access (33-gate), a key not paired yet needs this computer's grant: a code, unless one is
+  // kept here that still lasts.
+  const gates = statusGates(status.access);
+  const needsCode = gates !== null && !("credential" in keptAccess(dir, { network: status.network, genesis: status.genesis, gates }, Date.now()));
+  const pairing = (command: string) =>
+    needsCode ? `${command} --access-code XXXXX-XXXXX (this test network requires an access code to pair: ${WHERE_CODES})` : command;
   if (existsSync(appKeyPath)) {
     let key: AppKey;
     try {
       key = AppKey.parse(readFileSync(appKeyPath, "utf8"));
     } catch (e) {
-      return { status: "invalid", detail: `app.key is not a developer key (${(e as Error).message})`, next: `grain pair --new${flags}` };
+      return { status: "invalid", detail: `app.key is not a developer key (${(e as Error).message})`, next: pairing(`grain pair --new${flags}`) };
     }
     const base = { slug: key.slug, network: key.network, fingerprint: keyFingerprint(key.publicKey) };
     if (!key.isFor(status.network, status.genesis)) {
       return {
         ...base, status: "other_network",
         detail: `app.key is for ${key.network} ${key.genesis}, but the network answering is ${status.network} ${status.genesis.slice(0, 16)} (a reset?)`,
-        next: `grain pair --new${flags}`,
+        next: pairing(`grain pair --new${flags}`),
       };
     }
     const grain = await grainGet(node, key.slug);
@@ -117,7 +124,7 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
       revoked: "the owner revoked the app's keys", replaced: "the owner replaced this key", retired: `${key.slug} is retired`,
       unregistered: `the registry holds no app ${key.slug}`,
     } as const;
-    return { ...base, status: why, grain, detail: `app.key: ${words[why]}`, next: `grain pair --new${flags}` };
+    return { ...base, status: why, grain, detail: `app.key: ${words[why]}`, next: pairing(`grain pair --new${flags}`) };
   }
   const secret = existsSync(join(dir, PAIR_KEY_FILE)) ? pendingKey(dir) : null;
   if (secret !== null) {
@@ -145,11 +152,11 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
     return {
       status: "pairing", fingerprint: keyFingerprint(key),
       detail: `a key made by grain pair (${keyFingerprint(key)}) is not paired yet: ${offer}${asked}`,
-      next: `grain pair${flags}`,
+      next: pairing(`grain pair${flags}`),
     };
   }
   const env = process.env.SALTIX_APP_KEY?.trim() ? " (SALTIX_APP_KEY is set in this shell: the server would use it, this command does not read it)" : "";
-  return { status: "unpaired", detail: `no app.key and no key waiting in ${GRAIN_DIR}/${env}`, next: `grain pair${flags}` };
+  return { status: "unpaired", detail: `no app.key and no key waiting in ${GRAIN_DIR}/${env}`, next: pairing(`grain pair${flags}`) };
 }
 
 /** One of `doctor`'s findings: ok; something to do, which `next` says; or nothing to do but wait for the network. */

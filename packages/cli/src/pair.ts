@@ -8,16 +8,22 @@
 // 2. Registered at the network's relays under the key's address, it answers the owner's Saltix: one app and one owner
 //    per offer, with the key's proof for them (`judgePair`, `answerPair`), and says in the terminal who asked.
 // 3. It watches the registry until it names the key for that app, then writes `app.key` and `app.json`.
+//
+// On a test network whose relays require access grants (33-gate), the key is not a registered server key yet, so the
+// connection shows this computer's grant (`access.ts`): asked for before the offer is shown, so a code that is missing or
+// refused stops here, before anyone scans. Once paired, the server needs none.
 import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
 import QRCode from "qrcode";
 import {
-  AppKey, type NetworkName, type NodeLike, type PairRequest, type PairingOffer, type RelayFrame, MAX_PAIR_NAME, PairingError, RelayClient, RelayGateways, answerPair, decodePairFrame, encodePairFrame, grainGet,
-  judgePair, keyFingerprint, makeOffer, nodeCall, offerCodeText, offerLink, refusedChar, registeredKeyStatus, relaysOf, toHex,
+  AppKey, type AccessCredential, AccessRefused, type NetworkName, type NodeLike, type PairRequest, type PairingOffer, type RelayFrame,
+  MAX_PAIR_NAME, PairingError, RelayClient, RelayGateways, answerPair, decodePairFrame, encodePairFrame, grainGet, judgePair,
+  keyFingerprint, makeOffer, nodeCall, offerCodeText, offerLink, refusedChar, registeredKeyStatus, relaysOf, statusGates, toHex,
   fromHex, decodeOffer, encodeOffer, APP_KEY_FILE,
 } from "@saltix/grain-server";
+import { type Gated, accessRefused } from "./access.js";
 import { type DevLog, GRAIN_DIR, grainDir } from "./devlog.js";
 
 /** Where a key not paired yet waits, owner-only. */
@@ -258,6 +264,8 @@ export interface PairOptions {
   log: DevLog;
   out?: (line: string) => void;
   now?: () => number;
+  /** On a network whose relays require access: this computer's grant (`obtainAccess`: the one kept, or a code's). */
+  access?: (gated: Gated) => Promise<AccessCredential>;
   /** Tests: a relay connection of their own, and how often the registry is read (ms). */
   connect?: typeof RelayClient.connect;
   pollMs?: number;
@@ -268,10 +276,12 @@ export async function pair(o: PairOptions): Promise<number> {
   const out = o.out ?? ((line: string) => console.log(line));
   const now = o.now ?? Date.now;
   const dir = resolve(o.dir);
-  const status = await nodeCall<{ network: string; genesis: string }>(o.node, "node_status");
+  const status = await nodeCall<{ network: string; genesis: string; access?: unknown }>(o.node, "node_status");
   if (!["mainnet", "testnet", "devnet"].includes(status.network)) throw new Error(`the node answers for ${status.network}, a network the SDK does not know`);
   const network = status.network as NetworkName;
   const genesis = status.genesis;
+  // The gates whose grants the relays require (33-gate §5), or null where they require none.
+  const gates = statusGates(status.access);
   o.log.onNetwork(network);
   grainDir(dir);
   ensureGitignore(dir);
@@ -310,7 +320,14 @@ export async function pair(o: PairOptions): Promise<number> {
 
   // Saltix may have named it already (a wait cut short, a managed owner's delay that passed).
   const named = answered.length > 0 ? await namedFor(o.node, key, answered) : null;
-  if (named) return finished(o, dir, network, genesis, named.slug, secret, out);
+  if (named) return finished(o, dir, network, genesis, named.slug, secret, out, gates !== null);
+
+  // A key not paired yet shows a grant where the relays require access: had now, before the offer is shown.
+  let access: AccessCredential | null = null;
+  if (gates !== null) {
+    if (!o.access) throw new Error("this network's relays require access grants, and this tool was given no way to get one");
+    access = await o.access({ network, genesis, gates });
+  }
 
   // The offer: shown again while it has time to live, else a new one.
   const manifest = readManifestSlugAndName(dir);
@@ -354,9 +371,14 @@ export async function pair(o: PairOptions): Promise<number> {
   // Answer Saltix, then watch the registry.
   const connect = o.connect ?? RelayClient.connect.bind(RelayClient);
   let relay: RelayClient;
+  const again = `grain pair${o.flags}`;
   try {
-    relay = await connect({ ...relayReach(o.node), secret, network, ackKept: "by_handler", timeoutMs: 20_000 });
+    relay = await connect({ ...relayReach(o.node), secret, network, ackKept: "by_handler", timeoutMs: 20_000, access });
   } catch (e) {
+    if (e instanceof AccessRefused) {
+      o.log.step("relay", "refused", `access_${e.reason}`);
+      throw accessRefused(e, dir, again);
+    }
     o.log.step("relay", "failed", "network_unreachable");
     throw new Error(`no relay took this server's registration (${(e as Error).message}): check the connection, or pass --relay or --node`);
   }
@@ -373,7 +395,16 @@ export async function pair(o: PairOptions): Promise<number> {
     for (;;) {
       if (state.answered.length > 0) {
         const done = await namedFor(o.node, key, state.answered).catch(() => null);
-        if (done) return finished(o, dir, network, genesis, done.slug, secret, out);
+        if (done) return finished(o, dir, network, genesis, done.slug, secret, out, gates !== null);
+      }
+      // This computer's access ended while it waits (the grant's life is up): the relay closed the connection, and every
+      // relay refuses the grant from now on. The registry's word came first: a key it names needs no access to finish.
+      const lost = relay.accessLost;
+      if (lost !== null) {
+        o.log.step("relay", "refused", `access_${lost.reason}`);
+        const problem = accessRefused(lost, dir, again);
+        out(`${problem.message} It shows the same offer while it lives${state.answered.length > 0 ? ", and finishes once the registry names the key" : ""}.`);
+        return 1;
       }
       if (now() >= deadline) {
         o.log.step("registry", "timeout", state.answered.some((a) => a.offer === offer!.nonce) ? "answered_not_named" : "not_asked");
@@ -437,11 +468,13 @@ const REFUSALS: Record<string, string> = {
   not_owner: "the registry holds that app for another account, or retired",
 };
 
-function finished(o: PairOptions, dir: string, network: NetworkName, genesis: string, slug: string, secret: Uint8Array, out: (line: string) => void): number {
+function finished(o: PairOptions, dir: string, network: NetworkName, genesis: string, slug: string, secret: Uint8Array, out: (line: string) => void,
+  gated: boolean): number {
   const app = finishPairing(dir, network, genesis, slug, secret);
   o.log.step("paired", "ok");
   out(`Paired: this server speaks for ${slug} on ${network} (key ${app.fingerprint}).`);
   out(`app.key (owner-only) and app.json are written; .gitignore keeps the keys and ${GRAIN_DIR}/ out of git.`);
+  if (gated) out("The server needs no access code: the relays let a registered server key in.");
   out(`Next: npm start (a chat-only app), or grain doctor for what is left.`);
   return 0;
 }

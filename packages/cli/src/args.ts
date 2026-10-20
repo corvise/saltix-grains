@@ -17,8 +17,9 @@ export const SWITCHES: ReadonlySet<string> = new Set([
 
 /** Where a command reaches the network: its public relays (`--network`), relays named (`--relay`), or your node. */
 const NET = ["network", "relay", "node"];
-/** A transaction signed with a key file: where it goes and how it is signed. */
-const SIGNED = [...NET, "key", "genesis", "fee", "valid-for"];
+/** A transaction signed with a key file: where it goes and how it is signed; through relays that require access (a test
+ *  network's gate, 33-gate), the code that gets this computer a grant. */
+const SIGNED = [...NET, "key", "genesis", "fee", "valid-for", "access-code"];
 /** A registry call signed with a key file, and whether the command returns before it landed (`--no-wait`; `--wait`, the
  *  default, is still taken). */
 const KEYED = [...SIGNED, "wait", "no-wait"];
@@ -43,11 +44,11 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   rate: ["slug", "score", "review", ...KEYED],
   bind: ["handle", "slug", "clear", ...OWNER],
   "app-key": ["file", ...NET, "offline", "slug", "server", "out"],
-  pair: ["slug", "name", "new", "wait", "no-wait", "timeout", ...NET],
+  pair: ["slug", "name", "new", "wait", "no-wait", "timeout", "access-code", ...NET],
   status: ["json", ...NET],
   doctor: ["json", ...NET],
   sponsor: ["exchange", "amount", ...SIGNED],
-  faucet: ["key", "address", "wait", "timeout", ...NET],
+  faucet: ["key", "address", "wait", "timeout", "access-code", ...NET],
   profile: ["profile", "clear", "manifest", ...OWNER],
   "connect-profile": ["profile", "origin", "name", "category", "key", "owner", "revision", "out", "offline"],
 };

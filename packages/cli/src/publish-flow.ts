@@ -43,6 +43,7 @@ import { ensureGitignore, terminalQr } from "./pair.js";
 import { type Signer, accountOf, keyFlag, ownerLine, signerFor } from "./owner.js";
 import { lint, publicKeyOf, readKey } from "./project.js";
 import { publishCall, salt, submit, walletLink, waitForPublished, type Sent, type Signing } from "./registry.js";
+import { aboutAccess } from "./access.js";
 import { SETTLE_EVERY_MS, SETTLE_MS, STAGES, landed, sendSettled } from "./send.js";
 import { protocolOf, sourcesFor } from "./sources.js";
 import { APP_KEY_ENV, APP_KEY_FILE, privateCall, sameMembers } from "./studio.js";
@@ -991,6 +992,8 @@ async function ensurePrivate(o: PublishOptions, print: (line: string) => void, s
         o.log.step("access", "waiting", "sent");
         print(`access ${slug}: private (transaction ${sent.id}, fee ${salt(sent.fee)} SALT)`);
       } catch (e) {
+        // Access refused, or no code to get it: trying again would not help, and would ask again.
+        if (aboutAccess(e)) throw e;
         // Not sent (the network, the pool): tried again until the wait ends.
         w.at(`not sent (${(e as Error).message}): trying again`);
         await sleep(every);
