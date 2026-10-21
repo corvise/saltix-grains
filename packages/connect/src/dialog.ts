@@ -85,9 +85,10 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
   head.append(markElement(doc, DIALOG_CLASSES.mark), title, close);
   const scan = element(doc, "p", DIALOG_CLASSES.scan, words.scan);
   const code = element(doc, "div", "saltix-connect-dialog__code");
-  // On the same phone the link opens Saltix in this very tab (19-connect §14.1): a verified link hands the offer to the
-  // app and the page stays where the visitor returns to. A new tab would leave the visitor on a page that still shows
-  // the offer, which the page has consumed by then.
+  // The link that opens Saltix without unloading this page (19-connect §14.1): an intent link on Android, which the
+  // browser hands to the installed app as an external intent instead of navigating; the https link elsewhere. Never a
+  // new tab (the visitor would come back to a page still offering a consumed offer), never a navigation of this tab
+  // (the page, its socket and its slot would go, and the wallet would have nothing to deliver to).
   const open = element(doc, "a", DIALOG_CLASSES.open, words.open);
   open.setAttribute("rel", "noopener noreferrer");
   open.hidden = true;
@@ -108,7 +109,7 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
   };
   const show = (offer: OfferView) => {
     code.replaceChildren(qrElement(doc, offer, words.qr));
-    open.setAttribute("href", offer.link);
+    open.setAttribute("href", offer.app);
     open.hidden = !phone;
     renew.textContent = words.newCode;
   };

@@ -383,10 +383,15 @@ The owner's rule (2026-10-21): the reference standard for every site, mini-app a
 
 The page renders the connected state from the login itself, in the same browsing context, as soon as the grant checks
 (§5): who (the address, shortened), since when, and how to disconnect. No reload, no polling, no Back. The code it
-showed is gone with it: the slot is closed, and nothing offers the consumed offer again. On the same phone the link to
-Saltix opens in the same tab, never a new one; a page reached while its connection is kept shows it at once, and every
-tab of the origin follows a connection made or forgotten in another. `@saltix/connect` does all of it; the page renders
-`connected`.
+showed is gone with it: the slot is closed, and nothing offers the consumed offer again. **The link to Saltix must not
+unload the page**: on Android an intent link (`intent:…#Intent;scheme=saltix-connect;package=io.saltix.app;
+S.browser_fallback_url=<the https link>;end`), which the browser hands to the installed app as an external intent and
+overrides the URL's loading instead of navigating the tab; elsewhere the https link, which iOS Safari hands to the app
+without navigating. Never a new tab (the visitor comes back to a page still offering a consumed offer), never the https
+link in an Android tab (the tab navigates, the page unloads, its slot dies). A page unloaded anyway and loaded again
+within the slot's life opens the same slot with the same keys from `sessionStorage`, so the wallet's delivery, tried for
+30 seconds, still lands. A page reached while its connection is kept shows it at once, and every tab of the origin
+follows a connection made or forgotten in another. `@saltix/connect` does all of it; the page renders `connected`.
 
 ### 14.2. The page confirms to the wallet
 

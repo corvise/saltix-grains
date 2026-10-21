@@ -8,7 +8,8 @@ import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { decodeSignedProfile, encodeAddress, fromHex, policyOf, profileToJson, toHex, verifyByDeviceKey } from "@saltix/grain-server/web";
 import {
   ConnectError, b64url, checkAccount, checkConfirm, checkGrant, checkSiteProfileDocument, decodeConfirm, decodePayload, encodeConfirm, encodeGrant,
-  encodeLogin, encodeReply, encodeSeen, fromB64url, loginMessage, offerLink, offerText, openLinkPayload, parseOffer, readSiteProfile, sealLinkPayload,
+  encodeLogin, encodeReply, encodeSeen, fromB64url, isAndroid, loginMessage, offerAppLink, offerIntentLink, offerLink, offerText, openLinkPayload, parseOffer,
+  readSiteProfile, sealLinkPayload,
 } from "../dist/index.js";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../../../vectors/${name}`, import.meta.url), "utf8"));
@@ -172,6 +173,22 @@ test("the page's confirmation opens for the wallet's reply slot alone, and the r
     });
     assert.equal(reason, x.reason, x.name);
   }
+});
+
+test("the link that opens Saltix keeps the page: an intent link on Android, the https link elsewhere (§14.1)", () => {
+  const offer = parseOffer(v.offer.text);
+  const intent = offerIntentLink(offer);
+  assert.equal(intent, `intent:${v.offer.text.slice("saltix-connect:".length)}#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=${encodeURIComponent(v.offer.link)};end`);
+  assert.ok(!intent.includes("#saltix-connect"), "the offer is the intent's own URI, never its fragment");
+  assert.equal(decodeURIComponent(intent.split("S.browser_fallback_url=")[1].split(";end")[0]), v.offer.link, "without Saltix, the https link");
+  const android = "Mozilla/5.0 (Linux; Android 15; SM-F966B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
+  const ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+  const mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  assert.equal(offerAppLink(offer, android), intent);
+  assert.equal(offerAppLink(offer, ios), v.offer.link);
+  assert.equal(offerAppLink(offer, mac), v.offer.link);
+  assert.equal(offerAppLink(offer, ""), v.offer.link);
+  assert.ok(isAndroid(android) && !isAndroid(ios) && !isAndroid("Androidish"));
 });
 
 test("base64url in one spelling only", () => {

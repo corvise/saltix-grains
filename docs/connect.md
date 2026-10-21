@@ -130,12 +130,13 @@ signs the origin, so the account claims the site.
   inline style, no markup parsed, so Trusted Types too), and `connect.css` is a file. The page needs `connect-src`
   for its relay and node paths (`'self'` when they are on the site).
 - **`openConnectDialog(connect, { lang, theme })`** shows the QR code titled "Saltix Connect" with "Scan with Saltix to
-  sign in", and on a phone (a coarse pointer) the **Open Saltix** link, which opens in the same tab (a verified link
-  hands the offer to Saltix and the page stays where the visitor returns to; never `target="_blank"`, [§6](#6-connection-feedback-the-page-shows-and-confirms));
+  sign in", and on a phone (a coarse pointer) the **Open Saltix** link (`offer.app`: an intent link on Android, the
+  https link elsewhere — it opens Saltix without unloading the page, [§6](#6-connection-feedback-the-page-shows-and-confirms));
   it follows the session (the phone's notice, a refusal and why, a failure with Try again, New code) and resolves with
   the connection, or null when closed (the session is cancelled then).
 - **Your own UI** instead: `const offer = await connect.offer()` gives `offer.text` (what the QR code holds),
-  `offer.link` (the phone's link), `offer.qr` (`size` and one SVG `path`, or `svg` as text) and `offer.expiresAt`; events
+  `offer.link` (the https link, for a message or another device), `offer.app` (what Open Saltix on this device points
+  at: an intent link on Android, `offer.link` elsewhere), `offer.qr` (`size` and one SVG `path`, or `svg` as text) and `offer.expiresAt`; events
   `offer` (a new one), `seen`, `checking`, `connected` (the connection), `refused` (`{reason}`: `origin`, `time`,
   `not_a_device`, `network`…, or `unchecked` when the node could not check it: asked again after 1 and 3 seconds only
   while it was unreachable, too slow or busy — HTTP 429, 502, 503, 504 or its JSON-RPC -32603 — and never for an answer
@@ -228,20 +229,35 @@ to render what the client tells it.
    its QR code after `connected` is wrong, not slow.
 2. **Show the kept connection at once** on load (`connect.connection`), and follow `connected` and `disconnected` from
    other tabs (the client raises them on the storage event).
-3. **The link to Saltix opens in the same tab** (`openConnectDialog` does; your own UI: an `<a href={offer.link}>`
-   without `target`). A new tab leaves the visitor on a page that still shows the offer, and a second tap on it
-   delivers to a slot the page has already closed — the wallet then spins against nothing.
-4. **The confirmation is the client's.** When the grant checks, the client sends the wallet's reply slot a
+3. **The link to Saltix must not unload the page** (`openConnectDialog` does it right; your own UI: an
+   `<a href={offer.app}>` without `target`, never `offer.link` on a phone). `offer.app` is an **intent link** on
+   Android (`intent:1:…#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=…;end`): the browser
+   hands it to the installed Saltix as an external intent and overrides the URL's loading instead of navigating the
+   tab, so the page, its socket and its slot stay; without Saltix it loads the fallback, the https link, which offers
+   the app (and then there was nothing to deliver to anyway). Elsewhere `offer.app` is the https link: iOS Safari hands
+   a universal link to the app without navigating, and a computer has no app to open. Two ways that are wrong, both
+   seen on 2026-10-21: a **new tab** leaves the visitor on a page that still shows the offer, and a second tap delivers
+   to a slot the page has closed; the **https link in the same tab** on Android Chrome navigates the tab — the page
+   unloads, its slot dies (the relay saw the socket close, 1001 "going away", a second after the tap), and the wallet
+   has nothing to deliver to.
+4. **A page unloaded on the way comes back to its slot.** Should the browser unload the page anyway (a browser that
+   navigates on the link, a tab discarded in the background) and load it again within the slot's life, the client
+   opens the **same slot with the same keys** (kept in `sessionStorage`: the slot id, `Q`'s secret and `P`'s public
+   key, never a private key of the page; forgotten once connected, on New code, or past 30 minutes), so the wallet's
+   delivery, tried again every 2.5 s for 30 s, still lands. A relay drops a slot with its connection and lets a new
+   connection open the same id (09-relay §10.3 step 6), so nothing is lost but the seconds. `connect.offer()` on load
+   resumes; `connect.renew()` is fresh. Telemetry `connect_resumed`, `connect_resume_failed {kind}`.
+5. **The confirmation is the client's.** When the grant checks, the client sends the wallet's reply slot a
    `ConnectConfirm` sealed to the wallet's key (the reply the wallet delivered right before the grant names the slot,
    the key and the login), waits up to 5 seconds for the relay's `link_delivered`, and closes its slot. Saltix shows
    "Connected" on that confirmation alone; without it (an older page, a refused grant, a frozen tab) it says, after 10
    seconds, that the login was sent and the page has not confirmed. Telemetry: `connect_reply` (the wallet named its
    slot), `connect_confirm` with `outcome` `delivered`, `not_delivered`, `no_answer`, `no_reply` (an older wallet),
    `other_login`, `no_link`.
-5. **The relay path must pass `link_deliver` from the page** (09-relay §10.3 step 5: a connection holding a slot may
+6. **The relay path must pass `link_deliver` from the page** (09-relay §10.3 step 5: a connection holding a slot may
    deliver): a relay before 2026-10-21 refuses it (`not_registered`), the client logs `not_delivered`, and the wallet
    falls back to "login sent" — honest, and the page is still connected.
-6. **Serve the profile exactly** at `/.well-known/saltix-connect` as `application/json`, or serve nothing there (404).
+7. **Serve the profile exactly** at `/.well-known/saltix-connect` as `application/json`, or serve nothing there (404).
    A single-page site that answers its page for every path shows Saltix an HTML document, which is no profile; from
    this date a wallet reads any non-JSON answer as "no profile", but a JSON document that is not a profile that checks
    is shown as "did not check" with its reason, so never serve a placeholder.

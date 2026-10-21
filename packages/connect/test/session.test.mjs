@@ -5,11 +5,11 @@ import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MS, SLOT_LIFE_MS, b64url, checkConfirm, decodeConfirm, encodeGrant, encodeReply,
-  encodeSeen, fromB64url, loginMessage, openLinkPayload, parseOffer, sealLinkPayload,
+  encodeSeen, fromB64url, loginMessage, offerText, openLinkPayload, parseOffer, sealLinkPayload,
 } from "../dist/index.js";
 import { x25519 } from "@noble/curves/ed25519";
 import { toHex } from "@saltix/grain-server/web";
-import { Clock, FakeLink, RELAY_KEY, keys, opened } from "./helpers.mjs";
+import { Clock, FakeLink, MemoryStorage, RELAY_KEY, keys, opened } from "./helpers.mjs";
 
 const GENESIS = new Uint8Array(32).fill(0x5a);
 const ORIGIN = "https://dex.example";
@@ -22,9 +22,11 @@ function grantFor(offer, at) {
 }
 
 function harness(opts = {}) {
-  const clock = new Clock();
+  const clock = opts.clock ?? new Clock();
   const h = { clock, phases: [], links: [], dials: [], refused: [], events: [], connected: [], reconnecting: [], verified: [], visible: { value: true }, keyCount: 0 };
   h.session = new ConnectSession({
+    userAgent: opts.userAgent ?? "",
+    keep: opts.keep ?? null,
     relays: opts.relays ?? ["/saltix/r/1/"],
     network: GENESIS,
     networkKind: "devnet",
@@ -427,4 +429,98 @@ test("stop while a confirmation is on its way closes the slot's connection", asy
   assert.equal(link.closed, true);
   await h.clock.advance(CONFIRM_DELIVERED_MS);
   assert.equal(h.clock.timers.size, 0);
+});
+
+// ── The slot across a reload, and the link that keeps the page (19-connect §14.1) ─────
+
+const ANDROID = "Mozilla/5.0 (Linux; Android 15; SM-F966B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
+
+test("the offer carries the link that opens Saltix without unloading the page: an intent link on Android", async () => {
+  const h = harness({ userAgent: ANDROID });
+  await started(h);
+  const p = last(h);
+  assert.equal(p.kind, "offer");
+  assert.ok(p.app.startsWith("intent:1:") && p.app.includes("#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url="));
+  assert.equal(decodeURIComponent(p.app.split("S.browser_fallback_url=")[1].split(";end")[0]), p.link);
+  const mac = harness();
+  await started(mac);
+  assert.equal(last(mac).app, last(mac).link);
+  h.session.stop();
+  mac.session.stop();
+});
+
+test("a page unloaded on the way to Saltix opens the same slot again on its return, and the wallet's delivery lands", async () => {
+  const keep = new MemoryStorage();
+  const first = harness({ keep });
+  await started(first);
+  const { offer, sid } = offerOf(first);
+  first.session.handOff();
+  // The browser unloads the page: nothing of the session survives but what it kept.
+  first.links[0].drop();
+  const kept = JSON.parse(keep.getItem("saltix-connect-slot"));
+  assert.equal(kept.sid, sid);
+  assert.equal(kept.held, true);
+  assert.ok(!("pageKey" in kept), "no private key of the page is kept");
+  // The page loads again 3 seconds later, with the same store (sessionStorage: the same tab) and a relay that holds
+  // nothing for it any more: the same slot is opened again at the same relay, the same offer shown, held.
+  const clock = first.clock;
+  await clock.advance(3_000);
+  const again = harness({ keep, clock });
+  await again.session.start();
+  await clock.advance(0);
+  assert.deepEqual(again.links[0].sent[0], { type: "link_open", sid });
+  assert.equal(again.keyCount, 0, "no new keys");
+  assert.equal(last(again).kind, "offer");
+  assert.equal(last(again).text, offerOf(first).offer && offerText(offer));
+  assert.equal(again.events.find((e) => e.event === "connect_resumed")?.meta.held, true);
+  // The wallet's grant, sealed to the first page's keys, opens here and connects.
+  again.links[0].deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grantFor(offer, clock.now))), sid);
+  await clock.advance(0);
+  assert.deepEqual(again.connected, ["account ed25519"]);
+  assert.equal(keep.getItem("saltix-connect-slot"), null, "forgotten once connected");
+  // Held, the resumed offer is not replaced after the QR's two minutes.
+  const held = harness({ keep: new MemoryStorage() });
+  await started(held);
+  held.session.handOff();
+  await held.clock.advance(QR_LIFE_MS + 1);
+  assert.equal(held.keyCount, 1);
+  held.session.stop();
+});
+
+test("a kept slot gives way to a fresh one when asked, when its relay changed, or past its life", async () => {
+  const keep = new MemoryStorage();
+  const h = harness({ keep });
+  await started(h);
+  const { sid } = offerOf(h);
+  // New code: fresh keys, the kept slot forgotten.
+  await h.session.start({ fresh: true });
+  assert.notEqual(offerOf(h).sid, sid);
+  assert.equal(h.keyCount, 2);
+  assert.equal(JSON.parse(keep.getItem("saltix-connect-slot")).sid, offerOf(h).sid, "the fresh slot is the one kept now");
+  const current = offerOf(h).sid;
+  h.session.stop();
+  // Another relay answers at the path now: the kept offer names the old one, so a fresh slot.
+  const other = harness({ keep, clock: h.clock, answer: (_b, f) => opened(f, new Uint8Array(32).fill(0x77)) });
+  await other.session.start();
+  await other.clock.advance(0);
+  assert.notEqual(offerOf(other).sid, current);
+  assert.equal(other.events.find((e) => e.event === "connect_resume_failed")?.meta.kind, "other_relay");
+  other.session.stop();
+  // Past the slot's 30 minutes nothing is resumed.
+  const old = harness({ keep: new MemoryStorage() });
+  await started(old);
+  const oldSid = offerOf(old).sid;
+  old.session.stop();
+  await old.clock.advance(SLOT_LIFE_MS);
+  const late = harness({ keep: old.session["keep"], clock: old.clock });
+  await late.session.start();
+  assert.notEqual(offerOf(late).sid, oldSid);
+  late.session.stop();
+  // Junk in the store is no slot.
+  const junk = new MemoryStorage();
+  junk.setItem("saltix-connect-slot", "{not json");
+  const j = harness({ keep: junk });
+  await started(j);
+  assert.equal(j.keyCount, 1);
+  j.session.stop();
 });

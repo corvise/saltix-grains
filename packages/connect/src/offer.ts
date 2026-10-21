@@ -32,6 +32,30 @@ export function offerText(o: Offer): string {
 
 export const offerLink = (o: Offer): string => LINK_PREFIX + offerText(o);
 
+/** Saltix's Android package: an intent link names it, so no other app is offered the request. */
+export const APP_PACKAGE = "io.saltix.app";
+
+/**
+ * The offer as an Android intent link (19-connect §14.1): `intent:<the offer's text after "saltix-connect:">#Intent;
+ * scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=<the https link>;end`. A tap on it hands the
+ * request to the installed Saltix as an external intent — the browser overrides the URL's loading instead of navigating
+ * the tab, so the page, its socket and its slot stay (Chromium's ExternalNavigationHandler: "We should override the
+ * URL loading and launch an intent"); without Saltix the browser loads the fallback, the https link, which offers the
+ * app. The https link itself, opened in the tab, is a navigation the browser may commit while handing it to the app:
+ * Android Chrome did (2026-10-21), the page unloaded and its slot died with it.
+ */
+export function offerIntentLink(o: Offer): string {
+  const text = offerText(o);
+  return `intent:${text.slice("saltix-connect:".length)}#Intent;scheme=saltix-connect;package=${APP_PACKAGE};S.browser_fallback_url=${encodeURIComponent(offerLink(o))};end`;
+}
+
+/** Whether `userAgent` is an Android browser, where the intent link opens Saltix without unloading the page. */
+export const isAndroid = (userAgent: string): boolean => /\bAndroid\b/i.test(userAgent);
+
+/** The link that opens Saltix on this device and keeps the page: the intent link on Android, the https link elsewhere
+ *  (iOS Safari hands a universal link to the app without navigating; a computer has no app to open). */
+export const offerAppLink = (o: Offer, userAgent: string): string => (isAndroid(userAgent) ? offerIntentLink(o) : offerLink(o));
+
 /** A page's name as an offer carries it: 1–40 bytes, no control, format or bidirectional character, no line or
  *  paragraph separator. */
 export function nameOk(name: string): boolean {
