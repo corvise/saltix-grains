@@ -1,5 +1,5 @@
 // `createDevGate` (`@saltix/grain-server/dev`): a test network's gate on this computer, speaking saltix-api's interface
-// (Saltix 33-gate §4.5) for development and tests. Codes are redeemed once for a grant it signs with its own key; it
+// (Saltix 37-gate §4.5) for development and tests. Codes are redeemed once for a grant it signs with its own key; it
 // judges no attestation, so it gives unattested grants only (at most a day of the code's length, §4.3) and refuses a
 // certificate chain. Every refusal of §4.5 can be played (`refuse`). Development keys only.
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";

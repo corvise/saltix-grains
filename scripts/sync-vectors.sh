@@ -4,7 +4,7 @@
 # Connect's offers, grants and logs, for @saltix/connect), connect-profiles-v1.json (Connect profiles),
 # server-pairing-v1.json (pairing a server by QR code, grain pair), images-v1.json (named blobs: the image and bundle
 # checks, a bundle's upload into the network, for grain publish and grain icon) and gate-v1.json (a test network's access
-# grants and tokens, 33-gate: grain pair on a gated network) from a Saltix checkout, and record its commit and each
+# grants and tokens, 37-gate: grain pair on a gated network) from a Saltix checkout, and record its commit and each
 # file's git blob id there in vectors/SOURCE. CI holds the copies to those ids byte for byte (scripts/check-vectors.mjs),
 # so a vector edited here by hand fails.
 #

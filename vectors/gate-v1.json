@@ -15,7 +15,7 @@
     "signature": "eb9849c3ced869ebb9c745534ba321657649f790efd3ec2c797353e5d6bcd770387c725cf341f3bf85ec33b8c89ba824156de384202b800b84461b595c2eaae8",
     "signing_message": "8ed7d1644931c8af8e477cca61f9f810b119bd89357650d72608e386f5ff5497"
   },
-  "description": "Saltix 33-gate: access grants, a phone's delegation to a browser, tokens to a relay, the redemption's proof of possession and a code's id. Byte strings are lowercase hex unless named base64url; times are Unix ms as decimal strings. The P-256 signatures are RFC 6979 and low-s, over SHA-256 of the 32-byte message (what a Keystore computes for SHA256withECDSA); a phone's own are randomized, and any valid low-s signature is accepted.",
+  "description": "Saltix 37-gate: access grants, a phone's delegation to a browser, tokens to a relay, the redemption's proof of possession and a code's id. Byte strings are lowercase hex unless named base64url; times are Unix ms as decimal strings. The P-256 signatures are RFC 6979 and low-s, over SHA-256 of the 32-byte message (what a Keystore computes for SHA256withECDSA); a phone's own are randomized, and any valid low-s signature is accepted.",
   "domains": {
     "delegation": "Saltix access delegation v1",
     "grant": "Saltix access grant v1",
@@ -153,6 +153,11 @@
       "access": "malformed",
       "name": "unknown_version",
       "token": "00025a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a03476dcb6f9853aaed09e9c563ba11f2b01799029623c7b2924600aa935dd9902801003399e71480612518a301000080bd4b1da3010000c110bf917538bb04dd65028094d381fd20b9ab67c57aeba84c96c9a861a5d3f2e054c3292db81f50209c4743f520519aa5790fc72e72eb4b7696cf315cc0210c7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e00505c18a30100009264565d83aa582d489440555ccbba4cda84e5ee9f4e161d6b51808087e2af8620eed83f4d017e33db895d12c1155f1e596565f4a110c8d2693ce46bf641d75a"
+    },
+    {
+      "access": "malformed",
+      "name": "compact_key",
+      "token": "00015a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a05476dcb6f9853aaed09e9c563ba11f2b01799029623c7b2924600aa935dd9902801003399e71480612518a301000080bd4b1da3010000fe8cac1bf6f2ac2ef659aaea9d73558b328dd3d9595019415f62d984d317077b45ed9be1e41a32334f39e79a6ac0eb6dc8f2ea068f2192c4582524cc64d755017e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e00505c18a301000001de988a59e35bf8c799c85e9ed22322d4ca5102db2a04698aa3f269ec0222f318b783a6c2c3c9b267b24884f2481e2325a9a053899cfd9074e63ba5872f922d"
     },
     {
       "access": "proof",

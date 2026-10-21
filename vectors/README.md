@@ -17,7 +17,7 @@ client, in any language, reproduces them byte for byte, refusals included. The S
   and section numbers.
 - **`SOURCE`'s commit** (`b9019fd`) is the protocol's change that added `images-v1.json` (named blobs: icons, avatars
   and bundles the network keeps, 32-images); every other file's bytes are those of the commit before it, but
-  `gate-v1.json`'s, copied alone from `6c96500` (33-gate, a test network's access grants), whose line names it: the
+  `gate-v1.json`'s, copied alone from `6c96500` (37-gate, a test network's access grants), whose line names it: the
   protocol's other files changed since `b9019fd` (names and numbers, images, profiles) wait for a sync of their own. Earlier syncs
   brought `ConfigureGrain` tag 39 of protocol version 2 (`grains-v1.json`, `configure-v2`), which no network runs yet,
   and the member proof's 5 minutes of clock skew (`grain-chats-v1.json`).

@@ -195,7 +195,7 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   --relay URL#H  or a relay you name, pinned by its certificate's SHA-256 H (wss://host:30335/#…; repeat it)
   --node URL     or your own node's wallet interface (plain HTTP: a local node or a tunnel)
   --genesis H    refuse a node of another network; --fee N   base units of SALT; --valid-for N   slots (600)
-  --access-code C   where the test network's relays require access (its gate, Saltix 33-gate): a code from the
+  --access-code C   where the test network's relays require access (its gate, Saltix 37-gate): a code from the
     network's operator (made in Saltix Pass or with the operator's bot), XXXXX-XXXXX, for this computer's grant. Asked
     by grain pair before its key is paired, and by a write through the relays (grain faucet, a key file's
     transaction); also SALTIX_ACCESS_CODE, or typed at a terminal. The grant is kept in .grain/access.json while it
@@ -371,7 +371,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
   const { command, topic, positional, flags, all } = parse(argv);
   const manifestPath = text(flags, "manifest", MANIFEST_FILE);
   if (flags.get("access-code") === true) throw new UsageError("--access-code XXXXX-XXXXX: the code the network's operator gave");
-  /** This computer's access, where the network's relays require it (33-gate): the grant kept here, or a code's. */
+  /** This computer's access, where the network's relays require it (37-gate): the grant kept here, or a code's. */
   const access = (again: string) => (gated: Gated) => obtainAccess({
     dir: process.cwd(), code: typeof flags.get("access-code") === "string" ? (flags.get("access-code") as string) : undefined,
     env: process.env, prompt: terminalPrompt(), out: (line) => console.log(line), log, again,

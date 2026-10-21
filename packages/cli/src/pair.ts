@@ -9,7 +9,7 @@
 //    per offer, with the key's proof for them (`judgePair`, `answerPair`), and says in the terminal who asked.
 // 3. It watches the registry until it names the key for that app, then writes `app.key` and `app.json`.
 //
-// On a test network whose relays require access grants (33-gate), the key is not a registered server key yet, so the
+// On a test network whose relays require access grants (37-gate), the key is not a registered server key yet, so the
 // connection shows this computer's grant (`access.ts`): asked for before the offer is shown, so a code that is missing or
 // refused stops here, before anyone scans. Once paired, the server needs none.
 import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -280,7 +280,7 @@ export async function pair(o: PairOptions): Promise<number> {
   if (!["mainnet", "testnet", "devnet"].includes(status.network)) throw new Error(`the node answers for ${status.network}, a network the SDK does not know`);
   const network = status.network as NetworkName;
   const genesis = status.genesis;
-  // The gates whose grants the relays require (33-gate §5), or null where they require none.
+  // The gates whose grants the relays require (37-gate §5), or null where they require none.
   const gates = statusGates(status.access);
   o.log.onNetwork(network);
   grainDir(dir);

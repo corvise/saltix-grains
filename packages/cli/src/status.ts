@@ -89,7 +89,7 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
       next: `grain status${flags} again once the network answers (or pass --relay or --node)`,
     };
   }
-  // Where the relays require access (33-gate), a key not paired yet needs this computer's grant: a code, unless one is
+  // Where the relays require access (37-gate), a key not paired yet needs this computer's grant: a code, unless one is
   // kept here that still lasts.
   const gates = statusGates(status.access);
   const needsCode = gates !== null && !("credential" in keptAccess(dir, { network: status.network, genesis: status.genesis, gates }, Date.now()));

@@ -43,7 +43,7 @@ export interface RelayOptions {
    */
   ackKept?: "on_receipt" | "by_handler";
   /**
-   * An access grant and its key (33-gate), shown at registration where a relay requires access (its hello names
+   * An access grant and its key (37-gate), shown at registration where a relay requires access (its hello names
    * `access`): for a key the registry does not name yet, such as a computer's while `grain pair` pairs it, or a
    * certified one. A registered server key of a live grain needs none and shows none: relays let it in (12-grains §5.5).
    * Where a relay requires access and none is given, the client registers without and the relay decides.
@@ -112,7 +112,7 @@ export function usableEndpoint(endpoint: RelayEndpoint): boolean {
  *
  * Your frames use the relay's free share (11-access §3); a paid lane for servers comes later.
  *
- * On a test network whose relays require access grants (33-gate), a key the registry names for a live grain registers as
+ * On a test network whose relays require access grants (37-gate), a key the registry names for a live grain registers as
  * anywhere else; any other shows the grant `access` gives. A refusal of access is the `accessRefused` event (an
  * `AccessRefused`, its `reason` the relay's word); a round of relays that all refused rejects `ready()` (and `connect`)
  * with it. `accessEnded` says a relay ended the connection's access (the grant ended): it closes the connection.

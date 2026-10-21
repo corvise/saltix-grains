@@ -2,8 +2,8 @@
 
 > Reflects Saltix 09-relay §1.1–§1.3, §2, §3, §5, §6, §10.1, §10.3, §10.5, §10.5.2 and §10.7 (version 2, with the
 > changes of 2026-10-15 to 2026-10-19), 10-storage §4 and 11-access §2–§5 (approved 2026-10-05), as of corvise/saltix
-> `7d3744c5` (2026-10-19); and what 33-gate added to 09-relay §3 and §10.7 (a test network's access grants), as of
-> corvise/saltix `6c965007` (2026-10-21). Only the client side an app's server or a Connect page uses.
+> `7d3744c5` (2026-10-19); and what 37-gate added to 09-relay §3 and §10.7 (a test network's access grants), as of
+> corvise/saltix `9ff53fd8` (2026-10-21). Only the client side an app's server or a Connect page uses.
 
 Relays carry messages between clients: Saltix wallets, grains' servers, Connect pages. Clients encrypt the content themselves; a relay cannot read it. Any relay is an entry point: a client connects to one,
 and relays pass frames to each other and keep mailboxes for addresses that are offline.

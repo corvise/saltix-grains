@@ -1,4 +1,4 @@
-// A test network's gate (Saltix 33-gate): the access grant its gate signs for a P-256 key, what a client shows a relay
+// A test network's gate (Saltix 37-gate): the access grant its gate signs for a P-256 key, what a client shows a relay
 // (an `AccessToken`: the grant and the key's proof to that relay at that moment), and the relay's own check of one.
 //
 // A relay whose node runs a gate names it in its hello (`access: {gates}`) and takes a registration only with a token,
@@ -189,7 +189,7 @@ export function grantSigner(signed: SignedAccessGrant, gates: readonly Uint8Arra
 const SECRETS = new WeakMap<AccessKey, Uint8Array>();
 
 /**
- * The P-256 key an access grant is bound to (33-gate §1). A phone keeps its own in the Keystore; a computer keeps one in
+ * The P-256 key an access grant is bound to (37-gate §1). A phone keeps its own in the Keystore; a computer keeps one in
  * its project (`grain pair`: `.grain/access.key`, owner-only). It signs ECDSA over SHA-256 of a 32-byte message, `r ‖ s`
  * with a low `s` (RFC 6979). Its secret is never logged or printed: `toString` and `toJSON` show the public key alone.
  */
@@ -291,7 +291,7 @@ function grantTermsProblem(g: AccessGrant, network: Uint8Array, now: number): Ac
 }
 
 /**
- * Whether a relay takes `bytes` as a token (33-gate §3), as the node's `check_token` decides, in its order: what costs
+ * Whether a relay takes `bytes` as a token (37-gate §3), as the node's `check_token` decides, in its order: what costs
  * nothing first (the relay's key, the time, the grant's terms, the delegation's dates), then the gate's signature, the
  * delegation's and the proof. `@saltix/grain-server/dev`'s relay checks with it; a client needs it only in tests.
  */
@@ -363,7 +363,7 @@ export function helloGates(access: unknown, decode: (text: string) => Uint8Array
 }
 
 /** `node_status.access` (`{gates: [hex key, …]}`, or null): the gates whose grants the node's relay requires, or null
- *  when it requires none (08-node §6, 33-gate §5). */
+ *  when it requires none (08-node §6, 37-gate §5). */
 export function statusGates(access: unknown): Uint8Array[] | null {
   if (typeof access !== "object" || access === null) return null;
   const gates = (access as { gates?: unknown }).gates;

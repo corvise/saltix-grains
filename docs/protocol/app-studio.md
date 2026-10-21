@@ -3,7 +3,7 @@
 > Reflects Saltix 24-app-studio (approved 2026-10-15; the launch, the app's home, the console, invites, Awaiting you
 > and the Connect profile, 2026-10-15 to 2026-10-16; server keys that prove their holder, protocol version 2; pairing a
 > server by QR code, 2026-10-19), as of corvise/saltix `573525d8` (2026-10-19); with §3a's paragraph on a gated test
-> network, as of corvise/saltix `6c965007` (2026-10-21). Section numbers are the specification's.
+> network, as of corvise/saltix `9ff53fd8` (2026-10-21). Section numbers are the specification's.
 
 Anyone makes an app in Saltix's **My apps**: names it, binds a username, pairs the computer that runs its program by a
 QR code (the server key is made there and never leaves it) or, where no command runs, gets a **developer key**, and

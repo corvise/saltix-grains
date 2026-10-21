@@ -1,4 +1,4 @@
-// A computer's access to a test network whose relays require access grants (Saltix 33-gate). `grain pair` registers at
+// A computer's access to a test network whose relays require access grants (Saltix 37-gate). `grain pair` registers at
 // the relays under a key the registry does not name yet (24-app-studio §3a), so there it needs a grant; so does a write
 // through the relays (`grain faucet`, a key file's transaction). A computer cannot attest its key, so the grant is
 // unattested: at most 24 hours of the code's access length (§4.3).
@@ -25,7 +25,7 @@ export const ACCESS_KEY_FILE = join(GRAIN_DIR, "access.key");
 export const ACCESS_FILE = join(GRAIN_DIR, "access.json");
 /** Where a coding agent (or a script) hands over a code. */
 export const ACCESS_CODE_ENV = "SALTIX_ACCESS_CODE";
-/** Another network's gate (saltix-api's interface, 33-gate §4.5). */
+/** Another network's gate (saltix-api's interface, 37-gate §4.5). */
 export const GATE_ENV = "SALTIX_GATE";
 /** A kept grant with less left than this is not shown again: a new code is asked for. */
 export const ACCESS_MARGIN_MS = 60_000;

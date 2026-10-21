@@ -126,7 +126,7 @@ a developer key names the genesis it was made on, and the SDK refuses a key of a
   through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`.
 - **Test SALT**: `grain faucet` asks the test network's faucet for owner.key's account (or `--address`), once every 5
   minutes; `--wait` until it is there. Then `grain publish --key owner.key` can pay the deposit.
-- **A test network closed by access codes** (its gate: Saltix [33-gate](docs/protocol/gate.md)): its relays let a
+- **A test network closed by access codes** (its gate: Saltix [37-gate](docs/protocol/gate.md)): its relays let a
   connection in only with an access grant, and their wallet interface takes writes (`faucet_request`,
   `transaction_submit`) only with one; `node_status` says so (`access`). A paired server needs nothing: relays let a
   registered server key in. What needs a grant on this computer is `grain pair` before its key is paired, and a write

@@ -8,7 +8,7 @@
  * vectors/connect-profiles-v1.json, vectors/server-pairing-v1.json, vectors/images-v1.json, vectors/gate-v1.json). A
  * server pairs its key with its app by a QR code (`pairing.ts`, `grain pair`) and finds it with `appKeyFromEnvironment`;
  * on a test network whose relays require access grants, a key the registry does not name yet shows one (`access.ts`,
- * `gate.ts`: 33-gate). A sealed app's bundle and icon go into the network itself (`named.ts`: the checks,
+ * `gate.ts`: 37-gate). A sealed app's bundle and icon go into the network itself (`named.ts`: the checks,
  * `bundle-upload.ts`: the server key's statement, `blobs.ts`: `putBundle`, `putIcon`, `getBlob`).
  * `@saltix/grain-server/web` holds the parts that run in a web page too.
  */

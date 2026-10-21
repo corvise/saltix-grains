@@ -40,7 +40,7 @@ export function nodeInterface(url: string): WalletInterface {
 
 type Request = typeof relayRequest;
 
-/** The wallet interface's calls a relay whose node runs a gate takes only with an access token (33-gate §5, 09-relay
+/** The wallet interface's calls a relay whose node runs a gate takes only with an access token (37-gate §5, 09-relay
  *  §10.7): every read stays open. */
 export const ACCESS_METHODS: ReadonlySet<string> = new Set(["transaction_submit", "faucet_request"]);
 
@@ -78,7 +78,7 @@ export interface GatewayOptions {
  * answer, shows another certificate than its pin (nothing is sent to it), or answers with an HTTP error (`429`, say), is
  * passed over.
  *
- * On a test network whose relays run a gate (33-gate §5), a write (`ACCESS_METHODS`) a relay refuses for want of access
+ * On a test network whose relays run a gate (37-gate §5), a write (`ACCESS_METHODS`) a relay refuses for want of access
  * is sent to it again with a token of the credential `useAccess` gives, asked for then and kept for later writes; a
  * refusal with a token, or with no credential to give, is an `AccessRefused`. Reads never ask for one.
  */

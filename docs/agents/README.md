@@ -23,7 +23,7 @@ publishing), [grain chats](../protocol/grain-chats.md) (22-grain-chats: specs, r
 [app studio](../protocol/app-studio.md) (24-app-studio: pairing a server, developer keys, private apps, members),
 [connect](../protocol/connect.md) (19-connect: the Connect profile and sheet, Sign in with Saltix),
 [images](../protocol/images.md) (32-images: the icon standard, bundles the network keeps and their upload),
-[relays](../protocol/relays.md) (09-relay: relays, files), [the gate](../protocol/gate.md) (33-gate: a test network's
+[relays](../protocol/relays.md) (09-relay: relays, files), [the gate](../protocol/gate.md) (37-gate: a test network's
 access grants, which a paired server never needs), [the wallet interface](../protocol/wallet-interface.md) and
 [the basics](../protocol/basics.md) (addresses, amounts, keys, people's names). When a page here and a protocol page
 disagree, the protocol page wins and this page is a bug; when a protocol page and a golden vector disagree, the vector

@@ -1,4 +1,4 @@
-// The reference gate's interface (Saltix 33-gate §4.5): saltix-api at https://api.saltix.io, which Saltix, the web
+// The reference gate's interface (Saltix 37-gate §4.5): saltix-api at https://api.saltix.io, which Saltix, the web
 // wallet and `grain pair` ask for an access grant with a one-time code. JSON, binary values base64url without padding,
 // the network in hex, times Unix ms. This is saltix-api's interface, not the relays' protocol: another network's gate
 // may differ (`SALTIX_GATE` names it to the command line).
@@ -108,7 +108,7 @@ async function post<T>(o: ComputerRedemption, path: string, body: object): Promi
 const b64url = (bytes: Uint8Array): string => toBase64(bytes, true);
 
 /**
- * Redeem `code` for this computer (33-gate §4.3, §4.5): a new P-256 access key, a challenge, the key's proof of
+ * Redeem `code` for this computer (37-gate §4.3, §4.5): a new P-256 access key, a challenge, the key's proof of
  * possession, `unattested: "computer"`. The answer is checked before it is taken: a grant for this key and this network,
  * unattested, signed by a gate the network trusts, not ended. A challenge spent before the code reached the gate is
  * asked again once. Throws a `GateRefused` in plain words.

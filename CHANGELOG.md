@@ -4,7 +4,7 @@
 
 ### Added
 
-- **A test network closed by access codes** (Saltix 33-gate, [the gate](docs/protocol/gate.md)): `grain pair` on such a
+- **A test network closed by access codes** (Saltix 37-gate, [the gate](docs/protocol/gate.md)): `grain pair` on such a
   network (`node_status.access`) gets this computer's access grant before it shows the offer, from an access code given
   by `--access-code`, `SALTIX_ACCESS_CODE` or typed at the terminal, redeemed at the network's gate
   (`https://api.saltix.io`, `SALTIX_GATE`) as an unattested grant (`unattested: "computer"`, at most 24 hours), kept in

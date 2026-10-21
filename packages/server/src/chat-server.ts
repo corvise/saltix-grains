@@ -87,7 +87,7 @@ export interface ChatServerOptions {
   /** The owner key's certificate for the server key (`grain cert`): at most 31 days long for chat. Without one, the key
    *  must be one the grain's registry record names. */
   cert?: InvoiceKeyCert;
-  /** With a certificate, on a test network whose relays require access grants (33-gate): the grant to show, as a key
+  /** With a certificate, on a test network whose relays require access grants (37-gate): the grant to show, as a key
    *  the registry does not name needs one. A registered server key (a developer key) needs none and takes none. */
   access?: AccessCredential;
   /** The network: its genesis hash (hex) and kind. Read from the node when there is one (and checked against this). */

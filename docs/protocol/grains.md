@@ -3,7 +3,7 @@
 > Reflects Saltix 12-grains (approved 2026-10-05; bridge version 3, the page's frame, check-first sign-in, invoices
 > from a registered server key and the Connect profile, 2026-10-16; the icon standard and bundles the network keeps,
 > 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19); with §5.5's sentence on a gated test network, as of
-> corvise/saltix `6c965007` (2026-10-21). Section numbers are the specification's.
+> corvise/saltix `9ff53fd8` (2026-10-21). Section numbers are the specification's.
 
 A **grain** is an app that opens inside a Saltix wallet, from the Apps section, a chat or a link, with the wallet's
 identity, payments, storage and relays at hand and never its keys. Saltix calls grains *mini-apps* in what users read;

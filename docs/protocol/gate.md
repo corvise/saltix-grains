@@ -1,7 +1,7 @@
 # The gate: access on a test network
 
-> Reflects Saltix 33-gate §1–§5 and §7 (approved 2026-10-20), with what it added to 09-relay §3 and §10.7, 08-node §6,
-> 12-grains §5.5 and 24-app-studio §3a, as of corvise/saltix `6c965007` (2026-10-21). Only what an app's server and its
+> Reflects Saltix 37-gate §1–§5 and §7 (approved 2026-10-20), with what it added to 09-relay §3 and §10.7, 08-node §6,
+> 12-grains §5.5 and 24-app-studio §3a, as of corvise/saltix `9ff53fd8` (2026-10-21). Only what an app's server and its
 > tools meet. Section numbers are the specification's.
 
 A test network may be closed to people without an access code. Its website and downloads stay open; what is closed is

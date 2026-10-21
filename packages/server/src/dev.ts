@@ -5,9 +5,9 @@
 //   `from`, keeps kept frames in the addressee's mailbox until a signed ack (and delivers them again on the next
 //   registration), keeps files (`file_new`, then `PUT /_file/<id>` with `X-Offset`, `GET …/status`, `POST …/done`,
 //   `GET /_file/<id>`) and an app's numbers (`grain_stats`, the newest of each grain). Plain `ws://` and `http://`:
-//   loopback only. With `access`, it requires access grants as a test network's relay does (33-gate §5): its hello
+//   loopback only. With `access`, it requires access grants as a test network's relay does (37-gate §5): its hello
 //   names the gates, and `register` needs a token unless the record's key is exempt (a registered server key).
-// - `createDevGate`: the test network's gate (saltix-api's interface, 33-gate §4.5) for development and tests: codes
+// - `createDevGate`: the test network's gate (saltix-api's interface, 37-gate §4.5) for development and tests: codes
 //   redeemed once for a grant it signs, unattested ones only (it judges no attestation), with the gate's refusals.
 // - `createDevRegistry`: what a node's wallet interface says of one grain (`node_status`, `grain_get`, `account_get`,
 //   `relay_list`): its owner, server keys, access and team, changed in place, each change a new beacon block; and a node's
@@ -49,11 +49,11 @@ export type DevFrame = { type: string } & Record<string, unknown>;
 
 interface Session extends WebSocket {
   address?: string;
-  /** Ends the connection's access (33-gate §5): set while a token it showed holds. */
+  /** Ends the connection's access (37-gate §5): set while a token it showed holds. */
   accessTimer?: NodeJS.Timeout;
 }
 
-/** A development relay that requires access grants, as a test network's relay does (33-gate §5). */
+/** A development relay that requires access grants, as a test network's relay does (37-gate §5). */
 export interface DevRelayAccess {
   /** The gates the relay trusts: their Ed25519 public keys. */
   gates: Uint8Array[];
@@ -357,7 +357,7 @@ export interface DevRegistryOptions {
   name?: string;
   /** The protocol version `node_status` names (23-upgrades §6): 1 by default, as the test network runs. */
   protocol?: number;
-  /** The gates whose grants the node's relay requires (`node_status.access`, 33-gate §5): hex Ed25519 keys. None by
+  /** The gates whose grants the node's relay requires (`node_status.access`, 37-gate §5): hex Ed25519 keys. None by
    *  default (`access: null`). */
   gates?: string[];
   /** False: nobody registered the slug yet, until `publish` (a wallet's `RegisterGrain`). */

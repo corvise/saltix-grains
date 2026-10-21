@@ -1,4 +1,4 @@
-// `grain pair` on a test network whose relays require access grants (Saltix 33-gate), end to end on a development
+// `grain pair` on a test network whose relays require access grants (Saltix 37-gate), end to end on a development
 // gate and a relay that requires access: the code asked for before the offer is shown (a flag, the environment, or a
 // person at a terminal), redeemed unattested for this computer, kept owner-only and reused while it lasts, never printed
 // or logged; every refusal of the gate and of the relays in plain words; access that ends while it waits; and a paired

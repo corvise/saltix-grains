@@ -1,4 +1,4 @@
-// A test network's gate (Saltix 33-gate) as the reference makes it, byte for byte: the grants, the tokens a client shows
+// A test network's gate (Saltix 37-gate) as the reference makes it, byte for byte: the grants, the tokens a client shows
 // and their proofs, the redemption's proof, a code's id, and every token a relay refuses with the word it says
 // (vectors/gate-v1.json); the relay client showing a grant where a relay requires one and only there; a relay's
 // refusal and the end of access; the gateways' writes with a token; and the gate's interface with its refusals.

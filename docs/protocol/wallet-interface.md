@@ -1,8 +1,8 @@
 # The wallet interface
 
 > Reflects Saltix 08-node §6 and 09-relay §10.7 (with 32-images' `blob_put` and `blob_get`), as of corvise/saltix
-> `b9019fdf` (2026-10-19); with `node_status.access` and the access header of 33-gate §5, as of corvise/saltix
-> `6c965007` (2026-10-21). Only the methods an app, its server or its tools call; a node answers more (the explorer's
+> `b9019fdf` (2026-10-19); with `node_status.access` and the access header of 37-gate §5, as of corvise/saltix
+> `9ff53fd8` (2026-10-21). Only the methods an app, its server or its tools call; a node answers more (the explorer's
 > reads, cities, books, licenses).
 
 A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line read the chain through.
