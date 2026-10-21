@@ -33,6 +33,8 @@ export const SLOT_LIFE_MS = 30 * 60_000;
 export const OPEN_MS = 10_000;
 /** Waits between attempts to open the same slot again after its connection dropped. */
 const REOPEN_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
+/** How often a hidden page looks whether it is in front again, between a dropped connection and `wake()`. */
+const HIDDEN_CHECK_MS = 15_000;
 
 export interface SessionKeys {
   sid: Uint8Array;
@@ -224,7 +226,7 @@ export class ConnectSession<T> {
         const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
         this.seen = kept.seen;
         this.held = kept.held;
-        this.place(kept.base, keys, offer, kept.opened, opened.link);
+        this.place(kept.base, keys, offer, kept.opened, opened.link, opened.early);
         this.o.events.telemetry("connect_resumed", { relay: this.o.relays.indexOf(kept.base) + 1, ms: this.now() - kept.opened, held: kept.held });
         return;
       }
@@ -247,7 +249,7 @@ export class ConnectSession<T> {
         return this.fail("network");
       }
       const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
-      this.place(base, keys, offer, this.now(), opened.link);
+      this.place(base, keys, offer, this.now(), opened.link, opened.early);
       this.o.events.telemetry("connect_open", { relay: this.o.relays.indexOf(base) + 1, webcrypto: keys.webCrypto });
       return;
     }
@@ -256,14 +258,15 @@ export class ConnectSession<T> {
   }
 
   /** The slot is held: its offer shown, kept across a reload, kept open, and its times set. */
-  private place(base: string, keys: SessionKeys, offer: Offer, opened: number, link: RelayLink): void {
+  private place(base: string, keys: SessionKeys, offer: Offer, opened: number, link: RelayLink, early: Frame[] = []): void {
     const text = offerText(offer);
     this.slot = { base, keys, offer, text, link: offerLink(offer), app: offerAppLink(offer, this.userAgent), opened, link_: link, reply: null };
-    this.attach(link);
     this.remember();
     const slot = this.slot;
     if (this.seen) this.setPhase({ kind: "seen", offer, text, link: slot.link, app: slot.app });
     else this.setPhase({ kind: "offer", offer, text, link: slot.link, app: slot.app, expiresAt: opened + QR_LIFE_MS });
+    // Attached after the offer is shown: a payload the relay held for a parked slot goes straight to its check.
+    this.attach(link, early);
     this.every(KEEP_MS, () => this.keepOpen());
     const left = Math.max(0, opened + SLOT_LIFE_MS - this.now());
     this.after(Math.max(0, opened + QR_LIFE_MS - this.now()), () => this.expire());
@@ -362,7 +365,7 @@ export class ConnectSession<T> {
   // ── The relay ──────────────────────────────────────────────────────────────
 
   /** A connection to `base` holding slot `sid`, and the relay's node key, or null. */
-  private async open(base: string, sid: Uint8Array): Promise<{ link: RelayLink; relay: Uint8Array } | null> {
+  private async open(base: string, sid: Uint8Array): Promise<{ link: RelayLink; relay: Uint8Array; early: Frame[] } | null> {
     let link: RelayLink;
     try {
       link = await this.o.dial(base);
@@ -370,10 +373,19 @@ export class ConnectSession<T> {
       this.o.events.telemetry("connect_slot_failed", { kind: "unreachable", relay: this.o.relays.indexOf(base) + 1 });
       return null;
     }
+    // What the relay sends right after `link_opened` — the payload a parked slot held (09-relay §10.3 step 6a) —
+    // arrives before the slot is attached: kept, and handed to the slot's handler then.
+    const early: Frame[] = [];
     const answer = await new Promise<Frame | null>((resolve) => {
       const timer = this.setT(() => resolve(null), OPEN_MS);
+      let opened = false;
       link.onFrame = (f) => {
+        if (opened) {
+          early.push(f);
+          return;
+        }
         if (f.type === "link_opened" || (f.type === "error" && f.detail === "link_open")) {
+          opened = true;
           this.clearT(timer);
           resolve(f);
         }
@@ -396,13 +408,14 @@ export class ConnectSession<T> {
       link.close();
       return null;
     }
-    return { link, relay };
+    return { link, relay, early };
   }
 
-  private attach(link: RelayLink): void {
+  private attach(link: RelayLink, early: Frame[] = []): void {
     const slot = this.slot!;
     slot.link_ = link;
     link.onFrame = (f) => this.onFrame(f);
+    for (const f of early) this.onFrame(f);
     link.onClose = () => {
       if (this.slot !== slot || this.stopped) return;
       slot.link_ = null;
@@ -418,11 +431,18 @@ export class ConnectSession<T> {
     slot.link_.send({ type: "link_open", sid: b64url(slot.keys.sid) });
   }
 
-  /** Open the same slot again at the same relay, with growing waits; a relay that is another one now voids the offer. */
+  /** Open the same slot again at the same relay, with growing waits; a relay that is another one now voids the offer.
+   *  While the page is hidden nothing is dialed: a phone's browser in the background has no network, each attempt would
+   *  fail and count, and the relay keeps the slot parked with what the wallet delivers (09-relay §10.3 step 6a); `wake()`
+   *  opens it the moment the page is in front again. */
   private async reopen(): Promise<void> {
     const slot = this.slot;
     const generation = this.generation;
     if (!slot || slot.link_ || this.stopped) return;
+    if (!this.visible()) {
+      this.after(HIDDEN_CHECK_MS, () => void this.reopen());
+      return;
+    }
     const opened = await this.open(slot.base, slot.keys.sid);
     if (this.stopped || generation !== this.generation || this.slot !== slot) {
       opened?.link.close();
@@ -433,7 +453,7 @@ export class ConnectSession<T> {
       return;
     }
     if (opened && equal(opened.relay, slot.offer.relay)) {
-      this.attach(opened.link);
+      this.attach(opened.link, opened.early);
       this.reopenAttempt = 0;
       this.o.events.reconnecting(false);
       this.o.events.telemetry("connect_reconnect", { ok: true });

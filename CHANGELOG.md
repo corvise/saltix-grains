@@ -50,7 +50,10 @@
   `sessionStorage` (`keep`, `KEPT_SLOT_KEY`: the slot id, `Q`'s secret, `P`'s public key, whether seen or held; never a
   private key) and `start()` opens the same slot again on a reload within its life (`connect_resumed`,
   `connect_resume_failed`); `start({fresh: true})` and `connect.renew()` make a new one; forgotten once connected.
-  `Phase` and `OfferView` carry `app`; docs/connect.md §6 items 3–4.
+  A payload the relay held for a parked slot (09-relay §10.3 step 6a), sent right after `link_opened`, is taken on
+  resume and on a reconnect. While the page is hidden the session dials nothing after a dropped connection (a phone's
+  browser behind Saltix has no network) and opens the slot on `wake()`. `Phase` and `OfferView` carry `app`;
+  docs/connect.md §6 items 3–4.
 
 - **`@saltix/connect`: connection feedback** (Saltix 19-connect §14, the owner's reference standard, 2026-10-21). The
   session keeps the wallet's `ConnectReply` (a payload of first byte 2: the wallet's reply slot, its key and the login

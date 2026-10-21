@@ -524,3 +524,44 @@ test("a kept slot gives way to a fresh one when asked, when its relay changed, o
   assert.equal(j.keyCount, 1);
   j.session.stop();
 });
+
+// ── A parked slot (09-relay §10.3 step 6a): what the relay held comes right after link_opened; nothing is dialed hidden ─
+
+test("a payload the relay held for the slot, sent right after link_opened on resume, is taken", async () => {
+  const keep = new MemoryStorage();
+  const first = harness({ keep });
+  await started(first);
+  const { offer, sid } = offerOf(first);
+  first.session.handOff();
+  first.links[0].drop();
+  const grant = grantFor(offer, first.clock.now);
+  const held = sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grant));
+  // The relay answers link_open with link_opened and, at once, the payload it held while the slot was parked.
+  const again = harness({
+    keep, clock: first.clock,
+    answer: (_base, f) => (f.type === "link_open" ? { type: "link_opened", sid: f.sid, relay: b64url(RELAY_KEY), then: [{ type: "link_payload", sid, payload: b64url(held) }] } : null),
+  });
+  await again.session.start();
+  await again.clock.advance(0);
+  assert.deepEqual(again.connected, ["account ed25519"]);
+  assert.deepEqual(again.phases.map((p) => p.kind), ["opening", "offer", "checking", "connected"]);
+});
+
+test("a hidden page dials nothing while its connection is down, and opens the slot the moment it is in front", async () => {
+  const h = harness();
+  await started(h);
+  const { sid } = offerOf(h);
+  h.visible.value = false;
+  h.links[0].drop();
+  assert.deepEqual(h.reconnecting, [true]);
+  await h.clock.advance(60_000);
+  assert.equal(h.dials.length, 1, "nothing dialed in the background");
+  assert.ok(!h.events.some((e) => e.event === "connect_slot_failed"), "no attempt counted");
+  h.visible.value = true;
+  h.session.wake();
+  await h.clock.advance(0);
+  assert.equal(h.dials.length, 2);
+  assert.deepEqual(h.links[1].sent[0], { type: "link_open", sid });
+  assert.deepEqual(h.reconnecting, [true, false]);
+  h.session.stop();
+});
