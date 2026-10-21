@@ -316,8 +316,10 @@ const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the 
 export const appRules = `1. **The server's key is made where it runs and never leaves it.** Start every session with \`grain status\`. When it
    is not \`paired\`, run \`grain pair\` (in the background, or \`grain pair --no-wait\` and then \`grain pair\`), show
    the user its QR code (the terminal's, or \`.grain/pair.html\`) and wait: the user scans it with Saltix, checks the
-   6-digit code and confirms there, and \`grain pair\` writes \`app.key\` once the registry names the key. Never ask the
-   user to paste, type or send a key. The server reads \`app.key\` (owner-only), \`SALTIX_APP_KEY\` or the file
+   6-digit code and confirms there, and \`grain pair\` writes \`app.key\` once the registry names the key, for the app
+   the offer names (\`grain.json\`'s slug) or the one you confirmed with \`grain pair --accept S\` after it said
+   "Saltix asked to pair this server with S": never for an app nobody here named, since whoever saw the offer may
+   have asked. Never ask the user to paste, type or send a key. The server reads \`app.key\` (owner-only), \`SALTIX_APP_KEY\` or the file
    \`SALTIX_APP_KEY_FILE\` names (a systemd credential), never from the command line, which shells keep, and refuses to
    start without one (\`chat_unpaired\`). Never log, print, commit or report a key, nor \`owner.key\` or \`server.key\`.
    Only for a host where no command runs does a developer key made in Saltix stand in: if one is pasted to you, write it
@@ -399,7 +401,10 @@ const CHAT_START = `1. \`npx grain status\`. \`paired\`: go on. Anything else: s
 2. \`npx grain pair\`: it prints a QR code (and writes \`.grain/pair.html\`). Show it to the user and say: scan it with
    Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same 6-digit code, confirm with
    the PIN. It waits, answers the phone, and once the registry names the key writes \`app.key\` and \`app.json\`. Run it
-   in the background, or \`npx grain pair --no-wait\` to show the code and then \`npx grain pair\` to wait.
+   in the background, or \`npx grain pair --no-wait\` to show the code and then \`npx grain pair\` to wait. The offer
+   names this project's app (\`grain.json\`'s slug), so only that app pairs. An offer that names none (no \`grain.json\`)
+   answers whoever asks and pairs nothing by itself: when it says "Saltix asked to pair this server with S", and S is
+   the app the user meant, \`npx grain pair --accept S\`; if not, someone else saw the offer: \`npx grain pair --new\`.
 3. \`npx grain doctor\`: what is left, and the exact next step.`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules: a page's first for a page, the server's first

@@ -35,6 +35,14 @@ one in a chat when pairing can be done.
    leave running while you talk to the user: `npx grain pair --no-wait` prints the offer and returns at once; show it,
    then run `npx grain pair` to wait (the same offer, for 30 minutes). Or run `grain pair` in the background and read
    its output.
+   **It pairs only the app the offer names** (`grain.json`'s slug, or `--slug`). An offer that names none answers
+   whoever asks (anyone who saw the QR code or the link may ask for an app of their own, Saltix
+   [24-app-studio §3a](../protocol/app-studio.md#3a-pairing-a-server-by-qr-code)) and writes nothing by itself: it
+   prints "Saltix asked to pair this server with S, owner …" and exits 1 with the next step. When S is the app the
+   user meant, `npx grain pair --accept S` takes it (the same offer; it finishes once the registry names the key);
+   when it is not, someone else saw the offer: `npx grain pair --new` makes a new key and offer. `npx grain status`
+   says "asked to pair it with S, … not confirmed" and names the same command meanwhile. An earlier offer's answer
+   counts for nothing once a new offer is shown.
 4. **`npx grain doctor`** checks the rest (the key, `.gitignore`, `chat.json`'s version, `npm install`, the bundle, what
    the registry holds, the Connect profile) and names the exact next step. It exits 0 when nothing is left, 1 when
    something is to do, and 75 while it only waits for the network (a transaction on its way: ask again in a minute)
@@ -90,7 +98,15 @@ the app retired) or when `chat.json` changed under a version it served (`setupCa
 down), which a restart may fix.
 `owner.key`, which `grain init` also makes, is for registering from a computer on a test network, and signs only when a
 command names it (`--key owner.key`) or for an app it registered; an app made in Saltix has its owner on the phone and
-never uses it.
+never uses it. On the main network a key file signs nothing: `grain publish --key`, `retire`, `rate`, `access`,
+`profile`, `bind`, `configure` and `app-key make` are refused there before anything is sent, and the owner's Saltix
+signs from the QR code (Saltix 12-grains §10).
+
+`grain dev` listens on this computer alone (`127.0.0.1`; the Android emulator reaches it at `10.0.2.2`, the host's
+loopback): it signs with `owner.key` and takes writes to its development registry. `--host 0.0.0.0` on purpose, for a
+phone on the same network. A key file, a chat's store or `app.json` left under `public/` is served by nothing and goes
+into no bundle: `grain lint` reports it, `grain bundle` and `grain publish` refuse it (a bundle is uploaded before the
+owner signs and served by the network to anyone by its hash).
 
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 

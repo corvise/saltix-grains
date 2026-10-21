@@ -130,7 +130,9 @@ test("past the relays it knows, a gateway asks relay_list once and tries the rel
   const g = new RelayGateways([relay(1)], request, { discover: true });
   assert.deepEqual(await g.call("account_get", { address: "aa" }), { from: 2 });
   assert.deepEqual(asked, ["1:account_get", "1:relay_list", "2:account_get"], "the relay it names answers");
-  assert.deepEqual(g.endpoints, [{ ...relay(1), cert_sha256: "e".repeat(64) }, relay(2)]);
+  // relay_list names relay 1 under another certificate: relay 1 is an anchor (the gateway started from it), so its pin
+  // stays; one relay's list never moves another's pin.
+  assert.deepEqual(g.endpoints, [relay(1), relay(2)]);
   asked.length = 0;
   assert.deepEqual(await g.call("node_status"), { from: 2 }, "the one that answered");
   answers.set(relay(2).url, () => followsNone);
@@ -198,5 +200,45 @@ test("a gateway is trusted by its certificate's hash alone: another certificate 
     assert.deepEqual(new RelayGateways([{ url, cert_sha256: null }]).endpoints, [], "and never one without a pin");
   } finally {
     https.close();
+  }
+});
+
+test("a trust anchor's pin is never replaced by a relay_list; a discovered relay's is", () => {
+  const g = new RelayGateways([relay(1)]);
+  g.add([relay(2)], true);
+  assert.deepEqual(g.endpoints, [relay(1), relay(2)]);
+  const moved = (n) => ({ ...relay(n), cert_sha256: "e".repeat(64) });
+  assert.deepEqual(g.add([moved(1), moved(2)], true), [moved(2)], "only the discovered relay is re-pinned");
+  assert.deepEqual(g.endpoints, [relay(1), moved(2)]);
+  assert.deepEqual(g.add([moved(1)], false), [], "without repin nothing moves");
+});
+
+test("an answer from a node or a relay is read up to 4 MiB: a longer one is refused, not buffered", async () => {
+  const { createServer: httpServer } = await import("node:http");
+  const { MAX_ANSWER_BYTES, rpc, relayRequest } = await import("../dist/index.js");
+  assert.equal(MAX_ANSWER_BYTES, 4 * 1024 * 1024);
+  let huge = false;
+  const http = httpServer((req, res) => {
+    if (!huge) {
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true } }));
+      return;
+    }
+    // A chunked answer with no length: the cap is on the bytes read, not a header's word.
+    res.writeHead(200, { "content-type": "application/json" });
+    const chunk = Buffer.alloc(1 << 20, 0x20);
+    for (let i = 0; i < 6; i++) res.write(chunk);
+    res.end("{}");
+  });
+  await new Promise((r) => http.listen(0, "127.0.0.1", r));
+  const port = http.address().port;
+  try {
+    assert.deepEqual(await rpc(`http://127.0.0.1:${port}/`, "node_status"), { ok: true });
+    assert.equal((await relayRequest({ url: `ws://127.0.0.1:${port}/`, cert_sha256: null }, "GET", "/")).status, 200);
+    huge = true;
+    await assert.rejects(rpc(`http://127.0.0.1:${port}/`, "node_status"), /longer than 4194304 bytes/);
+    await assert.rejects(relayRequest({ url: `ws://127.0.0.1:${port}/`, cert_sha256: null }, "GET", "/"), /longer than 4194304 bytes/);
+  } finally {
+    http.closeAllConnections?.();
+    http.close();
   }
 });

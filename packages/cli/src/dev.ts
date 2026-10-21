@@ -8,13 +8,13 @@
 // a sealed grain's pages carry the Content-Security-Policy Saltix serves them with.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, normalize, extname, sep } from "node:path";
+import { basename, join, normalize, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type AppKey, type Manifest, ROLES, iconHash } from "@saltix/grain-server";
 import { createDevRegistry } from "@saltix/grain-server/dev";
 import { sealedCsp } from "@saltix/grain/rules";
 import { forOrigin, sign, originOf } from "./project.js";
-import { makeBundle, sealed } from "./bundle.js";
+import { makeBundle, refusedInBundle, sealed } from "./bundle.js";
 import { ICON_FILES } from "./icon.js";
 
 const TYPES: Record<string, string> = {
@@ -35,10 +35,17 @@ export const SIMULATOR = "/_simulator/";
 /** The simulator's files, built next to this module. */
 const SIMULATOR_DIR = fileURLToPath(new URL("./simulator/", import.meta.url));
 
-/** The file of `dir` that `path` (below it, already decoded) names, or null when it would leave `dir` or is none. */
+/** Where `grain dev` listens unless told: this computer alone. It signs with `owner.key` and takes writes to its
+ *  development registry, so a network's worth of readers is asked for (`--host 0.0.0.0`). The Android emulator reaches
+ *  the host's loopback at 10.0.2.2 without it. */
+export const DEV_HOST = "127.0.0.1";
+
+/** The file of `dir` that `path` (below it, already decoded) names, or null when it would leave `dir`, is none, or is
+ *  one a bundle refuses (a key file left under `public/`: never served either). */
 function fileIn(dir: string, path: string): string | null {
   const root = dir.endsWith(sep) ? dir.slice(0, -1) : dir;
   const file = normalize(join(root, path.endsWith("/") ? path + "index.html" : path));
+  if (refusedInBundle(basename(file)) !== null) return null;
   return file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile() ? file : null;
 }
 
@@ -63,7 +70,7 @@ export interface ServeOptions {
 }
 
 /** The server; `manifest` is read again for every request, so edits show without a restart. */
-export function serve(root: string, manifest: () => Manifest, secret: Uint8Array, port: number, host = "0.0.0.0", o: ServeOptions = {}): Promise<Server> {
+export function serve(root: string, manifest: () => Manifest, secret: Uint8Array, port: number, host = DEV_HOST, o: ServeOptions = {}): Promise<Server> {
   const publicDir = join(root, "public");
   // The bundle the last manifest named: what `/_bundle.zip` serves, so the two always agree.
   let bundle: Uint8Array | null = null;

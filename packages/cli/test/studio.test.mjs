@@ -36,7 +36,7 @@ async function fakeNode(state) {
       const { method, params } = JSON.parse(body);
       const result = {
         node_status: {
-          genesis: GENESIS, slot: state.slot ?? 1000, network: "testnet", beacon: { height: 1, hash: "b1" },
+          genesis: GENESIS, slot: state.slot ?? 1000, network: state.network ?? "testnet", beacon: { height: 1, hash: "b1" },
           ...(state.protocol ? { protocol: state.protocol, epoch_slots: state.epochSlots ?? 100 } : {}),
         },
         account_get: { nonce: 4, salt: state.salt ?? "200000000000", controller: null, shard: "" },
@@ -364,4 +364,29 @@ test("init --chat makes a chat-only grain with a spec to build on", async () => 
   assert.match(agents, /grain chat-spec/);
   assert.ok(!agents.includes("grain dev`: serves"), "no page to serve");
   assert.match(readFileSync(join(dir, "CLAUDE.md"), "utf8"), /^@AGENTS\.md$/m);
+});
+
+test("a key file signs on test networks only: on the main network every owner's call, retire, rate and app-key make are refused before anything is signed", async () => {
+  const { submit, refuseKeyFileOn } = await import("../dist/registry.js");
+  assert.throws(() => refuseKeyFileOn("mainnet"), /refused on the main network: the owner's Saltix signs there.*12-grains §10/);
+  for (const network of ["testnet", "devnet"]) refuseKeyFileOn(network);
+  const node = await fakeNode({ grain: grain(), network: "mainnet" });
+  try {
+    await assert.rejects(submit({ retire: "chess-bot" }, secret, signing(node.url)), /a key file's call is refused on the main network/);
+    await assert.rejects(submit({ access: { slug: "chess-bot", public: false, members: [] } }, secret, signing(node.url)), /refused on the main network/);
+    assert.deepEqual(node.submitted, [], "nothing was sent");
+    const dir = scratch("app-key-mainnet-");
+    writeFileSync(join(dir, "server.key"), "42".repeat(32) + "\n", { mode: 0o600 });
+    const made = await run(["app-key", "make", "--slug", "chess", "--node", node.url], dir);
+    assert.equal(made.code, 1);
+    assert.match(made.stderr, /a developer key made from a key file here is refused on the main network/);
+    assert.ok(!existsSync(join(dir, "app.key")));
+    // A rater's key file: what the registry would take is refused by the network alone.
+    const rated = await run(["rate", "--slug", "chess-bot", "--score", "5", "--key", "server.key", "--node", node.url], dir);
+    assert.equal(rated.code, 1);
+    assert.match(rated.stderr, /refused on the main network/);
+    assert.deepEqual(node.submitted, []);
+  } finally {
+    node.close();
+  }
 });

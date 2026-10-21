@@ -95,10 +95,23 @@ export async function show(node: NodeLike, slug: string): Promise<RegisteredGrai
   return grainGet(node, slug);
 }
 
+/**
+ * A key file signs on test networks only (12-grains §10): on the main network the owner's Saltix signs, from a QR code,
+ * so no app, username or deposit there is ever a plaintext file's. Throws for `mainnet`; `what` names what the key file
+ * would have done.
+ */
+export function refuseKeyFileOn(network: string, what = "a key file's call"): void {
+  if (network === "mainnet") {
+    throw new Error(`${what} is refused on the main network: the owner's Saltix signs there (a QR code, without --key); ` +
+      "a key file signs on the test network only (12-grains §10)");
+  }
+}
+
 /** Sign `call` with the key file's secret and submit it, after the network, the balance, the protocol version and the
  *  call's own bounds are checked: what a node would refuse is refused before a transaction is made. */
 export async function submit(call: GrainCall, secret: Uint8Array, s: Signing, o: SubmitOptions = {}): Promise<Sent> {
   const status = await nodeCall<Status>(s.node, "node_status");
+  refuseKeyFileOn(status.network);
   if (s.genesis !== undefined && status.genesis !== s.genesis.toLowerCase()) {
     throw new Error(`the node is on genesis ${status.genesis}, not ${s.genesis}`);
   }

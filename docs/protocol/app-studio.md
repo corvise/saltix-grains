@@ -211,6 +211,14 @@ accepted one only with a proof that verifies; it waits 2 minutes (`PAIR_ANSWER_W
 `ConfigureGrain`: **Add this server** puts the key first, where the app's chat goes; **Use only this server** names it
 alone. An app the owner does not have yet is made in the same confirmation, private, named by the offer's name.
 
+On the computer, the key's secret is made there and kept in a file only its owner reads, never printed, logged or sent;
+the computer answers requests only while it shows the offer, and one app and one owner per offer; and it takes itself as
+paired only for the slug it offered or the developer confirmed, once the registry names its key for that slug at its
+view of the canonical beacon tip. An offer seen by someone else lets them ask first, for an app of their own: that costs
+the developer a new offer and nothing else, so an answer for an app the developer never named pairs nothing (the SDK:
+`grain pair --accept S` confirms it, `grain pair --new` makes a new key and offer). The program the computer runs
+refuses to start until it is paired, saying to run `grain pair`.
+
 The SDK: `makeOffer`, `encodeOffer`/`decodeOffer`, `offerLink`/`parseOfferLink`, `offerProblem`, `offerCode`,
 `offerCodeText`, `offerAddress`, `keyFingerprint`, `encodePairFrame`/`decodePairFrame`, `judgePair`, `answerPair`,
 `checkPairAnswer`, `signServerKeyProof`/`verifyServerKeyProof`; `grain pair`, `grain status`, `grain doctor`

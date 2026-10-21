@@ -230,7 +230,7 @@
     ]
   },
   "description": [
-    "named blobs (32-images): kinds, images each takes with their hashes, images the check refuses with the reason, the monogram's colours, profiles of version 2 with an avatar, sealed grains' bundles and the bundles the check refuses, a server key's statement for a pending upload, and the frames that carry them",
+    "named blobs (32-images): kinds, images each takes with their hashes, images the check refuses with the reason, the monogram's colours, profiles of version 2 with an avatar, without a name and empty, and profiles refused for their first name, sealed grains' bundles and the bundles the check refuses, a server key's statement for a pending upload, and the frames that carry them",
     "hash = BLAKE3 derive_key(domain, bytes): \"Saltix grain icon v1\" for grain_icon, \"Saltix avatar v1\" for avatar, \"Saltix grain bundle v1\" for grain_bundle (12-grains §8)",
     "image check (32-images §2): the structure only, no pixel decoded. PNG (grain_icon): the signature, then chunks length u32 BE ‖ type ‖ data ‖ CRC-32 (ISO 3309) of type ‖ data; IHDR first (13 bytes: side, side, depth 8, colour 2 or 3, 0, 0, interlace 0); only IHDR, PLTE (colour 3, before IDAT, 3–768 bytes, a multiple of 3), sRGB (1 byte 0–3), pHYs (9 bytes), IDAT (consecutive) and IEND (empty, last, nothing after). JPEG (avatar): FF D8; segments FF marker len u16 BE (≥ 2) data, no fill bytes; APP0 only first and starting JFIF\\0; DQT, DHT, DRI; one SOF0 or SOF2 before any scan (precision 8, height = width = 640, 1 or 3 components, len 8 + 3n); SOS then entropy data in which FF 00 and FF D0–D7 belong to it; after the first scan only DHT, DRI, SOS; FF D9 the last two bytes",
     "image reasons: size (empty or over the kind's max), format, dimensions, depth, alpha, metadata (a chunk or segment the kind refuses: a profile, gamma, text, EXIF, APP1–APP15, a comment), animation (acTL, fcTL, fdAT)",
@@ -238,7 +238,8 @@
     "bundle check (32-images §7.3, 12-grains §8): 1 byte to 16 MiB; the end record (PK 05 06) is the last 22 bytes: one disk, entries here = entries in all, no comment, central directory offset + size = the end record's offset; 1–8 192 central entries (PK 01 02) covering the directory exactly, none with ZIP64's all-ones sizes or offset, disk 0; each stored (0, sizes equal) or deflated (8), flags without 0x0001 or 0x0040 (method); names of /-separated parts of [A-Za-z0-9._ ~@+-], none empty, . or .., at most 1 024 bytes, each once, a folder (name ending in /, unpacked 0) counted as its path, no file where a folder is (name); 1–4 096 files (files); their declared unpacked sizes at most 64 MiB in all (unpacked); then the local headers (PK 03 04) back to back from byte 0, in the directory's order, each at its entry's offset with the entry's flags, method and name, and its CRC and sizes unless flag 0x0008 puts a data descriptor (12 bytes, or 16 with PK 07 08) after the data, the last ending where the directory starts (format)",
     "upload statement (32-images §7.3): BundleUpload { slug: String, bundle: [32], size: u64, at: u64 } signed by a server key the live grain's registry record names, Ed25519 over BLAKE3 derive_key(\"Saltix grain bundle upload v1\", genesis_hash ‖ Borsh(BundleUpload)); SignedBundleUpload = Borsh { upload, key [32], signature [64] }; a node holds the bundle pending until at + 86 400 000 ms; it refuses a statement dated more than 600 000 ms ahead of its clock or past its day (time), a key the record does not name (key), a slug of no live grain (slug), a size over 16 MiB (size), a bad signature (signature)",
     "monogram colour = the first byte of BLAKE3 derive_key(\"Saltix grain monogram v1\", slug) mod 12, an index into the wallet's palette",
-    "profile version 2 (09-relay §1.5, 32-images §5.3) = version 1's fields (version u8, account [32], first_name, last_name, issued_at u64, signer) followed by avatar Option<[u8; 32]>; version 1 has no avatar field; signed under \"Saltix profile v1\" as version 1"
+    "profile version 2 (09-relay §1.5, 32-images §5.3) = version 1's fields (version u8, account [32], first_name, last_name, issued_at u64, signer) followed by avatar Option<[u8; 32]>; version 1 has no avatar field; signed under \"Saltix profile v1\" as version 1",
+    "profile names (09-relay §1.5): first_name is 1–64 characters, except in version 2 with an empty last_name, where it may be empty: a photo without a name, or, with no avatar either, the empty profile, which replaces and so clears the name and photo of the profiles before it; version 1 without a first name, or a last name without one, is refused as first_name; apps publish the empty profile only to clear their own and never renew it; each profile here is checked at its own issued_at"
   ],
   "frames": {
     "blob_get": {
@@ -378,6 +379,7 @@
   ],
   "kinds": [
     {
+      "alpha": false,
       "domain": "Saltix grain icon v1",
       "max_bytes": 65536,
       "name": "grain_icon",
@@ -386,9 +388,13 @@
         256
       ],
       "tag": 0,
-      "type": "image/png"
+      "type": "image/png",
+      "types": [
+        "image/png"
+      ]
     },
     {
+      "alpha": false,
       "domain": "Saltix avatar v1",
       "max_bytes": 131072,
       "name": "avatar",
@@ -396,7 +402,25 @@
         640
       ],
       "tag": 1,
-      "type": "image/jpeg"
+      "type": "image/jpeg",
+      "types": [
+        "image/jpeg"
+      ]
+    },
+    {
+      "alpha": true,
+      "domain": "Saltix token logo v1",
+      "max_bytes": 12288,
+      "name": "token_logo",
+      "sides": [
+        256
+      ],
+      "tag": 2,
+      "type": "image/png",
+      "types": [
+        "image/png",
+        "image/webp"
+      ]
     },
     {
       "domain": "Saltix grain bundle v1",
@@ -429,7 +453,9 @@
       "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
       "avatar": "78210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a",
       "encoded_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de0804000000416e6e6107000000506574726f7661006c50c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000178210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a11c90c6c837f7be7e392e0080f2cf5781ec5ab4847e1b5cb3b5e7c03e0efffd0f6dff29b96243a726cb05b4b24fb8bf357dbaff72cafc9eca70806f03b3a3f0f",
+      "first_name": "Anna",
       "issued_at": 1790000000000,
+      "last_name": "Petrova",
       "message_hex": "014108fe3ca810e020f983c76f46635c0c76d281e1a15f35c16617f710cb3e5f",
       "name": "version 2 with an avatar",
       "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
@@ -442,7 +468,9 @@
       "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
       "avatar": null,
       "encoded_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de0804000000416e6e6107000000506574726f7661605651c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c0000f5078b4331aad989c4a323dce66e5c30f063f6cc249cfc14c5cc72143cedc4ac66a897b0f31a89be0937f2cfc22c9e2202f8f2c841431f9598157a27f7b99a07",
+      "first_name": "Anna",
       "issued_at": 1790000060000,
+      "last_name": "Petrova",
       "message_hex": "b065f0af5ee36659af249adec188a7c4263e60ffc5904dd1ee318c053375ed96",
       "name": "version 2, the avatar removed",
       "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
@@ -455,7 +483,9 @@
       "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
       "avatar": null,
       "encoded_hex": "0108d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de0804000000416e6e6107000000506574726f7661c04052c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c00a98a55a91b41c016881d2b1437968cdb5e222857807eaa2280658ca8dcadec978eb959a9433317a42306ce171c601ae6454f09cc29579eda42a4cfc89f468d0e",
+      "first_name": "Anna",
       "issued_at": 1790000120000,
+      "last_name": "Petrova",
       "message_hex": "4f4a8fc5dd63d7c04615b0c15b7ac9d7d3fe4ca973066b080e2762633261e64d",
       "name": "version 1: no avatar, the bytes of before",
       "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
@@ -465,9 +495,71 @@
       "version": 1
     },
     {
+      "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
+      "avatar": "78210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a",
+      "encoded_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000000000000202b53c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000178210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4aadb93d30b1397e58fc967d46b4e93c567151ce9fd88b5c0071e6a031666758c383a06fee692fbe89f83172712b36a7b93d5bcf2bd7ed0658e32bdebbe1f1ed02",
+      "first_name": "",
+      "issued_at": 1790000180000,
+      "last_name": "",
+      "message_hex": "c9dbf1880ba7cce8f2fb08328c29d4a2fa8523fa929ea0dba060b04445667fdc",
+      "name": "version 2: a photo without a name",
+      "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+      "profile_b64": "AgjXBMG4NrKRucRHptBeRUiwg5i4iu5wtnp7R7A9Jd4IAAAAAAAAAAAgK1PEoAEAAADqSmxj4pxSCr71UHsTLsX5lUd2rr6-e5JCHuppFEbSLAABeCEPoksdWSCyAlxb3y07KJNB7qNO2CyUr0tsUXqamkqtuT0wsTl-WPyWfUa06TxWcVHOn9iLXABx5qAxZmdYw4Ogb-5pL76J-DFycSs2p7k9W88r1-0GWOMr3rvh8e0C",
+      "profile_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000000000000202b53c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000178210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a",
+      "signature_hex": "adb93d30b1397e58fc967d46b4e93c567151ce9fd88b5c0071e6a031666758c383a06fee692fbe89f83172712b36a7b93d5bcf2bd7ed0658e32bdebbe1f1ed02",
+      "version": 2
+    },
+    {
+      "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
+      "avatar": null,
+      "encoded_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000000000000801554c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000070e679644e65281a1ca68a86120446733749eb9e842fc885204d39779016179d1af5171fe21a809512f67b1a30130bb3f6daac7b9cb12fe2a6318e96dbd49b00",
+      "first_name": "",
+      "issued_at": 1790000240000,
+      "last_name": "",
+      "message_hex": "9fe0ee21c6c5d1270c9971f0e89a6e06875cb5824c16ee9d6c4fe3032ebb42d2",
+      "name": "version 2, empty: no name and no photo, clearing the profiles before it",
+      "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+      "profile_b64": "AgjXBMG4NrKRucRHptBeRUiwg5i4iu5wtnp7R7A9Jd4IAAAAAAAAAACAFVTEoAEAAADqSmxj4pxSCr71UHsTLsX5lUd2rr6-e5JCHuppFEbSLAAAcOZ5ZE5lKBocpoqGEgRGczdJ656EL8iFIE05d5AWF50a9Rcf4hqAlRL2exowEwuz9tqse5yxL-KmMY6W29SbAA",
+      "profile_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000000000000801554c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c0000",
+      "signature_hex": "70e679644e65281a1ca68a86120446733749eb9e842fc885204d39779016179d1af5171fe21a809512f67b1a30130bb3f6daac7b9cb12fe2a6318e96dbd49b00",
+      "version": 2
+    },
+    {
       "encoded_hex": "0308d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de0804000000416e6e6107000000506574726f7661006c50c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000178210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a11c90c6c837f7be7e392e0080f2cf5781ec5ab4847e1b5cb3b5e7c03e0efffd0f6dff29b96243a726cb05b4b24fb8bf357dbaff72cafc9eca70806f03b3a3f0f",
       "name": "a version this build does not read",
       "refused": "version"
+    },
+    {
+      "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
+      "avatar": null,
+      "encoded_hex": "0108d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000000000000006c50c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c005e867478b24c2f797abf54905dbaec391c16a6b0d7ca8503f551c320a0cf9c26fc5bd394ab8c397b81af11e53e2cf900dd3ec1618ff42879118298ea8df5db04",
+      "first_name": "",
+      "issued_at": 1790000000000,
+      "last_name": "",
+      "message_hex": "e4768aad8869d9975878402fed860baeb78500b7ec296770d242a194a259c7e5",
+      "name": "version 1 without a name",
+      "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+      "profile_b64": "AQjXBMG4NrKRucRHptBeRUiwg5i4iu5wtnp7R7A9Jd4IAAAAAAAAAAAAbFDEoAEAAADqSmxj4pxSCr71UHsTLsX5lUd2rr6-e5JCHuppFEbSLABehnR4skwveXq_VJBduuw5HBamsNfKhQP1UcMgoM-cJvxb05SrjDl7ga8R5T4s-QDdPsFhj_QoeRGCmOqN9dsE",
+      "profile_hex": "0108d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000000000000006c50c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c00",
+      "refused": "first_name",
+      "signature_hex": "5e867478b24c2f797abf54905dbaec391c16a6b0d7ca8503f551c320a0cf9c26fc5bd394ab8c397b81af11e53e2cf900dd3ec1618ff42879118298ea8df5db04",
+      "version": 1
+    },
+    {
+      "address": "dsalt1qprtsfsdcx6efrwwyg7ndqhj9fzcg8x9c3th8pdn60drmq0f9mcyq4evdnt",
+      "avatar": "78210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a",
+      "encoded_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000007000000506574726f7661006c50c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000178210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a2912151fc2cd6bf37e17a9f11eed56ba266b7c719f93025174d8617bd3c09b68b396cc25750e3b6262b1ac155bcee3c3a5b8058f258b507c894199c62423cc09",
+      "first_name": "",
+      "issued_at": 1790000000000,
+      "last_name": "Petrova",
+      "message_hex": "e3ab80a5357bf010af4b6be2c116d2e2ca0377367223bf45150e64ad2a27f2de",
+      "name": "version 2, a last name without a first name",
+      "private_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+      "profile_b64": "AgjXBMG4NrKRucRHptBeRUiwg5i4iu5wtnp7R7A9Jd4IAAAAAAcAAABQZXRyb3ZhAGxQxKABAAAA6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iwAAXghD6JLHVkgsgJcW98tOyiTQe6jTtgslK9LbFF6mppKKRIVH8LNa_N-F6nxHu1WuiZrfHGfkwJRdNhhe9PAm2izlswldQ47YmKxrBVbzuPDpbgFjyWLUHyJQZnGJCPMCQ",
+      "profile_hex": "0208d704c1b836b291b9c447a6d05e4548b08398b88aee70b67a7b47b03d25de080000000007000000506574726f7661006c50c4a001000000ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c000178210fa24b1d5920b2025c5bdf2d3b289341eea34ed82c94af4b6c517a9a9a4a",
+      "refused": "first_name",
+      "signature_hex": "2912151fc2cd6bf37e17a9f11eed56ba266b7c719f93025174d8617bd3c09b68b396cc25750e3b6262b1ac155bcee3c3a5b8058f258b507c894199c62423cc09",
+      "version": 2
     }
   ],
   "refused": [

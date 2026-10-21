@@ -6,7 +6,8 @@ Read [docs/how-it-works.md](docs/how-it-works.md) first: what a mini-app is made
 needs a server, and every step from an empty folder to a published app as one checklist. Three pages go on from this
 file, and the protocol has pages of its own:
 
-- [docs/agents/app.md](docs/agents/app.md): building an app, from pairing its server (`grain status`, then `grain pair`:
+- [docs/agents/app.md](docs/agents/app.md): building an app, from pairing its server (`grain status`, then `grain pair`,
+  which pairs the app the offer names or the one confirmed with `grain pair --accept S`, never one nobody here named:
   a QR code the owner's Saltix scans; never ask anyone to paste a key) to an app that runs, is tested and
   ships; the rules every app follows; how to act on an error report pasted from Saltix's console.
 - [docs/agents/sdk.md](docs/agents/sdk.md): working on the SDK: the repository's map, its commands and tests, the golden
@@ -342,8 +343,9 @@ today (so does the simulator). A page that checks first shows a splash of its ow
   each file's blob id, which CI holds them to: `node scripts/check-vectors.mjs`). The SDKs reproduce them byte for
   byte, refusals included; a format changes in the protocol first, never here, and its page in `docs/protocol/` moves
   with it.
-- **`npm ci && npm test`** is what CI runs (after `node scripts/check-vectors.mjs`): it builds every package and the
-  simulator, then runs each package's tests.
+- **`npm ci --ignore-scripts && npm test`** is what CI runs (after `node scripts/check-vectors.mjs`): no dependency's
+  install script runs (esbuild's binary comes from its platform package); the build makes every package and the
+  simulator, then each package's tests run. CI's actions are pinned by commit.
 - **One Ed25519 check:** `verifyEd25519` (`packages/server/src/keys.ts`), the node's own `verify_strict` (no key or `R`
   of small order, `s` reduced, `R` exactly `[s]B − [k]A`); never a library's `verify`, which takes signatures the node
   refuses (`ed25519.test.mjs` holds every module to it). `@saltix/connect`'s check of a grant (`verifyGrant`) is the

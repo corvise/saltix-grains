@@ -236,8 +236,15 @@ test("--new pairs a new key for the same app and keeps the old app.key aside; an
   assert.equal(offer.name, "Dice roller", "a name without the characters an offer refuses");
   await wallet(relay, link, "dice");
   node.grains.set("dice", record("dice", OWNER, [offer.key]));
-  assert.equal(await first.done, 0);
+  // An offer that names no app pairs nothing by itself: the developer confirms the app Saltix asked for.
+  assert.equal(await first.done, 1);
+  assert.match(first.lines.join("\n"), /Saltix asked to pair this server with dice.*grain pair --accept dice/s);
+  assert.ok(!existsSync(join(dir, "app.key")));
+  // The same offer (its name kept with it: --name need not be repeated), now for the app Saltix asked for.
+  const accepted = run(dir, node, { accept: "dice" });
+  assert.equal(await accepted.done, 0);
   const old = AppKey.parse(readFileSync(join(dir, "app.key"), "utf8"));
+  assert.equal(old.slug, "dice");
 
   const rotate = run(dir, node, { fresh: true });
   const next = parseOfferLink(await linkIn(rotate.lines));

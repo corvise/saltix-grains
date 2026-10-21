@@ -14,7 +14,7 @@ import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
 import QRCode from "qrcode";
 import {
-  AppKey, type NetworkName, type NodeLike, type PairRequest, type PairingOffer, type RelayFrame, MAX_PAIR_NAME, PairingError, RelayClient, RelayGateways, answerPair, decodePairFrame, encodePairFrame, grainGet,
+  AppKey, type NetworkName, type NodeLike, type PairRequest, type PairingOffer, type RelayFrame, MAX_PAIR_NAME, PairingError, RelayClient, RelayGateways, answerPair, decodePairFrame, encodeAddress, encodePairFrame, grainGet,
   judgePair, keyFingerprint, makeOffer, nodeCall, offerCodeText, offerLink, refusedChar, registeredKeyStatus, relaysOf, toHex,
   fromHex, decodeOffer, encodeOffer, APP_KEY_FILE,
 } from "@saltix/grain-server";
@@ -42,8 +42,11 @@ export interface PairState {
   genesis: string;
   /** The offer being shown, its Borsh in hex. */
   offer: string;
-  /** Each offer's answer (its nonce, the app and the owner account, hex), newest last. */
+  /** The offer's answer (its nonce, the app and the owner account, hex), if Saltix asked: one app and one owner per
+   *  offer. An earlier offer's answer is forgotten with the offer. */
   answered: Array<{ offer: string; slug: string; owner: string; at: string }>;
+  /** The slug the developer confirmed for an offer that names none (`grain pair --accept S`), or null. */
+  accepted?: string | null;
 }
 
 /** What `app.json` holds. */
@@ -195,17 +198,29 @@ export async function pairPage(offer: PairingOffer): Promise<string> {
 `;
 }
 
-/** The registry's word on `key` (hex) for each app an offer was answered for: the first that names it, or null. */
-export async function namedFor(node: NodeLike, key: string, answered: PairState["answered"]): Promise<{ slug: string; owner: string } | null> {
-  const seen = new Set<string>();
-  for (const a of [...answered].reverse()) {
-    if (seen.has(a.slug)) continue;
-    seen.add(a.slug);
-    const grain = await grainGet(node, a.slug);
-    if (grain && grain.owner === a.owner && registeredKeyStatus(grain, key) === null) return { slug: a.slug, owner: a.owner };
-  }
-  return null;
+/**
+ * The registry's word on `key` (hex) for the app the offer was answered for, when that app is the one the developer
+ * confirmed (`confirmed`: the slug the offer names, or `--accept`'s): the slug and owner once the registry names the key
+ * for them, else null. An answer for any other app never pairs this computer: whoever saw the offer may ask for an app
+ * of their own (24-app-studio §3a), and their registry call must not make this server theirs.
+ */
+export async function namedFor(node: NodeLike, key: string, answered: PairState["answered"], confirmed: string | null): Promise<{ slug: string; owner: string } | null> {
+  if (confirmed === null) return null;
+  const a = answered.find((x) => x.slug === confirmed);
+  if (!a) return null;
+  const grain = await grainGet(node, a.slug);
+  return grain && grain.owner === a.owner && registeredKeyStatus(grain, key) === null ? { slug: a.slug, owner: a.owner } : null;
 }
+
+/** The app `grain pair` takes itself as paired with, if the registry names its key for it: the slug the offer names, or
+ *  the one the developer confirmed with `--accept` for an offer that names none; null when neither. */
+export const confirmedSlug = (offer: PairingOffer, accepted: string | null | undefined): string | null => offer.slug ?? accepted ?? null;
+
+/** The next step once Saltix asked for an app the developer has not confirmed: the same words in `grain pair` and
+ *  `grain status`. */
+export const acceptHint = (slug: string, flags: string): string => `grain pair --accept ${slug}${flags}`;
+
+const slugOk = (slug: string): boolean => /^[a-z0-9][a-z0-9-]{2,31}$/.test(slug);
 
 /**
  * The key is paired with `slug`: `app.key` (owner-only, the developer key's form) and `app.json`, an older `app.key`
@@ -249,6 +264,9 @@ export interface PairOptions {
   flags: string;
   slug?: string;
   name?: string;
+  /** `--accept S`: for an offer that names no app, the app this computer may be paired with once Saltix asked for it
+   *  (the line "Saltix asked to pair this server with S"). Without it such an offer pairs nothing. */
+  accept?: string;
   /** Pair a new key even though `app.key` is still named. */
   fresh: boolean;
   /** Show the offer and return: a later `grain pair` waits for Saltix. */
@@ -306,21 +324,33 @@ export async function pair(o: PairOptions): Promise<number> {
     o.log.step("key_reused", "ok");
   }
   const key = toHex(ed25519.getPublicKey(secret));
-  const answered = state0 && state0.network === network && state0.genesis === genesis ? state0.answered : [];
+  if (o.accept !== undefined && !slugOk(o.accept)) throw new Error(`--accept ${o.accept}: a slug is 3 to 32 of [a-z0-9-], starting with a letter or a digit`);
 
-  // Saltix may have named it already (a wait cut short, a managed owner's delay that passed).
-  const named = answered.length > 0 ? await namedFor(o.node, key, answered) : null;
-  if (named) return finished(o, dir, network, genesis, named.slug, secret, out);
-
-  // The offer: shown again while it has time to live, else a new one.
+  // The offer: shown again while it has time to live, else a new one. Its answer (one app and one owner per offer) and
+  // what the developer accepted go with it: a new offer starts with neither.
   const manifest = readManifestSlugAndName(dir);
   const slug = o.slug ?? (rotating === null ? manifest.slug ?? null : rotating ?? readAppJson(dir)?.slug ?? manifest.slug ?? null);
-  const name = nameForOffer(o.name ?? manifest.name ?? basename(dir));
-  let offer: PairingOffer | null = null;
+  let kept: PairingOffer | null = null;
   if (state0 && state0.network === network && state0.genesis === genesis) {
     try {
-      const kept = decodeOffer(fromHex(state0.offer));
-      if (kept.key === key && kept.slug === slug && kept.name === name && kept.expiresAt - now() >= REUSE_MIN_MS) offer = kept;
+      kept = decodeOffer(fromHex(state0.offer));
+    } catch {
+      kept = null;
+    }
+  }
+  // The name a new app would get: `--name`, grain.json's, the one the offer shown already carries (so `grain pair
+  // --accept S` need not repeat it), else the directory's.
+  const name = nameForOffer(o.name ?? manifest.name ?? kept?.name ?? basename(dir));
+  let offer: PairingOffer | null = null;
+  let answered: PairState["answered"] = [];
+  let accepted: string | null = o.accept ?? null;
+  if (kept !== null && state0) {
+    try {
+      if (kept.key === key && kept.slug === slug && kept.name === name && kept.expiresAt - now() >= REUSE_MIN_MS) {
+        offer = kept;
+        answered = state0.answered.filter((a) => a.offer === kept.nonce);
+        accepted ??= state0.accepted ?? null;
+      }
     } catch {
       offer = null;
     }
@@ -331,15 +361,23 @@ export async function pair(o: PairOptions): Promise<number> {
   } else {
     o.log.step("offer_shown_again", "ok");
   }
-  const state: PairState = { network, genesis, offer: toHex(encodeOffer(offer)), answered };
+  if (offer.slug !== null && accepted !== null && accepted !== offer.slug) {
+    throw new Error(`--accept ${accepted}: this project is set up for ${offer.slug}, which the offer names; --accept is for an offer that names no app`);
+  }
+  const confirmed = confirmedSlug(offer, accepted);
+  const state: PairState = { network, genesis, offer: toHex(encodeOffer(offer)), answered, accepted };
   writePairState(dir, state);
+
+  // Saltix may have named it already (a wait cut short, a managed owner's delay that passed): for the confirmed app only.
+  const named = await namedFor(o.node, key, answered, confirmed);
+  if (named) return finished(o, dir, network, genesis, named.slug, secret, out);
   writeFileSync(join(dir, PAIR_PAGE_FILE), await pairPage(offer));
 
   const link = offerLink(offer);
   out(await terminalQr(link, o.tty));
   out(`Pair this server with Saltix: scan the QR code with the app owner's Saltix (the phone's camera, or My apps → Pair a server).`);
   out(`  code         ${offerCodeText(offer)}   (Saltix shows it too: pair only if it is the same)`);
-  out(`  app          ${slug ?? `any of the owner's, or a new one named "${name}"`}`);
+  out(`  app          ${slug ?? (accepted !== null ? `${accepted} (--accept), or a new one named "${name}"` : `any of the owner's, or a new one named "${name}"`)}`);
   out(`  network      ${network} ${genesis.slice(0, 16)}`);
   out(`  server key   ${keyFingerprint(key)} (its secret stays in ${PAIR_KEY_FILE} on this computer)`);
   out(`  valid until  ${new Date(offer.expiresAt).toISOString()}`);
@@ -364,20 +402,29 @@ export async function pair(o: PairOptions): Promise<number> {
   out("Waiting for Saltix… (Ctrl-C stops; grain pair again shows the same offer while it lives)");
   let queue = Promise.resolve();
   const onFrame = (frame: RelayFrame) => {
-    queue = queue.then(() => answer(o, frame, relay, offer!, secret!, genesis, state, dir, out, now)).catch(() => {});
+    queue = queue.then(() => answer(o, frame, relay, offer!, secret!, genesis, state, dir, out, now, confirmed)).catch(() => {});
   };
   relay.on("frame", onFrame);
   // Ctrl-C is the command line's to handle (`endOnSignals`): the log's last line, then exit 130, which closes the relay.
   try {
     const deadline = now() + o.timeoutMs;
     for (;;) {
-      if (state.answered.length > 0) {
-        const done = await namedFor(o.node, key, state.answered).catch(() => null);
+      const asked = state.answered.find((a) => a.offer === offer!.nonce) ?? null;
+      if (asked && confirmed === null) {
+        // Answered for an app this computer was not set up for: the developer decides, never this command by itself.
+        o.log.step("registry", "waiting", "not_confirmed");
+        out(`Saltix asked to pair this server with ${asked.slug}, which this project was not set up for, so nothing is written. ` +
+          `If that is the app you meant: ${acceptHint(asked.slug, o.flags)} (it finishes once the registry names the key). ` +
+          `If not, someone else saw the offer: grain pair --new${o.flags} makes a new key and offer.`);
+        return 1;
+      }
+      if (asked) {
+        const done = await namedFor(o.node, key, state.answered, confirmed).catch(() => null);
         if (done) return finished(o, dir, network, genesis, done.slug, secret, out);
       }
       if (now() >= deadline) {
-        o.log.step("registry", "timeout", state.answered.some((a) => a.offer === offer!.nonce) ? "answered_not_named" : "not_asked");
-        out(state.answered.some((a) => a.offer === offer!.nonce)
+        o.log.step("registry", "timeout", asked ? "answered_not_named" : "not_asked");
+        out(asked
           ? `Saltix was answered, but the registry does not name the key yet (a managed account's call may wait its delay). ` +
             `grain pair${o.flags} again finishes once it does; grain status says where it stands.`
           : `Saltix did not ask in time. grain pair${o.flags} again shows the offer (or a new one).`);
@@ -398,7 +445,7 @@ export async function pair(o: PairOptions): Promise<number> {
 
 /** Judge one frame and answer it; an accepted request is kept as the offer's answer. */
 async function answer(o: PairOptions, frame: RelayFrame, relay: RelayClient, offer: PairingOffer, secret: Uint8Array, genesis: string,
-  state: PairState, dir: string, out: (line: string) => void, now: () => number): Promise<void> {
+  state: PairState, dir: string, out: (line: string) => void, now: () => number, confirmed: string | null): Promise<void> {
   let request: PairRequest;
   try {
     const read = decodePairFrame(frame.payload);
@@ -422,8 +469,9 @@ async function answer(o: PairOptions, frame: RelayFrame, relay: RelayClient, off
       state.answered.push({ offer: offer.nonce, slug: request.slug, owner: request.owner, at: new Date(now()).toISOString() });
       writePairState(dir, state);
     }
-    out(`Saltix asked to pair this server with ${request.slug}${grain === null ? " (a new app)" : ""}, owner account ` +
-      `${request.owner.slice(0, 8)}…: answered. Waiting for the owner's transaction to name the key…`);
+    const owner = encodeAddress(state.network, fromHex(request.owner, 32));
+    out(`Saltix asked to pair this server with ${request.slug}${grain === null ? " (a new app)" : ""}, owner ${owner}: answered` +
+      (confirmed === request.slug ? ". Waiting for the owner's transaction to name the key…" : "."));
   } else {
     out(`Saltix asked for ${request.slug} and was refused: ${result} (${REFUSALS[result]}).`);
   }

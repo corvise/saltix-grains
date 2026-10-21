@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import type { Socket } from "node:net";
 import { type FileRef, fileRefProblem, openFile, relayOfEndpoint, sealFile } from "./file.js";
+import { MAX_ANSWER_BYTES } from "./node.js";
 import type { RelayClient, RelayEndpoint } from "./relay.js";
 
 /** The largest piece of one `PUT`. */
@@ -76,7 +77,16 @@ export async function relayRequest(endpoint: RelayEndpoint, method: string, path
       ...(socket ? { createConnection: () => socket! } : {}),
     }, (res) => {
       const chunks: Buffer[] = [];
-      res.on("data", (c: Buffer) => chunks.push(c));
+      let size = 0;
+      res.on("data", (c: Buffer) => {
+        size += c.length;
+        // A relay answers at most `MAX_ANSWER_BYTES` (a blob's piece, a listing): past that it is no answer.
+        if (size > MAX_ANSWER_BYTES) {
+          res.destroy(new Error(`the relay's answer is longer than ${MAX_ANSWER_BYTES} bytes`));
+          return;
+        }
+        chunks.push(c);
+      });
       res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) }));
       res.on("error", reject);
     });

@@ -15,7 +15,7 @@ const v = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", imp
 const hex = (h) => fromHex(h);
 
 test("kinds: their tags, names, hash domains, bounds, types and sides", () => {
-  assert.equal(v.kinds.length, 3);
+  assert.equal(v.kinds.length, 4);
   for (const k of v.kinds) {
     const ours = NAMED_KINDS[k.name];
     assert.ok(ours, k.name);

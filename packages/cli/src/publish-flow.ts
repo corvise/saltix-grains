@@ -42,7 +42,7 @@ import { type DevLog, GRAIN_DIR, grainDir } from "./devlog.js";
 import { ensureGitignore, terminalQr } from "./pair.js";
 import { type Signer, accountOf, keyFlag, ownerLine, signerFor } from "./owner.js";
 import { lint, publicKeyOf, readKey } from "./project.js";
-import { publishCall, salt, submit, walletLink, waitForPublished, type Sent, type Signing } from "./registry.js";
+import { publishCall, refuseKeyFileOn, salt, submit, walletLink, waitForPublished, type Sent, type Signing } from "./registry.js";
 import { SETTLE_EVERY_MS, SETTLE_MS, STAGES, landed, sendSettled } from "./send.js";
 import { protocolOf, sourcesFor } from "./sources.js";
 import { APP_KEY_ENV, APP_KEY_FILE, privateCall, sameMembers } from "./studio.js";
@@ -541,6 +541,15 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   let signer: Signer | null = null;
   if (!published) {
     signer = signerFor({ wallet: o.wallet, keyPath: o.keyPath, named: o.keyNamed, owner: before?.owner ?? null, what: slug });
+    // Said before anything is sent or uploaded: on the main network only the owner's Saltix signs (12-grains §10).
+    if (signer.by === "key") {
+      try {
+        refuseKeyFileOn(status.network, `--key ${basename(o.keyPath)}`);
+      } catch (e) {
+        o.log.step("signer", "refused", "mainnet_key_file");
+        throw new PublishError("signer", "mainnet_key_file", (e as Error).message);
+      }
+    }
     o.log.step("signer", "ok", signer.by === "key" ? `key_${signer.why}` : `wallet_${signer.why}`);
     print(ownerLine(signer, status.network, before?.owner ?? null, o.keyPath));
   }

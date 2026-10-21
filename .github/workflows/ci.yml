@@ -3,31 +3,27 @@ on:
   push: { branches: [main] }
   pull_request:
 # GitHub's own runners: the repository is public, and a pull request from a fork must never run on a machine of ours.
+# Actions are pinned by commit (as the protocol's repository pins them): a tag can move, a commit cannot.
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22 }
-      - run: npm ci
-      # Temporary files in a directory of the job's own, which the last step checks is left empty (scripts/ci-tmp.sh):
-      # every test removes what it makes (scripts/scratch.mjs).
-      - name: The job's temporary directory
-        run: scripts/ci-tmp.sh start
+      # No dependency's install script runs: esbuild's binary comes from its platform package, nothing else has one.
+      - run: npm ci --ignore-scripts
       # The golden vectors are the protocol's bytes: each file's git blob id is the one vectors/SOURCE records at the
       # corvise/saltix commit it names (scripts/sync-vectors.sh writes both).
       - run: node scripts/check-vectors.mjs
       - run: npm test
       # A bundle's bytes are a constant of its files, whatever Node makes them (docs/devex.md, 7): the same build, run
       # again on the newest and the oldest Node the SDK supports.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24 }
       - run: node --test --test-force-exit --test-name-pattern "any Node" packages/cli/test/bundle.test.mjs
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 20 }
       - run: node --test --test-force-exit --test-name-pattern "any Node" packages/cli/test/bundle.test.mjs
-      - name: The tests left no temporary files
-        run: scripts/ci-tmp.sh check

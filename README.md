@@ -173,6 +173,7 @@ npx grain init ../coach --chat            # a chat-only grain: grain.json, chat.
 npx grain status                          # is this project's server paired with its app? and what to run next
 npx grain pair                            # a QR code for the owner's Saltix: pairs this computer's own server key
 npx grain pair --no-wait                  # the offer only (a coding agent shows it), then grain pair to wait
+npx grain pair --accept S                 # an offer that named no app: take the app S Saltix asked for (whoever saw the offer may ask)
 npx grain pair --new                      # a new key for the same app: rotation, or a key that stopped working
 npx grain doctor                          # the project's state and the exact next step; exit 0, 1 or 75 (below)
 npx grain configure --slug dice --server server.key --category games   # the registry names the server key
@@ -226,7 +227,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   decline one); a user's own "no" is never an error. A screenshot of the page after each tap goes to `.grain/check/`.
 - `grain dev` is a server: it runs until Ctrl-C (or SIGTERM, or its terminal closing), and its log's last line says it
   stopped, however it was launched (`npx grain dev`, `npm run dev`, the command itself). A coding agent runs it in the
-  background, or not at all, and checks the page with `--check`, which exits. It signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
+  background, or not at all, and checks the page with `--check`, which exits. It listens on this computer alone
+  (`127.0.0.1`; the emulator reaches it at `10.0.2.2`, the host's loopback; `--host 0.0.0.0` for a phone on the same
+  network), signs the manifest for the origin each request came to (`localhost`, `127.0.0.1`, or
   the emulator's `10.0.2.2`) and prints the `salt:grain?manifest=…` link to open in a debug Saltix, and the simulator's
   address (`/_simulator/`): the page framed as Saltix frames it, with the wallet's controls, the band and the margins in
   the page's colours as Saltix takes them, and Saltix's splash while the page loads, on a phone, the Galaxy Z Fold's

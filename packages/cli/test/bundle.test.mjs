@@ -188,3 +188,44 @@ test("grain bundle writes the protocol's bundle byte for byte, and the network's
   assert.equal(made.size, expected.bytes);
   assert.deepEqual(checkBundle(made.zip), { ok: true, value: { files: expected.files, unpacked: expected.unpacked } });
 });
+
+test("a key file, a chat's store or app.json under public/ never goes into a bundle, grain dev never serves it, and grain lint says so first", async () => {
+  const { refusedInBundle, secretsUnder } = await import("../dist/bundle.js");
+  const { spawnSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const { rmSync } = await import("node:fs");
+  const dir = scratch("grain-bundle-secrets-");
+  mkdirSync(join(dir, "public", "data"), { recursive: true });
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>x</title>");
+  assert.ok(makeBundle(join(dir, "public")).files.includes("index.html"), "a clean public/ bundles");
+  // A bundle is uploaded before the owner signs and served by its hash to anyone: these are refused, never skipped.
+  for (const [name, what] of [["server.key", "a key file"], ["app.key", "a key file"], ["data/chat.store.json", "a chat's store"], ["app.json", "the server's app.json"]]) {
+    writeFileSync(join(dir, "public", name), "61".repeat(32) + "\n");
+    assert.throws(() => makeBundle(join(dir, "public")), new RegExp(`${name.replace(/\./g, "\\.")}: ${what}.*never goes into a bundle.*serves to anyone`), name);
+    assert.deepEqual(secretsUnder(join(dir, "public")).map((s) => s.name), [name]);
+    assert.equal(typeof refusedInBundle(name.split("/").at(-1)), "string");
+    rmSync(join(dir, "public", name));
+  }
+  assert.equal(refusedInBundle("index.html"), null);
+  assert.equal(refusedInBundle("keys.js"), null, "only the name's end counts");
+  assert.deepEqual(secretsUnder(join(dir, "nowhere")), []);
+  // grain dev: such a file is not served either, whatever its path.
+  writeFileSync(join(dir, "public", "owner.key"), "61".repeat(32) + "\n");
+  const server = await serve(dir, () => manifest({ hosted: { url: "http://localhost/index.html", origins: ["http://localhost"] } }), secret, 0);
+  try {
+    assert.equal(server.address().address, "127.0.0.1", "this computer only unless --host says otherwise");
+    const base = `http://127.0.0.1:${server.address().port}`;
+    assert.equal((await fetch(`${base}/owner.key`)).status, 404);
+    assert.equal((await fetch(`${base}/index.html`)).status, 200);
+  } finally {
+    server.close();
+  }
+  // grain lint: an error naming the file, before grain bundle or grain publish would refuse it.
+  writeFileSync(join(dir, "grain.json"), JSON.stringify(manifest({ hosted: { url: "https://notes.example/index.html", origins: ["https://notes.example"] } })));
+  const lint = spawnSync("node", [fileURLToPath(new URL("../dist/main.js", import.meta.url)), "lint"], { cwd: dir, encoding: "utf8" });
+  assert.equal(lint.status, 1);
+  assert.match(lint.stderr, /error: public\/owner\.key: a key file \(\*\.key\) under public\/ would go into the bundle.*move it out/);
+  rmSync(join(dir, "public", "owner.key"));
+  const clean = spawnSync("node", [fileURLToPath(new URL("../dist/main.js", import.meta.url)), "lint"], { cwd: dir, encoding: "utf8" });
+  assert.doesNotMatch(clean.stderr, /owner\.key|would go into the bundle/, "nothing left under public/ to report");
+});

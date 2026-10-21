@@ -189,6 +189,46 @@
       "stretched_hex": "df3518d8ac5bda9380f3b3f4f88cc13d1889aa64f084698f9bac1bb00a461ffe9934a617a2ff94a683e783dda0a92cbb5166d261cbbc7b2605c24d6d6022cc3a"
     }
   ],
+  "device_key_forms": {
+    "about": "one P-256 key, its compressed form (02/03 ‖ x) and its compact form (05 ‖ x), which names the same point; from protocol version 3 a block takes the compressed form alone",
+    "add_device": {
+      "id_hex": "9403e2d750a60c1216fce42fd22eb8f60007f79c21c0b240caee212a03daf87e",
+      "name": "root-adds-a-compact-key",
+      "proof_hex": "030006336245d6357e54d8ba0781913f76d948a00c6d154c163d711ac284aa8c74087edf2e941c688ea35b91389de35a17c381e060e7a901a90b70db5ef709923b835d19a0f86442ea8b62d4e71ba83c7cc6f1fe5e0e453d8e44d7b7fd521aaa9c7567a5f96ab7e57cfa6a4cd8e2c5cf3e27c4ff6488cedd35a99fcce115b8fe6d0b",
+      "refused_in": [
+        3
+      ],
+      "signed_hex": "0166d4b105a23066a00e502977a214bb4ff4828fa8bb419a8a5a23cb79ddb2814b0000000000000000a00f000000000000905f010000000000070001057431b18f055ac873b1eb7d74d8716ad1e3df06908b00cc2f901153f8eb6428180000ca9a3b000000000000000000000000030006336245d6357e54d8ba0781913f76d948a00c6d154c163d711ac284aa8c74087edf2e941c688ea35b91389de35a17c381e060e7a901a90b70db5ef709923b835d19a0f86442ea8b62d4e71ba83c7cc6f1fe5e0e453d8e44d7b7fd521aaa9c7567a5f96ab7e57cfa6a4cd8e2c5cf3e27c4ff6488cedd35a99fcce115b8fe6d0b",
+      "slot": 0,
+      "taken_in": [
+        1,
+        2
+      ],
+      "transaction_hex": "0166d4b105a23066a00e502977a214bb4ff4828fa8bb419a8a5a23cb79ddb2814b0000000000000000a00f000000000000905f010000000000070001057431b18f055ac873b1eb7d74d8716ad1e3df06908b00cc2f901153f8eb6428180000ca9a3b000000000000000000000000"
+    },
+    "keys": [
+      {
+        "key_hex": "01037431b18f055ac873b1eb7d74d8716ad1e3df06908b00cc2f901153f8eb642818",
+        "name": "compressed",
+        "valid": {
+          "1": true,
+          "2": true,
+          "3": true
+        }
+      },
+      {
+        "key_hex": "01057431b18f055ac873b1eb7d74d8716ad1e3df06908b00cc2f901153f8eb642818",
+        "name": "compact",
+        "valid": {
+          "1": true,
+          "2": true,
+          "3": false
+        }
+      }
+    ],
+    "secret_hex": "3131313131313131313131313131313131313131313131313131313131313131",
+    "since": 3
+  },
   "device_signatures": [
     {
       "key": "p256",
@@ -379,7 +419,8 @@
     "a device signs the transaction id; the root signs root use (id, next_digest) and the account's root digest becomes next_digest",
     "key event: Borsh {account [32], seq u32, prev [32], slot u64, body}; body tag 0 Signed(signed transaction), tag 1 Matured(transaction id [32]); id = BLAKE3 derive_key(\"Saltix key event v1\", event); prev of the first event is 32 zero bytes",
     "from protocol version 2 a quorum's signers sign its quorum message q = BLAKE3 derive_key(\"Saltix quorum v1\", transaction id ‖ [proof tag] ‖ the devices' indexes in the proof's order): Devices (tag 2) two indexes, RootAndDevice (tag 4) one; the devices sign q, the root signs root use (q, next_digest); one signer (Key, Device, Root) signs the id in every version; a log check takes either form of a quorum, the chain held each to its block's version",
-    "log check: replay from the origin (root_digest_0 of a kind 5 address, or the key of a kind 0 one) under the chain and the network's account_policy, each event under the controller in force at it; the address's first transaction acts as a quorum's; a quorum's or a strengthening action applies at once, any other account action waits for its Matured event; a SetController that applies voids what was registered before it"
+    "log check: replay from the origin (root_digest_0 of a kind 5 address, or the key of a kind 0 one) under the chain and the network's account_policy, each event under the controller in force at it; the address's first transaction acts as a quorum's; a quorum's or a strengthening action applies at once, any other account action waits for its Matured event; a SetController that applies voids what was registered before it",
+    "from protocol version 3 (protocol::COMPRESSED_P256) a P-256 device key a block takes (AddDevice, SetController's devices) is SEC1-compressed alone, 02 or 03 ‖ x; versions 1 and 2 take the compact form 05 ‖ x too, which names the point of x with the smaller y (a second encoding of half of all keys); a device the chain holds keeps signing in every version; a log check takes the forms every version took (`device_key_forms`)"
   ],
   "spec": "specs/13-accounts.md §3–§8, §11; specs/23-upgrades.md §2–§5",
   "transactions": [
