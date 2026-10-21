@@ -15,9 +15,10 @@ client, in any language, reproduces them byte for byte, refusals included. The S
   `spec` field (`"specs/12-grains.md"`, …) names the protocol document, which those pages reflect under the same name
   and section numbers.
 - **`SOURCE`'s commit** (`b9019fd`) is the protocol's change that added `images-v1.json` (named blobs: icons, avatars
-  and bundles the network keeps, 32-images); every other file's bytes are those of the commit before it. Earlier syncs
-  brought `ConfigureGrain` tag 39 of protocol version 2 (`grains-v1.json`, `configure-v2`), which no network runs yet,
-  and the member proof's 5 minutes of clock skew (`grain-chats-v1.json`).
+  and bundles the network keeps, 32-images); every other file's bytes are those of the commit before it.
+  `accounts-v1.json` came from the same commit later, for the quorums of protocol version 2 (`quorums_v2`), whose bytes
+  have not changed since. Earlier syncs brought `ConfigureGrain` tag 39 of protocol version 2 (`grains-v1.json`,
+  `configure-v2`), which no network runs yet, and the member proof's 5 minutes of clock skew (`grain-chats-v1.json`).
 - **Using one.** A file holds its `version`; the genesis hash and network its network-bound signatures use (`chain`, or
   `genesis_hash` and `network`); the keys it signs with (fixed, fake secrets: never use them for anything real); the
   objects in their Borsh form as hex, and in their JSON form where they have one; the messages signed (`message_hex`);
@@ -36,4 +37,5 @@ client, in any language, reproduces them byte for byte, refusals included. The S
 | `access-v1.json` | channel and stake transactions, an allowance and its request, a voucher, sponsor certificates signed by a plain key (`grant`) and a phone (`phone_grant`) | [relays](../docs/protocol/relays.md#paying-for-relays-lanes-and-sponsors) |
 | `server-pairing-v1.json` | pairing a server by QR code: offers (one for an app, one for any app with a name in Russian) with their Borsh, link, code, fingerprint and the server's address; a request and every answer as `SGP1` frames, with the proof and the payload it signs; how the computer judges requests; what readers and the wallet refuse | [app studio §3a](../docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code) |
 | `images-v1.json` | named blobs: the kinds (tag, name, hash domain, bound, type, sides); icons and avatars each kind takes with their hashes, and those the image check refuses with the reason; the monogram's colours; profiles of version 2 with an avatar; bundles as `grain bundle` writes them and as other tools do, and those the bundle check refuses; a server key's statement for a pending upload (Borsh, message, signature, and refused ones with the node's clock); the frames that carry them (`blob_put`'s pieces, answers and every refusal reason, `blob_get`, `GET /_blob/…`) | [images](../docs/protocol/images.md) |
+| `accounts-v1.json` | a managed account (13-accounts): its phrase's keys and derivation, root uses, device signatures (Ed25519 and P-256), transactions with every proof, its key event log and what the log proves (`log`), an upgrade from kind 0; and the same quorums signed in protocol version 2's form, over their quorum message (`quorums_v2`), which the offline log check takes beside version 1's | [basics](../docs/protocol/basics.md#accounts-whose-keys-change) |
 | `handles-v1.json` | usernames and numbers: their forms and Borsh, what a typed text reads as, how wallets display them, and every handle transaction (`BindHandle` among them) | [basics](../docs/protocol/basics.md#usernames-and-numbers), [app studio §2](../docs/protocol/app-studio.md#2-the-registry) |

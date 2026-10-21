@@ -2,7 +2,7 @@
 
 > Reflects Saltix 24-app-studio (approved 2026-10-15; the launch, the app's home, the console, invites, Awaiting you
 > and the Connect profile, 2026-10-15 to 2026-10-16; server keys that prove their holder, protocol version 2; pairing a
-> server by QR code, 2026-10-19), as of corvise/saltix `573525d8` (2026-10-19). Section numbers are the specification's.
+> server by QR code, 2026-10-19), as of corvise/saltix `44bbf728` (2026-10-20). Section numbers are the specification's.
 
 Anyone makes an app in Saltix's **My apps**: names it, binds a username, pairs the computer that runs its program by a
 QR code (the server key is made there and never leaves it) or, where no command runs, gets a **developer key**, and
@@ -43,9 +43,13 @@ ServerKeyProof { key: [u8; 32], proof: [u8; 64] }
   key's holder names it, for one network, one grain and one owner. A block of version 2 refuses tag 34.
 - **Which tag.** Send tag 34 while the network's `node_status.protocol.version` is 1 and tag 39 from version 2 (`next`
   says when it changes): a transaction valid past the switch waits, or goes in the new form, and a managed owner's
-  pending tag 34 that would take effect under version 2 is dropped. Version 2 is scheduled on no network yet: the SDK
-  sends tag 34, and the vectors this repository holds predate tag 39 ([vectors/README.md](../../vectors/README.md)).
-  When the registry answers `ServerKeyTaken` for a key a wallet made, it makes a fresh key.
+  pending tag 34 that would take effect under version 2 is dropped. `grain configure` does this by itself: tag 34 while
+  the network runs version 1, valid at most until the slot before a scheduled switch (and not sent in the last 30
+  slots before it), tag 39 from version 2, each key's proof signed by its key file (`--server server.key`; a key given
+  as bare hex cannot be proven and is refused then). The owner's Saltix names a key of a computer by pairing it (§3a),
+  whose answer carries the proof. The vectors hold both forms (`grains-v1.json`, `configure` and `configure-v2`;
+  [vectors/README.md](../../vectors/README.md)). When the registry answers `ServerKeyTaken` for a key a wallet made, it
+  makes a fresh key.
 - A managed owner's call waits like every grain call, and a quorum applies it at once. `grain_get` and `grain_list` show
   `servers` and `category`.
 

@@ -8,6 +8,7 @@ import {
 import { publishLink } from "./publish.js";
 import { publicKeyOf } from "./project.js";
 import { notYours } from "./studio.js";
+import { type VersionStatus, windowFor } from "./versions.js";
 
 export interface Signing {
   /** Where the network's wallet interface is: your node's URL, or the relays' gateways (`reachOf`). */
@@ -46,7 +47,7 @@ export function salt(units: bigint): string {
   return fraction ? `${whole}.${fraction}` : `${whole}`;
 }
 
-interface Status { genesis: string; slot: number; network: string }
+interface Status extends VersionStatus { genesis: string; slot: number; network: string }
 interface Account { nonce: number; salt: string }
 
 /** The call that registers `signed` with the deposit the node quotes for its slug, or updates it when its owner
@@ -94,8 +95,8 @@ export async function show(node: NodeLike, slug: string): Promise<RegisteredGrai
   return grainGet(node, slug);
 }
 
-/** Sign `call` with the key file's secret and submit it, after the network, the balance and the call's own bounds are
- *  checked: what a node would refuse is refused before a transaction is made. */
+/** Sign `call` with the key file's secret and submit it, after the network, the balance, the protocol version and the
+ *  call's own bounds are checked: what a node would refuse is refused before a transaction is made. */
 export async function submit(call: GrainCall, secret: Uint8Array, s: Signing, o: SubmitOptions = {}): Promise<Sent> {
   const status = await nodeCall<Status>(s.node, "node_status");
   if (s.genesis !== undefined && status.genesis !== s.genesis.toLowerCase()) {
@@ -110,10 +111,12 @@ export async function submit(call: GrainCall, secret: Uint8Array, s: Signing, o:
     throw new Error(`the account has ${account.salt} base units of SALT; this needs ${needs}`);
   }
   const nonce = o.nonce ?? account.nonce;
-  const validUntil = status.slot + s.validFor;
+  // Valid while blocks of the network's versions take its form: up to the slot before a version that refuses it.
+  const validUntil = windowFor(call, status, s.validFor);
   const signed = signGrainTx(secret, { nonce, fee, validUntilSlot: validUntil }, call, status.genesis);
   const answer = await nodeCall<{ id: string }>(s.node, "transaction_submit", { transaction: signed.hex });
-  const kind = (["register", "update", "retire", "configure", "access", "rate", "bind", "profile"] as const).find((k) => k in call)!;
+  // Either form of ConfigureGrain is the same call to its sender (tag 34 or 39, 24-app-studio §2).
+  const kind = "configureProven" in call ? "configure" : (["register", "update", "retire", "configure", "access", "rate", "bind", "profile"] as const).find((k) => k in call)!;
   return { call: kind, id: answer.id, fee, amount, nonce, validUntil };
 }
 

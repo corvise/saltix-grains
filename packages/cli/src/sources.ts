@@ -19,10 +19,7 @@ export interface ListedRelay {
 }
 
 /** What `node_status` says of protocol versions; a node from before them says nothing, which is version 1. */
-export function protocolOf(status: { protocol?: { version?: unknown } }): number {
-  const v = status.protocol?.version;
-  return typeof v === "number" && Number.isSafeInteger(v) && v >= 1 ? v : 1;
-}
+export { protocolOf } from "./versions.js";
 
 /** Whether a source is a relay's copy of a bundle (one the network serves), not one of the developer's own hosts. */
 export const isRelaySource = (source: string): boolean => {

@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Ready for protocol version 2** (24-app-studio §2, 13-accounts §6.1, 23-upgrades §6a):
+  - `grain configure` sends `ConfigureGrain` in the form of the version the network runs: bare keys (tag 34) in
+    version 1, each key with its proof (tag 39) from version 2, signed here by its key file. A key given as bare hex is
+    refused from version 2, and the owner's Saltix is pointed to `grain pair`.
+  - Every signed call passes `windowFor` (`versions.ts`). A call the network's version does not take is refused. One
+    of a form a scheduled version retires is valid at most until the slot before the switch, and is not sent in the last
+    30 slots before it.
+  - `callVersions` (`@saltix/grain-server`) gives each registry call's versions: `ConfigureGrain` 34 until 2, 39 from 2,
+    and a sealed manifest without a source from 2.
+  - `checkLog` and `keySpeaksFor` take a managed account's quorum in either form, all its signers in one. A quorum cut
+    down to one signer is refused, as is one whose signers sign two forms. Held to `vectors/accounts-v1.json`
+    (`quorums_v2`), now synced with the others.
+
 - **`grain dev --check --tap` taps the buttons a tap brings up** ("Clear history" once there is a history): after each
   tap the simulator names the buttons shown that were never seen (`saltixSimulator.more()`), tapped in their turn within
   30 buttons and 40 s; those left are a warning ("N buttons appeared later and were not tapped").
@@ -396,6 +409,13 @@
   (deflated, compressible ones could exceed that); a host may still compress the download on the wire.
 
 ### Fixed
+
+- A managed account whose key event log holds a quorum signed under protocol version 2 failed the offline log check:
+  every Connect grant and site profile it signed would have been refused once a network ran version 2.
+- `grain configure` sent tag 34 on any network, which a version 2 network refuses, so revoking a developer key
+  (`--revoke-all`) would have failed there too.
+- `grain app-key make` suggested `grain configure --server <hex>`, which cannot be proven from version 2. It now names
+  the key file.
 
 - **Ctrl-C on `npx grain dev` left no `end` line in `.grain/log.jsonl`**: npm forwards the terminal's SIGINT to the
   command, which gets it from the terminal too; the handler went after the first signal, and the second killed the

@@ -2,8 +2,9 @@
 
 > Reflects Saltix 01-foundation v2 §3–§5 (approved 2026-10-10), 03-ledger §1–§3, 13-accounts §2–§7 and §11,
 > 21-names §3–§5a, 23-upgrades §6–§7, 09-relay §1.5, and of 08-node §2, 05-beacon §1 and 06-licenses §4 the order an
-> account's transactions and registry calls take, as of corvise/saltix `7d3744c5` (2026-10-19). Only what an app
-> touches.
+> account's transactions and registry calls take, as of corvise/saltix `7d3744c5` (2026-10-19); a quorum's two forms
+> and protocol version 2's parts for apps (13-accounts §6.1, §7; 23-upgrades §6a) as of corvise/saltix `44bbf728`
+> (2026-10-20). Only what an app touches.
 
 What every other page builds on. The [index](README.md#conventions) gives the notation (Borsh, `derive`, hex,
 base64url).
@@ -136,11 +137,26 @@ received funds has no controller and no devices yet.
   the earlier ones made, starting from what the address commits to (a kind 5 address's first root, or an upgraded
   kind 0 address's key). The check proves that every change was authorized; the chain orders them. A controller
   version the checker does not know makes the log unverifiable to it ("keys not verified"), never a broken account.
+- **A quorum's two forms.** One signer (a key, one device, the root alone) signs the transaction's id in every protocol
+  version. A quorum's signers sign its id up to version 1 and, from version 2, its **quorum message**, which names the
+  proof's shape so that nobody can cut a quorum down to one of its signers and change what it may do:
+
+  ```text
+  q = derive("Saltix quorum v1", transaction id ‖ [proof tag] ‖ the devices' indexes in the proof's order)
+      Devices (tag 2): two indexes; RootAndDevice (tag 4): one
+  the devices sign q; the root signs its use of q: derive("Saltix root use v1", q ‖ next_digest)
+  ```
+
+  A log does not say which version each event's block ran, so its check takes a quorum in either form, the newer
+  first, all its signers in the same one: a root of one form with a device of the other proves nothing.
+  `vectors/accounts-v1.json` holds its log and the same quorums signed in version 2's form (`quorums_v2`), with their
+  messages.
 - **Where an app meets it.** `account_get` gives the current controller (its devices) as the node sees it, and
   `account_log` the log ([wallet interface](wallet-interface.md#methods)). A server that trusts its node reads
   `account_get`; a page that trusts no node (a Connect sign-in) replays `account_log` itself. The SDK's `checkLog`,
-  `keySpeaksFor` and `deviceProblem` (`@saltix/grain-server`) do it, held to the logs in `vectors/connect-v1.json` and
-  `vectors/connect-profiles-v1.json`; port them rather than the replay's rules, which are the managed accounts' own.
+  `keySpeaksFor` and `deviceProblem` (`@saltix/grain-server`) do it, held to the logs in `vectors/connect-v1.json`,
+  `vectors/connect-profiles-v1.json` and `vectors/accounts-v1.json` (version 2's quorums); port them rather than the
+  replay's rules, which are the managed accounts' own.
 
 ## Amounts and units
 
@@ -228,7 +244,10 @@ they are, and profile names are personal data no app receives from Saltix.
   and `next` (`{version, epoch}` or `null`).
 - Version 1 is what every network runs today. Version 2 (built, scheduled on no network yet) brings, for apps,
   `ConfigureGrain` tag 39 with proofs of its server keys ([app studio §2](app-studio.md#2-the-registry)); a client sends
-  tag 34 while `protocol.version` is 1, tag 39 from 2.
+  tag 34 while `protocol.version` is 1, tag 39 from 2, and never signs tag 34 valid past the switch `next` names. It
+  also brings a quorum's message (above), and a sealed manifest that names no source, the network keeping its bundle
+  ([grains §2](grains.md#2-manifest)); before it, a sealed manifest names 1–8 sources. `outdated` (`{version, …}` or
+  `null`) says the node saw a block of a version it does not know: the network runs that one.
 - **Readers.** An unknown tag fails Borsh, so a reader that predates it drops the whole object: an older wallet drops a
   chat message with a newer block or action whole ([grain chats §4](grain-chats.md#4-messages-what-the-app-sends)). A
   wallet signs nothing for a controller version it does not know, and shows an unknown key event as "keys not
