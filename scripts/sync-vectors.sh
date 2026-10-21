@@ -3,10 +3,11 @@
 # grain-chats-v1.json (chats and the file reference), handles-v1.json (usernames bound to apps), connect-v1.json (Saltix
 # Connect's offers, grants and logs, for @saltix/connect), connect-profiles-v1.json (Connect profiles),
 # server-pairing-v1.json (pairing a server by QR code, grain pair), images-v1.json (named blobs: the image and bundle
-# checks, a bundle's upload into the network, for grain publish and grain icon) and gate-v1.json (a test network's access
-# grants and tokens, 37-gate: grain pair on a gated network) from a Saltix checkout, and record its commit and each
-# file's git blob id there in vectors/SOURCE. CI holds the copies to those ids byte for byte (scripts/check-vectors.mjs),
-# so a vector edited here by hand fails.
+# checks, a bundle's upload into the network, for grain publish and grain icon), accounts-v1.json (managed accounts'
+# key event logs, and the quorums of protocol version 2, for the offline log check) and gate-v1.json (a test network's
+# access grants and tokens, 37-gate: grain pair on a gated network) from a Saltix checkout, and record its commit and
+# each file's git blob id there in vectors/SOURCE. CI holds the copies to those ids byte for byte
+# (scripts/check-vectors.mjs), so a vector edited here by hand fails.
 #
 #   scripts/sync-vectors.sh <checkout>            every file, from the checkout's commit (SOURCE's first line)
 #   scripts/sync-vectors.sh <checkout> <file>…    only those files: each line names the checkout's commit as a third
@@ -16,7 +17,7 @@ set -eu
 src=${1:?usage: scripts/sync-vectors.sh <path to a Saltix checkout> [file…]}
 shift
 here=$(cd "$(dirname "$0")/.." && pwd)
-files="grains-v1.json crypto-v1.json relay-v1.json access-v1.json grain-chats-v1.json handles-v1.json connect-v1.json connect-profiles-v1.json server-pairing-v1.json images-v1.json gate-v1.json"
+files="grains-v1.json crypto-v1.json relay-v1.json access-v1.json grain-chats-v1.json handles-v1.json connect-v1.json connect-profiles-v1.json server-pairing-v1.json images-v1.json accounts-v1.json gate-v1.json"
 # The ids come from the commit, so its vectors must be the commit's own.
 if [ -n "$(git -C "$src" status --porcelain -- vectors)" ]; then
   echo "the checkout's vectors/ has changes not committed: commit them, or sync from a clean checkout" >&2

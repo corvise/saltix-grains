@@ -334,6 +334,12 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   otherwise the tool says what to do in the owner's Saltix (My apps) and waits for the registry (`--timeout`). `configure` replaces the server keys and the category
   (`--revoke-all` names no key, which stops every developer key at once); `access` replaces public or private and the
   members. A rating names its account and is signed by the rater's key (`--key`), or given in Saltix.
+- `configure` sends the form of the network's protocol version (`node_status.protocol`; [24-app-studio
+  §2](docs/protocol/app-studio.md#2-the-registry)): bare keys (tag 34) while it runs version 1, valid at most until the
+  slot before a scheduled switch to version 2 and not sent in the last 30 slots before it; from version 2 each key with
+  its proof (tag 39), which `--server server.key` signs here for the app and its owner. A key given as bare hex cannot be
+  proven, so from version 2 it is refused, and the owner's Saltix names a computer's key only by pairing it (`grain
+  pair`), whose answer carries the proof.
 - `grain pair` (Saltix [24-app-studio §3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)) makes the server's Ed25519 key on this computer, in
   `.grain/pair.key` (owner-only, never printed), and shows its offer: a QR code (with colours on a terminal; plain half
   blocks elsewhere, drawn for a dark background), `.grain/pair.html`, the link `salt:grain-pair?o=…` and a 6-digit code

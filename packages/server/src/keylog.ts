@@ -12,6 +12,12 @@
 // Each event is replayed under the controller in force at it (23-upgrades §3): an account starts from its birth
 // controller (its kind 0 key, or rule set 1 of its first root), and a `SetController` replaces it. A controller of a
 // version this SDK does not know refuses the log as "a newer controller": keys not verified, never a broken account.
+//
+// A quorum's proof (two devices, or the root and a device) comes in two forms (13-accounts §6.1, §7): up to protocol
+// version 1 its signers sign the transaction's id, from version 2 its quorum message, which names the proof's shape so
+// that nobody can cut it down to one of its signers. A log does not say which version each event's block ran, so a
+// quorum is taken in either form, the newer first, all its signers in the same one; one signer signs the id in every
+// version.
 import { accountId } from "./address.js";
 import { Reader, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, deviceKeyValid, ed25519KeyValid, readDeviceKey, sameDeviceKey, verifyByDeviceKey, verifyEd25519 } from "./keys.js";
@@ -20,6 +26,9 @@ const KEY_EVENT_DOMAIN = "Saltix key event v1";
 const TX_DOMAIN = "Saltix transaction v3";
 const ROOT_DIGEST_DOMAIN = "Saltix root digest v1";
 const ROOT_USE_DOMAIN = "Saltix root use v1";
+const QUORUM_DOMAIN = "Saltix quorum v1";
+/** The protocol version from which a quorum's signers sign its quorum message (13-accounts §6.1). */
+const QUORUM_MESSAGE = 2;
 const MAX_DEVICES = 8;
 const MIN_DELAY = 600n;
 const MAX_DELAY = 2_592_000n;
@@ -343,11 +352,11 @@ class Controller {
     return this.devices.find((d) => sameDeviceKey(d.key, key));
   }
 
-  private deviceSignature(s: DeviceSignature, id: Uint8Array): DeviceKey {
+  private deviceSignature(s: DeviceSignature, message: Uint8Array): DeviceKey {
     const d = this.devices[s.index];
     if (!d) throw new Refusal(`no device ${s.index}`);
     if (d.kind === "guardian") throw new Refusal("a guardian proves nothing yet");
-    if (!verifyByDeviceKey(d.key, id, toHex(s.signature))) throw new Refusal("a device's signature does not verify");
+    if (!verifyByDeviceKey(d.key, message, toHex(s.signature))) throw new Refusal("a device's signature does not verify");
     return d.key;
   }
 
@@ -355,25 +364,40 @@ class Controller {
     if (use.scheme !== 0 || !equal(rootDigest(use.publicKey), this.rootDigest)) throw new Refusal("not the current root");
   }
 
-  authorize(proof: Proof, id: Uint8Array): Authority {
+  /** Who `proof` of transaction `id` speaks as, its devices' signatures read in the form of protocol `version`. */
+  authorize(proof: Proof, id: Uint8Array, version: number): Authority {
+    const message = proofMessage(proof, id, version);
     switch (proof.kind) {
       case "key":
         throw new Refusal("a key proof for a managed account");
       case "device":
-        return { kind: "device", key: this.deviceSignature(proof.device, id) };
+        return { kind: "device", key: this.deviceSignature(proof.device, message) };
       case "devices":
         if (proof.first.index >= proof.second.index) throw new Refusal("device signatures out of order");
-        this.deviceSignature(proof.first, id);
-        this.deviceSignature(proof.second, id);
+        this.deviceSignature(proof.first, message);
+        this.deviceSignature(proof.second, message);
         return { kind: "quorum" };
       case "root":
         this.root(proof.root);
         return { kind: "root" };
       case "root_and_device":
         this.root(proof.root);
-        this.deviceSignature(proof.device, id);
+        this.deviceSignature(proof.device, message);
         return { kind: "quorum" };
     }
+  }
+
+  /** `authorize` in the first of `versions` (newest first) whose signatures hold; else the newest's refusal. */
+  authorizeIn(proof: Proof, id: Uint8Array, versions: number[]): Authority {
+    let newest: unknown = null;
+    for (const version of versions) {
+      try {
+        return this.authorize(proof, id, version);
+      } catch (e) {
+        newest ??= e;
+      }
+    }
+    throw newest instanceof Error ? newest : new Refusal("no proof holds");
   }
 
   strengthens(a: AccountAction, by: Authority): boolean {
@@ -447,10 +471,34 @@ function proofLength(p: Proof): number {
   return { key: 65, device: 66, devices: 131, root: 130, root_and_device: 195 }[p.kind];
 }
 
-/** The transaction's id, once its stateless proof rules hold (`check_stateless`'s signatures). */
-function statelessId(tx: EventTx, genesis: Uint8Array): Uint8Array {
+/** A quorum's shape, its Borsh tag and its devices' indexes in the proof's order; null for one signer. */
+function quorumShape(p: Proof): Uint8Array | null {
+  if (p.kind === "devices") return Uint8Array.of(2, p.first.index, p.second.index);
+  if (p.kind === "root_and_device") return Uint8Array.of(4, p.device.index);
+  return null;
+}
+
+/**
+ * What `proof`'s signers sign for transaction `id` in a block of protocol `version` (13-accounts §6.1): the id for one
+ * signer in every version; a quorum's message `derive("Saltix quorum v1", id ‖ [tag] ‖ indexes)` from `QUORUM_MESSAGE`
+ * on. A root signs its use of this message.
+ */
+function proofMessage(proof: Proof, id: Uint8Array, version: number): Uint8Array {
+  const shape = quorumShape(proof);
+  return shape !== null && version >= QUORUM_MESSAGE ? derive(QUORUM_DOMAIN, id, shape) : id;
+}
+
+/** The protocol versions whose form `proof` may hold in a log, newest first: a quorum's two, one signer's one. */
+const logVersions = (proof: Proof): number[] => (quorumShape(proof) !== null ? [QUORUM_MESSAGE, 1] : [1]);
+
+/**
+ * The transaction's id, once its stateless proof rules hold (`check_stateless`'s signatures), and the versions, newest
+ * first, in whose form the root's signature holds (every form of the proof when no root signs).
+ */
+function statelessForms(tx: EventTx, genesis: Uint8Array): { id: Uint8Array; versions: number[] } {
   if (tx.txBytes.length + proofLength(tx.proof) > MAX_LOG_TX) throw new Refusal("too large");
   const id = derive(TX_DOMAIN, genesis, tx.txBytes);
+  let versions = logVersions(tx.proof);
   if (tx.sender.kind === "key") {
     if (tx.proof.kind !== "key") throw new Refusal("proof kind");
     if (!ed25519KeyValid(tx.sender.key) || !verifyEd25519(tx.sender.key, id, tx.proof.signature)) throw new Refusal("signature");
@@ -459,10 +507,10 @@ function statelessId(tx: EventTx, genesis: Uint8Array): Uint8Array {
     const use = rootUseOf(tx.proof);
     if (use) {
       if (use.scheme !== 0) throw new Refusal(`root scheme ${use.scheme} is not taken`);
-      const message = derive(ROOT_USE_DOMAIN, id, use.nextDigest);
-      if (!verifyEd25519(use.publicKey, message, use.signature) || equal(use.nextDigest, rootDigest(use.publicKey))) {
-        throw new Refusal("the root's signature");
-      }
+      if (equal(use.nextDigest, rootDigest(use.publicKey))) throw new Refusal("the root's signature");
+      const proof = tx.proof;
+      versions = versions.filter((v) => verifyEd25519(use.publicKey, derive(ROOT_USE_DOMAIN, proofMessage(proof, id, v), use.nextDigest), use.signature));
+      if (versions.length === 0) throw new Refusal("the root's signature");
     }
   }
   if (tx.action) {
@@ -470,7 +518,7 @@ function statelessId(tx: EventTx, genesis: Uint8Array): Uint8Array {
     if (tx.sender.kind === "key" && tx.action.kind !== "set_controller") throw new Refusal("account sender");
     checkAction(tx.action);
   }
-  return id;
+  return { id, versions };
 }
 
 /**
@@ -563,7 +611,7 @@ function replayOne(
   registered: Map<string, AccountAction>,
   tip: Uint8Array,
 ): Controller {
-  const id = statelessId(tx, genesis);
+  const { id, versions } = statelessForms(tx, genesis);
   const senderAccount = tx.sender.kind === "key" ? accountId(tx.sender.key, 0) : tx.sender.id;
   if (!equal(senderAccount, logOriginAccount(origin))) throw new Refusal("names another account");
   const action = tx.action;
@@ -578,7 +626,8 @@ function replayOne(
   }
   const c = controller!;
   if (tx.sender.kind !== "account") throw new Refusal("does not start the account from its origin");
-  const proven = c.authorize(tx.proof, id);
+  // A quorum's devices sign in the form its root signed in, when a root signs (`versions`); either form otherwise.
+  const proven = c.authorizeIn(tx.proof, id, versions);
   // The address's first transaction acts as a quorum's (13-accounts §6.1).
   const by: Authority = first ? { kind: "quorum" } : proven;
   const use = rootUseOf(tx.proof);

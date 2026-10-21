@@ -5,9 +5,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   type ConnectProfile, type GrainCall, type Handle, type RegisteredGrain, type NodeLike, AppKey, CATEGORIES, accountId, categoryOf, decodeAddress,
-  displayHandle, encodeProfile, fromHex, grainCallProblem, grainGet, nodeCall, parseHandle, parseRoles, roleNames, toHex, serverKeyOk, unownedProfile,
+  displayHandle, encodeProfile, fromHex, grainCallProblem, grainGet, nodeCall, parseHandle, parseRoles, roleNames, toHex, serverKeyOk, signServerKeyProof,
+  unownedProfile,
 } from "@saltix/grain-server";
 import { publicKeyOf, readKey } from "./project.js";
+import { type VersionStatus, networkVersion } from "./versions.js";
 
 export { APP_KEY_FILE } from "@saltix/grain-server";
 /** Where tools read a developer key from when no file is named. */
@@ -50,13 +52,50 @@ export function serverKeyOf(text: string): string {
   return publicKeyOf(readKey(text));
 }
 
-/** The call that names `servers` and `category` for `slug`. Without a category the registry's stays. */
-export async function configureCall(node: NodeLike, slug: string, servers: string[], category: string | undefined, owner?: Uint8Array): Promise<GrainCall> {
+/** A server key `grain configure` names: its public half (hex), and its secret when it came from its key file, which a
+ *  proof needs (24-app-studio §2). */
+export interface ServerKeyArg {
+  key: string;
+  secret: Uint8Array | null;
+}
+
+/** `--server`'s text as a `ServerKeyArg`: a key file (`grain cert init`'s `server.key`) with its secret, or a bare key
+ *  in hex without one. */
+export function serverKeyArgOf(text: string): ServerKeyArg {
+  if (/^[0-9a-f]{64}$/i.test(text) && !existsSync(text)) return { key: serverKeyOf(text), secret: null };
+  const secret = readKey(text);
+  return { key: publicKeyOf(secret), secret };
+}
+
+/** Why a server key cannot be named by itself from version 2 on: only its holder signs the proof. */
+export const unprovenKey = (key: string, version: number): string =>
+  `--server ${key.slice(0, 16)}…: the network runs protocol version ${version}, where ConfigureGrain names a server key ` +
+  `only with its proof, which its key file signs (24-app-studio §2): pass the key file (server.key) instead of its hex, ` +
+  `or pair the computer that holds it with grain pair there`;
+
+/**
+ * The call that names `servers` and `category` for `slug`, in the form of the protocol version the network runs
+ * (`node_status.protocol`; 23-upgrades §6a): tag 34 with bare keys in version 1, tag 39 from version 2 with each key's
+ * proof, signed here by its key file for the grain's owner on this network (a bare key is refused there,
+ * `unprovenKey`). Without a category the registry's stays.
+ */
+export async function configureCall(node: NodeLike, slug: string, servers: Array<string | ServerKeyArg>, category: string | undefined,
+  owner?: Uint8Array): Promise<GrainCall> {
   const g = owner ? await ownGrain(node, slug, owner) : await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered`);
   const c = category === undefined ? g.category ?? 0 : categoryOf(category);
   if (c === null) throw new Error(`--category ${category}: 0 to 9, or ${CATEGORIES.join(", ")}`);
-  return checked({ configure: { slug, servers, category: c } });
+  const keys = servers.map((s) => (typeof s === "string" ? { key: s, secret: null } : s));
+  const status = await nodeCall<VersionStatus & { genesis: string }>(node, "node_status");
+  const version = networkVersion(status);
+  if (version < 2) return checked({ configure: { slug, servers: keys.map((k) => k.key), category: c } });
+  // Checked first, so that no proof is signed for a call refused anyway.
+  checked({ configure: { slug, servers: keys.map((k) => k.key), category: c } });
+  const proven = keys.map(({ key, secret }) => {
+    if (secret === null) throw new Error(unprovenKey(key, version));
+    return { key, proof: signServerKeyProof(secret, status.genesis, slug, g.owner) };
+  });
+  return checked({ configureProven: { slug, servers: proven, category: c } });
 }
 
 /** Members from `<address or account hex>:<roles>`. */
@@ -179,7 +218,10 @@ export function unchangedWords(call: GrainCall): string {
     const n = a.members.length;
     return `${a.slug} is ${a.public ? "public" : "private"} with ${n === 0 ? "no members" : `these ${n} member${n === 1 ? "" : "s"}`} already, as asked`;
   }
-  if ("configure" in call) return `the registry names these server keys and category ${CATEGORIES[call.configure.category]} for ${call.configure.slug} already`;
+  if ("configure" in call || "configureProven" in call) {
+    const c = "configure" in call ? call.configure : call.configureProven;
+    return `the registry names these server keys and category ${CATEGORIES[c.category]} for ${c.slug} already`;
+  }
   if ("bind" in call) return `${displayHandle(call.bind.handle)} ${call.bind.slug === null ? "opens no app" : `opens ${call.bind.slug}`} already`;
   if ("profile" in call) {
     return call.profile.profile === null ? `${call.profile.slug} has no Connect profile already` : `the registry holds ${call.profile.slug}'s Connect profile with these words already`;
@@ -201,9 +243,10 @@ export async function waitForRegistry(node: NodeLike, call: GrainCall, ms: numbe
 
 /** What the owner does in Saltix for `call`, in words. */
 export function inSaltix(call: GrainCall): string {
-  if ("configure" in call) {
-    const c = call.configure;
-    const keys = c.servers.length === 0 ? "revoke every developer key" : `name the server keys ${c.servers.map((k) => k.slice(0, 16) + "…").join(", ")}`;
+  if ("configure" in call || "configureProven" in call) {
+    const c = "configure" in call ? call.configure : call.configureProven;
+    const servers = "configure" in call ? call.configure.servers : call.configureProven.servers.map((p) => p.key);
+    const keys = servers.length === 0 ? "revoke every developer key" : `name the server keys ${servers.map((k) => k.slice(0, 16) + "…").join(", ")}`;
     return `In the owner's Saltix: My apps → ${c.slug} → Developer key: ${keys}; category ${CATEGORIES[c.category]}.`;
   }
   if ("access" in call) {
