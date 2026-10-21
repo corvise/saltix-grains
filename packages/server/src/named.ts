@@ -7,9 +7,10 @@
 // No Node APIs here.
 import { derive, toHex } from "./bytes.js";
 
-/** The kinds of named blob, by their name in JSON and URLs (`/_blob/<kind>/<hash>`). Tag 2 is reserved (tokens' logos). */
-export type NamedKind = "grain_icon" | "avatar" | "grain_bundle";
-export type ImageKind = "grain_icon" | "avatar";
+/** The kinds of named blob, by their name in JSON and URLs (`/_blob/<kind>/<hash>`): a mini-app's icon, a person's
+ *  avatar, a token's logo (20-mint), a sealed mini-app's bundle. */
+export type NamedKind = "grain_icon" | "avatar" | "token_logo" | "grain_bundle";
+export type ImageKind = "grain_icon" | "avatar" | "token_logo";
 
 /** The standard icon's side (32-images §3.1), and the side of icons manifests named before the standard. */
 export const ICON_SIDE = 512;
@@ -19,6 +20,9 @@ export const MAX_ICON_BYTES = 65_536;
 /** An avatar's side and bytes at most (32-images §5.1). */
 export const AVATAR_SIDE = 640;
 export const MAX_AVATAR_BYTES = 131_072;
+/** A token's logo: an opaque PNG of this side and at most these bytes (20-mint, 32-images §2). */
+export const TOKEN_LOGO_SIDE = 256;
+export const MAX_TOKEN_LOGO_BYTES = 12_288;
 /** The largest bundle the network keeps (32-images §6.2): one a manifest with no source may name. Larger ones, up to
  *  `MAX_BUNDLE_BYTES` (12-grains' 20 MiB), come only from their sources. */
 export const MAX_NETWORK_BUNDLE_BYTES = 16 * 1024 * 1024;
@@ -46,6 +50,7 @@ export interface KindInfo {
 export const NAMED_KINDS: Readonly<Record<NamedKind, KindInfo>> = {
   grain_icon: { tag: 0, domain: "Saltix grain icon v1", maxBytes: MAX_ICON_BYTES, type: "image/png", sides: [ICON_SIDE, LEGACY_ICON_SIDE] },
   avatar: { tag: 1, domain: "Saltix avatar v1", maxBytes: MAX_AVATAR_BYTES, type: "image/jpeg", sides: [AVATAR_SIDE] },
+  token_logo: { tag: 2, domain: "Saltix token logo v1", maxBytes: MAX_TOKEN_LOGO_BYTES, type: "image/png", sides: [TOKEN_LOGO_SIDE] },
   grain_bundle: { tag: 3, domain: "Saltix grain bundle v1", maxBytes: MAX_NETWORK_BUNDLE_BYTES, type: "application/zip", sides: [] },
 };
 
@@ -112,7 +117,7 @@ export interface ImageInfo {
 export function checkImage(kind: ImageKind, bytes: Uint8Array): Checked<ImageInfo, ImageReason> {
   const info = NAMED_KINDS[kind];
   if (bytes.length === 0 || bytes.length > info.maxBytes) return refuse("size");
-  return kind === "grain_icon" ? checkPng(bytes, info.sides) : checkJpeg(bytes, info.sides);
+  return info.type === "image/png" ? checkPng(bytes, info.sides) : checkJpeg(bytes, info.sides);
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];

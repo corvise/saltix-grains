@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+### Security
+
+- **`grain pair` pairs only the app the developer named or confirmed** (Saltix 24-app-studio §3a). Before, an offer that
+  named no app (no `grain.json`, no `--slug`) took itself as paired with whatever app the registry first named the key
+  for: whoever saw the offer (a shared screen, a pasted log) could ask for an app of their own, name the key for it with
+  the proof they got, and this computer wrote `app.key` for that app and served it. Now such an offer answers whoever
+  asks, prints "Saltix asked to pair this server with S, owner …" and writes nothing: `grain pair --accept S` confirms
+  the app once the user says it is the one they meant, `grain pair --new` makes a new key and offer otherwise; `grain
+  status` says "asked to pair it with S, not confirmed" and names the same command. An earlier offer's answer counts for
+  nothing once a new offer is shown. The offer's `--name` is kept with it, so `--accept` need not repeat it.
+- **A key file signs on test networks only** (12-grains §10): `grain publish --key`, `retire`, `rate`, `access`,
+  `profile`, `bind`, `configure` and `app-key make` are refused when the network is `mainnet`, before anything is
+  uploaded or sent; the owner's Saltix signs there from the QR code. `grain sign` (offline) is unchanged.
+- **A key file, a chat's store or `app.json` under `public/` goes into no bundle**: `grain bundle` and `grain publish`
+  refuse it by name (a bundle is uploaded before the owner signs and served by the network to anyone by its hash),
+  `grain lint` reports it as an error first, and `grain dev` never serves such a file.
+- **`grain dev` listens on `127.0.0.1` by default** (`--host 0.0.0.0` for a phone on the same network; the Android
+  emulator reaches the host's loopback at `10.0.2.2`): it signs with `owner.key` and takes writes to its development
+  registry, which were open to the whole network before.
+- **A trust anchor's certificate pin is never replaced by a `relay_list`**: the relays a gateway starts from
+  (`PUBLIC_RELAYS`, `--relay`) keep their pins; one relay's list re-pins only relays it discovered.
+- **An answer from a node or a relay is read up to 4 MiB** (`MAX_ANSWER_BYTES`): `rpc`, the gateways and
+  `relayRequest` refuse a longer one instead of buffering it.
+- **CI pins its actions by commit and runs `npm ci --ignore-scripts`**; the docs say the same.
+
+### Changed
+
+- **The golden vectors are the protocol's at `a40da88d`** (`vectors/SOURCE`): `accounts-v1.json` with `device_key_forms`
+  (a P-256 key in SEC1's compact form `05 ‖ x`, which protocol versions 1 and 2 take as a device key and version 3
+  refuses), `images-v1.json` with the fourth blob kind (`token_logo`, tag 2), `handles-v1.json` with numbers of
+  protocol version 3's form and `relay-v1.json`. `deviceKeyValid`, `sameDeviceKey` and `verifyByDeviceKey` take the
+  compact form as one key with its compressed form (`compressedP256`), so a device added that way in version 1 or 2
+  keeps signing in a key event log, a member proof and a Connect grant; `NAMED_KINDS` has `token_logo`; `displayHandle`
+  writes a ten-digit number that starts with a code of three equal digits as `+0 777 123 4567`. Numbers of version
+  3's fixed form (a leading zero) are not read yet: the test says so where it skips them. docs/agents/sdk.md: the
+  vectors are synced with every change of the protocol's.
+
 ### Added
 
 - **Ready for protocol version 2** (24-app-studio §2, 13-accounts §6.1, 23-upgrades §6a):

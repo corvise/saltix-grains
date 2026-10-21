@@ -255,3 +255,44 @@ test("the protocol's version 2 quorums prove the log's keys in place of version 
   const cut = concat(body, Uint8Array.of(3), newProof.subarray(1, rootPart));
   assert.throws(() => checkLog(account, relink(new Map([[at(name), cut]])), G, pol), LogError, "a version 2 quorum cut to its root");
 });
+
+test("a P-256 device key in its compact form (05 ‖ x), which protocol versions 1 and 2 took, is one key with its compressed form and keeps signing", async () => {
+  // vectors/accounts-v1.json `device_key_forms`: the same point in both forms; the compact form names the point of x
+  // with the smaller y. A log check takes the forms every version took (the chain held each event to its block's).
+  const { compressedP256, deviceKeyValid, sameDeviceKey, verifyByDeviceKey, readAccountAction, Reader } = await import("../dist/index.js");
+  const { p256 } = await import("@noble/curves/p256");
+  const { sha256 } = await import("@noble/hashes/sha256");
+  const a = JSON.parse(readFileSync(new URL("../../../vectors/accounts-v1.json", import.meta.url), "utf8"));
+  const forms = a.device_key_forms;
+  const compressed = forms.keys.find((k) => k.name === "compressed").key_hex.slice(2);
+  const compact = forms.keys.find((k) => k.name === "compact").key_hex.slice(2);
+  assert.equal(compact.slice(0, 2), "05");
+  for (const k of forms.keys) assert.equal(deviceKeyValid({ p256: k.key_hex.slice(2) }), k.valid["1"] && k.valid["2"], k.name);
+  assert.equal(compressedP256(compact), compressed, "the compact form names the compressed point");
+  assert.equal(compressedP256(compressed), compressed);
+  assert.ok(sameDeviceKey({ p256: compact }, { p256: compressed }) && sameDeviceKey({ p256: compressed }, { p256: compact }));
+  // The key's secret signs; the signature verifies under either form, and under no other point.
+  const message = derive("Saltix key event v1", new Uint8Array([1, 2, 3]));
+  const signature = toHex(p256.sign(sha256(message), fromHex(forms.secret_hex, 32), { prehash: false, lowS: true }).toCompactRawBytes());
+  assert.equal(toHex(p256.getPublicKey(fromHex(forms.secret_hex, 32), true)), compressed, "the vector's secret is the key's");
+  assert.ok(verifyByDeviceKey({ p256: compressed }, message, signature));
+  assert.ok(verifyByDeviceKey({ p256: compact }, message, signature), "the compact form verifies the same signature");
+  const other = (compressed.startsWith("02") ? "03" : "02") + compressed.slice(2);
+  assert.ok(!verifyByDeviceKey({ p256: other }, message, signature), "the other point of x does not");
+  // What is no point: refused in every form.
+  for (const bad of ["04" + compressed.slice(2), "05" + "ff".repeat(32), "06" + compressed.slice(2), "00".repeat(33)]) {
+    assert.equal(compressedP256(bad), null, bad.slice(0, 2));
+    assert.equal(deviceKeyValid({ p256: bad }), false, bad.slice(0, 2));
+  }
+  // The vector's AddDevice of the compact key reads as an action a log replay takes (versions 1 and 2).
+  const tx = fromHex(forms.add_device.transaction_hex);
+  const r = new Reader(tx);
+  r.u8(); r.fixed(32); r.u64(); r.u64(); r.u64();
+  assert.equal(r.u8(), 7, "an account action");
+  const action = readAccountAction(r);
+  assert.equal(action.kind, "add_device");
+  assert.equal(action.device.key.p256, compact);
+  assert.ok(deviceKeyValid(action.device.key));
+  assert.deepEqual(forms.add_device.taken_in, [1, 2]);
+  assert.deepEqual(forms.add_device.refused_in, [3]);
+});

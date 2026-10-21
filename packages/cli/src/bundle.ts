@@ -4,7 +4,7 @@
 // releases), so two builds of the same files could name two hashes. Wallets download a bundle once; the host may
 // compress it on the wire (HTTP gzip) without touching its bytes. It is exactly the form the network keeps (the bundle
 // check, 32-images §2a), which `grain publish` puts into the network itself.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { MAX_BUNDLE_BYTES, MAX_BUNDLE_FILES, MAX_BUNDLE_UNPACKED, type Manifest, bundleHash, checkBundle, crc32 } from "@saltix/grain-server";
 
@@ -23,8 +23,35 @@ export interface Bundle {
   files: string[];
 }
 
-/** Every file under `dir` but hidden ones, as bundle names (`/`-separated), sorted. */
-function filesUnder(dir: string): string[] {
+/**
+ * Names that never go into a bundle, whatever else `public/` holds: a bundle is uploaded into the network before the
+ * owner signs and served by its hash to anyone (32-images §7.3), so a key file or a chat's store left there would be
+ * public. The names `.gitignore` keeps out of git (`grain pair`'s `IGNORED`), a chat store, and anything hidden
+ * (`.env`, `.git/`), which `filesUnder` passes over.
+ */
+export const REFUSED_IN_BUNDLE: ReadonlyArray<{ test: (name: string) => boolean; what: string }> = [
+  { test: (name) => name.endsWith(".key"), what: "a key file (*.key)" },
+  { test: (name) => name.endsWith(".store.json"), what: "a chat's store (*.store.json)" },
+  { test: (name) => name === "app.json", what: "the server's app.json" },
+];
+
+/** Why `name` (a file's name, without its directories) is refused in a bundle, or null. */
+export function refusedInBundle(name: string): string | null {
+  return REFUSED_IN_BUNDLE.find((r) => r.test(name))?.what ?? null;
+}
+
+/** The files under `dir` (as bundle names, `/`-separated) that a bundle refuses, and why: for `grain lint`. */
+export function secretsUnder(dir: string): Array<{ name: string; what: string }> {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return [];
+  return filesUnder(dir, false).flatMap((name) => {
+    const what = refusedInBundle(name.split("/").at(-1)!);
+    return what ? [{ name, what }] : [];
+  });
+}
+
+/** Every file under `dir` but hidden ones, as bundle names (`/`-separated), sorted; `refuse`: a key file or a store
+ *  among them is an error, never a bundle's entry. */
+function filesUnder(dir: string, refuse = true): string[] {
   const out: string[] = [];
   const walk = (d: string) => {
     for (const name of readdirSync(d)) {
@@ -32,7 +59,14 @@ function filesUnder(dir: string): string[] {
       const path = join(d, name);
       const st = statSync(path);
       if (st.isDirectory()) walk(path);
-      else if (st.isFile()) out.push(relative(dir, path).split(sep).join("/"));
+      else if (st.isFile()) {
+        const bundleName = relative(dir, path).split(sep).join("/");
+        const what = refusedInBundle(name);
+        if (what && refuse) {
+          throw new Error(`${bundleName}: ${what} never goes into a bundle, which the network serves to anyone by its hash: move it out of ${dir}`);
+        }
+        out.push(bundleName);
+      }
     }
   };
   walk(dir);

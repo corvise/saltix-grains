@@ -58,9 +58,11 @@ export class RelayGateways implements WalletInterface {
   private list: RelayEndpoint[] = [];
   private good = 0;
   private discovered = false;
+  /** The endpoints it started from, by URL: their pins are the trust anchors, which no relay's answer replaces. */
+  private readonly anchors = new Set<string>();
 
   constructor(endpoints: readonly RelayEndpoint[], private readonly request: Request = relayRequest, private readonly options: GatewayOptions = {}) {
-    this.add(endpoints);
+    for (const e of this.add(endpoints)) this.anchors.add(e.url);
   }
 
   /** The relays it calls. */
@@ -69,7 +71,8 @@ export class RelayGateways implements WalletInterface {
   }
 
   /** Relays to call besides: `wss://` ones pinned by their record's certificate, each once (`repin`: a new pin for a
-   *  known endpoint replaces its old one). The endpoints that were new. */
+   *  known endpoint replaces its old one, never an anchor's: the relays it started from are trusted on their own pins,
+   *  and one relay's `relay_list` must not move another's). The endpoints that were new. */
   add(endpoints: readonly RelayEndpoint[], repin = false): RelayEndpoint[] {
     const added: RelayEndpoint[] = [];
     for (const e of endpoints) {
@@ -79,7 +82,7 @@ export class RelayGateways implements WalletInterface {
       if (known < 0) {
         this.list.push(pinned);
         added.push(pinned);
-      } else if (repin && this.list[known]!.cert_sha256 !== pinned.cert_sha256) {
+      } else if (repin && !this.anchors.has(e.url) && this.list[known]!.cert_sha256 !== pinned.cert_sha256) {
         this.list[known] = pinned;
         added.push(pinned);
       }

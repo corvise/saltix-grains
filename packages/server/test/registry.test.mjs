@@ -92,12 +92,17 @@ test("a username bound to a grain is the node's", () => {
 test("handles read, print and encode as the node's", () => {
   for (const f of handles.forms) {
     const h = f.kind === "name" ? { name: f.text } : { number: f.text };
-    assert.equal(handleProblem(h) === null, f.valid, `${f.kind} ${f.text}`);
-    if (!f.valid) continue;
+    // `handleProblem` reads a number as protocol versions 1 and 2 do (`valid_v1`); numbers of one fixed form (21-names
+    // §4a, protocol version 3: the vectors' `valid`) are a later change's, once the network runs it.
+    const valid = f.valid_v1 ?? f.valid;
+    assert.equal(handleProblem(h) === null, valid, `${f.kind} ${f.text}`);
+    if (!valid) continue;
     assert.equal(displayHandle(h), f.display);
     assert.equal(toHex(encodeHandle(h)), f.borsh_hex);
   }
   for (const t of handles.typed) {
+    // A number of protocol version 3's fixed form with a leading zero (21-names §4a): not read yet (see above).
+    if (t.kind === "number" && t.text.startsWith("0")) continue;
     const h = parseHandle(t.typed);
     if (t.kind === null) {
       assert.equal(h, null, t.typed);

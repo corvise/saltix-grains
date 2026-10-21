@@ -10,7 +10,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type Manifest, type NodeLike, type RegisteredGrain, NO_ICON, UNOWNED, blobHeld, decodeOffer, encodeManifest, fromHex, grainGet,
+  AppKey, APP_KEY_FILE, type Manifest, type NodeLike, type PairingOffer, type RegisteredGrain, NO_ICON, UNOWNED, blobHeld, decodeOffer, encodeManifest, fromHex, grainGet,
   grainQuote, iconHash, keyFingerprint, minimumFee, nodeCall, registeredKeyStatus, toHex,
 } from "@saltix/grain-server";
 import { type Bundle, makeBundle } from "./bundle.js";
@@ -19,7 +19,7 @@ import { EXIT_WAITING, GRAIN_DIR } from "./devlog.js";
 import { saltOf } from "./faucet.js";
 import { ICON_FILES, checkIcon } from "./icon.js";
 import { accountOf, addressOf } from "./owner.js";
-import { PAIR_KEY_FILE, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
+import { PAIR_KEY_FILE, acceptHint, confirmedSlug, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
 import { KEY_FILE, readKey } from "./project.js";
 import {
   type PublishState, type SentRecord, STALE_MS, isPublishCall, landedIn, nextVersion, publicChanged, readPublishState, sameContent, sealedAsSent,
@@ -123,8 +123,21 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
   if (secret !== null) {
     const key = toHex(ed25519.getPublicKey(secret));
     const state = readPairState(dir);
-    const answered = state && state.genesis === status.genesis ? state.answered : [];
-    const named = answered.length > 0 ? await namedFor(node, key, answered) : null;
+    let offer = "no offer shown";
+    let shown: PairingOffer | null = null;
+    if (state && state.genesis === status.genesis) {
+      try {
+        shown = decodeOffer(fromHex(state.offer));
+        offer = Date.now() < shown.expiresAt ? `an offer valid until ${new Date(shown.expiresAt).toISOString()}` : "its offer expired";
+      } catch {
+        offer = "an unreadable offer";
+      }
+    }
+    // The current offer's answer alone counts, and only for the app the developer confirmed (the offer's slug, or
+    // --accept's): an answer for another app pairs nothing by itself.
+    const answered = shown && state ? state.answered.filter((a) => a.offer === shown!.nonce) : [];
+    const confirmed = shown ? confirmedSlug(shown, state?.accepted) : null;
+    const named = await namedFor(node, key, answered, confirmed);
     if (named) {
       return {
         status: "pairing", slug: named.slug, fingerprint: keyFingerprint(key),
@@ -132,19 +145,19 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
         next: `grain pair${flags}`,
       };
     }
-    let offer = "no offer shown";
-    if (state) {
-      try {
-        const o = decodeOffer(fromHex(state.offer));
-        offer = Date.now() < o.expiresAt ? `an offer valid until ${new Date(o.expiresAt).toISOString()}` : "its offer expired";
-      } catch {
-        offer = "an unreadable offer";
-      }
+    const asked = answered[0];
+    if (asked && confirmed === null) {
+      return {
+        status: "pairing", fingerprint: keyFingerprint(key),
+        detail: `a key made by grain pair (${keyFingerprint(key)}) is not paired yet: Saltix asked to pair it with ${asked.slug}, which this ` +
+          `project was not set up for, and that is not confirmed (grain pair --new makes a new key and offer if someone else saw the offer)`,
+        next: acceptHint(asked.slug, flags),
+      };
     }
-    const asked = answered.length > 0 ? `; Saltix asked for ${answered[answered.length - 1]!.slug}, and its transaction has not named the key yet` : "";
+    const waiting = asked ? `; Saltix asked for ${asked.slug}, and its transaction has not named the key yet` : "";
     return {
       status: "pairing", fingerprint: keyFingerprint(key),
-      detail: `a key made by grain pair (${keyFingerprint(key)}) is not paired yet: ${offer}${asked}`,
+      detail: `a key made by grain pair (${keyFingerprint(key)}) is not paired yet: ${offer}${waiting}`,
       next: `grain pair${flags}`,
     };
   }

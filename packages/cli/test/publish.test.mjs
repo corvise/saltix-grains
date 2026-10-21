@@ -1155,3 +1155,16 @@ test("grain access: nothing to change sends nothing; what it sends is kept, and 
     /^private, and its owner is owner\.key's account, which no phone holds: its 1 member open it in Saltix \(salt:grain\/space-game\)\..* \(the access call \(private, 1 member\) sent at \S+ landed\)$/);
   assert.equal(landed.outcome, "done");
 });
+
+test("--key on the main network is refused before anything is uploaded or sent: the owner's Saltix signs there", async () => {
+  const registry = node({ registered: false, network: "mainnet" });
+  const dir = project({ paired: false });
+  keyed(dir);
+  const ledger = ledgerOf(registry, dir, OWNER_FILE);
+  const { lines, done } = run(dir, ledger, { signing: { node: ledger, validFor: 600 }, keyNamed: true });
+  await assert.rejects(done, (e) => e.name === "PublishError" && e.reason === "mainnet_key_file" && /--key owner\.key is refused on the main network/.test(e.message));
+  assert.deepEqual(ledger.submitted, [], "nothing sent");
+  assert.doesNotMatch(lines.join("\n"), /^owner: /m, "refused before the owner line");
+  const log = readFileSync(join(dir, ".grain", "log.jsonl"), "utf8");
+  assert.match(log, /"step":"signer","outcome":"refused","reason":"mainnet_key_file"/);
+});

@@ -35,9 +35,36 @@ export function readDeviceKey(r: Reader): DeviceKey {
   throw new TypeError("borsh: a device key's tag");
 }
 
-/** Whether `a` and `b` are the same key. */
+/**
+ * A P-256 key in its compressed form (`02`/`03` ‖ x), from its compressed or its compact form (`05` ‖ x, SEC1: the point
+ * of x with the smaller y, which protocol versions 1 and 2 take as a device key and version 3 refuses; 13-accounts §5,
+ * `vectors/accounts-v1.json` `device_key_forms`). A log check takes the forms every version took, so a device added in
+ * the compact form keeps signing: its signatures verify under the compressed form of the same point. Null for bytes that
+ * are no P-256 point.
+ */
+export function compressedP256(hex: string): string | null {
+  if (!/^[0-9a-f]{66}$/.test(hex)) return null;
+  const prefix = hex.slice(0, 2);
+  try {
+    if (prefix === "02" || prefix === "03") {
+      const point = p256.ProjectivePoint.fromHex(hex);
+      return point.equals(p256.ProjectivePoint.ZERO) ? null : hex;
+    }
+    if (prefix !== "05") return null;
+    // Both points of x: the compact form names the one with the smaller y.
+    const even = p256.ProjectivePoint.fromHex("02" + hex.slice(2)).toAffine();
+    const odd = p256.ProjectivePoint.fromHex("03" + hex.slice(2)).toAffine();
+    return (even.y < odd.y ? "02" : "03") + hex.slice(2);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether `a` and `b` are the same key: a P-256 key in either of its forms is one key. */
 export function sameDeviceKey(a: DeviceKey, b: DeviceKey): boolean {
-  return "ed25519" in a ? "ed25519" in b && a.ed25519 === b.ed25519 : "p256" in b && a.p256 === b.p256;
+  if ("ed25519" in a) return "ed25519" in b && a.ed25519 === b.ed25519;
+  if (!("p256" in b)) return false;
+  return a.p256 === b.p256 || (compressedP256(a.p256) !== null && compressedP256(a.p256) === compressedP256(b.p256));
 }
 
 type Point = InstanceType<typeof ed25519.ExtendedPoint>;
@@ -66,14 +93,11 @@ export function ed25519KeyValid(key: Uint8Array): boolean {
   return point !== null && !point.isSmallOrder();
 }
 
-/** A device key the node takes: such an Ed25519 key, or a compressed P-256 point other than the identity. */
+/** A device key the node took in some protocol version: such an Ed25519 key, or a P-256 point other than the identity
+ *  in its compressed form, or in the compact form versions 1 and 2 took (`compressedP256`). */
 export function deviceKeyValid(key: DeviceKey): boolean {
   if ("ed25519" in key) return /^[0-9a-f]{64}$/.test(key.ed25519) && ed25519KeyValid(fromHex(key.ed25519, 32));
-  try {
-    return /^[0-9a-f]{66}$/.test(key.p256) && !p256.ProjectivePoint.fromHex(key.p256).equals(p256.ProjectivePoint.ZERO);
-  } catch {
-    return false;
-  }
+  return compressedP256(key.p256) !== null;
 }
 
 const L = ed25519.CURVE.n;
@@ -120,8 +144,9 @@ export function verifyByDeviceKey(key: DeviceKey, message: Uint8Array, signature
   try {
     const sig = fromHex(signature, 64);
     if ("ed25519" in key) return verifyEd25519(fromHex(key.ed25519, 32), message, sig);
-    // The hash is given, so no library default decides it.
-    return deviceKeyValid(key) && p256.verify(sig, sha256(message), fromHex(key.p256, 33), { prehash: false, lowS: true, format: "compact" });
+    // The key in its compressed form, whichever form named it; the hash is given, so no library default decides it.
+    const compressed = compressedP256(key.p256);
+    return compressed !== null && p256.verify(sig, sha256(message), fromHex(compressed, 33), { prehash: false, lowS: true, format: "compact" });
   } catch {
     return false;
   }

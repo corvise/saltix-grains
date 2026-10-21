@@ -37,7 +37,7 @@ repository's account of what apps need of them, and the golden vectors in `vecto
 ## Commands
 
 ```sh
-npm ci                     # esbuild's install script is denied (allowScripts): its binary comes from its platform package
+npm ci --ignore-scripts    # no dependency's install script runs (as in CI): esbuild's binary comes from its platform package
 npm test                   # builds every package and the simulator, then each package's node --test: what CI runs
 cd packages/cli && node --test --test-force-exit test/check.test.mjs   # grain dev --check in this computer's Chrome
 npm run build --workspace packages/server            # one package
@@ -56,6 +56,12 @@ Tests import `dist/`: build the package before running its tests by path, and ag
   and `chat.test.mjs` pass. Never edit a vector by hand: CI runs `node scripts/check-vectors.mjs`, which holds every
   file to its id in `SOURCE`; with `--saltix <checkout>` it also says which files the protocol changed since, time to
   sync.
+- **The vectors are synced with every change of the protocol's vectors**, in the same week as the protocol's pull
+  request lands, whether or not a format this SDK reads changed: a vector the SDK is behind on is a check the SDK and
+  the node disagree about (in 2026-10 the compact P-256 form and the fourth blob kind went unread for a week). CI
+  cannot see the protocol's repository, so a maintainer with a checkout runs `node scripts/check-vectors.mjs --saltix
+  <checkout>` after each protocol release and syncs; what a new vector adds that the SDK does not read yet is said in
+  the test that skips it (a number of protocol version 3's form, say), never silently.
 - **The protocol's pages move with it.** `docs/protocol/` keeps each specification's section numbers and names the
   protocol commit its text was read at (`As of corvise/saltix <commit>`). A sync or a change that reaches apps updates
   the page and that line in the same pull request, re-read against the specification: what an app needs, never the
@@ -333,7 +339,8 @@ What the SDK decided, and why, where a choice was made; the newest first. A chan
 1. A branch from `main`: `feat/…`, `fix/…`, `docs/…`.
 2. Conventional Commits in English, scope the package (`server`, `grain`, `connect`, `cli`, `simulator`, `docs`); a
    format change is `feat(server)!:` with a `BREAKING CHANGE:` footer.
-3. `npm test` passes; CI (`.github/workflows/ci.yml`: `node scripts/check-vectors.mjs` and `npm ci && npm test` on
-   Node 22 on GitHub's runners, and the bundle's bytes again on Node 24 and 20) passes on the pull request.
+3. `npm test` passes; CI (`.github/workflows/ci.yml`: `node scripts/check-vectors.mjs` and `npm ci --ignore-scripts
+   && npm test` on Node 22 on GitHub's runners, and the bundle's bytes again on Node 24 and 20; its actions pinned by
+   commit) passes on the pull request.
 4. Squash merge. The program that runs Saltix's own apps by their developer keys (Saltix Pass) vendors the built
    server SDK: a change it needs is synced there in a pull request of its own.

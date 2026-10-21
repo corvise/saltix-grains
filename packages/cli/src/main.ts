@@ -8,7 +8,7 @@ import {
 } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
-import { retireCall, show, salt, type Sent, type Signing } from "./registry.js";
+import { refuseKeyFileOn, retireCall, show, salt, type Sent, type Signing } from "./registry.js";
 import { type Signer, addressOf, ownerLine, signerFor } from "./owner.js";
 import { SETTLE_MS, sendSettled } from "./send.js";
 import { LANDS_IN, type WaitOut, Waiting, rewriteLine } from "./wait.js";
@@ -19,13 +19,13 @@ import {
 import { type VersionStatus, networkVersion } from "./versions.js";
 import { type Reach, reachOf } from "./network.js";
 import { grantAddress, granted, requestGrant, saltOf, waitForSalt } from "./faucet.js";
-import { serve, linkFor, simulatorFor } from "./dev.js";
+import { DEV_HOST, serve, linkFor, simulatorFor } from "./dev.js";
 import { runCheck } from "./check.js";
 import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, placeholderLinks, readConnectFile, templateTexts } from "./connect.js";
 import { clearCall, profileCall, profileLinkFor, servedSiteRevision, siteProfile, waitForProfile, wellKnownOf } from "./profile.js";
-import { makeBundle, sealed } from "./bundle.js";
+import { makeBundle, sealed, secretsUnder } from "./bundle.js";
 import * as template from "./template.js";
 import * as chatTemplate from "./chat-template.js";
 import { CERT_FILE, CHAT_DOCUMENT_FILE, CHAT_SPEC_FILE, SERVER_KEY_FILE, issueCert, lintChatSpec, readCert, readChatSpec, signedChatDocument } from "./chat.js";
@@ -47,9 +47,11 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            page for some people only, which checks first and renders after); --chat
                                            a chat-only one (no page: grain.json, connect.json and chat.json); each
                                            with a package.json whose npm install links the grain command
-  grain dev [--port 8090] [--app-key F] [--check [--tap]]
+  grain dev [--port 8090] [--host 127.0.0.1] [--app-key F] [--check [--tap]]
                                            serve public/ with the manifest signed for this computer until Ctrl-C
-                                           (a coding agent: in the background, or --check), and the
+                                           (a coding agent: in the background, or --check), on this computer only
+                                           (the Android emulator reaches it at 10.0.2.2, the host's loopback;
+                                           --host 0.0.0.0 for a phone on the same network), and the
                                            simulator: your page framed as Saltix frames it, with the wallet's
                                            controls, at the Galaxy Z Fold's 475x751, 704x932 and 932x704, held
                                            to Saltix's rules; a development registry (the team, members) at
@@ -141,13 +143,16 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            rate someone else's grain (0 withdraws your rating); public, by account
   grain bind --handle @name --slug S       (or --clear) point a username you hold at your grain: @name opens
                                            its chat
-  grain pair [--slug S] [--name N] [--new] [--no-wait] [--timeout 600]
+  grain pair [--slug S] [--name N] [--accept S] [--new] [--no-wait] [--timeout 600]
                                            pair this computer's server with its app in the owner's Saltix by a QR
                                            code: the key is made here and never leaves it (.grain/pair.key, then
                                            app.key, owner-only, and app.json); it answers the phone, waits until the
                                            registry names the key and writes them. The slug is grain.json's unless
                                            --slug; --name names a new app; --new pairs a new key (to rotate it);
-                                           --no-wait shows the offer and returns
+                                           --no-wait shows the offer and returns. An offer that names no app (no
+                                           grain.json, no --slug) answers whoever asks but pairs nothing by itself:
+                                           once it says "Saltix asked to pair this server with S", grain pair
+                                           --accept S takes that app (anyone who saw the offer may have asked)
   grain status [--json]                    whether this project's server is paired with its app (paired, pairing,
                                            unpaired, revoked, replaced, retired, unregistered, other_network; a
                                            page alone: not_needed) and the command to run next; exit 0 when paired
@@ -443,12 +448,14 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       }
       const keyFile = typeof flags.get("app-key") === "string" ? (flags.get("app-key") as string) : undefined;
       const appKey = keyFile !== undefined || process.env[APP_KEY_ENV]?.trim() ? readAppKey(keyFile) : undefined;
-      await serve(process.cwd(), () => readManifest(manifestPath).manifest, secret, port, "0.0.0.0", { appKey });
+      // This computer alone unless asked: the server signs with owner.key and takes writes to its development registry.
+      const host = text(flags, "host", DEV_HOST);
+      await serve(process.cwd(), () => readManifest(manifestPath).manifest, secret, port, host, { appKey });
       // Serving until stopped: Ctrl-C (or a supervisor's SIGTERM) is how it ends, and the log's last line says so.
       stopsOk = true;
       const served = readManifest(manifestPath).manifest;
       log.step("serve", "ok", "sealed" in served.entry ? "sealed" : placeholderHosted(served) ? "page" : "hosted");
-      console.log(`serving ${resolve("public")} on port ${port}`);
+      console.log(`serving ${resolve("public")} on ${host}:${port}${host === DEV_HOST ? " (this computer only; --host 0.0.0.0 for a phone on the same network)" : ""}`);
       console.log(`  a development registry at http://localhost:${port}/api/dev/rpc (node for your server): ` +
         (appKey ? `${appKey.network} ${appKey.genesis}…, naming the developer key's server key` : "pass --app-key to run your server from its developer key against it"));
       console.log(`  a debug Saltix in the emulator: ${linkFor(`http://10.0.2.2:${port}`)}`);
@@ -476,7 +483,14 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       }
       // A page's frame: inside the safe area, or edge to edge with viewport-fit=cover (12-grains §7). A chat-only grain has
       // none.
-      if (!("chat" in manifest.entry)) warnings.push(...lintPages(join(dirname(resolve(manifestPath)), "public")));
+      if (!("chat" in manifest.entry)) {
+        const publicDir = join(dirname(resolve(manifestPath)), "public");
+        warnings.push(...lintPages(publicDir));
+        // What grain bundle refuses, said before it does: a bundle is served by the network to anyone by its hash.
+        for (const s of secretsUnder(publicDir)) {
+          errors.push(`public/${s.name}: ${s.what} under public/ would go into the bundle, which the network serves to anyone: move it out (grain bundle refuses it)`);
+        }
+      }
       for (const w of warnings) console.log(`warning: ${w}`);
       for (const e of errors) console.error(`error: ${e}`);
       log.step("lint", errors.length > 0 ? "refused" : "ok", errors.length > 0 ? "errors" : warnings.length > 0 ? "warnings" : "clean");
@@ -721,6 +735,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       if (positional[0] === "make") {
         const r = reach();
         const status = await nodeCall<{ network: "mainnet" | "testnet" | "devnet"; genesis: string }>(r.node, "node_status");
+        refuseKeyFileOn(status.network, "a developer key made from a key file here");
         const secret = readKey(text(flags, "server", "server.key"));
         const key = AppKey.of(status.network, status.genesis, text(flags, "slug"), secret);
         const out = text(flags, "out", APP_KEY_FILE);
@@ -747,6 +762,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         dir: process.cwd(), node: r.node, flags: r.flags, log,
         slug: typeof flags.get("slug") === "string" ? (flags.get("slug") as string) : undefined,
         name: typeof flags.get("name") === "string" ? (flags.get("name") as string) : undefined,
+        accept: typeof flags.get("accept") === "string" ? (flags.get("accept") as string) : undefined,
         fresh: flags.get("new") === true, wait: flags.get("no-wait") !== true,
         timeoutMs: Number(typeof given === "string" ? given : "600") * 1000, tty: process.stdout.isTTY === true,
       });

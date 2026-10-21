@@ -34,10 +34,12 @@ export function parseHandle(typed: string): Handle | null {
   return handleProblem(handle) === null ? handle : null;
 }
 
-/** How wallets write it: `@anna`; a number in groups of four from the right, `+0 777 1234`. */
+/** How wallets write it: `@anna`; a number in groups of four from the right, `+0 777 1234`; a ten-digit number that
+ *  starts with a code of three equal digits (21-names §4a: `777 123 4567`) in three, three and four. */
 export function displayHandle(h: Handle): string {
   if ("name" in h) return `@${h.name}`;
   const d = h.number;
+  if (d.length === 10 && d[0] === d[1] && d[1] === d[2]) return `+0 ${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
   const first = d.length % 4 === 0 ? 4 : d.length % 4;
   const groups = [d.slice(0, first)];
   for (let i = first; i < d.length; i += 4) groups.push(d.slice(i, i + 4));
