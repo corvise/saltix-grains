@@ -2,7 +2,8 @@
 
 > Reflects Saltix 24-app-studio (approved 2026-10-15; the launch, the app's home, the console, invites, Awaiting you
 > and the Connect profile, 2026-10-15 to 2026-10-16; server keys that prove their holder, protocol version 2; pairing a
-> server by QR code, 2026-10-19), as of corvise/saltix `44bbf728` (2026-10-20). Section numbers are the specification's.
+> server by QR code, 2026-10-19), as of corvise/saltix `44bbf728` (2026-10-20); with §3a's paragraph on a gated test
+> network, as of corvise/saltix `9ff53fd8` (2026-10-21). Section numbers are the specification's.
 
 Anyone makes an app in Saltix's **My apps**: names it, binds a username, pairs the computer that runs its program by a
 QR code (the server key is made there and never leaves it) or, where no command runs, gets a **developer key**, and
@@ -210,6 +211,13 @@ a proof with any result but `accepted` (or none with it). Saltix takes an answer
 accepted one only with a proof that verifies; it waits 2 minutes (`PAIR_ANSWER_WAIT`). Then the PIN and
 `ConfigureGrain`: **Add this server** puts the key first, where the app's chat goes; **Use only this server** names it
 alone. An app the owner does not have yet is made in the same confirmation, private, named by the offer's name.
+
+**On a test network with a gate** ([the gate](gate.md)), the computer's key is not a registered server key yet, so the
+relays let it register only with an access grant: `grain pair` asks the developer for an access code before it shows
+the offer (`--access-code`, `SALTIX_ACCESS_CODE`, or typed at the terminal), redeems it at the network's gate for an
+unattested grant (a computer cannot attest its key: at most a day, [the gate §4.3](gate.md#43-a-computer-an-unattested-grant)),
+keeps it in `.grain/` and shows it at `register`. Once paired, the key is a registered server key, which relays let in
+without a grant: the server never needs a code.
 
 The SDK: `makeOffer`, `encodeOffer`/`decodeOffer`, `offerLink`/`parseOfferLink`, `offerProblem`, `offerCode`,
 `offerCodeText`, `offerAddress`, `keyFingerprint`, `encodePairFrame`/`decodePairFrame`, `judgePair`, `answerPair`,

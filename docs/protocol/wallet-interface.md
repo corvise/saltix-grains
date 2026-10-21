@@ -1,7 +1,8 @@
 # The wallet interface
 
 > Reflects Saltix 08-node §6 and 09-relay §10.7 (with 32-images' `blob_put` and `blob_get`), as of corvise/saltix
-> `b9019fdf` (2026-10-19). Only the methods an app, its server or its tools call; a node answers more (the explorer's
+> `b9019fdf` (2026-10-19); with `node_status.access` and the access header of 37-gate §5, as of corvise/saltix
+> `9ff53fd8` (2026-10-21). Only the methods an app, its server or its tools call; a node answers more (the explorer's
 > reads, cities, books, licenses).
 
 A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line read the chain through.
@@ -20,7 +21,10 @@ A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line 
   below (and the explorer's reads) from its own node; any other method is `-32601` ("not served here"). Per client (an
   IPv4 address or an IPv6 /64): 4 requests at once, 20 a second with a burst of 60, HTTP `429` past them. Heavy reads
   (`account_history`, `grain_list`, `grain_history`, `grain_stats_list`, `handle_search`, …) share one budget among all
-  of a relay's clients: 5 a second after a burst of 20, at most 2 under way, error `6` past it.
+  of a relay's clients: 5 a second after a burst of 20, at most 2 under way, error `6` past it. On a test network whose
+  relays run a gate, `transaction_submit` and `faucet_request` at a relay need the header `X-Saltix-Access` (an access
+  token for that relay): HTTP 401 and `-32001` (`"access"`, `data.access` the reason) without a valid one
+  ([the gate §5](gate.md#5-at-the-relays-and-the-wallet-interface)). A node of your own requires none.
 
 **Values.** SALT and WORK amounts are **decimal strings of base units** (a JSON number above 2⁵³ loses precision).
 Hashes, keys, account ids and transaction ids are hex. An account is given as a Bech32m address of the node's network
@@ -30,7 +34,7 @@ or an account id in hex. A transaction is the hex of its signed Borsh.
 
 | Method | Parameters | Result |
 |---|---|---|
-| `node_status` | — | `network` (the kind), `genesis` (the genesis hash), `genesis_time` (Unix seconds of slot 0), `slot`, `epoch`, `epoch_slots`, `beacon {height, hash, slot, final_height, …}`, `shards [{shard, height, hash, followed, slot}]`, `peers`, `faucet` (`{amount, work, every}` or `null`), `accounts` (`{derivation, policy: {delay, dispute_timeout}}`: the network's first account policy, which an offline key event log check needs), `build {version, commit}`, `protocol {version, supported, next, outdated}` ([basics](basics.md#protocol-versions)) |
+| `node_status` | — | `network` (the kind), `genesis` (the genesis hash), `genesis_time` (Unix seconds of slot 0), `slot`, `epoch`, `epoch_slots`, `beacon {height, hash, slot, final_height, …}`, `shards [{shard, height, hash, followed, slot}]`, `peers`, `faucet` (`{amount, work, every}` or `null`), `accounts` (`{derivation, policy: {delay, dispute_timeout}}`: the network's first account policy, which an offline key event log check needs), `build {version, commit}`, `protocol {version, supported, next, outdated}` ([basics](basics.md#protocol-versions)), `access` (`{gates: [hex key, …]}`, the gates whose grants the node's relay and its wallet interface require, or `null` when it requires none: [the gate](gate.md#5-at-the-relays-and-the-wallet-interface)) |
 | `account_get` | `address` | `account` (hex), `shard`, `salt`, `work`, `nonce` (the next transaction's), `channels` (`[{exchange, deposit, closing_at}]`), `stake`, `controller` (a managed account's: `devices [{key: {ed25519 \| p256}, kind, limit, …}]`, `policy`, `pending`, `log_seq`, `log_tip`, …; `null` for a plain account), `alias` |
 | `account_log` | `address` | a managed account's key event log: `account`, `origin` (`{root_digest}` of a kind 5 address or `{key}` of an upgraded kind 0 one; `null` with no events), `events` (`[{seq, slot, id, event}]`, `event` its Borsh in hex), along the canonical chain |
 | `account_history` | `address`, `limit` (50 by default, at most 500), `before` (a height) | `entries`, newest first (below) |

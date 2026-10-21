@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // The golden vectors are the protocol's, byte for byte: each file in vectors/ has the git blob id that vectors/SOURCE
-// records for it at the corvise/saltix commit it names (scripts/sync-vectors.sh writes both), and SOURCE names every
-// file. CI runs it; a vector edited here by hand, or a file synced without its id, fails.
+// records for it at the corvise/saltix commit it names (scripts/sync-vectors.sh writes both): the first line's, or the
+// one its own line names after the id (a file synced alone, ahead of the others), and SOURCE names every file. CI runs
+// it; a vector edited here by hand, or a file synced without its id, fails.
 //
 //   node scripts/check-vectors.mjs [vectors dir] [--saltix <checkout>]
 //
-// With a checkout of corvise/saltix it also checks the ids against the commit SOURCE names, and says which files its
+// With a checkout of corvise/saltix it also checks the ids against the commits SOURCE names, and says which files its
 // HEAD has changed since: time to sync.
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
@@ -16,18 +17,21 @@ import { fileURLToPath } from "node:url";
 /** Git's id of a file's bytes: SHA-1 of "blob <length>\0" and the bytes. */
 export const blobId = (bytes) => createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
 
-/** What SOURCE says: the commit and each file's blob id. */
+/** What SOURCE says: the commit, each file's blob id, and the commit each file came from (the first line's unless its
+ *  own line names another). */
 export function readSource(dir) {
   const lines = readFileSync(join(dir, "SOURCE"), "utf8").split("\n").filter((l) => l.trim() !== "");
   const head = /^corvise\/saltix ([0-9a-f]{40})$/.exec(lines[0] ?? "");
   if (!head) throw new Error("SOURCE: the first line is `corvise/saltix <commit>`");
   const ids = new Map();
+  const commits = new Map();
   for (const line of lines.slice(1)) {
-    const m = /^([a-z0-9-]+\.json) ([0-9a-f]{40})$/.exec(line);
-    if (!m) throw new Error(`SOURCE: "${line}" is not "<file> <blob id>"`);
+    const m = /^([a-z0-9-]+\.json) ([0-9a-f]{40})(?: ([0-9a-f]{40}))?$/.exec(line);
+    if (!m) throw new Error(`SOURCE: "${line}" is not "<file> <blob id>" or "<file> <blob id> <commit>"`);
     ids.set(m[1], m[2]);
+    commits.set(m[1], m[3] ?? head[1]);
   }
-  return { commit: head[1], ids };
+  return { commit: head[1], ids, commits };
 }
 
 /** Why the vectors in `dir` are not the ones SOURCE names, one line each; empty when they are. */
@@ -51,9 +55,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const dir = args[0] ?? join(dirname(fileURLToPath(import.meta.url)), "..", "vectors");
   const problems = vectorProblems(dir);
   if (saltix) {
-    const { commit, ids } = readSource(dir);
+    const { ids, commits } = readSource(dir);
     const git = (...a) => execFileSync("git", ["-C", saltix, ...a], { encoding: "utf8" }).trim();
     for (const [f, id] of ids) {
+      const commit = commits.get(f);
       if (git("rev-parse", `${commit}:vectors/${f}`) !== id) problems.push(`${f}: SOURCE's id is not the file at ${commit}`);
       const now = git("rev-parse", `HEAD:vectors/${f}`);
       if (now !== id) console.log(`${f}: changed in corvise/saltix since ${commit.slice(0, 12)}: sync it`);

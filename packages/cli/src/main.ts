@@ -4,8 +4,10 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from
 import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AppKey, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, type GrainCall, type Manifest,
+  AccessRefused, AppKey, RelayGateways, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText,
+  type GrainCall, type Manifest,
 } from "@saltix/grain-server";
+import { type Gated, AccessProblem, accessRefused, accessRefusalWords, gatedOf, obtainAccess, terminalPrompt } from "./access.js";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { retireCall, show, salt, type Sent, type Signing } from "./registry.js";
@@ -141,13 +143,14 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            rate someone else's grain (0 withdraws your rating); public, by account
   grain bind --handle @name --slug S       (or --clear) point a username you hold at your grain: @name opens
                                            its chat
-  grain pair [--slug S] [--name N] [--new] [--no-wait] [--timeout 600]
+  grain pair [--slug S] [--name N] [--new] [--no-wait] [--timeout 600] [--access-code C]
                                            pair this computer's server with its app in the owner's Saltix by a QR
                                            code: the key is made here and never leaves it (.grain/pair.key, then
                                            app.key, owner-only, and app.json); it answers the phone, waits until the
                                            registry names the key and writes them. The slug is grain.json's unless
                                            --slug; --name names a new app; --new pairs a new key (to rotate it);
-                                           --no-wait shows the offer and returns
+                                           --no-wait shows the offer and returns; --access-code where the network
+                                           requires access (below)
   grain status [--json]                    whether this project's server is paired with its app (paired, pairing,
                                            unpaired, revoked, replaced, retired, unregistered, other_network; a
                                            page alone: not_needed) and the command to run next; exit 0 when paired
@@ -185,7 +188,7 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain sponsor top-up --exchange C --amount W
   grain sponsor close --exchange C         the deposit returns after the claim window
 
-  grain faucet [--key owner.key | --address A] [--wait]
+  grain faucet [--key owner.key | --address A] [--wait] [--access-code C]
                                            test SALT (and WORK while it lasts) for the key file's account or an
                                            address, from the test network's faucet: once every 5 minutes; --wait
                                            until it is in the account (--timeout seconds, 120)
@@ -195,6 +198,12 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   --relay URL#H  or a relay you name, pinned by its certificate's SHA-256 H (wss://host:30335/#…; repeat it)
   --node URL     or your own node's wallet interface (plain HTTP: a local node or a tunnel)
   --genesis H    refuse a node of another network; --fee N   base units of SALT; --valid-for N   slots (600)
+  --access-code C   where the test network's relays require access (its gate, Saltix 37-gate): a code from the
+    network's operator (made in Saltix Pass or with the operator's bot), XXXXX-XXXXX, for this computer's grant. Asked
+    by grain pair before its key is paired, and by a write through the relays (grain faucet, a key file's
+    transaction); also SALTIX_ACCESS_CODE, or typed at a terminal. The grant is kept in .grain/access.json while it
+    lasts (a computer's: at most 24 hours of the code's length); a paired server needs none. SALTIX_GATE names
+    another network's gate (https://api.saltix.io by default).
   A flag's value is the word after it, or comes after = in the same word; a flag a command does not take is refused.
   grain --version says which version of the tool this is.
 `;
@@ -364,8 +373,27 @@ async function stdinText(): Promise<string | undefined> {
 async function main(argv: string[], log: DevLog): Promise<number> {
   const { command, topic, positional, flags, all } = parse(argv);
   const manifestPath = text(flags, "manifest", MANIFEST_FILE);
-  /** Where the command reaches the network: the public relays by default, --relay, or --node. */
-  const reach = () => reachOf(flags, all);
+  if (flags.get("access-code") === true) throw new UsageError("--access-code XXXXX-XXXXX: the code the network's operator gave");
+  /** This computer's access, where the network's relays require it (37-gate): the grant kept here, or a code's. */
+  const access = (again: string) => (gated: Gated) => obtainAccess({
+    dir: process.cwd(), code: typeof flags.get("access-code") === "string" ? (flags.get("access-code") as string) : undefined,
+    env: process.env, prompt: terminalPrompt(), out: (line) => console.log(line), log, again,
+  }, gated);
+  /** Where the command reaches the network: the public relays by default, --relay, or --node. A write through the relays
+   *  (a faucet's grant, a key file's transaction) shows this computer's access where they require it. */
+  const reach = (): Reach => {
+    const r = reachOf(flags, all);
+    if (r.node instanceof RelayGateways) {
+      const node = r.node;
+      const again = `grain ${command}${r.flags}`;
+      node.useAccess(async () => {
+        const gated = await gatedOf(node);
+        if (gated === null) throw new AccessProblem("required", accessRefusalWords("required", again).words);
+        return access(again)(gated);
+      });
+    }
+    return r;
+  };
   const keyPath = text(flags, "key", KEY_FILE);
   switch (command) {
     case "init": {
@@ -744,7 +772,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const r = reach();
       const given = flags.get("timeout");
       return pair({
-        dir: process.cwd(), node: r.node, flags: r.flags, log,
+        dir: process.cwd(), node: r.node, flags: r.flags, log, access: access(`grain pair${r.flags}`),
         slug: typeof flags.get("slug") === "string" ? (flags.get("slug") as string) : undefined,
         name: typeof flags.get("name") === "string" ? (flags.get("name") as string) : undefined,
         fresh: flags.get("new") === true, wait: flags.get("no-wait") !== true,
@@ -951,7 +979,9 @@ endOnSignals(log, () => stopsOk);
 main(argv, log).then((code) => {
   log.end(code);
   if (code !== 0) process.exitCode = code;
-}, (e) => {
+}, (refused) => {
+  // A relay's refusal of this computer's access, in words: what to do, and the kept grant forgotten when it is no good.
+  const e = refused instanceof AccessRefused ? accessRefused(refused, process.cwd(), `grain ${commandName}`) : refused;
   const exit = e instanceof UsageError ? 2 : 1;
   log.end(exit, reasonOf(e));
   console.error(`error: ${(e as Error).message}`);

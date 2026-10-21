@@ -108,6 +108,14 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
      Pair a server**), checks that Saltix shows the same code, keeps **Add this server** and confirms with the PIN;
      Saltix asks the computer through the relays, and `grain pair` writes `app.key` and `app.json` once the registry
      names the key. No key is copied at all. `npx grain doctor` names what is left.
+   - **A test network closed by access codes** ([the gate](protocol/gate.md)): its relays let in only connections with
+     an access grant, and the key `grain pair` makes is not registered yet, so it needs one. `grain status` says so
+     (`--access-code` in its `next`), and `grain pair` asks for the code before it shows the offer: the person gets one
+     from the network's operator (made in Saltix Pass or with the operator's bot) and types it at the terminal, or a
+     coding agent passes `--access-code XXXXX-XXXXX` (or `SALTIX_ACCESS_CODE`). A computer cannot attest its key, so
+     its grant lasts **at most 24 hours** of the code's length; it is kept in `.grain/` (out of git) for the commands
+     after, and `grain pair` says when it ends. **Once paired, the program needs no code**: relays let a registered
+     server key in.
    - **A developer key** stands in only for a host where no command runs: the owner copies it in Saltix (**Copy key**)
      and saves it there themselves; a coding agent never asks for one in its chat.
    - **A page alone pairs nothing**: it has no program, so `npx grain status` says `not_needed` and names the next
@@ -224,7 +232,11 @@ the owner's phone signs.
    SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more), the fees of the two transactions (millionths of a SALT), and
    what `owner.key`'s account holds; and whether `connect.json` is ready (it is checked here until the registry can hold
    it).
-2. `npx grain faucet --wait`: test SALT for `owner.key`'s account (once every 5 minutes; about 20 seconds).
+2. `npx grain faucet --wait`: test SALT for `owner.key`'s account (once every 5 minutes; about 20 seconds). On a test
+   network closed by access codes, this and the key file's transactions below go through the relays only with this
+   computer's access grant: the first asks for a code (`--access-code XXXXX-XXXXX`, `SALTIX_ACCESS_CODE`, or at the
+   terminal; [above](#the-lifecycle-as-one-checklist)), and the rest use the grant it keeps while it lasts (24 hours at
+   most).
 3. `npx grain publish --key owner.key`: it says which account will own the app, sends `RegisterGrain` and, right behind
    it with the next nonce, `SetGrainAccess` private (as an app made in Saltix starts), waits for both to land, then puts
    the bundle and the icon into the network. Later versions are signed by `owner.key` without `--key`: **a key file

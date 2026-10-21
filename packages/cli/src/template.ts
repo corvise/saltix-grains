@@ -317,7 +317,11 @@ export const appRules = `1. **The server's key is made where it runs and never l
    is not \`paired\`, run \`grain pair\` (in the background, or \`grain pair --no-wait\` and then \`grain pair\`), show
    the user its QR code (the terminal's, or \`.grain/pair.html\`) and wait: the user scans it with Saltix, checks the
    6-digit code and confirms there, and \`grain pair\` writes \`app.key\` once the registry names the key. Never ask the
-   user to paste, type or send a key. The server reads \`app.key\` (owner-only), \`SALTIX_APP_KEY\` or the file
+   user to paste, type or send a key. On a test network closed by access codes (\`grain status\`'s \`next\` names
+   \`--access-code\`), \`grain pair\` first needs one: ask the user for an access code (the network's operator gives
+   them, made in Saltix Pass or with the operator's bot) and run \`grain pair --access-code XXXXX-XXXXX\`; never repeat
+   it back or write it anywhere. A computer's access lasts at most 24 hours; once paired, the server needs none, so
+   never ask for a code then. The server reads \`app.key\` (owner-only), \`SALTIX_APP_KEY\` or the file
    \`SALTIX_APP_KEY_FILE\` names (a systemd credential), never from the command line, which shells keep, and refuses to
    start without one (\`chat_unpaired\`). Never log, print, commit or report a key, nor \`owner.key\` or \`server.key\`.
    Only for a host where no command runs does a developer key made in Saltix stand in: if one is pasted to you, write it
@@ -392,14 +396,20 @@ const PAGE_START = `1. \`npx grain status\`: a page alone needs no server, so it
    owner's Saltix signs from a QR code; without a phone, on the test network: [No phone, test
    network](${HOW_IT_WORKS}#no-phone-test-network) (\`npx grain faucet --wait\`, \`npx grain publish --key owner.key\`;
    minutes of waiting for the chain: in the background, or with \`--no-wait\` and \`npx grain doctor\`, which exits 75
-   while it only waits).`;
+   while it only waits). On a test network closed by access codes, the first of them asks for one: ask the user for an
+   access code (the network's operator gives them) and pass \`--access-code XXXXX-XXXXX\`; the grant is kept for the
+   rest, 24 hours at most.`;
 
 /** The first steps of a chat's project: pair its server, never take a key. */
 const CHAT_START = `1. \`npx grain status\`. \`paired\`: go on. Anything else: step 2, never a key pasted by the user.
 2. \`npx grain pair\`: it prints a QR code (and writes \`.grain/pair.html\`). Show it to the user and say: scan it with
    Saltix (the phone's camera, or My apps → Pair a server), check that Saltix shows the same 6-digit code, confirm with
    the PIN. It waits, answers the phone, and once the registry names the key writes \`app.key\` and \`app.json\`. Run it
-   in the background, or \`npx grain pair --no-wait\` to show the code and then \`npx grain pair\` to wait.
+   in the background, or \`npx grain pair --no-wait\` to show the code and then \`npx grain pair\` to wait. On a test
+   network closed by access codes (\`npx grain status\` names \`--access-code\`), it asks first for an access code: ask
+   the user for one (the network's operator gives them, made in Saltix Pass or with the operator's bot) and run
+   \`npx grain pair --access-code XXXXX-XXXXX\`. A computer's access lasts at most 24 hours and is kept in \`.grain/\`;
+   the paired server needs none.
 3. \`npx grain doctor\`: what is left, and the exact next step.`;
 
 /** AGENTS.md of a new project: what it is, how to run it, and the rules: a page's first for a page, the server's first
@@ -443,8 +453,9 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 - \`icon.png\`: the app's icon (\`npx grain icon\`), the one \`grain.json\`'s \`icon\` names.`}
 - \`owner.key\` (and \`server.key\`, \`app.key\` once \`grain pair\` wrote it, \`.grain/pair.key\` while it waits): secrets.
   Never commit, print, log or paste them. \`app.json\` (the app, its network, the key's public half) is not.
-- \`.grain/\`: \`grain pair\`'s and \`grain publish\`'s state, the icon's preview and the steps' log (\`log.jsonl\`: codes and
-  timings, nothing secret), out of git.
+- \`.grain/\`: \`grain pair\`'s and \`grain publish\`'s state, the icon's preview, this computer's access grant on a test
+  network closed by access codes (\`access.json\`, its key in \`access.key\`: never print or share them) and the steps'
+  log (\`log.jsonl\`: codes and timings, nothing secret), out of git.
 
 ## Commands
 
@@ -481,7 +492,7 @@ signed.json
 *.key
 bundle.zip
 node_modules/
-# grain pair's state (a key not paired yet, the offer's page) and the steps' log.
+# grain pair's state (a key not paired yet, the offer's page, this computer's access grant) and the steps' log.
 .grain/
 `;
 

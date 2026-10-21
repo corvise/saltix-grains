@@ -22,11 +22,12 @@ is a bug to report, unless the page follows a protocol change newer than the vec
 | [Grain chats](grain-chats.md) | the chat spec, requests and member proofs, the team's hello and welcome, signed messages and their blocks and actions, frames, reported numbers, the card standard | 22-grain-chats |
 | [App studio](app-studio.md) | registered server keys, chat-only grains, usernames bound to apps, private apps and roles, invites, pairing a server by QR code, the developer key, the console, deposits, categories, ratings and reported numbers | 24-app-studio |
 | [Saltix Connect](connect.md) | a page's session and offer, the login and grant, sealing, the page's checks, the Connect profile of a mini-app or a site, the Connect sheet, Sign in with Saltix | 19-connect |
+| [The gate](gate.md) | a test network's access grants: the grant and the token a client shows a relay, who needs none (a registered server key), a computer's unattested grant from a code, the gate's interface and refusals, what relays and their wallet interface say | 37-gate |
 | [Relays](relays.md) | relay records and certificate pinning, the client protocol a server speaks (register, messages, acks, keys, presence, files, an app's numbers, link slots), paying for relays and sponsors | 09-relay, 10-storage §4, 11-access (parts) |
 | [Wallet interface](wallet-interface.md) | the JSON-RPC methods an app or its server calls, at a node or a relay's gateway | 08-node §6, 09-relay §10.7 |
 | [Golden vectors](../../vectors/README.md) | what each vector file holds and how to use it | every file's own `spec` field |
 
-The five pages named after a specification keep its section numbers (`grains.md` § 5.4 is 12-grains §5.4), so a
+The six pages named after a specification keep its section numbers (`grains.md` § 5.4 is 12-grains §5.4), so a
 reference such as "22-grain-chats §3a" in the SDK's code, its docs or a vector's `spec` field leads to the same place
 here. Sections that concern no app (the chain's rules, nodes, relays' internals) are left out, so the numbers have gaps.
 

@@ -44,6 +44,30 @@ A wait that ended (`Saltix did not ask in time`, or a managed account's call tha
 `grain pair` again: the same key, the same offer while it lives. `grain pair --new` pairs a new key, to rotate one or to
 replace one that stopped working; the old `app.key` is kept in `.grain/`.
 
+### On a test network closed by access codes
+
+A test network may let in only people with an access code ([the gate](../protocol/gate.md)): its relays take a
+connection only with an access grant, and the key `grain pair` makes is not registered yet, so it needs one. You know
+it is so when `npx grain status`'s `next` reads `grain pair --access-code XXXXX-XXXXX (this test network requires an
+access code to pair: …)`, or `grain pair` stops with `this test network lets in only people with an access code`.
+
+1. **Ask the user for an access code**: 10 letters and digits, `XXXXX-XXXXX`. The test network's operator gives them,
+   made in Saltix Pass or with the operator's bot; a code opens one grant, once, within 7 days of being made.
+2. **Run `npx grain pair --access-code <the code>`** (or with `SALTIX_ACCESS_CODE` set; a person at a terminal may
+   type it when `grain pair` asks). It redeems the code at the network's gate before it shows the offer, says until
+   when this computer's access lasts (**at most 24 hours** of the code's length: a computer cannot attest its key) and
+   keeps the grant in `.grain/access.json`, its key in `.grain/access.key` (owner-only, out of git). Then pair as above;
+   `grain pair --no-wait` gets the access too, so the `grain pair` that waits needs no code.
+3. **Never repeat the code back, write it to a file or commit it**; never print or share `.grain/access.*`.
+4. **Once paired, no code is needed**: relays let a registered server key in, so `npm start` runs without one and
+   `grain pair` says "nothing to do". Never ask for a code then.
+
+Every refusal is said in words with what to do: a code the gate does not take (unknown, used, revoked or older than 7
+days: ask for a new one; never guess), too many attempts (wait the seconds it says), access that ended while
+`grain pair` waited (a new code, then `grain pair --access-code …`: it shows the same offer while it lives), a clock
+more than 10 minutes off. Without a phone, `grain faucet` and a key file's transactions on such a network need the
+same access: the first asks for a code, the rest use the grant kept while it lasts.
+
 Every command run in the project appends its steps to `.grain/log.jsonl`: codes and timings, never a key, an address or
 anything typed ([docs/devex.md](../devex.md#the-steps-log)). Attach it to a report about the tools.
 

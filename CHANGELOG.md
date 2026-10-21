@@ -4,6 +4,21 @@
 
 ### Added
 
+- **A test network closed by access codes** (Saltix 37-gate, [the gate](docs/protocol/gate.md)): `grain pair` on such a
+  network (`node_status.access`) gets this computer's access grant before it shows the offer, from an access code given
+  by `--access-code`, `SALTIX_ACCESS_CODE` or typed at the terminal, redeemed at the network's gate
+  (`https://api.saltix.io`, `SALTIX_GATE`) as an unattested grant (`unattested: "computer"`, at most 24 hours), kept in
+  `.grain/access.json` with its P-256 key in `.grain/access.key` (owner-only, never printed or logged) and reused while
+  it lasts; it says when the access ends, and stops in words if it ends while it waits. A paired server needs no code
+  and is never asked for one. `grain faucet` and a key file's transactions through the relays show the same grant when
+  a relay asks (`RelayGateways.useAccess`). Every refusal of the gate and of the relays is said in plain words with what
+  to do; `grain status` names `--access-code` while a code is needed. In `@saltix/grain-server`: the grant, the token
+  and the relay's check byte for byte with `vectors/gate-v1.json` (`AccessKey`, `accessToken`, `checkAccessToken`),
+  `RelayClient`'s `access` (shown only where a relay's hello asks; `AccessRefused`, `accessEnded`, `accessLost`),
+  `ChatServer`'s `access` for a certified key, `redeemComputerAccess` and `GATE_WORDS`; in `/dev`, `createDevGate` and
+  `createDevRelay({ access })`.
+- **`scripts/sync-vectors.sh <checkout> <file>…`** syncs the files named alone, each `vectors/SOURCE` line then naming
+  its own commit; `check-vectors.mjs` reads it. `gate-v1.json` came that way, from the protocol's `9ff53fd8` (the gate's own commit).
 - **Ready for protocol version 2** (24-app-studio §2, 13-accounts §6.1, 23-upgrades §6a):
   - `grain configure` sends `ConfigureGrain` in the form of the version the network runs: bare keys (tag 34) in
     version 1, each key with its proof (tag 39) from version 2, signed here by its key file. A key given as bare hex is

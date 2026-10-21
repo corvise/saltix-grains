@@ -127,6 +127,9 @@ export function reasonOf(error: unknown): string {
   if (e?.name === "PublishError" && e.step && e.reason) return `${e.step}_${e.reason}`;
   if (e?.name === "IconError" && e.reason) return `icon_${e.reason}`;
   if (e?.name === "RpcError") return "node_refused";
+  if ((e?.name === "AccessCodeNeeded" || e?.name === "AccessProblem") && typeof e.code === "string") return e.code;
+  if (e?.name === "AccessRefused" && e.reason) return `access_${e.reason}`;
+  if (e?.name === "GateRefused") return `gate_${(e as { error?: string }).error ?? "error"}`;
   if (typeof e?.message === "string" && /no relay answered|no relay took|ECONNREFUSED|ENOTFOUND|fetch failed/.test(e.message)) return "network_unreachable";
   if (typeof e?.code === "string" && /^E[A-Z]+$/.test(e.code)) return `fs_${e.code.toLowerCase()}`;
   return "error";
