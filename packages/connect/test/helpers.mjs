@@ -51,7 +51,13 @@ export class FakeLink {
     if (this.closed) return false;
     this.sent.push(frame);
     const reply = this.answer(frame);
-    if (reply) queueMicrotask(() => this.onFrame(reply));
+    if (reply) {
+      const { then, ...first } = reply;
+      queueMicrotask(() => {
+        this.onFrame(first);
+        for (const f of then ?? []) this.onFrame(f);
+      });
+    }
     return true;
   }
   close() {

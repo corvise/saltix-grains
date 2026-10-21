@@ -244,9 +244,13 @@ to render what the client tells it.
    navigates on the link, a tab discarded in the background) and load it again within the slot's life, the client
    opens the **same slot with the same keys** (kept in `sessionStorage`: the slot id, `Q`'s secret and `P`'s public
    key, never a private key of the page; forgotten once connected, on New code, or past 30 minutes), so the wallet's
-   delivery, tried again every 2.5 s for 30 s, still lands. A relay drops a slot with its connection and lets a new
-   connection open the same id (09-relay §10.3 step 6), so nothing is lost but the seconds. `connect.offer()` on load
-   resumes; `connect.renew()` is fresh. Telemetry `connect_resumed`, `connect_resume_failed {kind}`.
+   delivery, tried again every 2.5 s for 30 s, still lands: a relay **parks** a slot whose connection closed for the
+   rest of its half hour, holds what the wallet delivers to it meanwhile, and hands it over the moment the page opens
+   the slot again (09-relay §10.3 step 6a; the client takes what comes right after `link_opened`). While the page is
+   hidden (a phone's browser behind Saltix has no network) the client dials nothing — each attempt would fail and
+   count — and opens the slot the moment the page is in front again (`connect.wake()` on `visibilitychange`).
+   `connect.offer()` on load resumes; `connect.renew()` is fresh. Telemetry `connect_resumed`,
+   `connect_resume_failed {kind}`.
 5. **The confirmation is the client's.** When the grant checks, the client sends the wallet's reply slot a
    `ConnectConfirm` sealed to the wallet's key (the reply the wallet delivered right before the grant names the slot,
    the key and the login), waits up to 5 seconds for the relay's `link_delivered`, and closes its slot. Saltix shows
