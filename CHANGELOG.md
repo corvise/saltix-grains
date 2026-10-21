@@ -41,6 +41,17 @@
 
 ### Added
 
+- **`@saltix/connect`: connection feedback** (Saltix 19-connect §14, the owner's reference standard, 2026-10-21). The
+  session keeps the wallet's `ConnectReply` (a payload of first byte 2: the wallet's reply slot, its key and the login
+  it goes with) and, when a grant checks, raises `connected` at once and then confirms the login to that slot
+  (`ConnectConfirm` sealed to the reply's key with `aad = reply sid ‖ P`, `link_deliver` on the page's own slot
+  connection, `link_delivered` waited for 5 s) before the slot closes; telemetry `connect_reply` and `connect_confirm
+  {outcome}`. `encodeReply`, `encodeConfirm`, `decodeConfirm`, `checkConfirm`, `CONNECT_DELIVERY_MS`,
+  `CONNECT_CONFIRM_MS`, `CONFIRM_DELIVERED_MS`. The dialog's Open Saltix link opens in the same tab (no
+  `target="_blank"`): the page stays where the visitor returns to. docs/connect.md §6 is the page's checklist;
+  docs/protocol/connect.md §14 the protocol; vectors synced to corvise/saltix `1a3a1f01` (`reply`, `confirm`,
+  `refused_confirms`; a payload of first byte 2 is a reply, the refused grant of another version is `version-3`).
+
 - **Ready for protocol version 2** (24-app-studio §2, 13-accounts §6.1, 23-upgrades §6a):
   - `grain configure` sends `ConfigureGrain` in the form of the version the network runs: bare keys (tag 34) in
     version 1, each key with its proof (tag 39) from version 2, signed here by its key file. A key given as bare hex is

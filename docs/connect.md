@@ -27,7 +27,8 @@ its dialog. The site's own profile is signed once, offline, with `grain connect-
    your activity on the blockchain: balances, transfers, names". Without a profile, or with one that fails, the sheet
    shows the origin and the name the offer gives, marked as the page's own words, and says the site published none.
    The page meanwhile shows "Continue in Saltix" (the wallet's `ConnectSeen`).
-5. **The user continues**: the wallet signs a login naming this page's network, origin, slot and session key, and
+5. **The user continues**: the wallet signs a login naming this page's network, origin, slot and session key, names
+   where the page confirms (a reply slot of its own, [§6](#6-connection-feedback-the-page-shows-and-confirms)) and
    delivers the grant to the slot, sealed to the page.
 6. **The page checks the grant** (`verifyGrant`: `checkGrant`, `checkAccount`): this session's network, origin, slot and
    key, a time within 10 minutes of its clock, the signature (Ed25519 strictly, as the node verifies: no key or `R` of
@@ -37,7 +38,8 @@ its dialog. The site's own profile is signed once, offline, with `grain connect-
    upgraded. The node's status is read again for each grant: a node now on another network or chain refuses it
    (`network`), and one that names no account policy keeps no logs, so even an empty log from it leaves the grant
    unchecked. Then the page keeps `{account, address, grant}` in this origin's `localStorage` for 30 days or until the
-   visitor disconnects.
+   visitor disconnects, **shows the connection at once** (`connected`), and **confirms it to the wallet** through the
+   reply slot before its own slot closes, so Saltix says "Connected" on the page's word ([§6](#6-connection-feedback-the-page-shows-and-confirms)).
 7. **The page reads public data** through a node (`account_get`, `account_history`, `book_links`…) with that account
    first, and asks Saltix to sign every action ([19-connect §7](protocol/connect.md#7-actions)): the page never signs.
 
@@ -128,9 +130,10 @@ signs the origin, so the account claims the site.
   inline style, no markup parsed, so Trusted Types too), and `connect.css` is a file. The page needs `connect-src`
   for its relay and node paths (`'self'` when they are on the site).
 - **`openConnectDialog(connect, { lang, theme })`** shows the QR code titled "Saltix Connect" with "Scan with Saltix to
-  sign in", and on a phone (a coarse pointer) the **Open Saltix** link; it follows the session (the phone's notice, a
-  refusal and why, a failure with Try again, New code) and resolves with the connection, or null when closed (the
-  session is cancelled then).
+  sign in", and on a phone (a coarse pointer) the **Open Saltix** link, which opens in the same tab (a verified link
+  hands the offer to Saltix and the page stays where the visitor returns to; never `target="_blank"`, [§6](#6-connection-feedback-the-page-shows-and-confirms));
+  it follows the session (the phone's notice, a refusal and why, a failure with Try again, New code) and resolves with
+  the connection, or null when closed (the session is cancelled then).
 - **Your own UI** instead: `const offer = await connect.offer()` gives `offer.text` (what the QR code holds),
   `offer.link` (the phone's link), `offer.qr` (`size` and one SVG `path`, or `svg` as text) and `offer.expiresAt`; events
   `offer` (a new one), `seen`, `checking`, `connected` (the connection), `refused` (`{reason}`: `origin`, `time`,
@@ -210,6 +213,39 @@ public data, and ask Saltix to sign every action ([19-connect §7](protocol/conn
   mini-app's server has exactly that already: `grain.signIn` and `SignIns` ([12-grains §5.1](protocol/grains.md#51-identity): a challenge the server gives
   and spends once). A website's server waits for the same in Connect's spec; until then it keeps no session by a grant.
 
+## 6. Connection feedback: the page shows and confirms
+
+The owner's rule (2026-10-21, Saltix 19-connect [§14](protocol/connect.md#14-connection-feedback)): the reference
+standard for every site, mini-app and developer. The standard client does the page's part; a page built on it has only
+to render what the client tells it.
+
+**The checklist**, which `grain lint` cannot run for a site, so run it yourself:
+
+1. **Render the connected state from `connected`**, in the same tab, the moment the event fires: who (the address,
+   shortened, the full form on request), since when (`connection.since`), and a Disconnect that calls
+   `connect.disconnect()`. No reload, no polling, no "go back and check". The code the page showed is gone with it:
+   the client has closed the slot, and nothing on the page offers the consumed offer again. A page that still shows
+   its QR code after `connected` is wrong, not slow.
+2. **Show the kept connection at once** on load (`connect.connection`), and follow `connected` and `disconnected` from
+   other tabs (the client raises them on the storage event).
+3. **The link to Saltix opens in the same tab** (`openConnectDialog` does; your own UI: an `<a href={offer.link}>`
+   without `target`). A new tab leaves the visitor on a page that still shows the offer, and a second tap on it
+   delivers to a slot the page has already closed — the wallet then spins against nothing.
+4. **The confirmation is the client's.** When the grant checks, the client sends the wallet's reply slot a
+   `ConnectConfirm` sealed to the wallet's key (the reply the wallet delivered right before the grant names the slot,
+   the key and the login), waits up to 5 seconds for the relay's `link_delivered`, and closes its slot. Saltix shows
+   "Connected" on that confirmation alone; without it (an older page, a refused grant, a frozen tab) it says, after 10
+   seconds, that the login was sent and the page has not confirmed. Telemetry: `connect_reply` (the wallet named its
+   slot), `connect_confirm` with `outcome` `delivered`, `not_delivered`, `no_answer`, `no_reply` (an older wallet),
+   `other_login`, `no_link`.
+5. **The relay path must pass `link_deliver` from the page** (09-relay §10.3 step 5: a connection holding a slot may
+   deliver): a relay before 2026-10-21 refuses it (`not_registered`), the client logs `not_delivered`, and the wallet
+   falls back to "login sent" — honest, and the page is still connected.
+6. **Serve the profile exactly** at `/.well-known/saltix-connect` as `application/json`, or serve nothing there (404).
+   A single-page site that answers its page for every path shows Saltix an HTML document, which is no profile; from
+   this date a wallet reads any non-JSON answer as "no profile", but a JSON document that is not a profile that checks
+   is shown as "did not check" with its reason, so never serve a placeholder.
+
 ## Numbers
 
 | | |
@@ -219,5 +255,7 @@ public data, and ask Saltix to sign every action ([19-connect §7](protocol/conn
 | An offer shown | 2 minutes unseen, then a new slot and new keys; the slot is kept open every minute, 30 minutes in all |
 | An offer's name | 1–40 bytes; its origin at most 128 bytes |
 | A site's profile | at `/.well-known/saltix-connect`, at most 64 KiB, read within 5 seconds, kept a day by a wallet |
+| The wallet's delivery | tried again every 2.5 seconds while the relay finds no slot, 30 seconds in all; the page's confirmation waited for 10 seconds after |
+| The page's confirmation | sent when the grant checks; the relay's `link_delivered` waited for 5 seconds, then the slot closes |
 | A profile's texts | tagline 1–80, about 0–600, highlights 0–4 of 1–60, privacy 0–300 characters; 1–8 languages, `en` among them; 8 192 bytes in all |
 | A site's name and category | 1–32 characters; 0–9 |

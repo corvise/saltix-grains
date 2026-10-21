@@ -118,6 +118,7 @@ test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix
   assert.equal(open.hidden, false, "a phone shows Open Saltix");
   assert.equal(open.getAttribute("href"), OFFER.link);
   assert.equal(open.getAttribute("rel"), "noopener noreferrer");
+  assert.equal(open.getAttribute("target"), null, "the same tab: the page stays where the visitor returns to (19-connect §14.1)");
   open.click();
   assert.deepEqual(connect.calls, ["offer", "handOff"]);
   const status = dialog.find(DIALOG_CLASSES.status);

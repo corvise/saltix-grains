@@ -1,7 +1,9 @@
-// The wallet's answer to a Connect offer (Saltix 19-connect §4–§5): `ConnectSeen`, then a `ConnectGrant` — a
-// `ConnectLogin` naming this page's network, origin, slot and session key, signed by a key of the account. The page
-// takes a grant only when every rule of §5 holds; `saltix-types` `connect` has the same checks, and
-// vectors/connect-v1.json pins both to the same bytes and reasons. A port of the explorer's own.
+// The wallet's answer to a Connect offer (Saltix 19-connect §4–§5): `ConnectSeen`, then a `ConnectReply` naming where
+// the page confirms (§14.2), then a `ConnectGrant` — a `ConnectLogin` naming this page's network, origin, slot and
+// session key, signed by a key of the account. The page takes a grant only when every rule of §5 holds, and then
+// answers the reply with a `ConnectConfirm`, which a wallet takes only for the login it sent; `saltix-types` `connect`
+// has the same checks, and vectors/connect-v1.json pins both to the same bytes and reasons. A port of the explorer's
+// own.
 import {
   type AccountPolicy, type CheckedLog, type DeviceKey, Reader, Writer, derive, keySpeaksFor, readDeviceKey, verifyByDeviceKey, toHex,
   writeDeviceKey,
@@ -11,6 +13,16 @@ import { equal } from "./codec.js";
 export const LOGIN_DOMAIN = "Saltix connect login v1";
 export const GRANT_VERSION = 1;
 export const SEEN_TAG = 0;
+/** A `ConnectReply`'s first byte: where the page confirms (19-connect §14.2). */
+export const REPLY_TAG = 2;
+/** A `ConnectConfirm`'s first byte. */
+export const CONFIRM_VERSION = 1;
+/** How long a wallet tries to deliver a grant in all (§14.3). */
+export const CONNECT_DELIVERY_MS = 30_000;
+/** How long a wallet waits for the page's confirmation once the grant was delivered (§14.3). */
+export const CONNECT_CONFIRM_MS = 10_000;
+/** How long the page waits for the relay's `link_delivered` of its confirmation before it closes its slot (§14.2). */
+export const CONFIRM_DELIVERED_MS = 5_000;
 /** How far a login's `at` may be from the page's clock. */
 export const CONNECT_SKEW_MS = 10 * 60_000;
 /** How long the page keeps a grant. */
@@ -38,7 +50,32 @@ export interface ConnectGrant {
   signature: Uint8Array;
 }
 
-export type ConnectPayload = { kind: "seen"; at: bigint } | { kind: "grant"; grant: ConnectGrant; bytes: Uint8Array };
+/** Where the page confirms (19-connect §14.2): the wallet's reply slot at its relay, the key the confirmation is
+ *  sealed to, and the message of the login that follows, so the page answers one grant. */
+export interface ConnectReply {
+  /** The node key of the relay that holds the reply slot. */
+  relay: Uint8Array;
+  /** The reply slot. */
+  sid: Uint8Array;
+  /** `K`: an X25519 key of this request. */
+  key: Uint8Array;
+  /** `loginMessage` of the login that follows. */
+  login: Uint8Array;
+}
+
+/** "The page took the login": the page's answer at the reply slot. */
+export interface ConnectConfirm {
+  version: number;
+  /** `loginMessage` of the login the page took. */
+  login: Uint8Array;
+  /** Unix ms. */
+  at: bigint;
+}
+
+export type ConnectPayload =
+  | { kind: "seen"; at: bigint }
+  | { kind: "grant"; grant: ConnectGrant; bytes: Uint8Array }
+  | { kind: "reply"; reply: ConnectReply };
 
 /** Why the page refuses a payload or a grant: the reasons of vectors/connect-v1.json. */
 export type Refusal =
@@ -50,6 +87,7 @@ export type Refusal =
   | "slot"
   | "page"
   | "time"
+  | "login"
   | "signature"
   | "not_the_account"
   | "upgraded"
@@ -88,16 +126,53 @@ export function encodeGrant(g: ConnectGrant): Uint8Array {
 
 export const encodeSeen = (at: bigint): Uint8Array => new Writer().u8(SEEN_TAG).u64(at).done();
 
-/** One Borsh value and nothing after it: a seen notice by its first byte 0, a grant of version 1 by its first byte 1. */
-export function decodePayload(bytes: Uint8Array): ConnectPayload {
+export const encodeReply = (r: ConnectReply): Uint8Array =>
+  new Writer().u8(REPLY_TAG).fixed(r.relay, 32).fixed(r.sid, 32).fixed(r.key, 32).fixed(r.login, 32).done();
+
+export const encodeConfirm = (c: ConnectConfirm): Uint8Array => new Writer().u8(c.version).fixed(c.login, 32).u64(c.at).done();
+
+/** One Borsh value of version 1 and nothing after it. */
+export function decodeConfirm(bytes: Uint8Array): ConnectConfirm {
   if (bytes.length === 0) throw new ConnectError("encoding", "empty");
-  if (bytes[0] !== SEEN_TAG && bytes[0] !== GRANT_VERSION) throw new ConnectError("version", String(bytes[0]));
+  if (bytes[0] !== CONFIRM_VERSION) throw new ConnectError("version", String(bytes[0]));
   const r = new Reader(bytes);
   try {
-    if (r.u8() === SEEN_TAG) {
+    const version = r.u8();
+    const login = r.fixed(32);
+    const at = r.u64();
+    r.end();
+    return { version, login, at };
+  } catch (e) {
+    throw new ConnectError("encoding", e instanceof Error ? e.message : String(e));
+  }
+}
+
+/** What a wallet checks of a confirmation (§14.2 step 4): version 1, the login it sent, `at` within the skew. */
+export function checkConfirm(c: ConnectConfirm, login: Uint8Array, nowMs: number | bigint): void {
+  if (c.version !== CONFIRM_VERSION) throw new ConnectError("version", String(c.version));
+  if (!equal(c.login, login)) throw new ConnectError("login");
+  const now = BigInt(nowMs);
+  const skew = c.at > now ? c.at - now : now - c.at;
+  if (skew > BigInt(CONNECT_SKEW_MS)) throw new ConnectError("time");
+}
+
+/** One Borsh value and nothing after it: a seen notice by its first byte 0, a grant of version 1 by its first byte 1,
+ *  a reply by its first byte 2. */
+export function decodePayload(bytes: Uint8Array): ConnectPayload {
+  if (bytes.length === 0) throw new ConnectError("encoding", "empty");
+  if (bytes[0] !== SEEN_TAG && bytes[0] !== GRANT_VERSION && bytes[0] !== REPLY_TAG) throw new ConnectError("version", String(bytes[0]));
+  const r = new Reader(bytes);
+  try {
+    const first = r.u8();
+    if (first === SEEN_TAG) {
       const at = r.u64();
       r.end();
       return { kind: "seen", at };
+    }
+    if (first === REPLY_TAG) {
+      const reply: ConnectReply = { relay: r.fixed(32), sid: r.fixed(32), key: r.fixed(32), login: r.fixed(32) };
+      r.end();
+      return { kind: "reply", reply };
     }
     const login: ConnectLogin = {
       network: r.fixed(32),

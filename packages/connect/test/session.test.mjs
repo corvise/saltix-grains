@@ -3,7 +3,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
-import { ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MS, SLOT_LIFE_MS, b64url, encodeGrant, encodeSeen, fromB64url, loginMessage, parseOffer, sealLinkPayload } from "../dist/index.js";
+import {
+  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MS, SLOT_LIFE_MS, b64url, checkConfirm, decodeConfirm, encodeGrant, encodeReply,
+  encodeSeen, fromB64url, loginMessage, openLinkPayload, parseOffer, sealLinkPayload,
+} from "../dist/index.js";
+import { x25519 } from "@noble/curves/ed25519";
 import { toHex } from "@saltix/grain-server/web";
 import { Clock, FakeLink, RELAY_KEY, keys, opened } from "./helpers.mjs";
 
@@ -304,4 +308,123 @@ test("nothing runs after stop", async () => {
   const p = h.phases[1];
   assert.deepEqual(parseOffer(p.link), parseOffer(p.text));
   assert.equal(fromB64url(p.text.split(":")[5]).length, 32);
+});
+
+// ── The page's confirmation (19-connect §14.2) ───────────────────────────────
+
+const REPLY_RELAY = new Uint8Array(32).fill(0x36);
+const REPLY_SID = new Uint8Array(32).fill(0x55);
+const REPLY_SECRET = new Uint8Array(32).fill(0x56);
+
+/** A relay that answers `link_open` and, when `delivers`, the page's `link_deliver`. */
+const answering = (delivers) => (_base, f) => {
+  if (f.type === "link_deliver") return delivers === null ? null : { type: "link_delivered", sid: f.sid, delivered: delivers };
+  return opened(f);
+};
+
+/** The wallet's reply for `grant`, sealed to the page's slot. */
+function replyFor(offer, grant, login = loginMessage(grant.login)) {
+  const reply = { relay: REPLY_RELAY, sid: REPLY_SID, key: x25519.getPublicKey(REPLY_SECRET), login };
+  return sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeReply(reply));
+}
+
+const confirms = (h) => h.events.filter((e) => e.event === "connect_confirm").map((e) => e.meta.outcome);
+
+test("a grant whose reply came is confirmed at the wallet's reply slot before the slot closes; the page shows it first", async () => {
+  const h = harness({ answer: answering(true) });
+  await started(h);
+  const { offer, sid } = offerOf(h);
+  const link = h.links[0];
+  const grant = grantFor(offer, h.clock.now);
+  link.deliver(replyFor(offer, grant), sid);
+  assert.deepEqual(h.events.filter((e) => e.event === "connect_reply").length, 1);
+  link.deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grant)), sid);
+  await h.clock.advance(0);
+  assert.deepEqual(kinds(h), ["opening", "offer", "checking", "connected"]);
+  assert.deepEqual(h.connected, ["account ed25519"]);
+  // What went to the relay after the slot's opening: one link_deliver, to the reply's relay and slot.
+  const sent = link.sent.filter((f) => f.type === "link_deliver");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].relay, b64url(REPLY_RELAY));
+  assert.equal(sent[0].sid, b64url(REPLY_SID));
+  // The confirmation opens for the reply's key, its slot and the page's session key, and names the login taken.
+  const plain = openLinkPayload(REPLY_SECRET, REPLY_SID, offer.page, fromB64url(sent[0].payload));
+  assert.ok(plain, "sealed to the reply's key");
+  const confirm = decodeConfirm(plain);
+  assert.equal(confirm.version, 1);
+  assert.deepEqual(confirm.login, loginMessage(grant.login));
+  assert.equal(confirm.at, BigInt(h.clock.now));
+  checkConfirm(confirm, loginMessage(grant.login), h.clock.now + 5_000);
+  assert.throws(() => checkConfirm(confirm, new Uint8Array(32), h.clock.now), (e) => e instanceof ConnectError && e.reason === "login");
+  // Not for another slot, nor another page key.
+  assert.equal(openLinkPayload(REPLY_SECRET, new Uint8Array(32), offer.page, fromB64url(sent[0].payload)), null);
+  assert.equal(openLinkPayload(REPLY_SECRET, REPLY_SID, new Uint8Array(32), fromB64url(sent[0].payload)), null);
+  // The relay said delivered: the slot closed then, and nothing runs after.
+  assert.deepEqual(confirms(h), ["delivered"]);
+  assert.equal(link.closed, true);
+  assert.equal(h.clock.timers.size, 0);
+});
+
+test("without a reply, or with one for another login, the slot closes and no confirmation goes out", async () => {
+  for (const other of [false, true]) {
+    const h = harness({ answer: answering(true) });
+    await started(h);
+    const { offer, sid } = offerOf(h);
+    const link = h.links[0];
+    const grant = grantFor(offer, h.clock.now);
+    if (other) link.deliver(replyFor(offer, grant, new Uint8Array(32).fill(9)), sid);
+    link.deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grant)), sid);
+    await h.clock.advance(0);
+    assert.deepEqual(h.connected, ["account ed25519"]);
+    assert.equal(link.sent.filter((f) => f.type === "link_deliver").length, 0);
+    assert.deepEqual(confirms(h), [other ? "other_login" : "no_reply"]);
+    assert.equal(link.closed, true);
+    assert.equal(h.clock.timers.size, 0);
+  }
+});
+
+test("a confirmation the relay does not answer closes the slot after five seconds; one it refuses, at once", async () => {
+  const h = harness({ answer: answering(null) });
+  await started(h);
+  const { offer, sid } = offerOf(h);
+  const link = h.links[0];
+  const grant = grantFor(offer, h.clock.now);
+  link.deliver(replyFor(offer, grant), sid);
+  link.deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grant)), sid);
+  await h.clock.advance(0);
+  assert.deepEqual(h.connected, ["account ed25519"]);
+  assert.equal(link.closed, false, "the slot waits for the relay's word");
+  await h.clock.advance(CONFIRM_DELIVERED_MS - 1);
+  assert.equal(link.closed, false);
+  await h.clock.advance(1);
+  assert.equal(link.closed, true);
+  assert.deepEqual(confirms(h), ["no_answer"]);
+  assert.equal(h.clock.timers.size, 0);
+
+  const refused = harness({ answer: (_base, f) => (f.type === "link_deliver" ? { type: "error", message: "not_registered", detail: "link_deliver" } : opened(f)) });
+  await started(refused);
+  const r = offerOf(refused);
+  const g = grantFor(r.offer, refused.clock.now);
+  refused.links[0].deliver(replyFor(r.offer, g), r.sid);
+  refused.links[0].deliver(sealLinkPayload(r.offer.boxKey, r.offer.sid, r.offer.page, encodeGrant(g)), r.sid);
+  await refused.clock.advance(0);
+  assert.deepEqual(confirms(refused), ["not_delivered"]);
+  assert.equal(refused.links[0].closed, true);
+  assert.equal(refused.clock.timers.size, 0);
+});
+
+test("stop while a confirmation is on its way closes the slot's connection", async () => {
+  const h = harness({ answer: answering(null) });
+  await started(h);
+  const { offer, sid } = offerOf(h);
+  const link = h.links[0];
+  const grant = grantFor(offer, h.clock.now);
+  link.deliver(replyFor(offer, grant), sid);
+  link.deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grant)), sid);
+  await h.clock.advance(0);
+  assert.equal(link.closed, false);
+  h.session.stop();
+  assert.equal(link.closed, true);
+  await h.clock.advance(CONFIRM_DELIVERED_MS);
+  assert.equal(h.clock.timers.size, 0);
 });
