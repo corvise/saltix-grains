@@ -1,7 +1,7 @@
 # Saltix Connect: an account on a web page
 
 > Reflects Saltix 19-connect (basis for implementation 2026-10-12; the Connect profile, the Connect sheet and "Sign in
-> with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `1a3a1f01` (2026-10-21). Section
+> with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `ab434b54` (2026-10-21). Section
 > numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what

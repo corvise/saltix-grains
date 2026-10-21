@@ -49,7 +49,7 @@
   {outcome}`. `encodeReply`, `encodeConfirm`, `decodeConfirm`, `checkConfirm`, `CONNECT_DELIVERY_MS`,
   `CONNECT_CONFIRM_MS`, `CONFIRM_DELIVERED_MS`. The dialog's Open Saltix link opens in the same tab (no
   `target="_blank"`): the page stays where the visitor returns to. docs/connect.md §6 is the page's checklist;
-  docs/protocol/connect.md §14 the protocol; vectors synced to corvise/saltix `1a3a1f01` (`reply`, `confirm`,
+  docs/protocol/connect.md §14 the protocol; vectors synced to corvise/saltix `ab434b54` (`reply`, `confirm`,
   `refused_confirms`; a payload of first byte 2 is a reply, the refused grant of another version is `version-3`).
 
 - **Ready for protocol version 2** (24-app-studio §2, 13-accounts §6.1, 23-upgrades §6a):
