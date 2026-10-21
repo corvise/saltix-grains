@@ -8,7 +8,7 @@ import { type Offer, nameOk } from "./offer.js";
 import { type NodeLike, type NodeStatus, nodeCall } from "./node.js";
 import { type QrCode, qrCode } from "./qr.js";
 import { type Dial, dialWebSocket } from "./relay.js";
-import { ConnectSession, type Phase, type SessionKeys, makeKeys } from "./session.js";
+import { ConnectSession, type KeptSlotStore, type Phase, type SessionKeys, makeKeys } from "./session.js";
 import { type Connection, type KeptStorage, defaultStorage, forgetConnection, loadConnection, saveConnection, STORAGE_KEY } from "./store.js";
 import { CONNECT_LIFE_MS } from "./grant.js";
 import { verifyGrant } from "./verify.js";
@@ -41,14 +41,21 @@ export interface ConnectOptions {
   telemetry?: (event: string, meta?: Record<string, string | number | boolean>) => void;
   /** Fresh session keys (tests). */
   keys?: () => Promise<SessionKeys>;
+  /** The browser's user agent (tests): on Android the Open Saltix link is an intent link. */
+  userAgent?: string;
+  /** Where the slot is kept across a reload: `sessionStorage` by default, null for nowhere (tests). */
+  keep?: KeptSlotStore | null;
 }
 
 /** An offer as the page shows it. */
 export interface OfferView {
   /** The offer's text: what the QR code holds. */
   text: string;
-  /** `https://saltix.io/connect#…`: on a phone, the link that opens Saltix. */
+  /** `https://saltix.io/connect#…`: the link that opens Saltix, for a message or another device. */
   link: string;
+  /** The link that opens Saltix on this device without unloading the page (19-connect §14.1): an intent link on
+   *  Android, `link` elsewhere. What "Open Saltix" on a phone points at. */
+  app: string;
   qr: QrCode;
   /** When an unseen offer is replaced by a new one (Unix ms), or null once the wallet saw it. */
   expiresAt: number | null;
@@ -96,7 +103,8 @@ export interface SaltixConnect {
   /** Where the session stands: `idle` before an offer and after `cancel`. */
   readonly phase: Phase["kind"] | "idle";
   on<E extends keyof ConnectEvents>(event: E, handler: (data: ConnectEvents[E]) => void): () => void;
-  /** Start a session and give its offer (the current one while a session runs); rejects with `ConnectFailed`. */
+  /** Start a session and give its offer (the current one while a session runs); rejects with `ConnectFailed`. A slot
+   *  the page kept across a reload is opened again (§14.1). */
   offer(): Promise<OfferView>;
   /** A new offer at once: a new slot and new keys. */
   renew(): Promise<OfferView>;
@@ -150,7 +158,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
 
   const view = (p: Extract<Phase, { text: string }>, expiresAt: number | null): OfferView => {
     if (current && current.text === p.text) return { ...current, expiresAt };
-    return { text: p.text, link: p.link, qr: qrCode(p.text), expiresAt };
+    return { text: p.text, link: p.link, app: p.app, qr: qrCode(p.text), expiresAt };
   };
 
   /** The node's network and genesis, once: a node or a genesis of another network fails the session. */
@@ -195,7 +203,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
     }
   }
 
-  async function begin(): Promise<OfferView> {
+  async function begin(fresh = false): Promise<OfferView> {
     session?.stop();
     session = null;
     current = null;
@@ -217,6 +225,8 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
       name: o.name,
       dial: o.dial ?? dialWebSocket,
       keys: o.keys ?? makeKeys,
+      userAgent: o.userAgent,
+      keep: o.keep,
       verify: (grant, bytes, sess) => verifyGrant(grant, bytes, sess, { node: o.node, network: o.network, genesis: offered }),
       connected: (c) => {
         if (session !== s) return;
@@ -236,7 +246,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
       },
     });
     session = s;
-    void s.start();
+    void s.start({ fresh });
     return pending;
   }
 
@@ -273,7 +283,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
       if (session) return new Promise<OfferView>((ok, fail) => waiting.push({ ok, fail }));
       return begin();
     },
-    renew: begin,
+    renew: () => begin(true),
     cancel() {
       session?.stop();
       session = null;

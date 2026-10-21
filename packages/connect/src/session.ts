@@ -19,7 +19,7 @@ import {
   CONFIRM_DELIVERED_MS, CONFIRM_VERSION, ConnectError, type ConnectGrant, type ConnectReply, type Session, decodePayload, encodeConfirm,
   loginMessage, signerKind,
 } from "./grant.js";
-import { type Offer, offerLink, offerText } from "./offer.js";
+import { type Offer, offerAppLink, offerLink, offerText } from "./offer.js";
 import type { Dial, Frame, RelayLink } from "./relay.js";
 import { boxPublic, openLinkPayload, randomSecret, sealLinkPayload } from "./seal.js";
 
@@ -65,9 +65,9 @@ export async function makeKeys(): Promise<SessionKeys> {
 
 export type Phase =
   | { kind: "opening" }
-  | { kind: "offer"; offer: Offer; text: string; link: string; expiresAt: number }
-  | { kind: "seen"; offer: Offer; text: string; link: string }
-  | { kind: "checking"; offer: Offer; text: string; link: string }
+  | { kind: "offer"; offer: Offer; text: string; link: string; app: string; expiresAt: number }
+  | { kind: "seen"; offer: Offer; text: string; link: string; app: string }
+  | { kind: "checking"; offer: Offer; text: string; link: string; app: string }
   | { kind: "connected" }
   | { kind: "failed"; reason: "no_relay" | "refused" | "network" };
 
@@ -106,6 +106,44 @@ export interface SessionOptions<T> {
   random?: () => number;
   /** Whether the page is in front of the visitor: an offer is replaced only then. */
   visible?: () => boolean;
+  /** The browser's user agent: on Android the link that opens Saltix is an intent link (§14.1). */
+  userAgent?: string;
+  /**
+   * Where the slot is kept across a reload of the page (§14.1): `sessionStorage` by default, so a page the browser
+   * unloaded while handing the offer to Saltix and loaded again opens the same slot with the same keys, and the
+   * wallet's delivery, tried again for 30 seconds, still lands. Null keeps nothing.
+   */
+  keep?: KeptSlotStore | null;
+}
+
+/** Three methods of `sessionStorage`. */
+export interface KeptSlotStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+/** Where a page keeps its slot across a reload. */
+export const KEPT_SLOT_KEY = "saltix-connect-slot";
+
+/** A slot as the page keeps it: enough to open it again and to open what the wallet delivers to it. */
+interface KeptSlot {
+  base: string;
+  relay: string;
+  sid: string;
+  boxSecret: string;
+  page: string;
+  opened: number;
+  seen: boolean;
+  held: boolean;
+}
+
+function defaultKeep(): KeptSlotStore | null {
+  try {
+    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 interface Slot {
@@ -114,6 +152,8 @@ interface Slot {
   offer: Offer;
   text: string;
   link: string;
+  /** The link that opens Saltix on this device without unloading the page. */
+  app: string;
   opened: number;
   link_: RelayLink | null;
   /** The latest reply that opened for the slot: where the wallet waits for the page's confirmation (§14.2). */
@@ -133,6 +173,8 @@ export class ConnectSession<T> {
   private readonly clearT: (t: unknown) => void;
   private readonly random: () => number;
   private readonly visible: () => boolean;
+  private readonly userAgent: string;
+  private readonly keep: KeptSlotStore | null;
   /** The visitor took the offer to the wallet on this phone: it stays until the slot's end. */
   private held = false;
   /** The slot's connection while the page's confirmation is on its way, after the page connected. */
@@ -144,14 +186,21 @@ export class ConnectSession<T> {
     this.clearT = o.clearTimeout ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
     this.random = o.random ?? Math.random;
     this.visible = o.visible ?? (() => typeof document === "undefined" || document.visibilityState !== "hidden");
+    this.userAgent = o.userAgent ?? (typeof navigator === "undefined" ? "" : navigator.userAgent);
+    this.keep = o.keep === undefined ? defaultKeep() : o.keep;
   }
 
   get current(): Phase {
     return this.phase;
   }
 
-  /** Open a slot and show its offer; again with new keys whenever asked or when an unseen offer expires. */
-  async start(): Promise<void> {
+  /**
+   * Open a slot and show its offer; again with new keys whenever asked (`fresh`) or when an unseen offer expires. Not
+   * fresh, a slot the page kept across a reload (§14.1) is opened again first — the same id at the same relay, with the
+   * same keys and the same offer — so that a wallet already delivering to it still reaches the page; a relay that no
+   * longer answers with the same node key, or a kept slot past its life, gives way to a fresh one.
+   */
+  async start(options: { fresh?: boolean } = {}): Promise<void> {
     const generation = ++this.generation;
     this.clearTimers();
     this.closeLink();
@@ -162,6 +211,27 @@ export class ConnectSession<T> {
     this.reopenAttempt = 0;
     this.setPhase({ kind: "opening" });
     if (this.o.relays.length === 0) return this.fail("no_relay");
+    const kept = options.fresh ? null : this.kept();
+    if (options.fresh) this.forget();
+    if (kept) {
+      const keys: SessionKeys = { sid: fromB64Loose(kept.sid)!, boxSecret: fromB64Loose(kept.boxSecret)!, boxKey: boxPublic(fromB64Loose(kept.boxSecret)!), page: fromB64Loose(kept.page)!, pageKey: null, webCrypto: false };
+      const opened = await this.open(kept.base, keys.sid);
+      if (this.stopped || generation !== this.generation) {
+        opened?.link.close();
+        return;
+      }
+      if (opened && opened.link.network === this.o.networkKind && equal(opened.relay, fromB64Loose(kept.relay) ?? new Uint8Array())) {
+        const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
+        this.seen = kept.seen;
+        this.held = kept.held;
+        this.place(kept.base, keys, offer, kept.opened, opened.link);
+        this.o.events.telemetry("connect_resumed", { relay: this.o.relays.indexOf(kept.base) + 1, ms: this.now() - kept.opened, held: kept.held });
+        return;
+      }
+      opened?.link.close();
+      this.forget();
+      this.o.events.telemetry("connect_resume_failed", { kind: opened ? "other_relay" : "unreachable" });
+    }
     const keys = await this.o.keys();
     for (const base of this.shuffled(this.o.relays)) {
       if (this.stopped || generation !== this.generation) return;
@@ -177,20 +247,74 @@ export class ConnectSession<T> {
         return this.fail("network");
       }
       const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
-      const started = this.now();
-      this.slot = { base, keys, offer, text: offerText(offer), link: offerLink(offer), opened: started, link_: opened.link, reply: null };
-      this.attach(opened.link);
+      this.place(base, keys, offer, this.now(), opened.link);
       this.o.events.telemetry("connect_open", { relay: this.o.relays.indexOf(base) + 1, webcrypto: keys.webCrypto });
-      this.setPhase({ kind: "offer", offer, text: this.slot.text, link: this.slot.link, expiresAt: started + QR_LIFE_MS });
-      this.every(KEEP_MS, () => this.keep());
-      this.after(QR_LIFE_MS, () => this.expire());
-      this.after(SLOT_LIFE_MS, () => {
-        if (this.phase.kind !== "connected" && this.phase.kind !== "checking") void this.start();
-      });
       return;
     }
     this.o.events.telemetry("connect_slot_failed", { kind: "no_relay", relays: this.o.relays.length });
     this.fail("no_relay");
+  }
+
+  /** The slot is held: its offer shown, kept across a reload, kept open, and its times set. */
+  private place(base: string, keys: SessionKeys, offer: Offer, opened: number, link: RelayLink): void {
+    const text = offerText(offer);
+    this.slot = { base, keys, offer, text, link: offerLink(offer), app: offerAppLink(offer, this.userAgent), opened, link_: link, reply: null };
+    this.attach(link);
+    this.remember();
+    const slot = this.slot;
+    if (this.seen) this.setPhase({ kind: "seen", offer, text, link: slot.link, app: slot.app });
+    else this.setPhase({ kind: "offer", offer, text, link: slot.link, app: slot.app, expiresAt: opened + QR_LIFE_MS });
+    this.every(KEEP_MS, () => this.keepOpen());
+    const left = Math.max(0, opened + SLOT_LIFE_MS - this.now());
+    this.after(Math.max(0, opened + QR_LIFE_MS - this.now()), () => this.expire());
+    this.after(left, () => {
+      if (this.phase.kind !== "connected" && this.phase.kind !== "checking") void this.start({ fresh: true });
+    });
+  }
+
+  // ── The slot across a reload (§14.1) ───────────────────────────────────────
+
+  /** The slot kept by a page that was unloaded within its life, or null. */
+  private kept(): KeptSlot | null {
+    if (!this.keep) return null;
+    let kept: KeptSlot;
+    try {
+      const text = this.keep.getItem(KEPT_SLOT_KEY);
+      if (!text) return null;
+      kept = JSON.parse(text) as KeptSlot;
+    } catch {
+      return null;
+    }
+    const sound =
+      typeof kept.base === "string" && this.o.relays.includes(kept.base) && typeof kept.opened === "number" &&
+      [kept.relay, kept.sid, kept.boxSecret, kept.page].every((v) => typeof v === "string" && fromB64Loose(v)?.length === 32);
+    if (!sound || this.now() - kept.opened >= SLOT_LIFE_MS || this.now() < kept.opened) {
+      this.forget();
+      return null;
+    }
+    return kept;
+  }
+
+  private remember(): void {
+    const slot = this.slot;
+    if (!this.keep || !slot) return;
+    const kept: KeptSlot = {
+      base: slot.base, relay: b64url(slot.offer.relay), sid: b64url(slot.keys.sid), boxSecret: b64url(slot.keys.boxSecret), page: b64url(slot.keys.page),
+      opened: slot.opened, seen: this.seen, held: this.held,
+    };
+    try {
+      this.keep.setItem(KEPT_SLOT_KEY, JSON.stringify(kept));
+    } catch {
+      /* storage full or blocked: the slot lives in this page alone */
+    }
+  }
+
+  private forget(): void {
+    try {
+      this.keep?.removeItem(KEPT_SLOT_KEY);
+    } catch {
+      /* nothing kept */
+    }
   }
 
   /** Stop everything: the slot goes with its connection, a confirmation still on its way with it. */
@@ -205,10 +329,12 @@ export class ConnectSession<T> {
     this.slot = null;
   }
 
-  /** The visitor opened the link to Saltix on this phone: the offer stays while the wallet answers. */
+  /** The visitor opened the link to Saltix on this phone: the offer stays while the wallet answers, and the slot is
+   *  kept as held, so a page the browser unloads on the way opens it again on its return. */
   handOff(): void {
     if (this.slot && !this.held) {
       this.held = true;
+      this.remember();
       this.o.events.telemetry("connect_link_opened");
     }
   }
@@ -222,7 +348,7 @@ export class ConnectSession<T> {
       return;
     }
     this.o.events.telemetry("connect_offer_expired");
-    void this.start();
+    void this.start({ fresh: true });
   }
 
   /** The page came back to the foreground: a dropped connection is opened again at once. */
@@ -286,7 +412,7 @@ export class ConnectSession<T> {
     };
   }
 
-  private keep(): void {
+  private keepOpen(): void {
     const slot = this.slot;
     if (!slot || !slot.link_ || this.now() - slot.opened >= SLOT_LIFE_MS) return;
     slot.link_.send({ type: "link_open", sid: b64url(slot.keys.sid) });
@@ -318,7 +444,7 @@ export class ConnectSession<T> {
       opened.link.close();
       this.o.events.telemetry("connect_reconnect", { ok: false, kind: "other_relay" });
       this.o.events.reconnecting(false);
-      void this.start();
+      void this.start({ fresh: true });
       return;
     }
     const wait = REOPEN_MS[Math.min(this.reopenAttempt++, REOPEN_MS.length - 1)]!;
@@ -344,8 +470,9 @@ export class ConnectSession<T> {
     if (payload.kind === "seen") {
       if (!this.seen && this.phase.kind === "offer") {
         this.seen = true;
+        this.remember();
         this.o.events.telemetry("connect_seen", { ms: this.now() - slot.opened });
-        this.setPhase({ kind: "seen", offer: slot.offer, text: slot.text, link: slot.link });
+        this.setPhase({ kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
       }
       return;
     }
@@ -362,9 +489,9 @@ export class ConnectSession<T> {
 
   private async check(slot: Slot, grant: ConnectGrant, bytes: Uint8Array): Promise<void> {
     const back: Phase = this.seen
-      ? { kind: "seen", offer: slot.offer, text: slot.text, link: slot.link }
-      : { kind: "offer", offer: slot.offer, text: slot.text, link: slot.link, expiresAt: slot.opened + QR_LIFE_MS };
-    this.setPhase({ kind: "checking", offer: slot.offer, text: slot.text, link: slot.link });
+      ? { kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app }
+      : { kind: "offer", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app, expiresAt: slot.opened + QR_LIFE_MS };
+    this.setPhase({ kind: "checking", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
     const session: Session = { network: this.o.network, origin: this.o.origin, sid: slot.keys.sid, page: slot.keys.page };
     try {
       const value = await this.o.verify(grant, bytes, session);
@@ -380,6 +507,7 @@ export class ConnectSession<T> {
       const link = slot.link_;
       slot.link_ = null;
       this.slot = null;
+      this.forget();
       this.setPhase({ kind: "connected" });
       this.o.connected(value);
       void this.confirm(link, slot, grant);
@@ -451,6 +579,7 @@ export class ConnectSession<T> {
   private fail(reason: "no_relay" | "refused" | "network"): void {
     this.clearTimers();
     this.closeLink();
+    this.forget();
     this.setPhase({ kind: "failed", reason });
   }
 

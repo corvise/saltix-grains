@@ -99,7 +99,13 @@ function fakeConnect(offer) {
   };
 }
 
-const OFFER = { text: "saltix-connect:1:x", link: "https://saltix.io/connect#saltix-connect:1:x", qr: { size: 33, path: "M4 4h7v1h-7z", svg: "" }, expiresAt: 0 };
+const OFFER = {
+  text: "saltix-connect:1:x",
+  link: "https://saltix.io/connect#saltix-connect:1:x",
+  app: "intent:1:x#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=https%3A%2F%2Fsaltix.io%2Fconnect%23saltix-connect%3A1%3Ax;end",
+  qr: { size: 33, path: "M4 4h7v1h-7z", svg: "" },
+  expiresAt: 0,
+};
 
 test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix; it follows the session", async () => {
   const doc = new FakeDocument(true);
@@ -116,9 +122,9 @@ test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix
   assert.equal(qr.find(DIALOG_CLASSES.qrDark).getAttribute("d"), OFFER.qr.path);
   const open = dialog.find(DIALOG_CLASSES.open);
   assert.equal(open.hidden, false, "a phone shows Open Saltix");
-  assert.equal(open.getAttribute("href"), OFFER.link);
+  assert.equal(open.getAttribute("href"), OFFER.app, "the link that opens Saltix without unloading the page (19-connect §14.1)");
   assert.equal(open.getAttribute("rel"), "noopener noreferrer");
-  assert.equal(open.getAttribute("target"), null, "the same tab: the page stays where the visitor returns to (19-connect §14.1)");
+  assert.equal(open.getAttribute("target"), null, "never a new tab: the visitor would come back to a page still offering a consumed offer");
   open.click();
   assert.deepEqual(connect.calls, ["offer", "handOff"]);
   const status = dialog.find(DIALOG_CLASSES.status);

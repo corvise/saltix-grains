@@ -41,6 +41,17 @@
 
 ### Added
 
+- **`@saltix/connect`: the link to Saltix keeps the page, and a page unloaded on the way comes back to its slot**
+  (Saltix 19-connect §14.1; the owner, 2026-10-21: on Android Chrome the https link opened in the same tab navigated the
+  tab, the page unloaded and its slot died, and the wallet spun against nothing). `offer.app` is what Open Saltix
+  points at: on Android an intent link (`intent:1:…#Intent;scheme=saltix-connect;package=io.saltix.app;
+  S.browser_fallback_url=<the https link>;end`, `offerIntentLink`, `offerAppLink`, `isAndroid`), which the browser
+  hands to the installed app without navigating; the https link elsewhere. The session keeps its slot in
+  `sessionStorage` (`keep`, `KEPT_SLOT_KEY`: the slot id, `Q`'s secret, `P`'s public key, whether seen or held; never a
+  private key) and `start()` opens the same slot again on a reload within its life (`connect_resumed`,
+  `connect_resume_failed`); `start({fresh: true})` and `connect.renew()` make a new one; forgotten once connected.
+  `Phase` and `OfferView` carry `app`; docs/connect.md §6 items 3–4.
+
 - **`@saltix/connect`: connection feedback** (Saltix 19-connect §14, the owner's reference standard, 2026-10-21). The
   session keeps the wallet's `ConnectReply` (a payload of first byte 2: the wallet's reply slot, its key and the login
   it goes with) and, when a grant checks, raises `connected` at once and then confirms the login to that slot
