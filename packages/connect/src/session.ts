@@ -1,8 +1,10 @@
 /*
- * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5), a port of the explorer's own session: a slot at a relay, the offer for the QR code and the link, the wallet's notice that
- * it saw the offer, and the grant, checked before the page takes it.
+ * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5, §14), a port of the explorer's
+ * `explorer/src/connect/session.ts`: a slot at a relay, the offer for the QR code and the link, the wallet's notice that
+ * it saw the offer, and the grant, checked before the page takes it — then the page's confirmation to the wallet's
+ * reply slot (§14.2), sent before the slot closes, so the wallet shows "connected" on the page's word.
  *
- *   opening ──► offer ──► seen ──► checking ──► connected
+ *   opening ──► offer ──► seen ──► checking ──► connected (the page shows it at once; the confirmation goes out behind)
  *      │          │  ▲       │          │
  *      ▼          ▼  │       ▼          └─► a refused grant: back to offer or seen, with the reason
  *    failed    (2 minutes unseen: a new slot and new keys)
@@ -13,10 +15,13 @@
  */
 import { ed25519 } from "@noble/curves/ed25519";
 import { b64url, equal, fromB64Loose } from "./codec.js";
-import { ConnectError, type ConnectGrant, type Session, decodePayload, signerKind } from "./grant.js";
+import {
+  CONFIRM_DELIVERED_MS, CONFIRM_VERSION, ConnectError, type ConnectGrant, type ConnectReply, type Session, decodePayload, encodeConfirm,
+  loginMessage, signerKind,
+} from "./grant.js";
 import { type Offer, offerLink, offerText } from "./offer.js";
 import type { Dial, Frame, RelayLink } from "./relay.js";
-import { boxPublic, openLinkPayload, randomSecret } from "./seal.js";
+import { boxPublic, openLinkPayload, randomSecret, sealLinkPayload } from "./seal.js";
 
 /** How long one offer is shown unseen before a new slot and new keys replace it. */
 export const QR_LIFE_MS = 2 * 60_000;
@@ -111,6 +116,8 @@ interface Slot {
   link: string;
   opened: number;
   link_: RelayLink | null;
+  /** The latest reply that opened for the slot: where the wallet waits for the page's confirmation (§14.2). */
+  reply: ConnectReply | null;
 }
 
 export class ConnectSession<T> {
@@ -128,6 +135,8 @@ export class ConnectSession<T> {
   private readonly visible: () => boolean;
   /** The visitor took the offer to the wallet on this phone: it stays until the slot's end. */
   private held = false;
+  /** The slot's connection while the page's confirmation is on its way, after the page connected. */
+  private confirming: RelayLink | null = null;
 
   constructor(private readonly o: SessionOptions<T>) {
     this.now = o.now ?? (() => Date.now());
@@ -169,7 +178,7 @@ export class ConnectSession<T> {
       }
       const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
       const started = this.now();
-      this.slot = { base, keys, offer, text: offerText(offer), link: offerLink(offer), opened: started, link_: opened.link };
+      this.slot = { base, keys, offer, text: offerText(offer), link: offerLink(offer), opened: started, link_: opened.link, reply: null };
       this.attach(opened.link);
       this.o.events.telemetry("connect_open", { relay: this.o.relays.indexOf(base) + 1, webcrypto: keys.webCrypto });
       this.setPhase({ kind: "offer", offer, text: this.slot.text, link: this.slot.link, expiresAt: started + QR_LIFE_MS });
@@ -184,12 +193,14 @@ export class ConnectSession<T> {
     this.fail("no_relay");
   }
 
-  /** Stop everything: the slot goes with its connection. */
+  /** Stop everything: the slot goes with its connection, a confirmation still on its way with it. */
   stop(): void {
     this.stopped = true;
     this.generation++;
     this.clearTimers();
     this.closeLink();
+    this.confirming?.close();
+    this.confirming = null;
     this.slot?.keys.boxSecret.fill(0);
     this.slot = null;
   }
@@ -338,6 +349,13 @@ export class ConnectSession<T> {
       }
       return;
     }
+    if (payload.kind === "reply") {
+      // Where the wallet waits for the page's word: kept for the grant that follows (§14.2 step 3). Anyone who saw the
+      // QR could deliver one, so it counts only for the grant whose login it names.
+      slot.reply = payload.reply;
+      this.o.events.telemetry("connect_reply");
+      return;
+    }
     if (this.phase.kind === "checking" || this.phase.kind === "connected") return;
     void this.check(slot, payload.grant, payload.bytes);
   }
@@ -357,11 +375,14 @@ export class ConnectSession<T> {
         seen: this.seen,
       });
       this.clearTimers();
-      this.closeLink();
-      slot.keys.boxSecret.fill(0);
+      // The page shows the connection now (§14.1); the confirmation goes to the wallet behind it, and the slot closes
+      // once it is on its way (§14.2 step 3).
+      const link = slot.link_;
+      slot.link_ = null;
       this.slot = null;
       this.setPhase({ kind: "connected" });
       this.o.connected(value);
+      void this.confirm(link, slot, grant);
     } catch (e) {
       if (this.slot !== slot || this.stopped) return;
       const reason = e instanceof ConnectError ? e.reason : "unchecked";
@@ -373,6 +394,51 @@ export class ConnectSession<T> {
       // be, so it is due now, or the offer would stay to the slot's thirty.
       if (back.kind === "offer" && this.now() >= back.expiresAt) this.expire();
     }
+  }
+
+  /**
+   * The page's confirmation (§14.2 step 3): to the reply slot whose `login` is this grant's, sealed to the reply's key
+   * with the reply slot and the page's `P` as its associated data, delivered on the slot's own connection; the relay's
+   * `link_delivered` is waited for `CONFIRM_DELIVERED_MS`, then the connection closes. Without a reply (an older
+   * wallet), one for another login, or no connection, the slot just closes: the wallet says so on its side.
+   */
+  private async confirm(link: RelayLink | null, slot: Slot, grant: ConnectGrant): Promise<void> {
+    const reply = slot.reply;
+    const login = loginMessage(grant.login);
+    slot.keys.boxSecret.fill(0);
+    if (!link) {
+      this.o.events.telemetry("connect_confirm", { outcome: "no_link" });
+      return;
+    }
+    if (!reply || !equal(reply.login, login)) {
+      this.o.events.telemetry("connect_confirm", { outcome: reply ? "other_login" : "no_reply" });
+      link.close();
+      return;
+    }
+    this.confirming = link;
+    const confirm = encodeConfirm({ version: CONFIRM_VERSION, login, at: BigInt(this.now()) });
+    const payload = sealLinkPayload(reply.key, reply.sid, slot.keys.page, confirm);
+    const sid = b64url(reply.sid);
+    const delivered = await new Promise<boolean | null>((resolve) => {
+      const timer = this.setT(() => resolve(null), CONFIRM_DELIVERED_MS);
+      link.onFrame = (f) => {
+        if ((f.type === "link_delivered" && f.sid === sid) || (f.type === "error" && f.detail === "link_deliver")) {
+          this.clearT(timer);
+          resolve(f.type === "link_delivered" && f.delivered === true);
+        }
+      };
+      link.onClose = () => {
+        this.clearT(timer);
+        resolve(false);
+      };
+      if (!link.send({ type: "link_deliver", relay: b64url(reply.relay), sid, payload: b64url(payload) })) {
+        this.clearT(timer);
+        resolve(false);
+      }
+    });
+    this.o.events.telemetry("connect_confirm", { outcome: delivered === null ? "no_answer" : delivered ? "delivered" : "not_delivered" });
+    if (this.confirming === link) this.confirming = null;
+    link.close();
   }
 
   // ── Bookkeeping ────────────────────────────────────────────────────────────

@@ -12,6 +12,14 @@
     "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
     "network": "devnet"
   },
+  "confirm": {
+    "at": "1791800005000",
+    "borsh_hex": "01bfc9f9fc43f47e2008df660707b018f093f895f91feba9712b9a478652ebcc2088519a2fa1010000",
+    "login_hex": "bfc9f9fc43f47e2008df660707b018f093f895f91feba9712b9a478652ebcc20",
+    "now": "1791800015000",
+    "one_time_secret_hex": "8080808080808080808080808080808080808080808080808080808080808080",
+    "payload": "yEoPeE2XI8KFdycv9wDUK2ySPCP1vdOOkzrHfWzrkVcf9fgVyTCqsZjeQbiyeKNgY5nuZ_32TYeUFM7rA6DnFsTI221Vw-9fQzAVXfojIu1gqan4zNebVPU"
+  },
   "grants": [
     {
       "address": "dsalt1qwf4vw6mv8dnj58tgff27u7rszyuphuy4u5tkg5shng6y738anwlswpgfhw",
@@ -287,6 +295,43 @@
     }
   ],
   "plain_secret_hex": "4444444444444444444444444444444444444444444444444444444444444444",
+  "refused_confirms": [
+    {
+      "name": "sealed-for-another-reply-slot",
+      "payload": "APgasOsOGN214kfTjyXHo1LDn8d6dMs_c50wn2nuSHg57SBiKhbK3kM2umGxyL-gkdCMKSmoovPIQiAQdXtojR9i6otk5o33BbO98_eWZN1148_8wIVcnp4",
+      "reason": "open"
+    },
+    {
+      "name": "sealed-for-another-page-key",
+      "payload": "wYHWRYCvbC9_ZhyZ1SsRAWyFstgHrRi-EnW0Y8EFSRkeHQL8YidDicT8Cm9FwjUulo882z0202PJ8MVoeUpP2bZ11_ozaZrRtQWg2VSJRVXs9vHoAL_ZcWc",
+      "reason": "open"
+    },
+    {
+      "name": "another-login",
+      "payload": "JaSfnHV0lAcE7mDaEDlnNlLwkOl0slSJPfafGfKYmnpBzv481Gyyrz3VWXJvSdTKzE9WBJ189-S7BQgkPGBBdQAzztAlIPKQ7fpGsPxLgbbusl749xdjxXM",
+      "reason": "login"
+    },
+    {
+      "name": "too-late",
+      "payload": "AW_pcu4Vv_yD_zXRnT4UmkpRXcFRW_BcaxgpKK48uRQMsFm0IGK0q8OuA6bYmO8G4VKTIp3eYOwpzn3EON0rxTJ5fwHbG5goLa5QM6ecMCEcHsNFjbnS2wc",
+      "reason": "time"
+    },
+    {
+      "name": "version-2",
+      "payload": "wcbz1sNgwCMGqF3zeK1G4jZbkoMB0L8YosSA-JKMAzRQKj7ZaKq8QQFIPqjo6jyGFRXsd8IMHDmmjaj9zhEDkoFOqrHeQ3UAAvAU_d0G49K9_0wt1s5fur0",
+      "reason": "version"
+    },
+    {
+      "name": "trailing-byte",
+      "payload": "qBESx7F_kzSg9__128gjiorBKIKWELkzxzCkfI4HYmY7rz169nHc9YmWBPLx5n_Am6-PtuRtI4QjA9Fu6p3bBuhktaSR1TAF6jqlshtvKVfzScra4O-1U5s4",
+      "reason": "encoding"
+    },
+    {
+      "name": "empty",
+      "payload": "aEMMgB7C7cpdU39NJChOfc_u4cAADQa1I7WCSANRiwC-Fr_oVMvIk2yFF0Mq6YeC",
+      "reason": "encoding"
+    }
+  ],
   "refused_grants": [
     {
       "grant_borsh_hex": "015b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b726ac76b6c3b672a1d684a55ee787011381bf095e5176452179a344f44fd9bbf1100000068747470733a2f2f73616c7469782e696f5151515151515151515151515151515151515151515151515151515151515151f80cccdce4ae1c07ae208a2adf99a310ae4207e0306fa0236110b06827bbb8d0003e9a2fa101000000d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48aec517c7d0d1752e9a06a20c8b1363ba81b0b2460b283ba4f759db722163607ce4d484605d336fc2670e4869a1a067c7d43c0d41330622d61d0e0ed90e3dd708",
@@ -337,9 +382,9 @@
       "reason": "signature"
     },
     {
-      "grant_borsh_hex": "025a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a726ac76b6c3b672a1d684a55ee787011381bf095e5176452179a344f44fd9bbf1100000068747470733a2f2f73616c7469782e696f5151515151515151515151515151515151515151515151515151515151515151f80cccdce4ae1c07ae208a2adf99a310ae4207e0306fa0236110b06827bbb8d0003e9a2fa101000000d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4830498eb43e77924b141139e42443fcd2452713778dc5c4aa4fca3085c8dfa336ab0b36d3d474b30da5dc1826e52356f93dd3baadef82d1617d9979d149586b06",
+      "grant_borsh_hex": "035a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a726ac76b6c3b672a1d684a55ee787011381bf095e5176452179a344f44fd9bbf1100000068747470733a2f2f73616c7469782e696f5151515151515151515151515151515151515151515151515151515151515151f80cccdce4ae1c07ae208a2adf99a310ae4207e0306fa0236110b06827bbb8d0003e9a2fa101000000d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c4830498eb43e77924b141139e42443fcd2452713778dc5c4aa4fca3085c8dfa336ab0b36d3d474b30da5dc1826e52356f93dd3baadef82d1617d9979d149586b06",
       "log": "none",
-      "name": "version-2",
+      "name": "version-3",
       "reason": "version"
     },
     {
@@ -502,16 +547,33 @@
       "reason": "encoding"
     },
     {
-      "name": "first-byte-2",
-      "payload": "PUGjWcy7QGRHW_fqX5OSj7BNR1N4CvfRLj4wFzb3hgJZo7s0xedRRAvdzoDt3EoK8KruhGGbBeFIEWZr9PslUVH7gxyFR9bNv1zm6D8j3035t5d5fAdkUTzfE3OKtxDjlgijWAn-knRVrPtu6bUgLac2yjPlExUc4hu0jFT-PhIN4Z8iNZ2k1yJWQufP_XYKIQwFoM-OwmzKbK2Z78RvdvNcaAUTiHLGm42mwZlHzcYohV-7HqdrukBjdfcCtlOHjWRUplhVFiN6VdX6gbdC-Ld7nZ9HCquk3iMU6Nd2DgoXHAPwIl3E6I7b46TwkvJn_EEOTwL7ysSDEOytPgTCps2k2VhereI51ZTsmqhSt2WtmAMW3r6g8ese57RbsrMolphDgReD7tvbbKcSnFbm",
+      "name": "first-byte-3",
+      "payload": "PUGjWcy7QGRHW_fqX5OSj7BNR1N4CvfRLj4wFzb3hgJYo7s0xedRRAvdzoDt3EoK8KruhGGbBeFIEWZr9PslUVH7gxyFR9bNv1zm6D8j3035t5d5fAdkUTzfE3OKtxDjlgijWAn-knRVrPtu6bUgLac2yjPlExUc4hu0jFT-PhIN4Z8iNZ2k1yJWQufP_XYKIQwFoM-OwmzKbK2Z78RvdvNcaAUTiHLGm42mwZlHzcYohV-7HqdrukBjdfcCtlOHjWRUplhVFiN6VdX6gbdC-Ld7nZ9HCquk3iMU6Nd2DgoXHAPwIl3E6I7b46TwkvJn_EEOTwL7ysSDEOytPgTCps2k2VhereI51ZTsmqhSt2WtmAMW3r6g8ese57RbsrMSBXDvOe9EhtnvnfuLK2wb",
       "reason": "version"
     },
     {
       "name": "empty",
       "payload": "Q_J2xIge-m9-ERiqelmx67G_dQwyBjJRCcsPdMaoPwh4pb5yftjcQS0CwniVzAXt",
       "reason": "encoding"
+    },
+    {
+      "name": "reply-tag-on-a-grant",
+      "payload": "bBq3qZ0192YFNiixFZqNRUwTqYBvfydnB3GJrDJliAibbw8ar988bA-WK1JE13dVmROqLchxeo7eo4MgoeqLaTMAc01LkgdpQ64GEMRDL1V-x1UJjfYodmwfxntsntGZkYC7_0FFIWmoqao5SUQZYI8aOKHgtEOesXEd0WC34i0WYAouBzt0qcW4HSuxvJ9GCEYfNFOQ06unk5OGCFlqheK6tN-V1_bpEFB09YyYnAJvcqmgUQsvJLIU0YjqbKqKzU8NczujyitZWM2Ehun4UWUugJI2Byzf6XEf_ufBruX1PC8KvQ2cN9emO7EP7nuMqAJTGw9JV-V30bONODoYPCrrnVoHuSJKoV1jbwbQ5J41B4tH0rrygTkutIczZv4tVegZvgHibkskcg6tSZ9B",
+      "reason": "encoding"
     }
   ],
+  "reply": {
+    "borsh_hex": "0268f4b6017d0f876a55c80a82b8388a54aad264d367269e2de8be079c935b5f965555555555555555555555555555555555555555555555555555555555555555dccf9fc001b345c77474e76e1021bde04f7ea0ed8ee61f7f6f1a4e47a5af2f54bfc9f9fc43f47e2008df660707b018f093f895f91feba9712b9a478652ebcc20",
+    "for_grant": "plain-own-key",
+    "key_public_hex": "dccf9fc001b345c77474e76e1021bde04f7ea0ed8ee61f7f6f1a4e47a5af2f54",
+    "key_secret_hex": "5656565656565656565656565656565656565656565656565656565656565656",
+    "login_hex": "bfc9f9fc43f47e2008df660707b018f093f895f91feba9712b9a478652ebcc20",
+    "one_time_secret_hex": "6363636363636363636363636363636363636363636363636363636363636363",
+    "payload": "gV-2MUQF4AfQTtIVwiPVzUt5nQe7cYmtENvzJOpTQnGq3UkbxoSq5p0jxWeYas2DT_L4DOBPYPht3G03HXsOpjTGcSoN88W12yMIDajLsYd7RR3IUpCnfEK1hWSHZJ2EM6NrmV5ZHz8t3Hm8Ln6a3fDgbWVpv-LMZ8PggH7CPK7ADvVrw1B_SZEbAqXsi2fnbI7GiKcGsYqGWT1AivfjMuDxQDhBRewukr2tsu-rnXMl",
+    "relay_public_hex": "68f4b6017d0f876a55c80a82b8388a54aad264d367269e2de8be079c935b5f96",
+    "relay_secret_hex": "3636363636363636363636363636363636363636363636363636363636363636",
+    "sid_hex": "5555555555555555555555555555555555555555555555555555555555555555"
+  },
   "rules": [
     "offer: \"saltix-connect:1:\" then six values joined by \":\": relay node key, sid, Q (X25519), P (Ed25519), origin, name; base64url without padding; keys 32 bytes; origin and name UTF-8",
     "link: \"https://saltix.io/connect#\" followed by the offer's text",
@@ -521,7 +583,8 @@
     "ConnectLogin: Borsh {network [32] (genesis hash), account [32], origin String (u32 length + UTF-8), sid [32], page [32] (P), at u64 (Unix ms)}",
     "message = BLAKE3 derive_key(\"Saltix connect login v1\", Borsh(ConnectLogin)); an Ed25519 signer signs the 32 bytes (strict verification), a P-256 signer signs SHA-256 of them as r ‖ s with s ≤ n/2",
     "ConnectGrant: Borsh {version u8 = 1, login, signer DeviceKey (tag 0 Ed25519 [32], tag 1 P256 [33] compressed), signature [64]}",
-    "ConnectSeen: Borsh {tag u8 = 0, at u64}; a payload's first byte tells them apart: 0 seen, 1 grant, anything else refused; one value, nothing after it",
+    "ConnectSeen: Borsh {tag u8 = 0, at u64}; ConnectReply: Borsh {tag u8 = 2, relay [32] (the node key of the wallet's relay), sid [32] (its reply slot), key [32] (K, X25519), login [32] (the message of the login that follows)}; a payload's first byte tells them apart: 0 seen, 1 grant, 2 reply, anything else refused; one value, nothing after it",
+    "ConnectConfirm: Borsh {version u8 = 1, login [32] (the message of the login the page took), at u64}; sealed to the reply's key K as a link payload with aad = reply sid ‖ P and delivered to the reply slot (link_deliver from the page's slot connection); the wallet takes it when: version 1; login is the message of the login it sent; |at − now| ≤ 600000 ms; it shows connected on the page's confirmation, or says the login was sent and not confirmed after 10 s (19-connect §14)",
     "payload: base64url of E ‖ XChaCha20-Poly1305(key, nonce = 24 zero bytes, aad = sid ‖ P), E = X25519(e, 9), S = X25519(e, Q), key = BLAKE3 derive_key(\"Saltix link payload v1\", S ‖ E ‖ Q); e = one_time_secret",
     "the page takes a grant when: version 1; network, origin, sid and page are its session's; |at − now| ≤ 600000 ms; the signature verifies under signer; and by the account's key event log (account_log): an empty log and an Ed25519 signer whose personal id (BLAKE3 derive_key(\"Saltix address v1\", [0] ‖ key)) is the account, or a log that checks offline from its origin (13-accounts §7) whose controller lists the signer as a device that is not a guardian",
     "the address shown: kind 0 for an empty log or a log whose origin is a key (an upgraded account), kind 5 for a log whose origin is a root",

@@ -7,8 +7,8 @@ import { readFileSync } from "node:fs";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { decodeSignedProfile, encodeAddress, fromHex, policyOf, profileToJson, toHex, verifyByDeviceKey } from "@saltix/grain-server/web";
 import {
-  ConnectError, b64url, checkAccount, checkGrant, checkSiteProfileDocument, decodePayload, encodeGrant, encodeLogin, encodeSeen, fromB64url,
-  loginMessage, offerLink, offerText, openLinkPayload, parseOffer, readSiteProfile, sealLinkPayload,
+  ConnectError, b64url, checkAccount, checkConfirm, checkGrant, checkSiteProfileDocument, decodeConfirm, decodePayload, encodeConfirm, encodeGrant,
+  encodeLogin, encodeReply, encodeSeen, fromB64url, loginMessage, offerLink, offerText, openLinkPayload, parseOffer, readSiteProfile, sealLinkPayload,
 } from "../dist/index.js";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../../../vectors/${name}`, import.meta.url), "utf8"));
@@ -133,6 +133,45 @@ test("a grant of another version is refused however it came", () => {
   assert.equal(reasonOf(() => checkGrant(payload.grant, session, at + 600_000n)), "taken", "10 minutes is within");
   assert.equal(reasonOf(() => checkGrant(payload.grant, session, at + 600_001n)), "time");
   assert.equal(reasonOf(() => checkGrant(payload.grant, session, at - 600_001n)), "time");
+});
+
+test("the wallet's reply reaches the page like a grant and names the grant it goes with (§14.2)", () => {
+  const r = v.reply;
+  const reply = { relay: fromHex(r.relay_public_hex, 32), sid: fromHex(r.sid_hex, 32), key: fromHex(r.key_public_hex, 32), login: fromHex(r.login_hex, 32) };
+  assert.equal(toHex(encodeReply(reply)), r.borsh_hex);
+  assert.deepEqual(reply.key, x25519.getPublicKey(fromHex(r.key_secret_hex, 32)));
+  const sealed = sealLinkPayload(x25519.getPublicKey(boxSecret), session.sid, session.page, encodeReply(reply), fromHex(r.one_time_secret_hex));
+  assert.equal(b64url(sealed), r.payload);
+  const plain = openLinkPayload(boxSecret, session.sid, session.page, fromB64url(r.payload));
+  assert.deepEqual(decodePayload(plain), { kind: "reply", reply });
+  const named = v.grants.find((g) => g.name === r.for_grant);
+  assert.equal(toHex(reply.login), named.message_hex);
+});
+
+test("the page's confirmation opens for the wallet's reply slot alone, and the refused ones fail for their reason", () => {
+  const r = v.reply;
+  const c = v.confirm;
+  const keySecret = fromHex(r.key_secret_hex, 32);
+  const reply = { sid: fromHex(r.sid_hex, 32), key: fromHex(r.key_public_hex, 32), login: fromHex(r.login_hex, 32) };
+  const confirm = { version: 1, login: fromHex(c.login_hex, 32), at: BigInt(c.at) };
+  assert.equal(toHex(encodeConfirm(confirm)), c.borsh_hex);
+  const sealed = sealLinkPayload(reply.key, reply.sid, session.page, encodeConfirm(confirm), fromHex(c.one_time_secret_hex));
+  assert.equal(b64url(sealed), c.payload);
+  const nowC = BigInt(c.now);
+  const plain = openLinkPayload(keySecret, reply.sid, session.page, fromB64url(c.payload));
+  assert.deepEqual(decodeConfirm(plain), confirm);
+  checkConfirm(confirm, reply.login, nowC);
+  assert.equal(openLinkPayload(boxSecret, reply.sid, session.page, fromB64url(c.payload)), null, "not Q's");
+  assert.equal(openLinkPayload(keySecret, session.sid, session.page, fromB64url(c.payload)), null, "not the page's slot");
+  assert.ok(v.refused_confirms.length >= 7);
+  for (const x of v.refused_confirms) {
+    const reason = reasonOf(() => {
+      const plain = openLinkPayload(keySecret, reply.sid, session.page, fromB64url(x.payload));
+      if (!plain) throw new ConnectError("open");
+      checkConfirm(decodeConfirm(plain), reply.login, nowC);
+    });
+    assert.equal(reason, x.reason, x.name);
+  }
 });
 
 test("base64url in one spelling only", () => {

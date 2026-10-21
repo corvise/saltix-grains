@@ -1,7 +1,8 @@
 # Saltix Connect: an account on a web page
 
 > Reflects Saltix 19-connect (basis for implementation 2026-10-12; the Connect profile, the Connect sheet and "Sign in
-> with Saltix", 2026-10-16), as of corvise/saltix `7d3744c5` (2026-10-19). Section numbers are the specification's.
+> with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `a6d0de6b` (2026-10-21). Section
+> numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
@@ -373,3 +374,66 @@ Relays use self-signed certificates that apps pin by their records ([relays](rel
 a browser cannot pin, so a site reaches them through a WebSocket path of its own that pins them, or through a public
 gateway once one exists. `@saltix/connect` does the page's side: `createConnect`, `signInButton`, `openConnectDialog`,
 `verifyGrant`.
+
+## 14. Connection feedback
+
+The owner's rule (2026-10-21): the reference standard for every site, mini-app and developer. Three duties.
+
+### 14.1. The page shows the connection the moment the login arrives
+
+The page renders the connected state from the login itself, in the same browsing context, as soon as the grant checks
+(§5): who (the address, shortened), since when, and how to disconnect. No reload, no polling, no Back. The code it
+showed is gone with it: the slot is closed, and nothing offers the consumed offer again. On the same phone the link to
+Saltix opens in the same tab, never a new one; a page reached while its connection is kept shows it at once, and every
+tab of the origin follows a connection made or forgotten in another. `@saltix/connect` does all of it; the page renders
+`connected`.
+
+### 14.2. The page confirms to the wallet
+
+The relay's `link_delivered` says a payload reached the slot's connection, not that a page took it. So the wallet shows
+"connected" on the page's word, which travels the same way as the login, the other way round.
+
+```text
+ConnectReply {                       delivered to the page's slot right before the grant
+  tag:    u8        2
+  relay:  [u8; 32]  the node key of the wallet's relay, which holds the reply slot
+  sid:    [u8; 32]  the reply slot
+  key:    [u8; 32]  K: an X25519 key of this request, the confirmation is sealed to
+  login:  [u8; 32]  the message of the login that follows (§5)
+}
+ConnectConfirm {                     the page's answer at the reply slot
+  version: u8       1
+  login:   [u8; 32] the message of the login the page took
+  at:      u64      Unix ms
+}
+```
+
+1. The wallet opens a reply slot on its own relay connection (`link_open`), makes `K`, and delivers `ConnectReply`
+   to the page's slot sealed like a grant (first byte 2: an older page ignores it), then the grant. A relay that found
+   no slot for the reply found none for the grant: both are delivered again; once the reply was delivered, the grant
+   alone.
+2. The page keeps the latest reply that opened for its slot and, when a grant checks, answers the reply whose `login`
+   is that grant's login message — no other. `ConnectConfirm` is sealed to `K` as a link payload with
+   `aad = reply sid ‖ P` and delivered with `link_deliver {relay, sid, payload}` on the page's own slot connection,
+   which a relay takes from a connection holding a slot (09-relay §10.3 step 5); the page waits for `link_delivered`
+   up to 5 seconds, then closes its slot. It carries no account and no address.
+3. The wallet takes a confirmation that opens for `K`, its reply slot and the offer's `P`, of version 1, naming the
+   login it sent, within 10 minutes of its clock. Then, and only then, "Connected".
+
+Vectors: `reply`, `confirm` and `refused_confirms` in `vectors/connect-v1.json`.
+
+### 14.3. The wallet's sheet ends, always
+
+From Continue, within 40 seconds at most: **Connected** (the page's confirmation); **Login sent** (delivered, no
+confirmation within 10 seconds: go back to the site; if it does not show you signed in, reload it and scan its new
+code); **Not delivered** (30 seconds and the relay never found the slot: scan the code the page shows now);
+**Failed** (could not sign, no relay, the relay refused). Delivery is tried again every 2.5 seconds while the relay
+finds no slot, for 30 seconds in all. The wallet records the page in its list of connected sites once the grant was
+delivered, confirmed or not.
+
+### 14.4. The profile check has one reading
+
+A site's profile is at `/.well-known/saltix-connect` and nowhere else; the registry holds mini-apps' profiles only. An
+answer that is not a JSON object is **no profile** (the site's silence); a JSON document that is not a profile that
+checks **did not check** (the site's mistake, with its reason). A single-page site that answers its page for every path
+is never shown as a site whose profile failed.

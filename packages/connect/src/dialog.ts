@@ -85,8 +85,10 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
   head.append(markElement(doc, DIALOG_CLASSES.mark), title, close);
   const scan = element(doc, "p", DIALOG_CLASSES.scan, words.scan);
   const code = element(doc, "div", "saltix-connect-dialog__code");
+  // On the same phone the link opens Saltix in this very tab (19-connect §14.1): a verified link hands the offer to the
+  // app and the page stays where the visitor returns to. A new tab would leave the visitor on a page that still shows
+  // the offer, which the page has consumed by then.
   const open = element(doc, "a", DIALOG_CLASSES.open, words.open);
-  open.setAttribute("target", "_blank");
   open.setAttribute("rel", "noopener noreferrer");
   open.hidden = true;
   const status = element(doc, "p", DIALOG_CLASSES.status);
