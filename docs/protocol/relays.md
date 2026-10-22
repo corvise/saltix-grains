@@ -2,7 +2,8 @@
 
 > Reflects Saltix 09-relay §1.1–§1.3, §2, §3, §5, §6, §10.1, §10.3, §10.5, §10.5.2 and §10.7 (version 2, with the
 > changes of 2026-10-15 to 2026-10-19), 10-storage §4 and 11-access §2–§5 (approved 2026-10-05), as of corvise/saltix
-> `7d3744c5` (2026-10-19). Only the client side an app's server or a Connect page uses.
+> `7d3744c5` (2026-10-19); the pool vocabulary (a channel with a pool's exchange) as of corvise/saltix `e6448704`
+> (2026-10-22). Only the client side an app's server or a Connect page uses.
 
 Relays carry messages between clients: Saltix wallets, grains' servers, Connect pages. Clients encrypt the content themselves; a relay cannot read it. Any relay is an entry point: a client connects to one,
 and relays pass frames to each other and keep mailboxes for addresses that are offline.
@@ -252,10 +253,10 @@ not forwarded: wait, or pay. A grain's server's frames use the free share (the S
 users' frames go on the sponsor's lane when the manifest names a sponsor ([grains §5.4](grains.md#54-relays-real-time-between-users)),
 and on the free share otherwise: never on the user's own channel.
 
-**Channels.** A payer (a person, an app's backend) keeps WORK in a channel with one city's exchange, part of its account:
+**Channels.** A payer (a person, an app's backend) keeps WORK in a channel with one pool's exchange, part of its account:
 `OpenChannel {exchange, amount}`, `TopUpChannel`, `CloseChannel` (the deposit returns 3 days later); at most 2 channels,
 with different exchanges ([basics](basics.md#transactions-an-apps-tools-sign)). `exchange_list` names the exchanges.
-The SDK: `grain sponsor init`, `grain sponsor`, `grain sponsor open --exchange <city> --amount <WORK>`.
+The SDK: `grain sponsor init`, `grain sponsor`, `grain sponsor open --exchange <pool> --amount <WORK>`.
 
 ### Sponsor certificates
 

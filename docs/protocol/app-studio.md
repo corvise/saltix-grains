@@ -2,7 +2,8 @@
 
 > Reflects Saltix 24-app-studio (approved 2026-10-15; the launch, the app's home, the console, invites, Awaiting you
 > and the Connect profile, 2026-10-15 to 2026-10-16; server keys that prove their holder, protocol version 2; pairing a
-> server by QR code, 2026-10-19), as of corvise/saltix `44bbf728` (2026-10-20). Section numbers are the specification's.
+> server by QR code, 2026-10-19), as of corvise/saltix `44bbf728` (2026-10-20); the pool vocabulary (miners' ratings,
+> `miners_count`, `miners_sum`) as of corvise/saltix `e6448704` (2026-10-22). Section numbers are the specification's.
 
 Anyone makes an app in Saltix's **My apps**: names it, binds a username, pairs the computer that runs its program by a
 QR code (the server key is made there and never leaves it) or, where no command runs, gets a **developer key**, and
@@ -323,9 +324,9 @@ The marketplace shows two kinds of facts and never mixes them.
 **Checked on chain: ratings.** `RateGrain { slug, score: u8, review: String }` (tag 37), by any account but the owner,
 value 0 plus its fee: `score` 1–5, or 0 to withdraw the rating (of a live or retired grain; it fails when there is
 none); `review` at most 140 characters with no control characters, possibly empty. One rating per account and grain;
-the latest counts. The registry keeps each rating with its slot and whether the account held an active citizenship
-then, and per grain the count and sum of scores, overall and of citizens' ratings, which the card shows apart ("4.6
-from 23 citizens"). A review is shown without Unicode `Cc` and `Cf` characters and the line and paragraph separators
+the latest counts. The registry keeps each rating with its slot and whether the account held an active mining license
+then, and per grain the count and sum of scores, overall and of miners' ratings, which the card shows apart ("4.6
+from 23 miners"). A review is shown without Unicode `Cc` and `Cf` characters and the line and paragraph separators
 (`grain_ratings` gives it so). A rating is public and names its account. In an app's chat, a user who sent it requests
 on at least three different days may rate it from the chat's menu. Besides: the slots of registration and last update,
 the number of versions, the owner (with a username if bound), the owner's other apps, the verified mark.
@@ -345,7 +346,7 @@ relay (`grain_stats`), nodes check and keep them, and any node answers `grain_st
 `grain_stats_list {sort?, after?, limit?}` (`sort: "users"`: the most used first). **Only a public app's numbers are
 published**: a private app's server hands none to its relay, and nodes refuse and drop them.
 
-The wallet interface: `grain_get` and `grain_list` show `ratings {count, sum, citizens_count, citizens_sum}`;
+The wallet interface: `grain_get` and `grain_list` show `ratings {count, sum, miners_count, miners_sum}`;
 `grain_ratings {slug, after?, limit?}` lists ratings newest first ([wallet interface](wallet-interface.md#methods)).
 
 ## 8. Parameters

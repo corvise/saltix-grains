@@ -387,7 +387,7 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
   const grain: RegisteredGrain = {
     slug: o.slug, owner, version: 1, id: toHex(randomBytes(32)), registered: 1,
     updated: 1, retired: null, deposit: "10000000000", manifest: signed, servers: [...o.servers], category: 9, public: o.public ?? true,
-    members: [...(o.members ?? [])], handles: [], ratings: { count: 0, sum: 0, citizens_count: 0, citizens_sum: 0 },
+    members: [...(o.members ?? [])], handles: [], ratings: { count: 0, sum: 0, miners_count: 0, miners_sum: 0 },
   };
   const controllers = new Map<string, Controller>();
   const calls: Record<string, number> = {};

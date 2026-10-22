@@ -2,7 +2,8 @@
 
 > Reflects Saltix 12-grains (approved 2026-10-05; bridge version 3, the page's frame, check-first sign-in, invoices
 > from a registered server key and the Connect profile, 2026-10-16; the icon standard and bundles the network keeps,
-> 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19). Section numbers are the specification's.
+> 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19); the pool vocabulary (storage pools among a bundle's
+> keepers) as of corvise/saltix `e6448704` (2026-10-22). Section numbers are the specification's.
 
 A **grain** is an app that opens inside a Saltix wallet, from the Apps section, a chat or a link, with the wallet's
 identity, payments, storage and relays at hand and never its keys. Saltix calls grains *mini-apps* in what users read;
@@ -507,7 +508,7 @@ permission nothing in the app's sources uses.
 A bundle is a ZIP of the grain's files, at most 20 MiB. `bundle = derive("Saltix grain bundle v1", its bytes)`.
 
 **The network keeps it** ([images §6–§8](images.md#6-named-blobs)): a bundle of at most 16 MiB that a live grain's
-manifest names is a named blob, kept whole by its keepers (three storage cities and five relays offering space) and
+manifest names is a named blob, kept whole by its keepers (three storage pools and five relays offering space) and
 served by every relay (`GET /_blob/grain_bundle/<hash>` with `Range`, `blob_get`). The developer's machine puts it there
 itself with `blob_put`: before the owner signs the manifest, on the statement of a server key the grain's record names,
 which holds it for a day; or after the registry names it ([images §7.3](images.md#73-bundles-from-the-developers-machine-into-the-network)).

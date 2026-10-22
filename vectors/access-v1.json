@@ -31,11 +31,11 @@
     "device_private_hex": "4444444444444444444444444444444444444444444444444444444444444444",
     "device_public_hex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
     "exchange_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
-    "operator_private_hex": "2222222222222222222222222222222222222222222222222222222222222222",
-    "operator_public_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
     "payer_account_hex": "12d13022694ec2032f65b6d45d83ef9fb3582e490287c17697fed48761d350ef",
     "payer_private_hex": "8dde3bb31f98a8b2eba1a4042a50ea1864437784eef15bf877db086b165edf1b",
     "payer_public_hex": "92147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d",
+    "pool_key_private_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "pool_key_public_hex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
     "relay_public_hex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
   },
   "phone_grant": {
@@ -55,9 +55,9 @@
   "rules": [
     "all Borsh, integers little-endian; µWORK for WORK amounts, slots for times",
     "actions after Registry (tag 1): OpenChannel tag 2 {exchange: [u8; 32], amount: u64}; TopUpChannel tag 3 {exchange, amount}; CloseChannel tag 4 {exchange}; StakeAccess tag 5 {amount: u64 SALT}; UnstakeAccess tag 6",
-    "registry calls after UpdateCity (tag 3): OpenExchange tag 4 {city: [u8; 32], fee_bp: u16} paid in WORK; CloseExchange tag 5 {city}; ExchangeDebt tag 6 is the ledger's own",
-    "the labor fund (01-foundation §5.3): BuyWork tag 19, paid in SALT, credits `amount` µWORK (1 SALT = 1 000 WORK, a base unit for a µWORK); ReturnWork tag 21, paid in WORK, returns it at par; Give tag 22 {fund: u8}, paid in SALT, fund FuturePayments 0 | Gratitude 1",
-    "allowance: {exchange [32], payer [32], relay [32], client_key [32], amount u64, issued u64, expires u64, nonce [16]}; id = BLAKE3 derive_key(\"Saltix access allowance v1\", genesis hash ‖ allowance); the operator signs the id",
+    "registry calls after UpdatePool (tag 3): OpenExchange tag 4 {pool: [u8; 32], fee_bp: u16} paid in WORK; CloseExchange tag 5 {pool}; ExchangeDebt tag 6 is the ledger's own",
+    "the work fund (01-foundation §5.3): BuyWork tag 19, paid in SALT, credits `amount` µWORK (1 SALT = 1 000 WORK, a base unit for a µWORK); ReturnWork tag 21, paid in WORK, returns it at par; Give tag 22 {fund: u8}, paid in SALT, fund FuturePayments 0 | Gratitude 1",
+    "allowance: {exchange [32], payer [32], relay [32], client_key [32], amount u64, issued u64, expires u64, nonce [16]}; id = BLAKE3 derive_key(\"Saltix access allowance v1\", genesis hash ‖ allowance); the pool_key signs the id",
     "allowance request: {exchange [32], payer [32], relay [32], client_key [32], amount u64, grant Option<{certificate, signature [64]}>, nonce [16], at u64}; client_key signs BLAKE3 derive_key(\"Saltix allowance request v1\", genesis hash ‖ request); the allowance takes the nonce, issued = the exchange's slot, expires = issued + 86 400",
     "voucher: client_key signs BLAKE3 derive_key(\"Saltix access voucher v1\", allowance id ‖ total as u64 big-endian)",
     "sponsor certificate: {sponsor, user_key [32], per_day u64, services u8, issued u64, expires u64}; sponsor = Ed25519 tag 0 [32] (the payer's own key) | P256 tag 1 [33] (a managed payer's device, SEC1 compressed); the sponsor signs m = BLAKE3 derive_key(\"Saltix sponsor certificate v1\", genesis hash ‖ certificate): Ed25519 over m, or ECDSA P-256 over SHA-256 of m as r ‖ s with a low s",
@@ -137,8 +137,8 @@
         "amount": "10000000000",
         "call": {
           "call": "open_exchange",
-          "city_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
-          "fee_bp": 50
+          "fee_bp": 50,
+          "pool_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
         },
         "kind": "registry"
       },
@@ -155,7 +155,7 @@
         "amount": "0",
         "call": {
           "call": "close_exchange",
-          "city_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
+          "pool_hex": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
         },
         "kind": "registry"
       },

@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The pool vocabulary** (corvise/saltix #337, the owner's decision of 2026-10-22; a breaking change of the wallet
+  interface's words, with no aliases): the mining layer speaks the words of mining, here as in the protocol. A city is a
+  **pool**, its governor the **operator**, its node's signing key the **pool key**, a citizen a **miner** with a
+  **mining license**, the labor exchange **earnings**, the labor fund the **work fund**, subsidies **payouts**. What the
+  SDK reads changed with it: `exchange_list`'s rows carry `pool` and `pool_key` (once `city` and `operator`; the CLI's
+  `Exchange`, `grain sponsor open --exchange <pool>`), a grain's `ratings` are `{count, sum, miners_count, miners_sum}`
+  (once `citizens_*`; `GrainRatings`), `grain_list` sorts by `miners` and `grain_ratings`' rows say `miner`. The golden
+  vectors are synced at corvise/saltix `e6448704`, main's merge commit of #337: `access-v1.json` (`pool_key_*_hex`,
+  `pool_hex`, its rules) and `handles-v1.json` (the reserved names `pool` and `operator`) changed in words only, no byte
+  of any Borsh form or signature. The protocol pages, `AGENTS.md` and the guides use the new words; the old ones
+  survive only in this changelog's history.
+
 ### Security
 
 - **`grain pair` pairs only the app the developer named or confirmed** (Saltix 24-app-studio §3a). Before, an offer that

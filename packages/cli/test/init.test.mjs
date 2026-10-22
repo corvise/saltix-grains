@@ -84,7 +84,7 @@ async function fakeNode(relay, slug, servers) {
           grain: params.slug !== slug ? null : {
             slug, owner: "aa".repeat(32), version: 1, id: "11".repeat(32), registered: 1, updated: 1, retired: null, deposit: "0",
             manifest: null, servers: servers(), category: 0, public: true, members: [], handles: [],
-            ratings: { count: 0, sum: 0, citizens_count: 0, citizens_sum: 0 },
+            ratings: { count: 0, sum: 0, miners_count: 0, miners_sum: 0 },
           },
           deposit: "0",
         },
