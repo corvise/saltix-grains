@@ -1,8 +1,9 @@
 # Images: icons, named blobs and bundles in the network
 
 > Reflects Saltix 32-images (basis for implementation, 2026-10-19: named blobs, the image and bundle checks, the
-> mini-app icon standard, sealed bundles hosted by the network), as of corvise/saltix `b9019fdf` (2026-10-19). Section
-> numbers are the specification's.
+> mini-app icon standard, sealed bundles hosted by the network), as of corvise/saltix `b9019fdf` (2026-10-19); the pool
+> vocabulary (storage pools of different operators among a bundle's keepers) as of corvise/saltix `e6448704`
+> (2026-10-22). Section numbers are the specification's.
 
 Bytes that something signed or on chain names by hash are **named blobs**, and the network keeps them while that
 reference stands: a mini-app's icon (named by its manifest), a person's avatar (named by their profile), and a sealed
@@ -23,7 +24,7 @@ network (§7.3). The SDK: `named.ts` (the checks), `bundle-upload.ts` (the state
 | Format | PNG, opaque | JPEG | ZIP, the bundle check (§2a) |
 | Pixels | 512 × 512 (256 × 256 taken from manifests made before) | 640 × 640 | — |
 | Bytes | at most 65 536 | at most 131 072 | at most 16 MiB |
-| Kept by | every full node | the 5 relays that keep the account's vault | 3 storage cities and 5 relays offering space, its keepers |
+| Kept by | every full node | the 5 relays that keep the account's vault | 3 storage pools and 5 relays offering space, its keepers |
 | Uploaded | `blob_put` once the registry names it (§7.1) | with the profile (wallets') | `blob_put` in pieces, before or after the manifest (§7.3) |
 | Fetched | `blob_get`, `GET /_blob/grain_icon/<hash>` | `blob_get`, `GET /_blob/avatar/<hash>` | `GET /_blob/grain_bundle/<hash>` with `Range`, `blob_get` a piece at a time |
 
@@ -128,7 +129,7 @@ in the canonical registry, an avatar a kept profile names. **A blob nothing name
 exception: a bundle a registered server key says is its grain's next, held **pending** for a day (§7.3). The bytes prove
 themselves (their hash is computed, never claimed), so whoever holds them may bring them, and nobody can bring others.
 
-A bundle's keepers are 3 storage cities of different governors and the first 5 relays offering space, chosen by
+A bundle's keepers are 3 storage pools of different operators and the first 5 relays offering space, chosen by
 rendezvous hashing (`derive("Saltix bundle placement v1", hash ‖ key)`); a young network with neither keeps every bundle
 at every node with a store. Any relay caches what it fetched for its clients.
 

@@ -179,7 +179,7 @@ test("a report's status is a short title, cut at a word; the name and the messag
   const typed = errorFacts(new TypeError("Cannot read properties of undefined (reading 'site')"));
   assert.equal(reportStatus(typed), "Error · TypeError");
   // A plain Error, a thrown string: the message says what it is, cut at a word within 60 characters.
-  const words = errorFacts(new Error("could not mint the access key because the node at the city did not answer in time"));
+  const words = errorFacts(new Error("could not mint the access key because the node at the pool did not answer in time"));
   const s = reportStatus(words);
   assert.equal(s, "Error · could not mint the access key because the node at…");
   assert.ok([...s].length <= CARD_LIMITS.status);

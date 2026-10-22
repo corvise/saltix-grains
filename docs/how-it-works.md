@@ -196,8 +196,8 @@ This is the one account of it; the other pages link here (Saltix 32-images [§6]
 [§10](protocol/images.md#10-what-is-a-protocol-change)).
 
 - **Into the network, on every protocol version.** `grain publish` sends the bundle in pieces to the relay that answers
-  it (its gateway's `blob_put`). The node behind it offers the bundle to its **keepers**, 3 storage cities of different
-  governors and the first 5 relays offering space, chosen by the bundle's hash, until 3 of them hold it (a young network
+  it (its gateway's `blob_put`). The node behind it offers the bundle to its **keepers**, 3 storage pools of different
+  operators and the first 5 relays offering space, chosen by the bundle's hash, until 3 of them hold it (a young network
   with neither keeps every bundle at every node with a store). They keep it while a live manifest names it. Every relay
   serves it to its wallets, fetching it from a keeper the first time it is asked: meanwhile `blob_get` answers
   `fetching`, which says the relay knows the hash, never that anyone has the bytes.

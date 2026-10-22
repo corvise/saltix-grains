@@ -186,7 +186,7 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
 
   grain sponsor init                       a sponsor key (sponsor.key): its account pays relays for your users
   grain sponsor                            the sponsor's account, WORK, channels and the exchanges to open one with
-  grain sponsor open --exchange C --amount W   a channel with city C's exchange, W WORK deposited
+  grain sponsor open --exchange C --amount W   a channel with pool C's exchange, W WORK deposited
   grain sponsor top-up --exchange C --amount W
   grain sponsor close --exchange C         the deposit returns after the claim window
 

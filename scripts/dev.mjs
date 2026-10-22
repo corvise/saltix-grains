@@ -94,7 +94,7 @@ const registry = {
     this.grain ??= {
       slug: SLUG, owner: toHex(ownerId), version: 1, id: "00".repeat(32), registered: 1, updated: 1, retired: null, deposit: "30000000000",
       manifest: manifestFor(`http://localhost:${PORT}`), servers: [toHex(ed25519.getPublicKey(serverSecret))], category: 9, public: true,
-      members: [], handles: [], ratings: { count: 0, sum: 0, citizens_count: 0, citizens_sum: 0 },
+      members: [], handles: [], ratings: { count: 0, sum: 0, miners_count: 0, miners_sum: 0 },
     };
     return this.grain;
   },

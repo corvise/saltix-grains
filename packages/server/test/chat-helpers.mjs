@@ -77,7 +77,7 @@ export function fakeChain(over = {}) {
     grain: {
       slug: "access", owner: toHex(accountId(fromHex(ownerKey.ed25519, 32))), version: 1, id: "11".repeat(32), registered: 1, updated: 1,
       retired: null, deposit: "30000000000", manifest: manifest(), servers: [serverKey], category: 1, public: true, members: [], handles: [],
-      ratings: { count: 0, sum: 0, citizens_count: 0, citizens_sum: 0 },
+      ratings: { count: 0, sum: 0, miners_count: 0, miners_sum: 0 },
     },
     controllers: new Map(),
     down: false,

@@ -116,6 +116,15 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 
 What the SDK decided, and why, where a choice was made; the newest first. A change that goes against one says so here.
 
+- **2026-10-22, the pool vocabulary** (corvise/saltix #337, the owner's decision; the vectors at its merge commit
+  `e6448704`): the SDK took the protocol's words at once, with no aliases, since the node's wallet interface answers
+  with the new field names only (`exchange_list`'s `pool` and `pool_key`, `ratings.miners_count`, `grain_list`'s
+  `miners`, a rating's `miner`) and the test network is reset on that build. Rejected: reading both the old and the
+  new names for a while (no network ever answered the old ones under a build that matters; a client that reads a
+  retired field name from a node that answers with `miners_count` would show 0 in silence, which is worse than a type
+  that says what the node says). Every project's own `AGENTS.md` (`packages/cli/src/template.ts`) is unchanged: an app's rules
+  name none of these words; `AGENTS.md`'s *Naming* section carries them for the SDK's developers.
+
 - **2026-10-20, ready for protocol version 2** (versions 2 and 3 are to be scheduled on the test network; no network runs them yet):
   - **`grain configure` follows the network's version**, never a flag: tag 34 with bare keys while `node_status` says
     version 1, tag 39 with each key's proof from version 2 (a node left behind counts by the version its `outdated`

@@ -54,7 +54,7 @@ The pages use one notation:
 
 These pages hold what a third-party developer needs to build and publish a mini-app or a Connect sign-in, and nothing
 more. Left out on purpose: consensus and mining, the beacon chain and shards beyond what a confirmation means, the
-registry's internals besides the grain calls, cities, citizenship and licenses, WORK books, the economics beyond units
+registry's internals besides the grain calls, pools, mining licenses and charters, WORK books, the economics beyond units
 and deposits, how nodes and relays work inside (gossip, placement, replication, the vault's storage, the archive),
 wallets' own formats (device linking, the vault's items, managed accounts' recovery), running a node, and any server or
 deployment of Saltix's own. When an app needs one of those, the page says what it may rely on and stops there.

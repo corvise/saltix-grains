@@ -242,12 +242,12 @@ export function minimumFee(call: GrainCall): bigint {
   return minimumTxFee(grainAction(call));
 }
 
-/** A grain's ratings (24-app-studio §6a): their count and sum, overall and from accounts that held a citizenship. */
+/** A grain's ratings (24-app-studio §6a): their count and sum, overall and from accounts that held a mining license. */
 export interface GrainRatings {
   count: number;
   sum: number;
-  citizens_count: number;
-  citizens_sum: number;
+  miners_count: number;
+  miners_sum: number;
 }
 
 /** A slug in the registry as a node serves it (`grain_get`, Saltix 08-node §6). The app studio's fields are absent on

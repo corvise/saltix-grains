@@ -1,8 +1,9 @@
 # Saltix Connect: an account on a web page
 
 > Reflects Saltix 19-connect (basis for implementation 2026-10-12; the Connect profile, the Connect sheet and "Sign in
-> with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `a6d0de6b` (2026-10-21). Section
-> numbers are the specification's.
+> with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `a6d0de6b` (2026-10-21); the pool
+> vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22). Section numbers are the
+> specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
@@ -298,7 +299,7 @@ wallet's own, never part of a page, and keeps to a page's frame inside the safe 
 
 1. **Saltix Connect**, with Saltix's mark: whose sheet this is. A service's page can never draw it.
 2. **The service's identity.** A mini-app: its icon, name, `@username` when one is bound, its mark (verified, in the
-   registry, not listed), its owner (username or short address), its category, its rating with the citizens' apart, its
+   registry, not listed), its owner (username or short address), its category, its rating with the miners' apart, its
    reported users labelled as reported by the app, and "on Saltix since" its registration. A site: its host in large
    type and its origin in full (what the user checks against the browser's address bar), its name, whether its profile
    checked, its owner when it did, its category, and whether this account connected to it before and when.

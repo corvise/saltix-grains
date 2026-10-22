@@ -92,7 +92,7 @@ export async function grantFor(node: NodeLike, sponsorSecret: Uint8Array, userKe
   }, genesis);
 }
 
-/** The sponsor's channel with an exchange (a city id, hex): open with a deposit, top up, close. Amounts in µWORK. */
+/** The sponsor's channel with an exchange (a pool id, hex): open with a deposit, top up, close. Amounts in µWORK. */
 export type ChannelCall =
   | { open: { exchange: string; amount: bigint } }
   | { topUp: { exchange: string; amount: bigint } }

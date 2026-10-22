@@ -543,7 +543,7 @@ A **sponsor** pays the relays for your users' grain frames when the free share i
 ```sh
 grain sponsor init                                   # sponsor.key; put its account in grain.json "sponsor"
 grain sponsor                                        # its account, WORK, channels, the exchanges to open one with
-grain sponsor open --exchange <city> --amount 10
+grain sponsor open --exchange <pool> --amount 10
 ```
 
 ```ts

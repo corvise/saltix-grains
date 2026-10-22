@@ -14,11 +14,15 @@ client, in any language, reproduces them byte for byte, refusals included. The S
   `SOURCE`'s commit (below). [docs/protocol/](../docs/protocol/README.md) explains every format they hold; a file's own
   `spec` field (`"specs/12-grains.md"`, …) names the protocol document, which those pages reflect under the same name
   and section numbers.
-- **`SOURCE`'s commit** (`b9019fd`) is the protocol's change that added `images-v1.json` (named blobs: icons, avatars
-  and bundles the network keeps, 32-images); every other file's bytes are those of the commit before it.
-  `accounts-v1.json` came from the same commit later, for the quorums of protocol version 2 (`quorums_v2`), whose bytes
-  have not changed since. Earlier syncs brought `ConfigureGrain` tag 39 of protocol version 2 (`grains-v1.json`,
-  `configure-v2`), which no network runs yet, and the member proof's 5 minutes of clock skew (`grain-chats-v1.json`).
+- **`SOURCE`'s commit** (`e6448704`, 2026-10-22) is the protocol's pool vocabulary (corvise/saltix #337: pools,
+  operators, miners, mining licenses, earnings, payouts), which renamed only words in the files here: `access-v1.json`'s
+  `pool_key_*_hex` keys (the pool key that signs an allowance), the `pool_hex` of its `open_exchange` and
+  `close_exchange` JSON forms and its rules, and two of `handles-v1.json`'s reserved names (`pool` and `operator`,
+  for the roles they name now; `CHANGELOG.md` has the words before); no Borsh byte, key or signature changed, and every
+  other file's bytes are those of earlier commits. Earlier syncs brought `images-v1.json` (named blobs: icons, avatars and bundles
+  the network keeps, 32-images), `accounts-v1.json` for the quorums of protocol version 2 (`quorums_v2`),
+  `ConfigureGrain` tag 39 of protocol version 2 (`grains-v1.json`, `configure-v2`), which no network runs yet, and the
+  member proof's 5 minutes of clock skew (`grain-chats-v1.json`).
 - **Using one.** A file holds its `version`; the genesis hash and network its network-bound signatures use (`chain`, or
   `genesis_hash` and `network`); the keys it signs with (fixed, fake secrets: never use them for anything real); the
   objects in their Borsh form as hex, and in their JSON form where they have one; the messages signed (`message_hex`);

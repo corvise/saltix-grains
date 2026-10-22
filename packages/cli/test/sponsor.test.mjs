@@ -8,7 +8,7 @@ import { channel, parseWork, sponsorStatus } from "../dist/sponsor.js";
 
 const secret = fromHex("62".repeat(32), 32);
 const me = toHex(accountId(ed25519.getPublicKey(secret)));
-const city = "e1".repeat(32);
+const pool = "e1".repeat(32);
 
 async function node(state) {
   const submitted = [];
@@ -20,7 +20,7 @@ async function node(state) {
       const result = {
         node_status: { genesis: "5a".repeat(32), slot: 1000, network: "devnet" },
         account_get: { nonce: 2, salt: state.salt ?? "1000000", work: state.work ?? "50000000", channels: state.channels ?? [] },
-        exchange_list: { exchanges: state.exchanges ?? [{ city, operator: "aa".repeat(32), fee_bp: 50, bond: "1", closed: null, reachable: true }] },
+        exchange_list: { exchanges: state.exchanges ?? [{ pool, pool_key: "aa".repeat(32), fee_bp: 50, bond: "1", closed: null, reachable: true }] },
         transaction_submit: { id: "cd".repeat(32) },
       }[method];
       if (method === "account_get") assert.equal(params.address, me);
@@ -46,19 +46,19 @@ test("amounts of WORK are exact", () => {
 test("a channel opens with a listed exchange, from what the account has", async () => {
   const ok = await node({});
   assert.equal((await sponsorStatus(ok.url, secret)).account, me);
-  await channel({ open: { exchange: city, amount: 10_000_000n } }, secret, s(ok.url));
-  assert.deepEqual(action(ok.submitted[0]), [2, city]);
+  await channel({ open: { exchange: pool, amount: 10_000_000n } }, secret, s(ok.url));
+  assert.deepEqual(action(ok.submitted[0]), [2, pool]);
   ok.close();
 
   const refusals = [
-    [{ exchanges: [] }, { open: { exchange: city, amount: 1n } }, /no open exchange/],
-    [{ work: "5" }, { open: { exchange: city, amount: 10n } }, /needs 10/],
-    [{ salt: "0" }, { open: { exchange: city, amount: 1n } }, /fee/],
-    [{ channels: [{ exchange: city, deposit: "1", closing_at: null }] }, { open: { exchange: city, amount: 1n } }, /open already/],
+    [{ exchanges: [] }, { open: { exchange: pool, amount: 1n } }, /no open exchange/],
+    [{ work: "5" }, { open: { exchange: pool, amount: 10n } }, /needs 10/],
+    [{ salt: "0" }, { open: { exchange: pool, amount: 1n } }, /fee/],
+    [{ channels: [{ exchange: pool, deposit: "1", closing_at: null }] }, { open: { exchange: pool, amount: 1n } }, /open already/],
     [{ channels: [{ exchange: "01".repeat(32), deposit: "1", closing_at: null }, { exchange: "02".repeat(32), deposit: "1", closing_at: null }] },
-      { open: { exchange: city, amount: 1n } }, /2 channels/],
-    [{}, { topUp: { exchange: city, amount: 1n } }, /no open channel/],
-    [{ channels: [{ exchange: city, deposit: "1", closing_at: 900 }] }, { close: { exchange: city } }, /no open channel/],
+      { open: { exchange: pool, amount: 1n } }, /2 channels/],
+    [{}, { topUp: { exchange: pool, amount: 1n } }, /no open channel/],
+    [{ channels: [{ exchange: pool, deposit: "1", closing_at: 900 }] }, { close: { exchange: pool } }, /no open channel/],
   ];
   for (const [state, call, why] of refusals) {
     const n = await node(state);
@@ -66,9 +66,9 @@ test("a channel opens with a listed exchange, from what the account has", async 
     assert.equal(n.submitted.length, 0, `nothing submitted: ${why}`);
     n.close();
   }
-  const open = await node({ channels: [{ exchange: city, deposit: "1", closing_at: null }] });
-  await channel({ topUp: { exchange: city, amount: 1n } }, secret, s(open.url));
-  await channel({ close: { exchange: city } }, secret, s(open.url));
+  const open = await node({ channels: [{ exchange: pool, deposit: "1", closing_at: null }] });
+  await channel({ topUp: { exchange: pool, amount: 1n } }, secret, s(open.url));
+  await channel({ close: { exchange: pool } }, secret, s(open.url));
   assert.deepEqual(open.submitted.map((t) => action(t)[0]), [3, 4]);
   open.close();
 });

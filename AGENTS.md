@@ -323,6 +323,13 @@ today (so does the simulator). A page that checks first shows a splash of its ow
 - **Words.** The product is Saltix, everywhere. Saltix calls apps *mini-apps* in what users read (lower case; Russian
   «мини-приложения»); *grain* is the protocol's word, for manifests, the bridge's `grain_*`, these SDKs and the specs,
   not a word for what users read. In an app's own words, an app is an app.
+- **The mining layer's words** (the protocol's, since 2026-10-22, with no aliases): a **pool** (its node admits miners,
+  witnesses their work and runs an exchange a sponsor opens a channel with), its **operator** (the account that holds
+  the charter) and its **pool key** (the key its node signs with: `exchange_list`'s `pool_key`), a **miner** with a
+  **mining license** (a grain's `ratings.miners_count` and `miners_sum`, `grain_list`'s `miners` sort, a rating's
+  `miner`), **earnings**, the **work fund**, **payouts**; in Russian «пул», «оператор пула», «ключ пула», «майнер»,
+  «лицензия майнера», «Заработок», «фонд WORK», «выплаты». Never the political and geographic words the protocol
+  retired on 2026-10-22 (`CHANGELOG.md` names them): no node, wallet or vector answers to them.
 - **An app** is its slug (3–32 of `[a-z0-9-]`, fixed, never used again once retired), its manifest's `name` in each
   language (English required), and optionally a Saltix username bound to it (`grain bind --handle @name`), which opens
   its chat. Saltix never shows a name alone: the slug and its mark go with it, and a slug that reads like a known one

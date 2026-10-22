@@ -1,5 +1,5 @@
 // `grain sponsor`: the account that pays the relays for a grain's users (Saltix 11-access §4, 12-grains §5.4) —
-// its key file, its channels with cities' exchanges, and the transactions that open, top up and close them.
+// its key file, its channels with pools' exchanges, and the transactions that open, top up and close them.
 import {
   type ChannelCall, type NetworkName, type NodeLike, nodeCall, signChannelTx, channelTxFee, accountId, encodeAddress, toHex, fromHex,
 } from "@saltix/grain-server";
@@ -11,7 +11,7 @@ export const SPONSOR_KEY_FILE = "sponsor.key";
 export const MAX_CHANNELS = 2;
 
 export interface Channel { exchange: string; deposit: string; closing_at: number | null }
-export interface Exchange { city: string; operator: string; fee_bp: number; bond: string; closed: number | null; reachable: boolean }
+export interface Exchange { pool: string; pool_key: string; fee_bp: number; bond: string; closed: number | null; reachable: boolean }
 export interface SponsorStatus {
   address: string;
   /** What the manifest's `sponsor` names. */
@@ -58,8 +58,8 @@ export async function channel(call: ChannelCall, secret: Uint8Array, s: Signing)
     if (held) throw new Error(`a channel with ${exchange} is open already${held.closing_at !== null ? " and closing" : ""}`);
     if (a.channels.length >= MAX_CHANNELS) throw new Error(`the account holds ${MAX_CHANNELS} channels already`);
     const { exchanges } = await nodeCall<{ exchanges: Exchange[] }>(s.node, "exchange_list");
-    const e = exchanges.find((x) => x.city === exchange);
-    if (!e || e.closed !== null) throw new Error(`${exchange}: no open exchange of that city (grain sponsor lists them)`);
+    const e = exchanges.find((x) => x.pool === exchange);
+    if (!e || e.closed !== null) throw new Error(`${exchange}: no open exchange of that pool (grain sponsor lists them)`);
   } else if (!held || held.closing_at !== null) {
     throw new Error(`no open channel with ${exchange}`);
   }
