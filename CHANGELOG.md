@@ -63,6 +63,15 @@
   of any Borsh form or signature. The protocol pages, `AGENTS.md` and the guides use the new words; the old ones
   survive only in this changelog's history.
 
+### Fixed
+
+- **`chat.paymentOf` finds a WORK invoice paid on chain** ([docs/payments.md](docs/payments.md)). On a network of
+  protocol version 4 or later — the test network is one — no account holds WORK on chain, so a WORK invoice is paid
+  from the payer's book or in SALT of the same integer on chain (Saltix 35-work-on-layer-2 §3.4), and `paymentOf`
+  counted only a payment in the invoice's own asset: one paid in SALT was never found. It now counts SALT of the same
+  integer for a WORK invoice (`paysAsset`, exported for `findPayment`'s callers); a SALT invoice is still paid in SALT
+  only, and a payment from a book is not on chain.
+
 ### Security
 
 - **`grain pair` pairs only the app the developer named or confirmed** (Saltix 24-app-studio §3a). Before, an offer that

@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ChatServer, ChatKeyNotRegistered, card, decodeInvoice, invoiceProblem, memoText, unitsOf, encodeAddress, fromHex,
+  paysAsset,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { chain, ownerKey, quiet, spec, serverKey, appKey, fakeChain, wallet, serverOn } from "./chat-helpers.mjs";
@@ -111,6 +112,38 @@ test("the payment is found by its reference, of the invoice's asset and at least
     assert.equal(paid.confirmations, 3);
     assert.deepEqual(await server.paymentOf(signed.invoice), paid, "the invoice alone does too");
     assert.equal(signed.payee, encodeAddress("devnet", fromHex(owner, 32)));
+  } finally {
+    await close();
+  }
+});
+
+test("a WORK invoice is paid in WORK or in SALT of the same integer, as it is on chain from protocol version 4", async () => {
+  // Saltix 35-work-on-layer-2 §3.4: no account holds WORK on chain, so a WORK invoice is paid from the payer's book or
+  // in SALT of the same integer, and the payee's history shows SALT. Before, `paymentOf` never found it.
+  assert.equal(paysAsset("WORK", "salt"), true);
+  assert.equal(paysAsset("WORK", "work"), true);
+  assert.equal(paysAsset("SALT", "salt"), true);
+  assert.equal(paysAsset("SALT", "work"), false, "a SALT invoice is paid in SALT only");
+  const fake = fakeChain();
+  const history = [];
+  const { server, close } = await studio(fake, history);
+  try {
+    const signed = server.invoice({ amount: "2", asset: "WORK", memo: "Premium" });
+    assert.equal(signed.invoice.amount, 2_000_000n, "µWORK, which are SALT's base units");
+    const entry = (over) => ({
+      address: signed.payee, kind: "received", tx: "bb".repeat(32), from: "dsalt1payer", asset: "salt", amount: "2000000",
+      height: 10, confirmations: 1, memo: { text: memoText(signed.invoice) }, ...over,
+    });
+    history.push(entry({ amount: "1999999" }));
+    assert.equal(await server.paymentOf(signed), null, "short of the amount");
+    history.splice(0, 1, entry({ memo: { text: "ab".repeat(16) } }));
+    assert.equal(await server.paymentOf(signed), null, "another reference");
+    history.splice(0, 1, entry());
+    const paid = await server.paymentOf(signed);
+    assert.equal(paid?.tx, "bb".repeat(32), "SALT of the same integer");
+    assert.equal(paid.asset, "salt");
+    history.splice(0, 1, entry({ asset: "work", tx: "cc".repeat(32) }));
+    assert.equal((await server.paymentOf(signed))?.tx, "cc".repeat(32), "WORK itself, as before version 4");
   } finally {
     await close();
   }
