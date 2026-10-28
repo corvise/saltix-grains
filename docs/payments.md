@@ -41,12 +41,15 @@ chat.command("premium", async (ask) => {
 
 // Later: a timer or the user's next request.
 const paid = await chat.paymentOf(order.invoice);   // through the same relays or node the server reads the registry from
-if (paid && paid.confirmations >= 3) await deliver(order.user);
+if (paid && paid.confirmations >= 1) await deliver(order.user);   // final on Consensus 2: the test network's
 ```
 
 - `chat.invoice({ amount, asset?, memo?, reference?, expiresInMs?, to? })`:
   - `amount` is a bigint of base units or a decimal string in whole units (`"2.5"` SALT; SALT has 9 decimals, WORK 6);
-  - `asset` is `"SALT"` (the default) or `"WORK"`;
+  - `asset` is `"SALT"` (the default) or `"WORK"`. Ask for SALT on a network of protocol version 4 or later, as the
+    test network is: WORK lives only in the pools' books there, so a WORK invoice is paid from the payer's book or as
+    SALT of the same integer on chain (Saltix 35-work-on-layer-2), and `chat.paymentOf` counts only a payment in the
+    invoice's own asset;
   - `memo` is the sheet's text, at most 200 bytes;
   - `reference` is 16 random bytes unless you give it;
   - it returns `{ invoice, hex, payee }`, where `hex` is what a card's `invoice` block and `grain.pay` take, and
@@ -56,7 +59,10 @@ if (paid && paid.confirmations >= 3) await deliver(order.user);
   - for a certified key without a node, when `to` is missing: it knows no owner.
 - `chat.paymentOf(invoice)` finds the payment to the payee whose public memo starts with the reference. It counts only
   a payment of the invoice's asset and at least its amount, and returns `null` until one is on the canonical chain.
-  Deliver after the confirmations your goods are worth.
+  On Consensus 2 — the test network since its v15 of 26 October 2026 — a block the node shows is final at its
+  committee's certificate, so one confirmation is enough and a payment never rolls back; on a network of the longest
+  chain, deliver after the confirmations your goods are worth
+  ([confirmations](protocol/wallet-interface.md#confirmations)).
 
 ## From a page (`grain.pay`)
 

@@ -252,8 +252,8 @@ chat.text((ask) => card().text("Pick Plan below."));
   `failed` and is reported to your team's console.
 - **Payments** (`chat.invoice`, `chat.paymentOf`): `const inv = chat.invoice({ amount: "2.5", memo: "Premium, 1 month" })`, then
   `card().text(…).invoice(inv)`. The developer key's invoice pays the app's owner only. Keep `inv.invoice` with what
-  the user asked for, and deliver once `await chat.paymentOf(inv.invoice)` has the confirmations you need
-  ([../payments.md](../payments.md)).
+  the user asked for, and deliver once `await chat.paymentOf(inv.invoice)` has the confirmations you need — one on
+  Consensus 2, the test network's, where a block the node shows is final ([../payments.md](../payments.md)).
 
 ## A page for some people only: check first, then render
 
