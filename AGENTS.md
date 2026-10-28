@@ -347,7 +347,10 @@ Connect sheet and card (Saltix 19-connect [§11.1](docs/protocol/connect.md#111-
 - **The support agent** (`examples/support-agent`, `createSupportAgent`) is the app's own program answering in the
   app's chat: the app's notes (`faq.json`) first, then a language model when `ANTHROPIC_API_KEY` is in the environment
   (then `chat.json` says `"ai": true`), and a person's `@name` (`SUPPORT_HUMAN`) takes over when neither can answer,
-  the user asks for a person, or the model answered a user's daily share. It logs event names and numbers, never what
+  the user asks for a person, the model answered a user's daily share (20), or it answered the day's total for all
+  users together (500, `perDayTotal`, `SUPPORT_MODEL_DAILY`: keys cost nothing, so a share per user alone bounds no
+  bill). The model reads the question and the notes only and has no tool: never put a secret in the notes. It logs
+  event names and numbers, never what
   users wrote, an answer, a key or an address. One app, one key, one program: mount its handlers on the app's own
   `ChatServer`, and name it as the support with a username bound to the app. An agent with an address of its own is not
   in the SDK yet: [what it lacks](docs/support-agent-address.md).

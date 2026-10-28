@@ -84,8 +84,14 @@ app's registered key, "from <slug>, verified".
   alone (`claudeAnswerer`; the key comes from the environment, never a file in a repository). A model's answer says so
   on its card, and `chat.json` says `"ai": true`, which users read before they write.
 - **Hand-over**: a person's `@name` (`SUPPORT_HUMAN`) takes over when neither can answer, when the user asks for a
-  person (the `human` command, or words such as "talk to a person"), when the model declines or fails, and once the
-  model answered a user's daily share (20 questions). The card names the person.
+  person (the `human` command, or words such as "talk to a person"), when the model declines or fails, once the
+  model answered a user's daily share (20 questions), and once it answered the day's total for all users together (500,
+  `perDayTotal` or `SUPPORT_MODEL_DAILY`): a key in the app costs nothing to make, so a share per user alone would let
+  a flood of new accounts run up the app's bill. The card names the person.
+- **What a user can make it say**: the model reads the user's question and the app's notes, nothing else, and has no
+  tool: it can neither act nor read another user's words. A user can still talk it into saying something odd, to
+  themselves alone, under the card's "a language model" line: write the notes so that the model's one job is them, and
+  never put a secret in them.
 - **Common questions**: the `topics` command lists the notes as buttons; a tap asks the note's question.
 - **Logs** carry event names and numbers: where an answer came from (`rules`, `model`, `person`), the language, the
   time it took, a note's id. Never what a user wrote, an answer, a user's key or address.

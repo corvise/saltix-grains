@@ -135,7 +135,8 @@ What the SDK decided, and why, where a choice was made; the newest first. A chan
     consent is read from a file the holder wrote or signed here with the key in `SALTIX_SUPPORT_KEY`, never a key file.
   - **The model is Anthropic's, through its official SDK, loaded only when `ANTHROPIC_API_KEY` is set** (no dependency
     of the SDK or its lockfile), asked for a structured answer or a hand-over, with the server-side fallback for a
-    declined request, at a daily share per user (a model costs money per question); `chat.json`'s `ai` must say what
+    declined request, at a daily share per user and a daily total for everyone (a model costs money per question, and
+    a key in the app costs nothing: the threat audit of 2026-10-28); `chat.json`'s `ai` must say what
     runs, or the example refuses to start. Rejected: a provider-neutral HTTP call (a format of our own to keep in step),
     and keeping the conversation (the agent keeps nothing past its answer).
   - **The sync's other changes** were taken with it: usernames only (the numbers left with the v15 genesis: `Handle`

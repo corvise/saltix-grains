@@ -8,7 +8,8 @@ import { readFileSync } from "node:fs";
 import { assertCardStandard, chatSpecFromJson, lintCard } from "../dist/index.js";
 import { testChat } from "../dist/testing.js";
 import {
-  DEFAULT_MODEL, MAX_ANSWER, MODEL_QUESTIONS_PER_DAY, asksForPerson, claudeAnswerer, createSupportAgent, matchNote, readFaq,
+  DEFAULT_MODEL, MAX_ANSWER, MODEL_QUESTIONS_PER_DAY, MODEL_QUESTIONS_PER_DAY_TOTAL, asksForPerson, claudeAnswerer, createSupportAgent,
+  matchNote, readFaq,
 } from "../../../examples/support-agent/support.mjs";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../../../examples/support-agent/${name}`, import.meta.url), "utf8"));
@@ -16,9 +17,11 @@ const notes = readFaq(read("faq.json"));
 const specJson = read("chat.json");
 
 /** The harness with the agent mounted as server.mjs mounts it; `model` and the agent's log as the test gives them. */
-async function start({ model = null, perDay, aiSpec = model !== null, now } = {}) {
+async function start({ model = null, perDay, perDayTotal, aiSpec = model !== null, now } = {}) {
   const events = [];
-  const agent = createSupportAgent({ notes, human: "@anna_k", model, perDay, now, log: (level, event, meta) => events.push({ level, event, meta }) });
+  const agent = createSupportAgent({
+    notes, human: "@anna_k", model, perDay, perDayTotal, now, log: (level, event, meta) => events.push({ level, event, meta }),
+  });
   const t = await testChat({
     spec: { ...specJson, ai: aiSpec },
     setup: (chat) => {
@@ -158,6 +161,33 @@ test("the model answers a user's daily share, then a person; the next day, again
     await t.close();
   }
   assert.equal(MODEL_QUESTIONS_PER_DAY, 20);
+});
+
+test("all users together get at most the day's total from the model: a flood of new accounts cannot run up the app's bill", async () => {
+  // A user's share is per key in the app, and a key costs nothing to make (the threat audit of 2026-10-28): a thousand
+  // fresh accounts each asking their 20 questions would have the model answer 20 000 a day on the app's bill.
+  let clock = Date.UTC(2026, 9, 28, 10);
+  const asked = [];
+  const model = async (question) => (asked.push(question), "An answer.");
+  const { t, events } = await start({ model, perDay: 20, perDayTotal: 3, now: () => clock });
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await t.as(`fresh${i}`).say(`Question ${i}`)).text, "An answer.");
+    const past = await t.as("fresh3").say("Question 3");
+    assert.match(past.text, /a person on the app's team/, "past the day's total, a person");
+    assert.deepEqual(past.fields, { "Write to": "@anna_k" });
+    assert.equal(asked.length, 3, "the model is not asked past the day's total");
+    // The notes still answer, whatever the model's total: they cost nothing.
+    assert.match((await t.as("fresh4").say("What does the app keep about me?")).text, /Nothing past its answer/);
+    clock += 86_400_000;
+    assert.equal((await t.as("fresh5").say("Question 5")).text, "An answer.", "a new day, a new total");
+    assert.ok(events.some((e) => e.event === "support_answer" && e.meta.why === "total"), "the log says why");
+  } finally {
+    await t.close();
+  }
+  assert.equal(MODEL_QUESTIONS_PER_DAY_TOTAL, 500);
+  for (const perDayTotal of [-1, 1.5, Number.NaN]) {
+    assert.throws(() => createSupportAgent({ notes, human: "@anna_k", perDayTotal }), /perDayTotal/, String(perDayTotal));
+  }
 });
 
 test("createSupportAgent refuses a person who is no username", () => {
