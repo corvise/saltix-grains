@@ -172,7 +172,7 @@ test("from protocol version 2 the owner's Saltix names a key of this computer by
   writeFileSync(join(dir, "server.key"), "63".repeat(32) + "\n", { mode: 0o600 });
   const out = await run(["configure", "--slug", "chess-bot", "--server", "server.key", "--node", node.url, "--timeout", "1"], dir);
   assert.equal(out.code, 1);
-  assert.match(out.stderr, /protocol version 2: the owner's Saltix names a server key with its proof, which comes with its pairing: run grain pair --slug chess-bot/);
+  assert.match(out.stderr, /protocol version 2: the owner's Saltix names a server key with its proof, which comes with its pairing: run grain pair --app chess-bot/);
   assert.doesNotMatch(out.stdout, /My apps → chess-bot → Developer key/);
   // Revoking every key needs no proof: Saltix does it.
   const revoke = await run(["configure", "--slug", "chess-bot", "--revoke-all", "--node", node.url, "--timeout", "1"], dir);

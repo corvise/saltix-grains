@@ -9,13 +9,13 @@ and later finds the payment on chain by the invoice's **reference**.
 
 | Key | Payee (`to`) | When |
 |---|---|---|
-| A **developer key**: a server key the grain's registry record names (`ConfigureGrain`; what Saltix's app studio makes) | the grain's **owner** only | an app made in Saltix; any app whose server runs from a registered key |
+| A **registered server key**: one the grain's registry record names (`ConfigureGrain`): the key `grain pair` paired, or a developer key made in Saltix before pairing | the grain's **owner** only | an app made in Saltix; any app whose server runs from a registered key |
 | A server key the owner key **certified** (`InvoiceKeyCert`, `grain cert`) | any account | an app whose owner holds a key file |
 | The **owner key** itself | any account | not on a server: the owner key stays with the owner |
 
-A developer key's invoice pays the grain's owner, as the registry has it when the wallet checks. Then even a leaked
-developer key cannot send a payment anywhere but the owner. The owner replaces or revokes it in Saltix (My apps → the
-app → Developer key). Such an invoice has no certificate, like the owner key's, and the wallet tries the owner key
+A registered key's invoice pays the grain's owner, as the registry has it when the wallet checks. Then even a leaked
+key cannot send a payment anywhere but the owner. The owner replaces or removes it in Saltix (My apps → the app →
+Servers). Such an invoice has no certificate, like the owner key's, and the wallet tries the owner key
 first and then each key the registry names.
 
 **Which wallets take it.** Saltix 0.1.54 and newer take it, checked against the registry read when the invoice comes.

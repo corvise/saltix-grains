@@ -1,5 +1,5 @@
-// What `grain init` makes besides the manifest and the page: for a chat, a server that runs it from its developer key
-// (Saltix 24-app-studio §3); for either, the package.json that links the SDK and the `grain` command from the checkout.
+// What `grain init` makes besides the manifest and the page: for a chat, a server that runs it from the key `grain pair`
+// paired (Saltix 24-app-studio §3a); for either, the package.json that links the SDK and the `grain` command from the checkout.
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,7 +51,7 @@ export const pagePackageJson = (slug: string, cli: string) => JSON.stringify({
   devDependencies: { "@saltix/grain-cli": cli },
 }, null, 2) + "\n";
 
-/** A chat-only grain's server: the developer key is its whole configuration (Saltix 24-app-studio §3). */
+/** A chat-only grain's server: the key in `app.key` is its whole configuration (Saltix 24-app-studio §3a). */
 export const chatServer = (slug: string) => `// The chat of ${slug}, run by its server key (Saltix 24-app-studio §3a): \`grain pair\` made it on this computer and
 // wrote app.key once the registry named it; the key names the app, its network and the server key the registry trusts.
 // The server finds the network's public relays and answers chat.json's commands.
@@ -108,7 +108,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 `;
 
 /** A chat-only grain's handlers (\`chat.mjs\`): what the app does, apart from how it starts, so tests run it too. */
-export const chatHandlers = (slug: string) => `// What ${slug} answers: one handler for each command chat.json declares. server.mjs runs them with the developer key;
+export const chatHandlers = (slug: string) => `// What ${slug} answers: one handler for each command chat.json declares. server.mjs runs them with the paired key;
 // test/chat.test.mjs runs them on a development network (npm test). ask.args holds a command's arguments, typed by the
 // spec (a number is a bigint); ask.lang is the user's language ("" when unknown): answer in it when you can, else in
 // English.

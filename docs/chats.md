@@ -28,20 +28,23 @@ A server key speaks for the grain in either of two ways ([22-grain-chats §1](pr
 Both sign invoices. A registered key's invoice pays the grain's owner only, which wallets check against the registry
 ([payments.md](payments.md); Saltix 0.1.53 and older refuse it). A certified key's invoice may pay any account.
 
-### From a paired key or a developer key (registered)
+### From a paired key (registered)
 
 `grain pair` makes the server's key on the computer that runs it and pairs it with the app in the owner's Saltix by a QR
-code (Saltix 24-app-studio [§3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code), [docs/first-app.md](first-app.md)): once the registry names it,
-`app.key` holds it in the developer key's form, `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, which is also what
-Saltix's App studio hands over where no command runs. It is the server's whole configuration:
+code, from the command the app's page shows — the app, the owner's address, the network (Saltix 24-app-studio
+[§3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code), [docs/first-app.md](first-app.md)): once the registry
+names it, `app.key` holds it as `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, the form developer keys had — which
+Saltix made before pairing and makes no more ([§3](protocol/app-studio.md#3-the-developer-key)): a key of that origin
+keeps working, with a warning at start to pair a server in its place. It is the server's whole configuration:
 
 ```ts
 const chat = await ChatServer.start({ appKey: appKeyFromEnvironment(), spec, store: fileChatStore("chat.store.json") });
 ```
 
-`appKeyFromEnvironment({ dir, env })` reads `SALTIX_APP_KEY`, the file `SALTIX_APP_KEY_FILE` names, or `app.key` in
-`dir` (owner-only: `chat_key_exposed` otherwise), and refuses a server with none (`chat_unpaired`, saying to run
-`grain pair`).
+`appKeyFromEnvironment({ dir, env, warn })` reads `SALTIX_APP_KEY`, the file `SALTIX_APP_KEY_FILE` names, or `app.key` in
+`dir` (owner-only: `chat_key_exposed` otherwise), refuses a server with none (`chat_unpaired`, saying to run
+`grain pair`), and gives `warn` (the console unless told) `DEVELOPER_KEY_WARNING` for a key that `app.json` beside it
+does not name (`keyPairedHere`): one made elsewhere and carried here.
 
 `ChatServer.start` reads the key strictly (`AppKey.parse`: the exact form, lower-case hex, a known network, a valid
 slug), finds the network's public relays (`PUBLIC_RELAYS`, each pinned by its certificate; the rest from `relay_list`),
@@ -59,10 +62,10 @@ file signs instead for an app it owns, or when `--key` names it, on test network
 
 ```sh
 grain pair                                                   # the owner's Saltix pairs this computer's own key (QR code)
-grain status                                                 # paired, pairing, replaced…, and the next step
+grain status                                                 # paired, waiting, replaced…, and the next step
 grain cert init                                              # or, on test networks: server.key, a key of your own
 grain configure --slug S --server server.key                 # the registry names it (--revoke-all names none)
-grain app-key make --slug S                                  # app.key: its developer key, owner-only, never printed
+grain app-key make --slug S                                  # app.key for server.key, owner-only, never printed (no phone)
 grain app-key --file app.key                                 # its public parts, and whether the registry names it
 ```
 
@@ -138,12 +141,12 @@ no wallet that holds the version served, and nothing else would say so. `setSpec
 
 **Setups that cannot work.** Every configuration refusal of `ChatServer.start` is a `ChatSetupError` (`code`, and
 `exitCode` 78): `chat_unpaired` (no key: run `grain pair`; from `appKeyFromEnvironment`), `chat_key_exposed` (`app.key`
-readable by others), `chat_wrong_network` (a developer key of another network: the test network was reset, or `chain`
+readable by others), `chat_wrong_network` (a key of another network: the test network was reset, or `chain`
 contradicts the node), `chat_key_not_registered` (`ChatKeyNotRegistered`: replaced, revoked, retired, not registered),
 `chat_spec_changed_under_version` and `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_spec_version_starter`
-(a developer key's spec of version 1: Saltix made the app with a starting spec of version 1, which wallets keep until a
+(a registered key's spec of version 1: Saltix made the app with a starting spec of version 1, which wallets keep until a
 higher one comes, so serve 2 or more), `chat_no_relays` (a network with no public relays and no node given). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
-developer key): exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on; anything else (a network
+key in `app.key`'s form): exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on; anything else (a network
 that is down) exits with 1 and may pass on a restart. A store without
 `served` and `setServed` (your own `ChatStore`) checks nothing across restarts; `fileChatStore` keeps it.
 
@@ -162,7 +165,7 @@ that is down) exits with 1 and may pass on a restart. A store without
 ```ts
 import { ChatServer, ChatRefusal, card, chatSpecFromJson, fileChatStore } from "@saltix/grain-server";
 
-// From a developer key: everything else is found.
+// From the paired key (app.key): everything else is found.
 const chat = await ChatServer.start({
   appKey: process.env.SALTIX_APP_KEY!,
   spec: chatSpecFromJson(JSON.parse(readFileSync("chat.json", "utf8"))),   // signed with the key at start
@@ -506,7 +509,7 @@ else, each value of its kind and within its bounds), signed by the grain key for
 
 `npm run dev` runs a development relay at `/relay` (`createDevRelay` of `@saltix/grain-server/dev`: records checked, kept frames held until a
 signed ack, files), a development registry that names the example's server key, and the example's chat on both, from its
-developer key (`examples/hello-grain/chat.json`, `chat.mjs`). In the simulator, load the manifest, then **Load the chat**
+registered key (`examples/hello-grain/chat.json`, `chat.mjs`). In the simulator, load the manifest, then **Load the chat**
 (or **Open the chat** in the grain): it plays the wallet's side exactly, checks every card against the registered keys,
 builds forms from the spec, masks secrets and shows the numbers the app reports. **Private app** and **This account is a
 member** change the development registry (a member uses and develops the app, so it is on its team); **Send a member
@@ -536,7 +539,7 @@ await t.close();
 ```
 
 - `spec`: a path or file URL of `chat.json`, its JSON, or a spec; `setup(chat)` registers the handlers, or `start(options)`
-  starts the server itself from the options given (a developer key, the relay, the registry). `access: "private"`,
+  starts the server itself from the options given (the key, the relay, the registry). `access: "private"`,
   `members` by name with roles (`user`, `developer`, `viewer`), `options` for `ChatServer.start` (`store`, `version`…).
 - Arguments are typed by the spec (`argsFor`): a request the spec does not allow is a `TypeError` in the test, never sent.
 - Every frame a wallet gets is checked as Saltix checks it: a spec signed by a key the registry names and not lower than

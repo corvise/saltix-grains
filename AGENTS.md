@@ -6,10 +6,11 @@ Read [docs/how-it-works.md](docs/how-it-works.md) first: what a mini-app is made
 needs a server, and every step from an empty folder to a published app as one checklist. Three pages go on from this
 file, and the protocol has pages of its own:
 
-- [docs/agents/app.md](docs/agents/app.md): building an app, from pairing its server (`grain status`, then `grain pair`,
-  which pairs the app the offer names or the one confirmed with `grain pair --accept S`, never one nobody here named:
-  a QR code the owner's Saltix scans; never ask anyone to paste a key) to an app that runs, is tested and
-  ships; the rules every app follows; how to act on an error report pasted from Saltix's console.
+- [docs/agents/app.md](docs/agents/app.md): building an app, from pairing its server (`grain status`, then `grain pair`
+  with the command from the app's page in Saltix — the app, the owner's address, the network, all public — whose QR
+  code the owner's Saltix scans, compares and confirms; never ask anyone for a key, a token or an address they did not
+  give you) to an app that runs, is tested and ships; the rules every app follows; how to act on an error report pasted
+  from Saltix's console.
 - [docs/agents/sdk.md](docs/agents/sdk.md): working on the SDK: the repository's map, its commands and tests, the golden
   vectors, and how a change lands.
 - [docs/agents/cards.md](docs/agents/cards.md): the card design standard as rules for every card an app sends (a status
@@ -19,7 +20,7 @@ file, and the protocol has pages of its own:
   full message, the stack — in its text, so the copy for an AI agent loses nothing.
 - [docs/protocol/](docs/protocol/README.md): the Saltix protocol as an app needs it, the reference under every rule
   here: the manifest, the bridge and the page's frame, sign-in and member proofs, invoices, chats and cards, the app
-  studio and developer keys, Saltix Connect and its profile, relays, the wallet interface, addresses and amounts. Each
+  studio and pairing a server, Saltix Connect and its profile, relays, the wallet interface, addresses and amounts. Each
   page names the specification it reflects (`12-grains §5.4` is [grains.md § 5.4](docs/protocol/grains.md#54-relays-real-time-between-users))
   and the protocol commit it was read at. The protocol's own repository is not public: read these pages, and the
   golden vectors in [vectors/](vectors/README.md), which are its bytes and win over any page.
@@ -55,13 +56,16 @@ first publish) **runs in the background or with a timeout of 10 minutes or more*
 A call that would change nothing the registry holds says "nothing to change" and sends nothing. The rest of this page, and of [docs/agents/app.md](docs/agents/app.md), about servers,
 keys and pairing is for an app with a program: a chat, payments, notifications, a page for some people only.
 
-## Start here: Saltix's brief, or a developer key
+## Start here: Saltix's brief, or the pairing command
 
-Saltix offers **Copy brief for a coding agent** beside each app's key: the app's name, slug, form and network and these
-steps, in English, with a line saying which language to answer the person in, and never a key
-([the brief](docs/first-app.md#building-with-a-coding-agent)). A string that starts with `saltix-app:1:` is a Saltix
-mini-app's **developer key** (Saltix 24-app-studio [§3](docs/protocol/app-studio.md#3-the-developer-key)). Whichever
-you were given, an app is waiting for you:
+Saltix offers **Copy brief for a coding agent** on each app's page: the app's name, slug, form, network and owner and
+these steps, in English, with a line saying which language to answer the person in, and never a key
+([the brief](docs/first-app.md#building-with-a-coding-agent)). Beside it is the **pairing command**,
+`grain pair --app <slug> --owner <address> --genesis <16 hex>` (Saltix 24-app-studio
+[§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)): three public facts, which the registry holds for
+every app, and nothing else. A string that starts with `saltix-app:1:` is a **developer key** made before pairing
+([§3](docs/protocol/app-studio.md#3-the-developer-key), retired: step 4). Whichever you were given, an app is waiting
+for you:
 
 1. **Read [docs/how-it-works.md](docs/how-it-works.md)**, then come back. Whether the app needs a program at all is
    its table [Do I need a server?](docs/how-it-works.md#do-i-need-a-server), in short:
@@ -78,21 +82,28 @@ you were given, an app is waiting for you:
    links the SDK and the `grain` command from the checkout (the SDK is not on npm yet).
 3. **Pair it, every session from `grain status`** (Saltix 24-app-studio
    [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). `npx grain status`: `paired`, go on (a page
-   alone says `not_needed`: [the quick path](#quick-path-a-page-only-app)). Anything else: `npx grain pair` (in the
-   background, or `npx grain pair --no-wait` and then `npx grain pair` to wait). **Show the person its QR code (the
-   terminal's, or `.grain/pair.html`) and the 6-digit code, and wait**: they scan it with Saltix (the phone's camera,
-   or My apps → Pair a server), check that Saltix shows the same code, keep **Add this server** and confirm with the
-   PIN. `grain pair` writes `app.key` and `app.json` once the registry names the key; the
-   key is made on this computer and never leaves it. Then `npx grain doctor` names what is left. **Never ask the person
-   to paste, type or send a key.**
-4. **A developer key is only for a host where no command runs.** If one reaches you anyway, read only its public parts:
-   `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network (`dsalt`: Saltix's test network, of the devnet
-   kind; `tsalt`: a testnet; `salt`: the main network), `genesis` the first 8 bytes of its genesis hash in hex, `slug`
-   the app (`salt:grain/<slug>`). The last part, 64 hex characters, is the secret: never print, repeat, log or quote it,
-   nor the whole key; `npx grain app-key --file app.key --offline` prints the public parts, never `cat` the file. A key
-   pasted into the chat is in the conversation's history now: write it to `app.key` with `(umask 077 && cat > app.key)`
-   without repeating it, and once the app runs ask the person to pair this project instead (`grain pair --new`, then
-   **Use only this server**) or to replace the key in Saltix (a long press on the app, then Program, **Replace key**).
+   alone says `not_needed`: [the quick path](#quick-path-a-page-only-app)). Anything else: `npx grain pair` with the
+   fields of the command from the app's page (`--app`, `--owner`, `--genesis`; a project paired once keeps them, and an
+   app the registry holds needs its slug alone: the owner is read from its record), in the background, or
+   `npx grain pair --no-wait` and then `npx grain pair` to wait. **Show the person its QR code (the terminal's, or
+   `.grain/pair.html`) and the 6-digit code, and wait**: they scan it with Saltix (the phone's camera, or My apps → Pair
+   a server), check that Saltix shows the same code, keep **Add this server** and confirm with the PIN. `grain pair`
+   watches the registry and writes `app.key` and `app.json` once it names the key, renewing the offer while nobody
+   scans (no second command); the key is made on this computer and never leaves it. Then `npx grain doctor` names what
+   is left. **Never ask the person to paste, type or send a key.** **Never ask the person for a key, a token or an
+   address they did not give you**: the command on the app's page holds everything the computer needs; when a field is
+   missing, say which and where it is.
+4. **A developer key is retired.** Saltix makes no new ones (24-app-studio §3, 2026-10-28): a host where no command runs
+   is where the program's own first start runs `grain pair` once, its console showing the QR code as any terminal does.
+   One made before keeps working until its owner pairs a server in its place, and the server says so at start. If one
+   reaches you anyway, read only its public parts: `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network
+   (`dsalt`: Saltix's test network, of the devnet kind; `tsalt`: a testnet; `salt`: the main network), `genesis` the
+   first 8 bytes of its genesis hash in hex, `slug` the app (`salt:grain/<slug>`). The last part, 64 hex characters, is
+   the secret: never print, repeat, log or quote it, nor the whole key; `npx grain app-key --file app.key --offline`
+   prints the public parts, never `cat` the file. A key pasted into the chat is in the conversation's history now: write
+   it to `app.key` with `(umask 077 && cat > app.key)` without repeating it, and once the app runs ask the person to
+   pair this project instead (`grain pair --new`, then **Replace the other servers**) and to remove the old key in
+   Saltix (the app's page, **Servers**; a Saltix from before: a long press on the app, then Program, **Replace key**).
 5. **One app, one key, one program.** The key is this app's alone and runs one program: the app's own project. Never
    run the SDK's example (`npm run example`) or any other program with the key of an app that already has a program,
    and never reuse another app's key or slug: two programs on one key both answer in its chat. The example is an app of
@@ -223,19 +234,20 @@ bearer artefact that answers no server's challenge, so a server never takes it a
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
 
-**Payments** go through the wallet's own sheet, and a developer key's invoice pays the app's owner only (Saltix
+**Payments** go through the wallet's own sheet, and a registered server key's invoice (the paired key's) pays the app's owner only (Saltix
 12-grains [§5.2](docs/protocol/grains.md#52-payments)): `chat.invoice({ amount: "2.5", memo })` signs one to the owner the registry names, a card's
 `invoice` block carries it (a page hands it to `grain.pay`), and `chat.paymentOf` finds the payment on chain. Never
 deliver on the page's or the user's word, and never put another payee in an invoice: wallets refuse it (`payee`).
-Saltix 0.1.54 pays a developer key's invoice and 0.1.53 and older cannot, so say in the card what to do if the sheet does
+Saltix 0.1.54 pays a registered key's invoice and 0.1.53 and older cannot, so say in the card what to do if the sheet does
 not open: update Saltix ([docs/payments.md](docs/payments.md)).
 
 **The server's key is paired, never copied** (Saltix 24-app-studio [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). Start every session in an app's project
-with `grain status` (a page alone: `not_needed`, nothing to pair); when it is not `paired`, run `grain pair`, show the user its QR code (or `.grain/pair.html`) and the
-6-digit code, and wait while they scan it with Saltix and confirm: the key is made on this computer and never leaves it,
-and `grain pair` writes `app.key` once the registry names it. Never ask the user to paste, type or send a key; a developer
-key is only for a host where no command runs. `grain doctor` names the next step. Every command logs its steps to
-`.grain/log.jsonl`, codes and timings only.
+with `grain status` (a page alone: `not_needed`, nothing to pair); when it is not `paired`, run `grain pair` with the command from the app's page in
+Saltix (`--app`, `--owner`, `--genesis`: public facts, kept by the project once paired), show the user its QR code (or `.grain/pair.html`) and the
+6-digit code, and wait while they scan it with Saltix, compare the code and confirm: the key is made on this computer and never leaves it,
+and `grain pair`, watching the registry, writes `app.key` once it names the key. Never ask the user to paste, type or send a key, nor for an
+address they did not give you; developer keys are retired (one made before keeps working, with a warning to pair a server in its place).
+`grain doctor` names the next step. Every command logs its steps to `.grain/log.jsonl`, codes and timings only.
 
 Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, a developer key `saltix-app:1:…`) are never committed,
 printed, logged or pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
@@ -246,7 +258,7 @@ served, and the store that remembers it is never deleted to get past it); and a 
 stands (a key of another network or one the registry does not name, such a spec) exits with 78 (`setupCannotWork`,
 `ChatSetupError`), which its supervisor must not restart. Test every command end to end with `testChat`
 (`@saltix/grain-server/testing`: a development relay, registry and key, every card checked as Saltix checks it), never
-with a real developer key.
+with a real key.
 
 ## Building an app: check first, then render
 

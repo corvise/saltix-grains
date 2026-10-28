@@ -311,7 +311,7 @@ their agent) got stuck, how long the pairing took, which refusal came first. It 
 report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves to `log.1.jsonl`.
 
 ```json
-{"at":"2026-10-19T12:00:03.120Z","tool":"0.1.0","run":"9f2c01ab","command":"pair","step":"request","outcome":"ok","reason":"accepted","ms":41250,"network":"devnet"}
+{"at":"2026-10-28T12:00:03.120Z","tool":"0.1.0","run":"9f2c01ab","command":"pair","step":"paired","outcome":"ok","ms":41250,"network":"devnet"}
 ```
 
 - `run` ties the lines of one command together; `ms` counts from its start; `network` is the network's kind once the
@@ -325,15 +325,15 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 |---|---|
 | `init` | `chat`, `page`, `page_sign_in`: the project made |
 | `rotate` | `asked` (`--new`), or why `app.key` stopped working: `revoked`, `replaced`, `retired`, `unregistered`, `other_network` |
-| `paired_already` | `app.key` is named: nothing to do |
+| `paired_already` | `app.key` is named: nothing to do; `refused` with `server_key_taken` when `--app` names another app than the key serves (the registry names a key for one live app only: `--new`) |
+| `fields` | `refused`: `other_network` (`--genesis` or the owner's address of another network), `no_app`, `no_owner` (a new app without `--owner`), `owner_malformed`, `owner_unknown_network`, `owner_slug` |
 | `key_made`, `key_reused` | a new key in `.grain/pair.key`, or the one an earlier offer made |
-| `offer_made`, `offer_shown_again` | a new offer, or the one still living |
-| `offer` | `no_wait` (`--no-wait`: shown, not waited for); `offer_expired` (timeout: nobody asked in 30 minutes) |
-| `relay` | `ok`, or `network_unreachable`: no relay took the key's registration |
-| `request` | the answer to a request: `accepted`, `used`, `expired`, `unknown`, `other_app`, `not_owner`; a frame that was not a request: `frame_not_pairing`, `frame_malformed`, `frame_slug`, `frame_unread` |
-| `registry` | timeout: `answered_not_named` (Saltix was answered, its transaction has not named the key: a managed owner's delay, a cancelled PIN) or `not_asked` |
+| `record` | `refused` before anything is shown: `another_account` (the slug held for another account), `retired`, `server_key_taken` (the registry names this key for another app, or another account's app names it) |
+| `offer_made`, `offer_shown_again`, `offer_renewed` | a new offer, the one still living, or a new one made when the shown one expired with nobody having scanned it |
+| `offer` | `no_wait` (`--no-wait`: shown, not waited for) |
+| `registry` | `waiting` with `network_unreachable` (the network did not answer; the watch goes on); `refused` with `another_account` or `retired` (the record turned against the offer); `timeout` with `not_named` (`--timeout` passed: the registry has not named the key, a managed owner's delay, a cancelled PIN) |
 | `paired` | `app.key` and `app.json` written |
-| `status` | the state: `paired`, `not_needed` (a page alone), `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
+| `status` | the state: `paired`, `not_needed` (a page alone), `waiting`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
 | `doctor` | `done` (`ok`) when nothing is left (exit 0); `refused` with the first thing to do (exit 1): `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `registry` (a page's slug free: the deposit, the fees, the way to it; grain.json changed since the registry's version; a key file's transaction that can land no more), `bundle` (`public/` changed since), `upload` (not in the network: never a relay's `fetching` alone), `published`, `access` (public, but should be private), `icon`, `connect_profile`; `waiting` with the first thing waited for when nothing is to do but wait for the network (exit 75): `registry`, `upload`, `access`, `connect_profile` (a transaction a key file here sent, on its way) |
 | `serve` | `grain dev` serves: `sealed` (a new project's form), `page` (an older `grain init`'s placeholder origin), `hosted` |
 | `check` | `grain dev --check`: `clean`, `warnings`, or the first error's kind (`controls`, `page_error`, `open`, `connect_sheet`, `layout`, `tap`: with `--tap`, a tap after which the page threw or asked for what Saltix refuses); `refused` with `no_browser`; `waiting` with `no_sandbox`; `failed` with `browser` |

@@ -17,8 +17,8 @@ repository's account of what apps need of them, and the golden vectors in `vecto
 | `card-standard.ts`, `card-lint.ts` | the card standard (22-grain-chats §5a: the action bar's rows and emphasis, polls' looks and shares; it reproduces the vectors' `cards`), and the lint against the guide's numbers ([cards.md](cards.md)) |
 | `chat-server.ts`, `chat-store.ts`, `report.ts`, `stats.ts`, `member.ts` | `ChatServer`: requests, budget, console, error reports, numbers, private apps |
 | `testing.ts`, `dev.ts` | `@saltix/grain-server/testing` (`testChat`: an app's chat under test, wallets that check every card) and `/dev` (`createDevRelay`, `createDevRegistry`, whose `node_status` gives a node's clocks of Consensus 2 or the longest chain, `DevClock`: the registry's `position` by its heights, the slot by their pace): subpaths, not in `index.ts` |
-| `app-key.ts`, `network.ts` | the developer key; the public relays and the chain view a server reads |
-| `pairing.ts`, `key-file.ts` | pairing a server by QR code (24-app-studio §3a: the offer, its link and code, the frames, the computer's judgment, the wallet's check of an answer, the server key's proof; `vectors/server-pairing-v1.json`); where a server finds its key (`appKeyFromEnvironment`), refusing to start unpaired; a support address's consent signed with the key in `SALTIX_SUPPORT_KEY` (`supportConsentFromEnvironment`), never a file |
+| `app-key.ts`, `network.ts` | the form `app.key` holds (a developer key's, retired: Saltix makes no new ones); the public relays and the chain view a server reads |
+| `pairing.ts`, `key-file.ts` | pairing a server by QR code (24-app-studio §3a, version 2: the command from the app's page, the offer with the key's proof for the app and its owner, its link and code, the wallet's checks, the slug's verdict from the registry's record; no frames: the computer watches the registry; `vectors/server-pairing-v2.json`); where a server finds its key (`appKeyFromEnvironment`), refusing to start unpaired and warning of a key not paired here (`keyPairedHere`); a support address's consent signed with the key in `SALTIX_SUPPORT_KEY` (`supportConsentFromEnvironment`), never a file |
 | `relay.ts`, `records.ts`, `seal.ts`, `upload.ts`, `file.ts` | `RelayClient`, relay records, sealed frames, files next to the relay |
 | `named.ts`, `bundle-upload.ts`, `blobs.ts` | named blobs (32-images, `vectors/images-v1.json`): the image check and the bundle check (`checkImage`, `checkBundle`, `namedProblem`, `namedHash`), the server key's statement for a pending bundle (`signBundleUpload`, `bundleUploadProblem`), and putting a bundle (in pieces, resumed on `offset`, `busy` and `rate_limited` waited out) and an icon into the network and reading them back (`putBundle`, `putIcon`, `getBlob`, `blobHeld`); `dev.ts`'s registry takes blobs as a node does |
 | `login.ts`, `sign-in.ts`, `invoice.ts`, `notification.ts`, `sponsor.ts`, `node.ts` | sign-ins (a page's, with the team's member proof and its rights: `SignIns`), invoices, notifications, sponsors, a node's wallet interface |
@@ -116,6 +116,36 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 ## Decisions
 
 What the SDK decided, and why, where a choice was made; the newest first. A change that goes against one says so here.
+
+- **2026-10-28, pairing a server, version 2** (Saltix 24-app-studio §3a, corvise/saltix #488; the owner's rule: scan the
+  QR code, compare the code, confirm with the PIN, and nothing else — no key, token or address is ever pasted or carried,
+  and an agent never asks a person for one they did not give it):
+  - **The command's fields come from the command line, the project, then the registry.** `--app`, `--owner`, `--genesis`
+    first; else `app.json` (an app paired here on this network), the offer shown (`.grain/pair.json`), `grain.json`'s
+    slug; else, for an app the registry holds, the owner from its record, and the genesis is always the network's own.
+    A new app says plainly which field it needs and where it is (the app's page in Saltix). Rejected: guessing the owner
+    from `owner.key` (a key file's account is the owner only on a test network without a phone; the command names the
+    owner, and the proof binds it), and taking the fields from `grain.json` beyond the slug (it holds no owner).
+  - **The watch is unbounded by default**, with a short backoff (2 s growing to 15 s): an agent left waiting needs no
+    second command, and the offer renews itself (the same key, a new nonce) when it expires with nobody having scanned
+    it; `--timeout S` bounds it when a tool needs an end. Rejected: version 1's 10-minute default (it ended the wait
+    while the owner was still reading the sheet) and a relay session for a "done" message (the registry's word is the
+    answer; two sessions and the messenger's gate for the sake of a message the chain already carries).
+  - **The registry's record is read before anything is shown**: another account's slug, or a retired one, is refused
+    with the reason and the command's fields, and a key the record names already finishes at once; during the watch a
+    record that turns against the offer stops it. `ServerKeyTaken`, which the phone sees, is told on the computer where
+    it can be: `--app` naming another app than `app.key` serves, a pending key the registry names for the app it was
+    offered for before, another account's app naming the key — each says `grain pair --new`.
+  - **`grain status` says `waiting`** (an offer shown, the registry not naming the key yet), with the app and the owner
+    the offer is for, and names the whole command when it knows no fields; `pairing` is gone with version 1's exchange.
+  - **The server's name is the host name unless `--name` says otherwise**, cut to what an offer takes; the offer's
+    `name` is the server's (what the owner's sheet shows beside the fingerprint), no longer a new app's.
+  - **A developer key keeps working, with a warning**: `app.key` beside an `app.json` that names its public half was
+    paired here; any other key (`SALTIX_APP_KEY`, a file, `app.key` written by hand) was made elsewhere and carried, so
+    `appKeyFromEnvironment` says so once at start (`warn`, the console unless told) and `grain status` and `doctor` say
+    to pair a server in its place. Rejected: refusing such keys (the registry cannot tell them apart, and an app nobody
+    re-paired would stop) and a new file form for `app.key` (its form is a file's, never carried; a change would reach
+    every server for nothing).
 
 - **2026-10-28, support for an app** (corvise/saltix #474, the owner's request: an app's creator names its support, a
   person or an AI agent that answers and hands over to a person; the vectors at `6671fabb`):

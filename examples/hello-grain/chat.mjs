@@ -2,7 +2,7 @@
 // a secret, a file, an invoice and a status — and every action: run, open and reply; and one that fails on purpose, so
 // that the app's team gets the error in its console (24-app-studio §4). Every card follows the card design standard
 // (docs/cards.md: a status first, as the card's title), which packages/server/test/example.test.mjs holds it to.
-// `server.mjs` runs it from a developer key on a real network; `npm run dev` on the development relay.
+// `server.mjs` runs it from the key `grain pair` paired on a real network; `npm run dev` on the development relay.
 import { randomBytes } from "node:crypto";
 import { ChatServer, ChatRefusal, card, signInvoice, toHex } from "../../packages/server/dist/index.js";
 
@@ -25,7 +25,7 @@ function sessions(day, top, errorsOnly) {
 const hasScreen = (chat) => !chat.grain?.manifest || !("chat" in chat.grain.manifest.manifest.entry);
 
 /**
- * Start the chat: `options` are `ChatServer.start`'s (a developer key, or the slug, server key and certificate, and the
+ * Start the chat: `options` are `ChatServer.start`'s (the paired key, or the slug, server key and certificate, and the
  * spec and relays); `owner` is the account invoices pay, when the server key has a certificate that lets it sign them.
  */
 export async function startChat(options, owner = null) {
@@ -63,7 +63,7 @@ export async function startChat(options, owner = null) {
     const { csv, rows } = sessions(day, top, ask.args.errors_only === true);
     const file = await chat.upload(new TextEncoder().encode(csv), { name: `sessions-${day}.csv`, mime: "text/csv" });
     // An optional invoice, here only from a server key the owner key certified (`npm run dev` with CHAT_NODE). A server
-    // run from a developer key signs one to the app's owner with `chat.invoice` (docs/payments.md).
+    // run from its paired key signs one to the app's owner with `chat.invoice` (docs/payments.md).
     const invoice = options.cert && options.secret && owner
       ? signInvoice({
         slug: chat.slug, to: owner, asset: "SALT", amount: 1_000_000n, memo: "Thanks for the example", reference: toHex(randomBytes(16)),

@@ -1,4 +1,4 @@
-corvise/saltix e0492dc46cd0101f8af03be85e78f0cd981db10e
+corvise/saltix 5c045a9f294a44bd9b5befb231bc24504753934f
 grains-v1.json 4462263508b2843e2659c3f2196c2e2e3d3cb06a
 crypto-v1.json 5aefc29b8111dc46b92ac7326efe0296e0afea32
 relay-v1.json 2510e2ad0d1183e0c1145560fec0ed9224508b54
@@ -7,6 +7,6 @@ grain-chats-v1.json c0d704ee234ca7307c1455cf98dec4219acf0404
 handles-v1.json 249b377baab48941aceeedb3065e51f05a2670aa
 connect-v1.json 7e8f360c13091318e9d3a631d8dbd55f31bb8cc9
 connect-profiles-v1.json 194135f9bd18e75b965c81f67891615df92bc6e8
-server-pairing-v1.json 36fbc5dc2d98a63e3850f159bd281aa173757ad7
+server-pairing-v2.json 748aaf12f14c5980d4ae60f02c2d0e97e3648068
 images-v1.json 5adc7c6df87f966f15ffe5efc5f9f508cd5518f3
 accounts-v1.json bd65842851f649c32f5895f72453501f2e86a762

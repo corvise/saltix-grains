@@ -73,7 +73,7 @@ test("a project's AGENTS.md and README send a reader to the SDK's protocol pages
 
 test("the anchor the rules link to is the guide's heading", () => {
   assert.match(guide, /^## The rules every app follows$/m);
-  assert.match(guide, /^## The developer key is a secret$/m);
+  assert.match(guide, /^## A developer key made before pairing is a secret, and retired$/m);
 });
 
 test("(a) the key: where server.mjs reads it, where the guide keeps it, never on the command line", () => {
@@ -87,13 +87,18 @@ test("(a) the key: where server.mjs reads it, where the guide keeps it, never on
   assert.doesNotMatch(server, /process\.env\.SALTIX_APP_KEY/, "one reader of the key: the SDK's");
   assert.match(appRules, /never from the command line/);
   assert.match(guide, /Never put it on a command line/);
-  // The key is paired, never copied: status first, pair, show the QR code, never ask for a key.
+  // The key is paired, never copied: status first, pair with the command from the app's page, show the QR code, never
+  // ask for a key, a token or an address the person did not give.
   for (const text of [appRules, guide, agentsMd("coach", true), agentsMd("coach", false)]) {
     assert.match(text, /grain status/);
     assert.match(text, /grain pair/);
   }
-  assert.match(appRules, /Never ask the\s+user to paste, type or send a key/);
+  for (const text of [appRules, guide, agentsMd("coach", true)]) assert.match(text, /--app <slug> --owner <address>\s+--genesis <16 hex>|--app <slug> --owner <address> --genesis <16 hex>/);
+  assert.match(appRules, /Never ask the\s+user to paste, type or send a key, nor for an address they did not\s+give you/);
   assert.match(guide, /Never ask the user to paste/);
+  assert.match(guide, /\*\*Never ask the person for a key, a token or an address they did not give\s+you\*\*/);
+  assert.match(agentsMd("coach", true), /\*\*Never ask the\s+user for a key, a token or an address they did not give you\*\*/);
+  assert.doesNotMatch(appRules + guide + agentsMd("coach", true), /--accept|SGP1/, "nothing of version 1's exchange");
   assert.match(agentsMd("coach", true), /## Start here, every session/);
   // One app, one key, one program: never the example or a second program on a key, never another app's key or slug.
   assert.match(appRules, /\*\*One app, one key, one program\*\*/);
@@ -148,7 +153,7 @@ test("(f) payments: the SDK's calls, to the owner only, delivered on the chain's
     assert.ok(guide.includes(call), `the guide: ${call}`);
   }
   assert.match(appRules, /pays the app's\s+owner and nobody else/);
-  assert.match(guide, /a developer key's invoice pays the owner/);
+  assert.match(guide, /a registered key's invoice pays the owner/);
   assert.match(appRules, /never on the page's or the user's word/);
   assert.match(guide, /never deliver on the page's or the user's word/i);
   assert.match(appRules, /Saltix 0\.1\.53 and older/);

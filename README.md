@@ -1,8 +1,9 @@
 # saltix-grains
 
-Got a key starting with `saltix-app:1:`? It is a Saltix mini-app developer key — start with
-[docs/how-it-works.md](docs/how-it-works.md) and [AGENTS.md](AGENTS.md#start-here-saltixs-brief-or-a-developer-key);
-keep the key in `app.key`, never in a chat or a commit.
+Got a command starting with `grain pair --app`? It is the pairing command from a Saltix mini-app's page — start with
+[docs/how-it-works.md](docs/how-it-works.md) and [AGENTS.md](AGENTS.md#start-here-saltixs-brief-or-the-pairing-command);
+run it in the app's project and show its QR code. A key starting with `saltix-app:1:` is a developer key made before
+pairing: keep the key in `app.key`, never in a chat or a commit, and pair a server in its place.
 
 SDKs and tools for **grains**, apps that open inside Saltix wallets (*mini-apps*, as Saltix calls them in its Apps
 tab; *grain* is the protocol's word). The rules are the protocol's, and **[docs/protocol/](docs/protocol/README.md)**
@@ -35,8 +36,8 @@ app). Servers, keys and pairing are for an app with a program (a chat, payments,
 
 **[How a mini-app works](docs/how-it-works.md)**: what runs where, whether your app needs a server (a page alone needs
 none; a program connects out to the relays, with no domain, open port or certificate), and every step to a published
-app as one checklist. **[Your first app in ten minutes](docs/first-app.md)**: `grain pair` shows a QR code, your Saltix
-scans it and makes (or pairs) the app, `npm start`. The server's key is made on your computer and never leaves it:
+app as one checklist. **[Your first app in ten minutes](docs/first-app.md)**: `grain pair`, with the command from the
+app's page, shows a QR code; your Saltix scans it and makes (or pairs) the app; `npm start`. The server's key is made on your computer and never leaves it:
 nothing to copy.
 
 **A page needs no server and no hosting**: `grain publish` seals `public/` into a bundle and puts it straight into the
@@ -65,13 +66,13 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
 | [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `support`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: a preview of Saltix's Connect sheet from `connect.json` before the app opens, the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
-| [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
+| [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from its paired key (`npm run example`) |
 | [`examples/support-agent`](examples/support-agent) | an app's support answered by its program in the app's chat: the app's notes (`faq.json`), a language model whose key is in the environment, and a person's `@name` taking over (`createSupportAgent`, `npm run support-agent`) |
 | [`docs/how-it-works.md`](docs/how-it-works.md) | read first: the pieces of a mini-app and what runs where, *Do I need a server?*, the lifecycle as one checklist (one app, one key; connect; build; the standards; the simulator; publish; run the program; updates and key rotation), publishing a page, running the program |
-| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing an app's page |
+| [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, pairing the server, a command, going public, designing an app's page |
 | [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's page (safe by default, full screen with `viewport-fit=cover`), what a page gets from Saltix (and that it gets no design tokens), checking first, naming apps and people, and work on this repository; `CLAUDE.md` points to it; [`docs/agents/`](docs/agents/README.md) goes on from it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
-| [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
+| [`docs/payments.md`](docs/payments.md) | payments: invoices from a registered key (a paired one: to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
 | [`docs/support.md`](docs/support.md) | support for your app: the four forms of the support contact, `grain support`, a support address's consent, the support agent, what a user sees; and [what an agent with an address of its own still needs](docs/support-agent-address.md) |
 | [`docs/connect.md`](docs/connect.md) | Sign in with Saltix on a website or DApp: the site's Connect profile, the button, the QR code or the link, the Connect sheet, the grant checked, the relay path a page needs |
 | [`docs/icons.md`](docs/icons.md) | an app's icon: the standard (512 × 512, opaque, sRGB, 64 KiB, the rounded-square mask, the keyline circle), what `grain icon` makes from any picture, its checks and preview, and how it goes into the network |
@@ -80,13 +81,13 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | [`vectors/`](vectors/README.md) | the protocol's golden vectors, its own bytes copied unchanged, and what each file holds |
 
 The packages reproduce `vectors/grains-v1.json` (manifests, chat-only ones included, logins, invoices, notifications,
-the registry transactions of [12-grains](docs/protocol/grains.md) and [24-app-studio](docs/protocol/app-studio.md), deposits, the developer key), the addresses of
+the registry transactions of [12-grains](docs/protocol/grains.md) and [24-app-studio](docs/protocol/app-studio.md), deposits, developer keys made before pairing), the addresses of
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
 chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
 apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json`, the
 Connect profiles, their link and `SetGrainProfile`, and support addresses with their consent (format 2), of
-`vectors/connect-profiles-v1.json`, the pairing offers, frames
-and judgments of `vectors/server-pairing-v1.json` and the named blobs of `vectors/images-v1.json` (the image and bundle
+`vectors/connect-profiles-v1.json`, the pairing command, offers, proof and slug
+verdicts of `vectors/server-pairing-v2.json` and the named blobs of `vectors/images-v1.json` (the image and bundle
 checks, a bundle as `grain bundle` writes it, the server key's statement for an upload, the frames) byte for byte,
 refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
 `vectors/SOURCE` names the protocol commit and each file's blob id, which CI holds them to
@@ -97,7 +98,7 @@ refusals included. The vectors are the protocol's golden bytes, copied unchanged
 ```sh
 npm install
 npm run dev            # builds, then serves the simulator and hello-grain on :8090
-npx grain pair         # pairs this checkout's server key with an app in Saltix (a QR code; app.key once named)
+npx grain pair --app S --owner A --genesis G   # the command from the app's page in Saltix: a QR code; app.key once the registry names the key
 npm run example        # hello-grain's chat as that app's server, from app.key (or SALTIX_APP_KEY)
 SUPPORT_HUMAN=@anna npm run support-agent   # or the support agent as that app's server (docs/support.md)
 ```
@@ -117,9 +118,9 @@ SUPPORT_HUMAN=@anna npm run support-agent   # or the support agent as that app's
 
 ### Networks: no node of your own needed
 
-Saltix's **test network** is of the devnet kind: addresses `dsalt1…`, developer keys `saltix-app:1:dsalt:…`, and
+Saltix's **test network** is of the devnet kind: addresses `dsalt1…`, the pairing command's `--genesis` its genesis hash's first 8 bytes, and
 `network: "devnet"` wherever the SDK asks (`testnet` is a kind no public network runs yet). It is reset now and then;
-a developer key names the genesis it was made on, and the SDK refuses a key of a network that was reset. Since its v15
+a paired key names the genesis it was made on (`app.json`), and the SDK refuses a key of a network that was reset. Since its v15
 of 26 October 2026 it runs **Consensus 2**: a committee certifies every block, so a payment the node shows is final
 with one confirmation; and an epoch is 1 600 certified beacon heights, which run behind the slot clock, so read when an
 epoch begins from `node_status.epochs_ahead` and `pace`, never from `genesis_time + epoch · epoch_slots`
@@ -187,14 +188,14 @@ npx grain cert init && npx grain cert     # server.key, and cert.json: the owner
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
 npx grain init ../coach --chat            # a chat-only grain: grain.json, chat.json, server.mjs (npm start), no page
 npx grain status                          # is this project's server paired with its app? and what to run next
-npx grain pair                            # a QR code for the owner's Saltix: pairs this computer's own server key
+npx grain pair --app S --owner A --genesis G   # the command from the app's page in Saltix: a QR code for the owner's Saltix pairs this computer's own key
+npx grain pair                            # a project paired once keeps the fields; an app the registry holds needs its slug alone (grain.json's)
 npx grain pair --no-wait                  # the offer only (a coding agent shows it), then grain pair to wait
-npx grain pair --accept S                 # an offer that named no app: take the app S Saltix asked for (whoever saw the offer may ask)
-npx grain pair --new                      # a new key for the same app: rotation, or a key that stopped working
+npx grain pair --new                      # a new key for the same app (rotation, or one that stopped working), or for another app
 npx grain doctor                          # the project's state and the exact next step; exit 0, 1 or 75 (below)
 npx grain configure --slug dice --server server.key --category games   # the registry names the server key
-npx grain app-key make --slug dice        # app.key: its developer key, owner-only, never printed
-npx grain app-key --file app.key          # a developer key's public parts, and whether the registry names it
+npx grain app-key make --slug dice        # app.key for server.key, owner-only, never printed (test networks without a phone)
+npx grain app-key --file app.key          # app.key's public parts, and whether the registry names it
 npx grain access --slug dice --private --member dsalt1q…:user+developer   # its owner and members only
 npx grain access --slug dice --public     # anyone
 npx grain bind --handle @dice --slug dice # a username you hold opens the app's chat
@@ -354,26 +355,37 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `configure`, `access` and `bind` are the owner's (the handle's holder's) calls: the account is said first; signed with
   a key file when `--key` names it or it is the owner's (test networks), refused before a node would refuse them;
   otherwise the tool says what to do in the owner's Saltix (My apps) and waits for the registry (`--timeout`). `configure` replaces the server keys and the category
-  (`--revoke-all` names no key, which stops every developer key at once); `access` replaces public or private and the
+  (`--revoke-all` names no key, which stops every server key at once); `access` replaces public or private and the
   members. A rating names its account and is signed by the rater's key (`--key`), or given in Saltix.
 - `configure` sends the form of the network's protocol version (`node_status.protocol`; [24-app-studio
   §2](docs/protocol/app-studio.md#2-the-registry)): bare keys (tag 34) while it runs version 1, valid at most until the
   slot before a scheduled switch to version 2 and not sent in the last 30 slots before it; from version 2 each key with
   its proof (tag 39), which `--server server.key` signs here for the app and its owner. A key given as bare hex cannot be
   proven, so from version 2 it is refused, and the owner's Saltix names a computer's key only by pairing it (`grain
-  pair`), whose answer carries the proof.
-- `grain pair` (Saltix [24-app-studio §3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)) makes the server's Ed25519 key on this computer, in
-  `.grain/pair.key` (owner-only, never printed), and shows its offer: a QR code (with colours on a terminal; plain half
-  blocks elsewhere, drawn for a dark background), `.grain/pair.html`, the link `salt:grain-pair?o=…` and a 6-digit code
-  that Saltix shows too. Nothing in the offer is secret. The owner's Saltix scans it, picks the app (`grain.json`'s slug,
-  or `--slug`; with none, any of theirs, or a new one named by `--name`) and asks this computer through the relays; it
-  answers one app and one owner per offer with the key's proof for them, prints who asked, and watches the registry
-  (`--timeout`, 600 seconds) until it names the key, then writes `app.key` (owner-only, the developer key's form) and
-  `app.json` (the app, the network, the key's public half), and keeps `app.key`, `*.key` and `.grain/` out of git.
-  Run again, it shows the same offer while it lives (30 minutes) and finishes once Saltix's transaction landed (a
-  managed account's may wait its delay). `--new` pairs a new key and keeps the old `app.key` in `.grain/`.
-- `grain status` prints `paired`, `not_needed` (a page alone: nothing to pair), `pairing`, `unpaired`, `revoked`,
-  `replaced`, `retired`, `unregistered`, `other_network`, `invalid` or `unknown`, one line on why, and the command to
+  pair`), whose offer carries the proof.
+- `grain pair` (Saltix [24-app-studio §3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)) takes the three
+  public fields of the command the app's page in Saltix shows (`--app <slug> --owner <address> --genesis <16 hex>`; a
+  project paired once keeps them in `app.json` and `.grain/pair.json`, and for an app the registry holds `grain pair`
+  alone reads the owner from its record; a new app needs `--app` and `--owner`), reads the registry's record of the slug
+  first (another account's, or retired: refused before anything is shown), makes the server's Ed25519 key on this
+  computer, in `.grain/pair.key` (owner-only, never printed), signs its proof for the app and the owner — the very proof
+  a `ConfigureGrain` of tag 39 carries — and shows its offer: a QR code (with colours on a terminal; plain half blocks
+  elsewhere, drawn for a dark background), `.grain/pair.html`, the link `salt:grain-pair?o=…` and a 6-digit code that
+  Saltix shows too. Nothing in the offer is secret, and nothing is signed but the proof. The owner's Saltix scans it,
+  checks it by itself (its network, the clock, the owner is this account, the proof, the slug its own or free) and
+  names the key; this computer watches the registry (`grain_get` through the public relays, polled with a short backoff:
+  no relay session, no mailbox) until the record names its key, renewing the offer when it expires with nobody having
+  scanned it, then writes `app.key` (owner-only) and `app.json` (the app, its owner, the network, the key's public
+  half), and keeps `app.key`, `*.key` and `.grain/` out of git. It waits until then (`--timeout S` stops it after S
+  seconds; `--no-wait` shows the offer and returns); run again, it shows the same offer while it lives (30 minutes) and
+  finishes once Saltix's transaction landed (a managed account's may wait its delay). `--name` names this server on the
+  owner's screen (the host name unless told). `--new` pairs a new key — to rotate it, or for another app, since the
+  registry names a key for one live app only — and keeps the old `app.key` in `.grain/`. No key, token or address is
+  ever pasted: the owner scans, compares the code and confirms with the PIN.
+- `grain status` prints `paired`, `not_needed` (a page alone: nothing to pair), `waiting` (an offer shown, the registry
+  not naming the key yet), `unpaired`, `revoked`,
+  `replaced`, `retired`, `unregistered`, `other_network`, `invalid` or `unknown`, one line on why (and a warning when
+  `app.key` holds a developer key made in Saltix: pair a server in its place), and the command to
   run next (`--json` for a program, `next` in the same words, `nothing: …` once paired, never null; exit 0 when paired
   or not needed). `grain doctor` checks the rest of the way to an app that runs (`.gitignore`, the key file's mode,
   `chat.json`'s version, `npm install`, a page's bundle and where its publish stands, `not_uploaded`, `pending`,

@@ -1,12 +1,13 @@
 // The example's chat as your app's server, from its key and nothing else: the key `grain pair` made in the checkout and
-// Saltix paired (app.key, 24-app-studio §3a), or a developer key Saltix gave you (§3):
+// Saltix paired (app.key, 24-app-studio §3a: the command from the app's page, a QR code the owner scans), or a developer
+// key Saltix made before pairing (§3, retired: it works, with a warning to pair a server in its place):
 //
-//   npx grain pair && npm run example      or   SALTIX_APP_KEY_FILE=app.key npm run example
+//   npx grain pair --app <slug> --owner <address> --genesis <16 hex> && npm run example      or   SALTIX_APP_KEY_FILE=app.key npm run example
 //
 // The key names the app, its network and its server key. The server finds the network's public relays, checks that
 // the registry names the key, signs `chat.json` with it (its slug set to your app's) and answers in your app's chat.
 //
-//   SALTIX_APP_KEY       the developer key itself (keep it out of your shell's history: an .env file, or a secret store)
+//   SALTIX_APP_KEY       the key's text itself (a developer key made before: keep it out of your shell's history: an .env file, or a secret store)
 //   SALTIX_APP_KEY_FILE  or a file holding it, readable by you alone (app.key in the checkout by default: grain pair writes it)
 //   CHAT_SPEC            the chat spec in its JSON form (chat.json next to this file by default)
 //   CHAT_STORE           where the server remembers answered requests and its numbers (chat.store.json)

@@ -1,6 +1,7 @@
 // `grain status` and `grain doctor`: where a project's server stands, read from its files and the registry, and the
-// exact next step. `status` answers one question, whether the server is paired with its app (Saltix 24-app-studio §3a);
-// a page alone has no server, so for it pairing is `not_needed`. `doctor` checks the rest of the path to an app that runs
+// exact next step. `status` answers one question, whether the server is paired with its app (Saltix 24-app-studio §3a):
+// `paired`, `waiting` (an offer shown, the registry not naming the key yet), `unpaired`, or what became of a key that
+// worked; a page alone has no server, so for it pairing is `not_needed`. `doctor` checks the rest of the path to an app that runs
 // or a page that is published, and stops at the first thing to do: before a page's first publish, what registering it
 // takes (the deposit, and on the test network without a phone the faucet and `--key owner.key`); a transaction a key
 // file here sent, until it landed; and an outcome its exit status tells: nothing to do (0), something to do (1), or
@@ -10,8 +11,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type Manifest, type NodeLike, type PairingOffer, type RegisteredGrain, NO_ICON, UNOWNED, blobHeld, decodeOffer, encodeManifest, fromHex, grainGet,
-  grainQuote, iconHash, keyFingerprint, minimumFee, nodeCall, registeredKeyStatus, toHex,
+  AppKey, APP_KEY_FILE, type Manifest, type NetworkName, type NodeLike, type RegisteredGrain, NO_ICON, UNOWNED, blobHeld, decodeOffer, encodeManifest, fromHex,
+  grainGet, grainQuote, iconHash, judgeSlug, keyFingerprint, keyPairedHere, minimumFee, nodeCall, registeredKeyStatus, slugRecordOf, targetOwner, toHex,
 } from "@saltix/grain-server";
 import { type Bundle, makeBundle } from "./bundle.js";
 import { CONNECT_FILE, TEMPLATE_NEXT, lintConnect, readConnectFile, stillTemplate, templateTexts } from "./connect.js";
@@ -19,7 +20,7 @@ import { EXIT_WAITING, GRAIN_DIR } from "./devlog.js";
 import { saltOf } from "./faucet.js";
 import { ICON_FILES, checkIcon } from "./icon.js";
 import { accountOf, addressOf } from "./owner.js";
-import { PAIR_KEY_FILE, acceptHint, confirmedSlug, gitignoreOk, namedFor, pendingKey, readPairState } from "./pair.js";
+import { PAIR_KEY_FILE, gitignoreOk, pendingKey, readManifestSlug, readPairState } from "./pair.js";
 import { KEY_FILE, readKey } from "./project.js";
 import {
   type PublishState, type SentRecord, STALE_MS, isPublishCall, landedIn, nextVersion, publicChanged, readPublishState, sameContent, sealedAsSent,
@@ -31,9 +32,12 @@ import { protocolOf } from "./sources.js";
 import { privateCall } from "./studio.js";
 import { LANDS_IN } from "./wait.js";
 
-/** Where a project's server stands with its app; `not_needed` for a page alone, which has no server. */
+/** Where a project's server stands with its app: `paired`; `not_needed` for a page alone, which has no server;
+ *  `waiting`, a key made by `grain pair` whose offer the registry has not answered yet; `unpaired`, no key at all; what
+ *  became of `app.key` (`revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`); `unknown`, the
+ *  network did not answer. */
 export type PairStatus =
-  | "paired" | "not_needed" | "pairing" | "unpaired" | "revoked" | "replaced" | "retired" | "unregistered" | "other_network" | "invalid"
+  | "paired" | "not_needed" | "waiting" | "unpaired" | "revoked" | "replaced" | "retired" | "unregistered" | "other_network" | "invalid"
   | "unknown";
 
 /** The states `grain status` exits 0 for: nothing to pair. */
@@ -60,7 +64,12 @@ export interface KeyState {
   detail: string;
   /** The command to run next, or null when there is none. */
   next: string | null;
+  /** Something to know that stops nothing: `app.key` holds a developer key made in Saltix, which keeps working while
+   *  a server is paired in its place. */
+  warning?: string;
   slug?: string;
+  /** The owner's address, as the command named it. */
+  owner?: string;
   network?: string;
   fingerprint?: string;
   /** The registry's record of the app, when the key names one and the node answered. */
@@ -88,18 +97,19 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
       next: `grain status${flags} again once the network answers (or pass --relay or --node)`,
     };
   }
+  const genesis16 = status.genesis.slice(0, 16);
   if (existsSync(appKeyPath)) {
     let key: AppKey;
     try {
       key = AppKey.parse(readFileSync(appKeyPath, "utf8"));
     } catch (e) {
-      return { status: "invalid", detail: `app.key is not a developer key (${(e as Error).message})`, next: `grain pair --new${flags}` };
+      return { status: "invalid", detail: `app.key is not a server key (${(e as Error).message})`, next: `grain pair --new${flags}` };
     }
     const base = { slug: key.slug, network: key.network, fingerprint: keyFingerprint(key.publicKey) };
     if (!key.isFor(status.network, status.genesis)) {
       return {
         ...base, status: "other_network",
-        detail: `app.key is for ${key.network} ${key.genesis}, but the network answering is ${status.network} ${status.genesis.slice(0, 16)} (a reset?)`,
+        detail: `app.key is for ${key.network} ${key.genesis}, but the network answering is ${status.network} ${genesis16} (a reset?)`,
         next: `grain pair --new${flags}`,
       };
     }
@@ -107,10 +117,17 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
     const why = registeredKeyStatus(grain, key.publicKey);
     if (why === null) {
       const first = grain!.servers![0] === key.publicKey;
+      // A key paired here has app.json beside it naming its public half; any other was made elsewhere (a developer key
+      // made in Saltix, which makes no new ones) and carried here: it keeps working, and a server paired in its place
+      // is the way.
+      const warning = keyPairedHere(dir, key) ? {} : {
+        warning: "app.key holds a developer key made in Saltix (or written by hand), not one paired here: it keeps working, and " +
+          `Saltix makes no new ones; pair a server in its place (grain pair --new${flags}, then remove the old key in the app's page)`,
+      };
       return {
         ...base, status: "paired", grain,
         detail: `paired with ${key.slug} on ${key.network} (key ${base.fingerprint}${first ? ", the app's chat goes to it" : ", not the first key: chats go to the first"})`,
-        next: null,
+        next: null, ...warning,
       };
     }
     const words = {
@@ -122,47 +139,57 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
   const secret = existsSync(join(dir, PAIR_KEY_FILE)) ? pendingKey(dir) : null;
   if (secret !== null) {
     const key = toHex(ed25519.getPublicKey(secret));
+    const base = { status: "waiting" as const, fingerprint: keyFingerprint(key) };
     const state = readPairState(dir);
-    let offer = "no offer shown";
-    let shown: PairingOffer | null = null;
-    if (state && state.genesis === status.genesis) {
-      try {
-        shown = decodeOffer(fromHex(state.offer));
-        offer = Date.now() < shown.expiresAt ? `an offer valid until ${new Date(shown.expiresAt).toISOString()}` : "its offer expired";
-      } catch {
-        offer = "an unreadable offer";
-      }
+    if (!state || state.network !== (status.network as NetworkName) || state.genesis !== status.genesis) {
+      return { ...base, detail: `a key made by grain pair (${base.fingerprint}) is not paired yet: no offer shown for this network`, next: `grain pair${flags}` };
     }
-    // The current offer's answer alone counts, and only for the app the developer confirmed (the offer's slug, or
-    // --accept's): an answer for another app pairs nothing by itself.
-    const answered = shown && state ? state.answered.filter((a) => a.offer === shown!.nonce) : [];
-    const confirmed = shown ? confirmedSlug(shown, state?.accepted) : null;
-    const named = await namedFor(node, key, answered, confirmed);
-    if (named) {
+    const target = state.target;
+    let offer = "its offer expired";
+    try {
+      const shown = decodeOffer(fromHex(state.offer));
+      if (Date.now() < shown.expiresAt) offer = `an offer valid until ${new Date(shown.expiresAt).toISOString()}`;
+    } catch {
+      offer = "an unreadable offer";
+    }
+    // The registry's word on the pending key, for the app and the owner it was offered for.
+    let owner = "";
+    try {
+      owner = targetOwner(target);
+    } catch {
+      // An unreadable owner address in the state: the record is judged as another account's below.
+    }
+    const verdict = judgeSlug({ key, owner }, slugRecordOf(await grainGet(node, target.slug)));
+    const named = { ...base, slug: target.slug, owner: target.owner };
+    if (verdict === "paired_already") {
+      return { ...named, detail: `the registry names the pending key ${base.fingerprint} for ${target.slug}: grain pair writes app.key`, next: `grain pair${flags}` };
+    }
+    if (verdict === "another_account") {
       return {
-        status: "pairing", slug: named.slug, fingerprint: keyFingerprint(key),
-        detail: `the registry names the pending key ${keyFingerprint(key)} for ${named.slug}: grain pair writes app.key`,
-        next: `grain pair${flags}`,
+        ...named, detail: `${target.slug} belongs to another account, not ${target.owner}: the offer shown pairs nothing`,
+        next: `grain pair --app ${target.slug} --owner <the owner's address> --genesis ${target.genesis}${flags} (copy the command from the app's page in Saltix)`,
       };
     }
-    const asked = answered[0];
-    if (asked && confirmed === null) {
+    if (verdict === "retired") {
       return {
-        status: "pairing", fingerprint: keyFingerprint(key),
-        detail: `a key made by grain pair (${keyFingerprint(key)}) is not paired yet: Saltix asked to pair it with ${asked.slug}, which this ` +
-          `project was not set up for, and that is not confirmed (grain pair --new makes a new key and offer if someone else saw the offer)`,
-        next: acceptHint(asked.slug, flags),
+        ...named, detail: `${target.slug} is retired, and a retired slug is never used again: the offer shown pairs nothing`,
+        next: `grain pair --app <a new app's slug> --owner <its owner's address> --genesis ${target.genesis}${flags} (make the app in Saltix; its page shows the command)`,
       };
     }
-    const waiting = asked ? `; Saltix asked for ${asked.slug}, and its transaction has not named the key yet` : "";
     return {
-      status: "pairing", fingerprint: keyFingerprint(key),
-      detail: `a key made by grain pair (${keyFingerprint(key)}) is not paired yet: ${offer}${waiting}`,
-      next: `grain pair${flags}`,
+      ...named, detail: `a key made by grain pair (${base.fingerprint}) is not paired yet: ${offer} for ${target.slug} (owner ${target.owner})`,
+      next: `grain pair${flags} (it shows the offer again and waits for the registry)`,
     };
   }
   const env = process.env.SALTIX_APP_KEY?.trim() ? " (SALTIX_APP_KEY is set in this shell: the server would use it, this command does not read it)" : "";
-  return { status: "unpaired", detail: `no app.key and no key waiting in ${GRAIN_DIR}/${env}`, next: `grain pair${flags}` };
+  // No key at all: the command's fields come from the registry for an app it holds (grain.json's slug), else from the
+  // app's page in Saltix.
+  const slug = readManifestSlug(dir);
+  const held = slug === null ? null : await grainGet(node, slug).catch(() => null);
+  const next = held
+    ? `grain pair${flags} (the app's owner is read from the registry)`
+    : `grain pair --app ${slug ?? "<slug>"} --owner <the owner's address> --genesis ${genesis16}${flags} (copy the command from the app's page in Saltix)`;
+  return { status: "unpaired", detail: `no app.key and no key waiting in ${GRAIN_DIR}/${env}`, next };
 }
 
 /** One of `doctor`'s findings: ok; something to do, which `next` says; or nothing to do but wait for the network. */
@@ -171,6 +198,8 @@ export interface Finding {
   what: string;
   detail: string;
   next?: string;
+  /** Something to know that stops nothing (`KeyState.warning`). */
+  warning?: string;
   /** Not done yet, with nothing to do about it but wait: a transaction on its way to the registry. */
   waiting?: boolean;
 }
@@ -440,7 +469,7 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
   if (state.status === "not_needed") {
     findings.push({ ok: true, what: "key", detail: `not needed: a page alone has no server (grain pair${flags} would let grain publish put its bundle into the network before the owner signs)` });
   } else {
-    findings.push({ ok: state.status === "paired", what: "key", detail: state.detail, ...(state.next ? { next: state.next } : {}) });
+    findings.push({ ok: state.status === "paired", what: "key", detail: state.detail, ...(state.next ? { next: state.next } : {}), ...(state.warning ? { warning: state.warning } : {}) });
   }
 
   const appKeyPath = join(dir, APP_KEY_FILE);
@@ -449,7 +478,7 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
   }
 
   if (state.status === "paired" && manifest?.slug && manifest.slug !== state.slug) {
-    findings.push({ ok: false, what: "app", detail: `grain.json names ${manifest.slug}, but the key is ${state.slug}'s`, next: `set grain.json's slug to ${state.slug}, or grain pair --new${flags} for ${manifest.slug}` });
+    findings.push({ ok: false, what: "app", detail: `grain.json names ${manifest.slug}, but the key is ${state.slug}'s`, next: `set grain.json's slug to ${state.slug}, or grain pair --new --app ${manifest.slug}${flags}` });
   }
 
   const chatOnly = existsSync(chatPath) && (!manifest?.entry || "chat" in manifest.entry);

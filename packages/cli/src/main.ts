@@ -157,20 +157,28 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            rate someone else's grain (0 withdraws your rating); public, by account
   grain bind --handle @name --slug S       (or --clear) point a username you hold at your grain: @name opens
                                            its chat
-  grain pair [--slug S] [--name N] [--accept S] [--new] [--no-wait] [--timeout 600]
+  grain pair [--app S] [--owner ADDRESS] [--genesis HEX16] [--name N] [--new] [--no-wait] [--timeout S]
                                            pair this computer's server with its app in the owner's Saltix by a QR
                                            code: the key is made here and never leaves it (.grain/pair.key, then
-                                           app.key, owner-only, and app.json); it answers the phone, waits until the
-                                           registry names the key and writes them. The slug is grain.json's unless
-                                           --slug; --name names a new app; --new pairs a new key (to rotate it);
-                                           --no-wait shows the offer and returns. An offer that names no app (no
-                                           grain.json, no --slug) answers whoever asks but pairs nothing by itself:
-                                           once it says "Saltix asked to pair this server with S", grain pair
-                                           --accept S takes that app (anyone who saw the offer may have asked)
-  grain status [--json]                    whether this project's server is paired with its app (paired, pairing,
+                                           app.key, owner-only, and app.json). The app's page in Saltix shows the
+                                           command with its three public fields: the app, the owner's address and
+                                           the network's genesis (its first 8 bytes); a project paired once keeps
+                                           them, and for an app the registry holds the owner is read from its
+                                           record, so grain pair alone does there. It signs the key's proof for
+                                           that app and owner, shows the offer (a QR code, .grain/pair.html, the
+                                           link, a 6-digit code to compare) and watches the registry until the
+                                           owner's Saltix names the key, renewing the offer when it expires; then
+                                           it writes app.key and app.json. No key, token or address is ever
+                                           pasted: the owner scans, compares the code and confirms with the PIN.
+                                           --name names this server on the owner's screen (the host name unless
+                                           told); --new pairs a new key (to rotate it, or for another app);
+                                           --no-wait shows the offer and returns; --timeout stops waiting after S
+                                           seconds (unless told, it waits until the key is named)
+  grain status [--json]                    whether this project's server is paired with its app (paired, waiting,
                                            unpaired, revoked, replaced, retired, unregistered, other_network; a
                                            page alone: not_needed) and the command to run next; exit 0 when paired
-                                           or not_needed
+                                           or not_needed. A developer key made in Saltix in app.key still works,
+                                           with a warning to pair a server in its place
   grain doctor [--json]                    the project's state and the exact next step: the key, .gitignore, the
                                            chat spec, dependencies, a page's bundle and where its publish stands
                                            (not_uploaded, pending, waiting_for_owner, pending_expired, published:
@@ -425,7 +433,8 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner public key ${ownerKey}: its secret is in ${KEY_FILE} (keep it secret)`);
         console.log(`next: npm install, then grain pair in ${dir}: scan its QR code with your Saltix, which makes the app ` +
-          `${slug} (or pairs it, if it is yours already); then npm start. The server's key is made here and never leaves it`);
+          `${slug} (or pairs it, if it is yours already); then npm start. The server's key is made here and never leaves it. ` +
+          `A new app needs the owner's address: grain pair --owner <your address> (the app's page in Saltix shows the whole command)`);
         console.log(`  or on the test network, with owner.key: grain faucet --wait, grain publish, grain cert init, ` +
           `grain configure --slug ${slug} --server server.key, grain app-key make --slug ${slug}`);
         log.step("init", "ok", "chat");
@@ -703,7 +712,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         const version = networkVersion(await nodeCall<VersionStatus>(r.node, "node_status"));
         if (version >= 2) {
           throw new Error(`the network runs protocol version ${version}: the owner's Saltix names a server key with its proof, ` +
-            `which comes with its pairing: run grain pair --slug ${slug} on the computer that holds the key and scan its QR code ` +
+            `which comes with its pairing: run grain pair --app ${slug} on the computer that holds the key and scan its QR code ` +
             `in Saltix (or sign here with --key, the owner's key file, on the test network)`);
         }
       }
@@ -778,13 +787,22 @@ async function main(argv: string[], log: DevLog): Promise<number> {
     case "pair": {
       const r = reach();
       const given = flags.get("timeout");
+      if (given === true || (typeof given === "string" && !/^\d+$/.test(given))) throw new UsageError("--timeout S: seconds to wait at most");
+      const field = (name: string): string | undefined => {
+        const value = flags.get(name);
+        if (value === true) throw new UsageError(`--${name} takes a value: copy the command from the app's page in Saltix`);
+        return typeof value === "string" ? value : undefined;
+      };
+      const tty = process.stdout.isTTY === true;
       return pair({
         dir: process.cwd(), node: r.node, flags: r.flags, log,
-        slug: typeof flags.get("slug") === "string" ? (flags.get("slug") as string) : undefined,
-        name: typeof flags.get("name") === "string" ? (flags.get("name") as string) : undefined,
-        accept: typeof flags.get("accept") === "string" ? (flags.get("accept") as string) : undefined,
+        ...(field("app") !== undefined ? { app: field("app")! } : {}),
+        ...(field("owner") !== undefined ? { owner: field("owner")! } : {}),
+        ...(field("genesis") !== undefined ? { genesis: field("genesis")! } : {}),
+        ...(field("name") !== undefined ? { name: field("name")! } : {}),
         fresh: flags.get("new") === true, wait: flags.get("no-wait") !== true,
-        timeoutMs: Number(typeof given === "string" ? given : "600") * 1000, tty: process.stdout.isTTY === true,
+        ...(typeof given === "string" ? { timeoutMs: Number(given) * 1000 } : {}),
+        tty, ...(tty ? { progress: rewriteLine((text) => process.stdout.write(text)) } : {}),
       });
     }
     case "status": {
@@ -799,6 +817,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       } else {
         console.log(`status: ${state.status}`);
         console.log(`  ${state.detail}`);
+        if (state.warning) console.log(`warning: ${state.warning}`);
         console.log(`next: ${next}`);
       }
       return settled(state.status) ? 0 : 1;
@@ -817,6 +836,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         for (const f of findings) {
           const tag = f.ok ? "ok  " : f.waiting ? "wait" : "fix ";
           console.log(`${tag} ${f.what.padEnd(15)} ${f.detail}${f.ok || !f.next ? "" : ` → ${f.next}`}`);
+          if (f.warning) console.log(`warn ${f.what.padEnd(15)} ${f.warning}`);
         }
         console.log(`next: ${next}`);
       }
