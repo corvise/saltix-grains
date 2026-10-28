@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import {
   type ConnectProfile, type Manifest, MAX_PROFILE_BYTES, MAX_PROFILE_LINK, PERMISSIONS, PROFILE_LIMITS, ProfileError, encodeProfile, httpsLinkOk,
-  languageOk, profileFromJson, profileLink, profileProblem, refusedChar, supportOk,
+  languageOk, offlineOwner, profileFromJson, profileLink, profileProblem, refusedChar, supportAddress, supportOk,
 } from "@saltix/grain-server";
 import { ICON_FILES, checkIcon } from "./icon.js";
 import { connectTexts } from "./template.js";
@@ -168,7 +168,9 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
   if ("owner" in value || "revision" in value) {
     warnings.push(`${where}: owner and revision are filled in when it is set (the owner's account, the registry's revision and one): leave them out`);
   }
-  if (value.version !== 1) errors.push(`${where}: version: 1, the format's version`);
+  if (value.version !== 1 && value.version !== 2) {
+    errors.push(`${where}: version: 1, the format's version; 2 when support is a Saltix address (protocol version 9 and later: grain support sets both)`);
+  }
   const subject = value.subject;
   const slug = isObject(subject) && Object.keys(subject).length === 1 && isObject(subject.grain) ? subject.grain.slug : undefined;
   if (slug === undefined) errors.push(`${where}: subject: {"grain": {"slug": "${m.slug}"}}`);
@@ -209,13 +211,21 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
     }
   }
   if (langs.length === 1 && langs[0] === "en") warnings.push(`${where}: texts: English only; add "ru" (Saltix shows the English words to every other reader)`);
-  for (const [field, ok, rule] of [
-    ["website", httpsLinkOk, LINK_RULE],
-    ["terms", httpsLinkOk, LINK_RULE],
-    ["support", supportOk, `an https:// link, a mailto: address with nothing after it, or a Saltix username (@name)`],
-  ] as const) {
+  for (const [field, ok, rule] of [["website", httpsLinkOk, LINK_RULE], ["terms", httpsLinkOk, LINK_RULE]] as const) {
     const v = value[field];
     if (v !== undefined && v !== null && !ok(v)) errors.push(`${where}: ${field}: ${rule}`);
+  }
+  const support = value.support;
+  if (support !== undefined && support !== null && !supportOk(support)) {
+    if (supportAddress(support) === null) {
+      errors.push(`${where}: support: an https:// link, a mailto: address with nothing after it, a Saltix username (@name), or a Saltix ` +
+        "address in its canonical form (lowercase, dsalt1…; protocol version 9 and later): grain support writes one");
+    } else if (value.version !== 2) {
+      errors.push(`${where}: support: a Saltix address needs version 2, which networks take from protocol version 9: grain support sets both`);
+    }
+  }
+  if (value.version === 2 && supportAddress(support) === null) {
+    warnings.push(`${where}: version 2 with no support address: a network before protocol version 9 refuses it, and version 1 says the same (grain support sets it)`);
   }
   // A link that leads nowhere: Saltix's sheet would show it, and users would tap it.
   errors.push(...placeholderLinks(value).map((words) => `${where}: ${words}`));
@@ -227,7 +237,7 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
   // In words above; the format's own check has the last word, so nothing the network refuses passes here.
   let profile: ConnectProfile;
   try {
-    profile = profileOfProject(value, m.owner, 1);
+    profile = profileOfProject(value, offlineOwner(value, m.owner), 1);
   } catch (e) {
     errors.push((e as Error).message);
     return { errors, warnings };
@@ -239,7 +249,7 @@ export function lintConnect(projectDir: string, m: Manifest): Lint {
   }
   const problem = profileProblem(profile);
   if (problem) {
-    errors.push(`${where}: ${problem}: out of bounds (Saltix 19-connect §11.1)`);
+    errors.push(`${where}: ${problem}: ${problem.startsWith("consent_") ? "the support address's consent does not hold (grain support <address> --consent F checks it against the network)" : "out of bounds"} (Saltix 19-connect §11.1)`);
     return { errors, warnings };
   }
   try {

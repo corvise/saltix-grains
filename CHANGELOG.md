@@ -2,8 +2,46 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Support for your app** (Saltix 19-connect §11.1, corvise/saltix #474, protocol version 9; [docs/support.md](docs/support.md)):
+  an app's Connect profile names who answers its users, and the SDK holds every form to the network's rules.
+  - **The profile's format 2**: `support` may be a Saltix address too, the owner's own or one whose holder signed its
+    consent (`support_consent`, `SupportConsent`: the address's key over `"Saltix support consent v1"`, the network's
+    genesis hash, the app's slug and its owner). `profileProblem`, `verifyProfile`, `checkGrainProfile` and
+    `checkSiteProfile` read by a `ProfileReading` (the block's protocol version, the network, its genesis hash), with
+    the refusals `consent_missing`, `consent_unneeded`, `consent_key`, `consent_slug`, `consent_owner`,
+    `consent_signature`, and `version` for format 2 before version 9; `supportAddress`, `supportKind`,
+    `supportProblem`, `supportAccount`, `signSupportConsent`, `verifySupportConsent`, `encodeSupportConsent`,
+    `supportConsentFromJson`, `offlineOwner`, `grainOwnerPayload` (also a server key's proof's payload), and
+    `supportConsentFromEnvironment`, which signs with the key in `SALTIX_SUPPORT_KEY`, never a file. A profile call of
+    format 2 is protocol version 9's (`callVersions`), and `signGrainTx` checks its consent on the network it signs
+    for. Held to `vectors/connect-profiles-v1.json`'s `support_address`, every case as a block of version 8 and one of
+    version 9 read it.
+  - **`grain support <contact>`** writes `connect.json`'s support contact in its canonical form and checks it as the
+    network will: a link or an e-mail address; a username, refused when nobody holds it (whoever minted it would get
+    the app's users' questions), said to open the app's chat when bound to it; an address of this network from
+    protocol version 9, the owner's own or with its holder's consent (`--consent F`, or signed here from
+    `SALTIX_SUPPORT_KEY`). `grain support consent` is the holder's side. `grain lint` takes format 2 and checks a
+    consent's key and app; `grain profile` holds the profile to the network's reading (format 2 refused before version 9,
+    saying when it comes; a consent of another network refused before anything is signed); `grain show` prints the
+    support contact; the simulator's Connect sheet shows a username or an address as a chat. `readSiteProfile`
+    (`@saltix/connect`) takes the network to hold a site's support address to.
+  - **The support agent** (`examples/support-agent`, `npm run support-agent`): an app's support answered by its own
+    program in the app's chat, which every user reaches: the app's notes (`faq.json`) first, a language model next when
+    `ANTHROPIC_API_KEY` is set (Anthropic's SDK, loaded only then; a daily share per user; `chat.json` says `"ai": true`
+    or it does not start), and a person's `@name` takes over when neither can answer or the user asks. It logs names
+    and numbers, never what users wrote. An agent with an address of its own is not built:
+    [docs/support-agent-address.md](docs/support-agent-address.md) says what it still needs.
+  - Every project's `AGENTS.md` (and the SDK's `AGENTS.md`, `CLAUDE.md`, `docs/agents/app.md`) has *Support for your
+    app*: the four forms, setting it, the consent, the agent, what a user sees.
+
 ### Changed
 
+- **The vectors are synced at corvise/saltix `6671fabb`** (#474's head), and the SDK follows what the sync brought:
+  **usernames alone** (the numbers left with the v15 genesis, 2026-10-25): `Handle` is `{ name }`, a number's text
+  (`+0 777 1234`) reads as no handle, and `grain bind` says so; `grain_get`'s `donations` (`RegisteredGrain`), whose
+  call `SetGrainDonations` (tag 76) the SDK does not send, said in the test that skips it.
 - **The pool vocabulary** (corvise/saltix #337, the owner's decision of 2026-10-22; a breaking change of the wallet
   interface's words, with no aliases): the mining layer speaks the words of mining, here as in the protocol. A city is a
   **pool**, its governor the **operator**, its node's signing key the **pool key**, a citizen a **miner** with a

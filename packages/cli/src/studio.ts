@@ -144,7 +144,7 @@ export async function handleGet(node: NodeLike, handle: Handle): Promise<HandleR
 /** The call that points `handle` at `slug` (the key file's account holds both), or clears it with null. */
 export async function bindCall(node: NodeLike, typed: string, slug: string | null, holder: Uint8Array): Promise<GrainCall> {
   const handle = parseHandle(typed);
-  if (handle === null) throw new Error(`${typed}: not a name (@anna) or a number (+0 777 1234)`);
+  if (handle === null) throw new Error(`${typed}: not a name (@anna: 1 to 32 of a-z 0-9 _, a letter first)`);
   const record = await handleGet(node, handle);
   const mine = ownAccount(holder);
   if (record === null || record.owner !== mine) throw new Error(`${displayHandle(handle)}: not this account's`);

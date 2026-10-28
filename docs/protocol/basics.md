@@ -4,7 +4,8 @@
 > 21-names §3–§5a, 23-upgrades §6–§7, 09-relay §1.5, and of 08-node §2, 05-beacon §1 and 06-licenses §4 the order an
 > account's transactions and registry calls take, as of corvise/saltix `7d3744c5` (2026-10-19); a quorum's two forms
 > and protocol version 2's parts for apps (13-accounts §6.1, §7; 23-upgrades §6a) as of corvise/saltix `44bbf728`
-> (2026-10-20). Only what an app touches.
+> (2026-10-20); usernames without the numbers (21-names) as of corvise/saltix `6671fabb` (2026-10-28). Only what an app
+> touches.
 
 What every other page builds on. The [index](README.md#conventions) gives the notation (Borsh, `derive`, hex,
 base64url).
@@ -213,19 +214,17 @@ SignedTransaction { tx: Transaction, proof }    proof 0 Key([u8; 64]): the key's
 - The SDK: `signTx`, `txId`, `minimumTxFee` (`tx.ts`), `signGrainTx` (registry calls), `signChannelTx` (channels).
   `vectors/grains-v1.json` (`registry.transactions`) holds signed registry transactions byte for byte.
 
-## Usernames and numbers
+## Usernames
 
 Handles are NFTs in the chain's registry that resolve to an account; an owner may bind one to an app so that `@name`
 opens the app's chat ([app studio §2](app-studio.md#2-the-registry)).
 
 - **A name**: 1–32 of `a-z`, `0-9` and `_`, starting with a letter, no `__`, not ending in `_`; lowercase only on chain.
   Written `@name`; the `@` is not part of it. Some names are reserved (`saltix…`, `support`, `wallet`, …).
-- **A number**: `+0` then 4–10 digits, the first 1–9; the chain keeps the digits. Written in groups of four from the
-  right: `+0 777 1234`. It is never a phone number: no country code starts with 0.
-- **Borsh** `Handle = 0 Name(String) | 1 Number(String)`, the canonical text.
-- Reading what a person typed: white space around it dropped, a leading `@` dropped and the name lowercased; `+0` and
-  digits (spaces and dashes dropped) a number. The SDK: `parseHandle`, `displayHandle`, `handleProblem`;
-  `vectors/handles-v1.json`.
+- **Borsh** `Handle = 0 Name(String)`, the canonical text. The numbers (`+0 777 1234`, tag 1) left with the v15 test
+  network's genesis (2026-10-25): tag 1 decodes as nothing, and text of their form reads as no handle.
+- Reading what a person typed: white space around it dropped, a leading `@` dropped and the name lowercased. The SDK:
+  `parseHandle`, `displayHandle`, `handleProblem`; `vectors/handles-v1.json`.
 - `handle_get` resolves one, with `app` the slug it opens ([wallet interface](wallet-interface.md#methods)).
 
 ## People's names

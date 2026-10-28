@@ -32,7 +32,7 @@ test("every grain command and npm script they name exists", () => {
       named++;
       assert.ok(commands.has(command), `${name} names grain ${command}, which the help does not list`);
     }
-    for (const [, script] of text.matchAll(/npm run ([a-z:]+)/g)) assert.ok(scripts.includes(script), `${name}: npm run ${script}`);
+    for (const [, script] of text.matchAll(/npm run ([a-z:-]+)/g)) assert.ok(scripts.includes(script), `${name}: npm run ${script}`);
   }
   assert.ok(named >= 5, "the pages name the commands they use");
 });

@@ -7,7 +7,7 @@ import { accountId } from "./address.js";
 import { Writer, fromHex, toHex } from "./bytes.js";
 import { type Handle, handleProblem, writeHandle } from "./handle.js";
 import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
-import { type SignedConnectProfile, checkGrainProfile, encodeSignedProfile } from "./profile.js";
+import { PROFILE_VERSION, PROFILE_VERSION_2, SUPPORT_ADDRESS_VERSION, type SignedConnectProfile, checkGrainProfile, encodeSignedProfile } from "./profile.js";
 import { UNOWNED } from "./publish.js";
 import { type NodeLike, nodeCall } from "./node.js";
 import { type TxFields, encodeTx, minimumTxFee, signTx, txId } from "./tx.js";
@@ -97,7 +97,8 @@ const CALL = { register: 7, update: 8, retire: 9, configure: 34, bind: 35, acces
  * The protocol versions whose blocks take `call` (23-upgrades §6a: every tag applies from a version, a retired one until
  * a later one): `since`, the first; `until`, the first that refuses it, or null. `ConfigureGrain` with bare keys (tag
  * 34) is version 1's only, the one with proofs (tag 39) version 2's on; a sealed manifest that names no source is
- * version 2's on (12-grains §2, 32-images §10). Every other call here is version 1's, and every version's after it.
+ * version 2's on (12-grains §2, 32-images §10); a Connect profile of format 2 (a support address, 19-connect §11.1)
+ * version 9's on. Every other call here is version 1's, and every version's after it.
  */
 export function callVersions(call: GrainCall): { since: number; until: number | null } {
   if ("configure" in call) return { since: 1, until: 2 };
@@ -106,11 +107,15 @@ export function callVersions(call: GrainCall): { since: number; until: number | 
     const entry = ("register" in call ? call.register : call.update).manifest.entry;
     if ("sealed" in entry && entry.sealed.sources.length === 0) return { since: 2, until: null };
   }
+  if ("profile" in call && (call.profile.profile?.profile.version ?? PROFILE_VERSION) >= PROFILE_VERSION_2) {
+    return { since: SUPPORT_ADDRESS_VERSION, until: null };
+  }
   return { since: 1, until: null };
 }
 
-/** Why `call` would be refused before it leaves the shard (24-app-studio §9), or null; the registry checks the rest. */
-export function grainCallProblem(call: GrainCall, sender?: string): string | null {
+/** Why `call` would be refused before it leaves the shard (24-app-studio §9), or null; the registry checks the rest.
+ *  With the network's `genesis` (hex), a Connect profile's consent is checked on it too, as the shard does. */
+export function grainCallProblem(call: GrainCall, sender?: string, genesis?: string): string | null {
   const slug = (s: string) => (slugOk(s) ? null : "slug: 3 to 32 of [a-z0-9-], not starting with -");
   if ("retire" in call) return slug(call.retire);
   if ("configure" in call || "configureProven" in call) {
@@ -126,7 +131,7 @@ export function grainCallProblem(call: GrainCall, sender?: string): string | nul
     return slug(c.slug);
   }
   if ("bind" in call) {
-    if (handleProblem(call.bind.handle)) return "handle: not a name or number in its canonical form";
+    if (handleProblem(call.bind.handle)) return "handle: not a name in its canonical form";
     return call.bind.slug === null ? null : slug(call.bind.slug);
   }
   if ("access" in call) {
@@ -148,9 +153,10 @@ export function grainCallProblem(call: GrainCall, sender?: string): string | nul
   if ("profile" in call) {
     const { profile } = call.profile;
     if (profile !== null) {
-      // As the shard checks it before it leaves (12-grains §3): in bounds, signed, the grain's, and the sender's when the
-      // sender is known. That its key speaks for the owner, and its revision, are the registry's to check.
-      const problem = checkGrainProfile(profile, call.profile.slug, sender ?? profile.profile.owner);
+      // As the shard checks it before it leaves (12-grains §3): in bounds, signed, the grain's, the sender's when the
+      // sender is known, and its consent signed for this network when the network is known. That its key speaks for the
+      // owner, and its revision, are the registry's to check; the block's version is `callVersions`' (`windowFor`).
+      const problem = checkGrainProfile(profile, call.profile.slug, sender ?? profile.profile.owner, genesis === undefined ? {} : { genesis });
       if (problem) return `profile: ${problem} (Saltix 19-connect §11)`;
     }
     return slug(call.profile.slug);
@@ -172,8 +178,8 @@ export function serverKeyOk(hex: string): boolean {
 }
 
 /** The registry call's action: `Action::Registry { call, amount }`. */
-function grainAction(call: GrainCall, sender?: string): Uint8Array {
-  const problem = grainCallProblem(call, sender);
+function grainAction(call: GrainCall, sender?: string, genesis?: string): Uint8Array {
+  const problem = grainCallProblem(call, sender, genesis);
   if (problem) throw new TypeError(problem);
   const w = new Writer().u8(ACTION_REGISTRY);
   let amount = 0n;
@@ -234,7 +240,7 @@ export function signGrainTx(secret: Uint8Array, fields: Omit<TxFields, "sender">
     }
     if (manifest.owner !== toHex(accountId(sender))) throw new TypeError("the manifest's owner is not this key's account");
   }
-  return signTx(secret, fields, grainAction(call, toHex(accountId(sender))), genesisHash);
+  return signTx(secret, fields, grainAction(call, toHex(accountId(sender)), genesisHash), genesisHash);
 }
 
 /** The least fee a node's pool takes for `call`: its size times `MIN_FEE_PER_BYTE` (the fee does not change it). */
@@ -278,6 +284,9 @@ export interface RegisteredGrain {
   /** The highest revision of a profile the grain took, 0 for none: a new one must be higher, a cleared one's included
    *  (`grain_get`'s `profile_revision`); absent on a node from before it. */
   profile_revision?: number;
+  /** Whether its owner takes donations (24-app-studio §2b, protocol version 9): wallets offer *Support the developer*, a
+   *  transfer to `owner`, never to an address anyone types; absent on a node from before it, which offers none. */
+  donations?: boolean;
 }
 
 /** What the registry holds under `slug`; null when nobody registered it. */

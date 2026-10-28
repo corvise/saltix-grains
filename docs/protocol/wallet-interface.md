@@ -2,8 +2,9 @@
 
 > Reflects Saltix 08-node §6 and 09-relay §10.7 (with 32-images' `blob_put` and `blob_get`), as of corvise/saltix
 > `b9019fdf` (2026-10-19); the pool vocabulary (`exchange_list`'s `pool` and `pool_key`, `grain_list`'s `miners` sort,
-> the ratings' `miners_count`, `miners_sum` and `miner`) as of corvise/saltix `e6448704` (2026-10-22). Only the methods
-> an app, its server or its tools call; a node answers more (the explorer's reads, pools, books, licenses).
+> the ratings' `miners_count`, `miners_sum` and `miner`) as of corvise/saltix `e6448704` (2026-10-22); `grain_get`'s
+> `donations` (protocol version 9) as of corvise/saltix `6671fabb` (2026-10-28). Only the methods an app, its server or
+> its tools call; a node answers more (the explorer's reads, pools, books, licenses).
 
 A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line read the chain through.
 
@@ -40,7 +41,7 @@ or an account id in hex. A transaction is the hex of its signed Borsh.
 | `faucet_request` | `address` | a test network's faucet (below): `id` of the transfer, `amount`, `work` (`{id, amount}` or `null`) |
 | `exchange_list` | — | `exchanges`: `pool` (its id, hex), `pool_key`, `fee_bp`, `bond`, `payout`, `closed`, `reachable` (a sponsor opens its channel with one) |
 | `relay_list` | — | `relays`: `key`, `peer`, `endpoints [{url, cert_sha256}]` (empty: not reachable), `issued_at`, `version`, `store_gib`, `country` |
-| `grain_get` | `slug` | `grain` (or `null`): `slug`, `owner` (account id), `version`, `id` (the manifest id), `registered`, `updated`, `retired` (slots; `retired` `null` while live), `deposit` (SALT held), `manifest` (its signed JSON form, `null` once retired), `servers` (hex), `category`, `public`, `members` (`[{account, roles}]`), `handles` (as displayed), `ratings {count, sum, miners_count, miners_sum}`, `returns`, `profile` (the signed Connect profile's JSON form, or `null`), `profile_revision`; and, beside `grain`, `deposit`: what `RegisterGrain` of this slug needs, also for a free slug |
+| `grain_get` | `slug` | `grain` (or `null`): `slug`, `owner` (account id), `version`, `id` (the manifest id), `registered`, `updated`, `retired` (slots; `retired` `null` while live), `deposit` (SALT held), `manifest` (its signed JSON form, `null` once retired), `servers` (hex), `category`, `public`, `members` (`[{account, roles}]`), `handles` (as displayed), `ratings {count, sum, miners_count, miners_sum}`, `returns`, `profile` (the signed Connect profile's JSON form, or `null`), `profile_revision`, `donations` (whether the owner takes donations: *Support the developer* on the app's card, a transfer to `owner`; absent from a node before protocol version 9); and, beside `grain`, `deposit`: what `RegisterGrain` of this slug needs, also for a free slug |
 | `grain_list` | `query` (≤ 64 bytes), `sort` (`slug`, `newest`, `rating`, `miners`), `after`, `limit` (20, at most 100), `retired` (`false`), `category`, `owner` or `member` (an address) | `grains` in `grain_get`'s form, public ones only unless `owner` or `member` asks; `next` |
 | `grain_ratings` | `slug`, `after`, `limit` (20, at most 100) | `ratings` newest first: `account`, `score`, `review` (as a reader may show it), `slot`, `miner` (whether the account held an active mining license when it rated); `next` |
 | `grain_history` | `slug`, `before` (a beacon height), `limit` (20, at most 100), `ratings` (`true`) | `entries`: the registry calls about the grain, newest first (`call`, `height`, `slot`, `caller`, `asset`, `amount`, `refused`, `tx`, and what the call says); `next` |

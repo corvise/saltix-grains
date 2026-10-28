@@ -207,6 +207,11 @@ chat.text((ask) => card().text("Pick a command below.").reply("Hello", "hello"))
 http.createServer((req, res) => chat.serveDocument(req, res) || app(req, res));
 ```
 
+**Text alone** is what a user types without a command (at most 2 000 characters): `chat.text` answers it, and without
+one it gets a `refused` status. An app whose chat answers questions (its support) handles text with the support agent of
+`examples/support-agent`: the app's notes, a language model whose key is in the environment, and a person's `@name`
+taking over ([support.md](support.md)).
+
 **Cards.** `card()` builds a message of 1–16 blocks and 0–8 actions: `text` (1–4 000 characters, line breaks kept, no
 markup), `fields` (1–16 rows of a label up to 40 and a value up to 200 characters), `secret` (label, value up to 256,
 `expiresAt`), `file` (a `FileRef` from `chat.upload`, a title, a format such as `csv`), `invoice` (`chat.invoice`'s

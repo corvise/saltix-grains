@@ -12,7 +12,7 @@ import { type SafeArea, shortAddress } from "../packages/grain/src/index";
 import { type NetworkName, encodeAddress } from "../packages/server/src/address";
 import { fromHex } from "../packages/server/src/bytes";
 import { PERMISSIONS } from "../packages/server/src/manifest";
-import { type ConnectProfile, profileFromJson, profileProblem, profileText } from "../packages/server/src/profile";
+import { type ConnectProfile, offlineOwner, profileFromJson, profileProblem, profileText, supportKind } from "../packages/server/src/profile";
 import { drawIcon } from "./icon";
 
 /** Where `grain dev` (and `npm run dev`) serves the project's `connect.json`. */
@@ -42,6 +42,7 @@ const WORDS = {
     website: "Website",
     support: "Support",
     terms: "Terms",
+    chat: "a chat in Saltix",
     by: "by",
   },
   ru: {
@@ -65,6 +66,7 @@ const WORDS = {
     website: "Сайт",
     support: "Поддержка",
     terms: "Условия",
+    chat: "чат в Saltix",
     by: "владелец",
   },
 } as const;
@@ -120,7 +122,8 @@ export async function fetchProfile(manifestUrl: string, owner: string): Promise<
     return { profile: null, problem: "json" };
   }
   try {
-    const profile = profileFromJson({ ...(value as object), owner, revision: 1 });
+    // A support address's consent names the owner it is for, which the registry knows and the preview does not.
+    const profile = profileFromJson({ ...(value as object), owner: offlineOwner(value, owner), revision: 1 });
     return { profile, problem: profileProblem(profile) };
   } catch (e) {
     return { profile: null, problem: (e as Error).message };
@@ -210,8 +213,12 @@ export function showConnectSheet(host: SheetHost, m: SheetManifest, profile: Con
     if (t.privacy) foot.append(el("p", "cs-privacy", t.privacy));
     const links = el("p", "cs-links");
     for (const [label, link] of [[w.website, profile.website], [w.support, profile.support], [w.terms, profile.terms]] as const) {
-      // Links as text: the wallet opens them outside the app; a preview opens nothing.
-      if (link) links.append(el("span", "", `${label}: ${link}`));
+      if (!link) continue;
+      // Links as text: the wallet opens them outside the app, and a username or an address as a chat in it (a support
+      // address shortened as Saltix writes addresses); a preview opens nothing.
+      const kind = supportKind(link);
+      const shown = kind === "address" ? `${shortAddress(link)} (${w.chat})` : kind === "username" ? `${link} (${w.chat})` : link;
+      links.append(el("span", "", `${label}: ${shown}`));
     }
     if (links.childElementCount > 0) foot.append(links);
   }

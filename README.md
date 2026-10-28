@@ -47,8 +47,11 @@ your computer; the owner's Saltix signs the version from a QR code
 
 **Every app ships a Connect profile, and asks only for what it uses**: `connect.json`, the app's own words that Saltix's
 Connect sheet shows before anyone signs in (Saltix 19-connect [§11](docs/protocol/connect.md#11-the-connect-profile)–[§12](docs/protocol/connect.md#12-the-connect-sheet)); `grain lint` fails without it
-([docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson)). Websites and DApps sign their users in with
-the same standard: **[Sign in with Saltix](docs/connect.md)** (`@saltix/connect`).
+([docs/agents/app.md](docs/agents/app.md#the-connect-profile-connectjson)). Its `support` names who answers the app's
+users: a link, an e-mail address, a username, or a Saltix address with its holder's consent; and a program can answer
+them in the app's chat, handing over to a person (**[Support for your app](docs/support.md)**, `grain support`,
+`examples/support-agent`). Websites and DApps sign their users in with the same standard:
+**[Sign in with Saltix](docs/connect.md)** (`@saltix/connect`).
 
 **Safe by default; full screen only with viewport-fit=cover and the insets**: Saltix lays an app's page inside the safe
 area, below its controls; a page that declares `viewport-fit=cover` is drawn edge to edge and pads by the variables
@@ -60,14 +63,16 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | [`@saltix/grain`](packages/grain) | the page's side of the bridge: typed `grain_*` methods, events, `inWallet()`, `slugLink()`, `walletLink()`, `grain.chat.open()`, `grain.layout()` (the page's safe area and the wallet's controls, as CSS variables below the wallet's own), `viewportFitCover()`, `frameFor()`, `pageColorOf()` and `frameColors()` (the frame and its colours as Saltix makes them, for tools that play the wallet), `shortAddress()` (an address as Saltix shortens it, `dsalt1qabcd…uvwxyz`), `grain.manage.open()` |
 | [`@saltix/grain-server`](packages/server) | the server's side: check sign-ins, make and sign invoices, certify an invoice key, find payments on chain, sign the manifest and the Connect profile, the registry's calls, Address v1, key event logs checked offline, and the grain's chat (`ChatServer`, from a developer key alone); `@saltix/grain-server/web` is what runs in a page |
 | [`@saltix/connect`](packages/connect) | "Sign in with Saltix" for websites and DApps: the page's side of Saltix Connect (`createConnect`: the session, the offer as a QR code and a link, the grant checked, the connection kept), the button standard (`signInButton`, `connect.css`), the dialog (`openConnectDialog`), and a site's profile read as a wallet reads it ([docs/connect.md](docs/connect.md)) |
-| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
+| [`@saltix/grain-cli`](packages/cli) | the `grain` command line: `init`, `pair`, `status`, `doctor`, `dev`, `lint`, `icon`, `sign`, `bundle`, `publish`, `retire`, `show`, `profile`, `support`, `connect-profile`, `chat-spec`, `cert`, `configure`, `access`, `rate`, `bind`, `app-key`, `sponsor`, `faucet`; every command run in a project logs its steps to `.grain/log.jsonl` (codes and timings, nothing secret) |
 | [`simulator/`](simulator) | the wallet's side of the bridge in a desktop browser, for development: a preview of Saltix's Connect sheet from `connect.json` before the app opens, the page framed as Saltix frames it (inside the safe area, or edge to edge with `viewport-fit=cover`) with the wallet's controls, on a phone, the Galaxy Z Fold's sizes and an iPhone-like screen, and a chat pane |
 | [`examples/hello-grain`](examples/hello-grain) | a grain with its server: sign-in, storage, an invoice paid and found on chain, and a chat that runs from a developer key (`npm run example`) |
+| [`examples/support-agent`](examples/support-agent) | an app's support answered by its program in the app's chat: the app's notes (`faq.json`), a language model whose key is in the environment, and a person's `@name` taking over (`createSupportAgent`, `npm run support-agent`) |
 | [`docs/how-it-works.md`](docs/how-it-works.md) | read first: the pieces of a mini-app and what runs where, *Do I need a server?*, the lifecycle as one checklist (one app, one key; connect; build; the standards; the simulator; publish; run the program; updates and key rotation), publishing a page, running the program |
 | [`docs/first-app.md`](docs/first-app.md) | your first app in ten minutes: Saltix's App studio, the developer key, a command, going public, designing an app's page |
 | [`AGENTS.md`](AGENTS.md) | the rules a coding agent (and a person) follows: an app's page (safe by default, full screen with `viewport-fit=cover`), what a page gets from Saltix (and that it gets no design tokens), checking first, naming apps and people, and work on this repository; `CLAUDE.md` points to it; [`docs/agents/`](docs/agents/README.md) goes on from it |
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 | [`docs/payments.md`](docs/payments.md) | payments: invoices from a developer key (to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
+| [`docs/support.md`](docs/support.md) | support for your app: the four forms of the support contact, `grain support`, a support address's consent, the support agent, what a user sees; and [what an agent with an address of its own still needs](docs/support-agent-address.md) |
 | [`docs/connect.md`](docs/connect.md) | Sign in with Saltix on a website or DApp: the site's Connect profile, the button, the QR code or the link, the Connect sheet, the grant checked, the relay path a page needs |
 | [`docs/icons.md`](docs/icons.md) | an app's icon: the standard (512 × 512, opaque, sRGB, 64 KiB, the rounded-square mask, the keyline circle), what `grain icon` makes from any picture, its checks and preview, and how it goes into the network |
 | [`docs/cards.md`](docs/cards.md) | the card design standard: how every Saltix draws a card (the capsule, the action bar, emphasis, polls, states after a tap), what each block is for, do's and don'ts, and the lint |
@@ -79,7 +84,8 @@ the registry transactions of [12-grains](docs/protocol/grains.md) and [24-app-st
 `vectors/crypto-v1.json`, the relay records of `vectors/relay-v1.json`, the sponsors of `vectors/access-v1.json`, the
 chats, member proofs, reported numbers, hellos and welcomes and file references of `vectors/grain-chats-v1.json`, the usernames bound to
 apps of `vectors/handles-v1.json`, Saltix Connect's offers, grants and key event logs of `vectors/connect-v1.json`, the
-Connect profiles, their link and `SetGrainProfile` of `vectors/connect-profiles-v1.json`, the pairing offers, frames
+Connect profiles, their link and `SetGrainProfile`, and support addresses with their consent (format 2), of
+`vectors/connect-profiles-v1.json`, the pairing offers, frames
 and judgments of `vectors/server-pairing-v1.json` and the named blobs of `vectors/images-v1.json` (the image and bundle
 checks, a bundle as `grain bundle` writes it, the server key's statement for an upload, the frames) byte for byte,
 refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
@@ -93,6 +99,7 @@ npm install
 npm run dev            # builds, then serves the simulator and hello-grain on :8090
 npx grain pair         # pairs this checkout's server key with an app in Saltix (a QR code; app.key once named)
 npm run example        # hello-grain's chat as that app's server, from app.key (or SALTIX_APP_KEY)
+SUPPORT_HUMAN=@anna npm run support-agent   # or the support agent as that app's server (docs/support.md)
 ```
 
 - **In a desktop browser:** open `http://localhost:8090/` (the simulator), press *Load a manifest*,
@@ -164,6 +171,10 @@ npx grain publish --key owner.key        # or sign with a key file (test network
                                           # account's and private; it waits for the chain (about 2-4 minutes, up to 6)
 npx grain profile                         # the Connect profile (connect.json): a QR code for the owner's Saltix, or
                                           # signed by the key file that owns the app; --clear removes it
+npx grain support @dice                   # who answers users: connect.json's support contact, checked as the network
+                                          # will (a username bound to the app opens its chat); then grain profile
+npx grain support dsalt1q… --consent support-consent.json   # a Saltix address (protocol version 9) and its holder's consent
+SALTIX_SUPPORT_KEY=… npx grain support consent --slug dice   # the holder's side: its consent, the key from the environment
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
                                           # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
 npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
@@ -295,7 +306,8 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `grain lint` fails without it, and checks every rule of the format with the field and its limit (a tagline of 1–80
   characters in one line, about up to 600, up to 4 highlights of 60, a privacy summary of up to 300, required when the
   manifest asks for `address` or `storage`; `https://` links, never to a host reserved for examples (`.example`,
-  `example.com`, `.test`), which leads nowhere; support an `https://` link, a `mailto:` address or `@name`; at most
+  `example.com`, `.test`), which leads nowhere; support an `https://` link, a `mailto:` address, `@name` or (version 2)
+  a Saltix address in its canonical form with its holder's consent, unless it is the owner's own; at most
   8 192 bytes in Borsh), the icon file (`icon.png` or `public/icon.png`: one every wallet takes, whose hash `grain.json`
   names, with the standard's warnings: [docs/icons.md](docs/icons.md)), and warns about an empty about, English alone, a
   link too long for a QR code (2 048 characters: set it in the app studio, or with a key file) and each permission
@@ -305,7 +317,19 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   (`SetGrainProfile`) after the PIN; the tool waits for the registry. A key file that owns the app (test networks) signs
   the profile itself, with or without `--key`, at the registry's revision and one, and sends the call; `--clear` removes
   the profile. A link to a host reserved for examples, and `grain init`'s own words, are refused first. `grain show`
-  prints the registry's profile and whether a wallet takes it.
+  prints the registry's profile, whether a wallet takes it, and its support contact. A profile that names a support
+  address (format 2) is checked as the network reads it now, and refused before it runs protocol version 9.
+- `grain support <contact>` writes `connect.json`'s support contact (Saltix 19-connect
+  [§11.1](docs/protocol/connect.md#111-the-format), [docs/support.md](docs/support.md)) in its canonical form: an
+  `https://` link, a `mailto:` address (`help@dice.app` reads as one), a username (refused when nobody holds it: whoever
+  minted it would get the app's users' questions; one bound to the app opens its chat), or a Saltix address, which takes
+  format 2 (`"version": 2`, from protocol version 9) and, unless it is the owner's own, its holder's consent:
+  `--consent F` (the file `grain support consent` wrote), or signed here with the holder's key in
+  `SALTIX_SUPPORT_KEY`. It checks the address against the network (its version, its prefix, the app's registered owner,
+  the consent's key, app, owner and signature) before it writes anything; `grain profile` then sets the profile.
+  `grain support` alone says which contact `connect.json` names, `--clear` removes it. `grain support consent --slug S
+  [--owner A]` is the holder's side: the consent of the address whose key is in `SALTIX_SUPPORT_KEY` (never a file) to
+  answer for the app S of its owner (the registry's, or A) on this network, written to `support-consent.json` (public).
 - `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
   operator's key file, from the texts and links of `--profile` (`connect.json`), at a revision above the one the site
   serves now and the file it writes (`--out`, `.well-known/saltix-connect`), or `--revision N`; when neither can be

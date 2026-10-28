@@ -2,8 +2,9 @@
 
 > Reflects Saltix 19-connect (basis for implementation 2026-10-12; the Connect profile, the Connect sheet and "Sign in
 > with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `a6d0de6b` (2026-10-21); the pool
-> vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22). Section numbers are the
-> specification's.
+> vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22); the profile's format 2, a
+> support address with its holder's consent (protocol version 9, 2026-10-28), as of corvise/saltix `6671fabb`
+> (2026-10-28). Section numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
@@ -186,14 +187,24 @@ that speaks for the service's owner, so nobody else can put words in its mouth. 
 
 ```text
 ConnectProfile {
-  version:   u8                       1
+  version:   u8                       the format: 1, or 2 (from protocol version 9)
   subject:   Subject
   owner:     [u8; 32]                 the service's owner: a grain's owner, a site's operator
   revision:  u32                      at least 1, raised with every change
   texts:     Map<lang, ProfileText>   1–8 languages, "en" among them
   website:   Option<String>           an https link
-  support:   Option<String>           an https link, a mailto: address, or a Saltix username "@name"
+  support:   Option<String>           an https link, a mailto: address, a Saltix username "@name";
+                                      in format 2 also a Saltix address
   terms:     Option<String>           an https link to its terms of use
+  support_consent: Option<SupportConsent>   format 2 only, after terms: the support address's consent;
+                                            format 1 encodes nothing here
+}
+SupportConsent {
+  slug:      String                   the grain it answers for
+  owner:     [u8; 32]                 the grain's owner it consents to
+  key:       [u8; 32]                 the Ed25519 key the support address is Address v1 of
+  signature: [u8; 64]                 strict Ed25519 by key over
+             derive("Saltix support consent v1", Borsh((genesis_hash, slug, owner)))
 }
 Subject = 0 Grain { slug: String }                                a mini-app: its name, icon and category are its
                                                                   manifest's and registry record's
@@ -219,6 +230,32 @@ SignedConnectProfile { profile, key: DeviceKey, signature: [u8; 64] }
   double dot, a lowercase domain of at least two labels); or a Saltix username in its canonical form (`@name`). Anything
   else (`http:`, `javascript:`, `data:`, `tel:`) is refused, so a wallet never opens a link a profile could turn
   against it.
+- **A support address, with its holder's consent** (format 2, protocol version 9). An owner names who answers the
+  app's users: a person, or an AI agent with an address of its own.
+  - Format 2 is format 1's fields and, after `terms`, `support_consent`. A block of protocol version 8 or earlier
+    refuses format 2 (`version`); from version 9 a block takes both. Format 1 keeps its bytes and never takes an
+    address. A version above 2 is refused (`version`).
+  - In format 2 `support` may also be a **Saltix address** of the network: its canonical text (lowercase Bech32m, the
+    network's prefix `salt`, `tsalt` or `dsalt`; another spelling, another network's prefix or a broken checksum is
+    refused, `support`), of a kind an account messages from (0 personal, 5 managed; a contract's or a system module's
+    is refused).
+  - **The address is the owner's own account, or it carries its holder's consent**, so an owner cannot name anyone's
+    address to open a way to them. The consent's `key` is the key the address is Address v1 of (a personal address's
+    own key, a managed address's first root key, whose root digest the address commits to); its `signature` covers
+    the network's genesis hash, the grain's slug and the owner's account id, the Borsh of a 32-byte hash, a string (a
+    `u32` length, then UTF-8) and a 32-byte id, in a domain of its own. Refused, each for its reason: no consent where
+    one is needed (`consent_missing`), one where none is: a username, a link, an e-mail address, the owner's own
+    address (`consent_unneeded`); a key that does not make the address (`consent_key`); another grain (`consent_slug`;
+    a consent binds a grain, so a site's profile names its owner's own address alone); another owner
+    (`consent_owner`); a signature that does not verify on the reader's network (`consent_signature`).
+  - **Who checks.** A shard holds a `SetGrainProfile`'s profile to the block's version, its network's prefix and the
+    consent's signature on its network; the registry does the same but the prefix. A reader that is not the chain
+    takes format 2 whatever the version; a wallet checks the consent's signature on its own network and shows the
+    address there.
+  - **Wallets open a chat with it**, as they do for `@name`, and a user whose messenger is not activated reaches a live
+    app's support address all the same, that address alone, when it is the owner's own or carries a consent; the
+    address answers by its own activation. The holder signs its consent in its own wallet (an agent's in the app that
+    holds it) and gives it to the owner, who puts it in the profile.
 - **Size.** The Borsh form is at most 8 192 bytes: English and Russian in full fit, eight full languages do not.
 - **One encoding.** A reader takes only the canonical Borsh of a signed profile: it re-encodes what it decoded and
   refuses any difference (keys out of order or repeated, trailing bytes).
@@ -226,7 +263,8 @@ SignedConnectProfile { profile, key: DeviceKey, signature: [u8; 64] }
   devices, a guardian excepted. **A server key never signs a profile**: its links send users somewhere, so only the
   owner chooses them.
 - **The reasons** a reader gives, checked in this order: encoding, version, subject, revision, languages, tagline,
-  about, highlights, privacy, website, support, terms, size, signature, then service, owner, key.
+  about, highlights, privacy, website, support, consent_missing or consent_unneeded, consent_key, consent_slug,
+  consent_owner, terms, size, signature, consent_signature, then service, owner, key.
 - **The JSON form** (a site's well-known document, `grain_get`, the SDK's files):
 
   ```json
@@ -245,12 +283,17 @@ SignedConnectProfile { profile, key: DeviceKey, signature: [u8; 64] }
   ```
 
   A site's subject is `{"site": {"origin", "name", "category"}}`; a phone's key is `{"p256": "<hex, 33 bytes, SEC1
-  compressed>"}`; absent links are `null`; bytes in lowercase hex. The
+  compressed>"}`; absent links are `null`; bytes in lowercase hex. Format 2 adds `"support_consent": {"slug", "owner":
+  hex, "key": hex, "signature": hex} | null` to `profile`, and format 1's form has no such key. The
   signature covers the Borsh form, so a reader rebuilds it and checks; the order of keys does not matter. A mini-app's
   `connect.json` is the `profile` object without `owner` and `revision`.
 
-The SDK: `signProfile`, `verifyProfile`, `profileProblem`, `checkGrainProfile`, `checkSiteProfile`,
-`checkProfileOwner`, `profileToJson`, `profileFromJson`; `grain lint` checks every rule with the field and its limit.
+The SDK: `signProfile`, `verifyProfile`, `profileProblem`, `checkGrainProfile`, `checkSiteProfile` (each with a
+reading: the block's protocol version, the network, its genesis hash), `checkProfileOwner`, `profileToJson`,
+`profileFromJson`; for a support address `supportAddress`, `supportProblem`, `supportAccount`, `signSupportConsent`,
+`verifySupportConsent` and `supportConsentFromEnvironment`; `grain lint` checks every rule with the field and its limit,
+and `grain support` writes a contact ([support](../support.md)). `vectors/connect-profiles-v1.json`'s `support_address`
+holds format 2's cases as a block of version 8 and one of version 9 read them.
 
 ### 11.2. A mini-app's profile lives in the registry
 
@@ -321,8 +364,8 @@ wallet's own, never part of a page, and keeps to a page's frame inside the safe 
    A mini-app's address and notifications rows have a switch, **off by default**; declining them still signs the user
    in. A site's address is what Connect gives, so its row has no switch.
 5. The profile's **privacy summary**, as the service's words; its website, support and terms as links (opened outside
-   the app); for a hosted mini-app, that its owner can change its code at any time; and that Saltix never asks for the
-   phrase or the PIN inside an app.
+   the app; a support address or username opens a chat in the wallet, §11.1); for a hosted mini-app, that its owner
+   can change its code at any time; and that Saltix never asks for the phrase or the PIN inside an app.
 6. **Continue** and **Cancel**; **What is Saltix Connect?** explains that the service learns only what the rows say,
    nothing secret leaves the phone, every payment and transaction is confirmed in Saltix, and access is revoked in
    Settings at any time.

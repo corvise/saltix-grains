@@ -49,6 +49,7 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   sponsor: ["exchange", "amount", ...SIGNED],
   faucet: ["key", "address", "wait", "timeout", ...NET],
   profile: ["profile", "clear", "manifest", ...OWNER],
+  support: ["consent", "profile", "clear", "manifest", "slug", "owner", "out", ...NET],
   "connect-profile": ["profile", "origin", "name", "category", "key", "owner", "revision", "out", "offline"],
 };
 

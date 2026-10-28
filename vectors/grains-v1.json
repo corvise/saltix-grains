@@ -310,6 +310,7 @@
     "notification: the owner or the certified server key signs derive_key(\"Saltix grain notification v1\", genesis_hash || Borsh(GrainNotification)); SignedGrainNotification is Borsh {notification, cert: Option<InvoiceKeyCert>, signature}",
     "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least the slug's deposit (deposits below), kept up to 100 SALT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner, and its owner_key speaks for it (13-accounts §5); ids as in transaction-v3.json",
     "app studio (24-app-studio): Entry tag 2 Chat (no fields; JSON {\"chat\": {}}), notifications only; ConfigureGrain tag 34 {slug, servers: Vec<[u8;32]> (0-4, valid Ed25519, distinct, each one live grain's only), category: u8 (0-9)}, protocol version 1 only; ConfigureGrain tag 39 {slug, servers: Vec<ServerKeyProof {key [32], proof [64]}>, category: u8}, from protocol version 2: each key signs (strict Ed25519) derive_key(\"Saltix grain server v1\", Borsh((genesis_hash [32], slug: String, owner: AccountId [32]))) for the call's sender as owner (signed_payload_hex is that Borsh); SetGrainAccess tag 36 {slug, public: bool, members: Vec<(AccountId, u8 roles: 1 user, 2 developer, 4 viewer)> (0-64, distinct, not the owner)}; RateGrain tag 37 {slug, score: u8 (1-5, 0 withdraws), review: String (at most 140 characters, no control characters)} by any account but the owner; BindHandle tag 35 is in handles-v1.json",
+    "donations (24-app-studio §2b): SetGrainDonations tag 76 {slug: String, open: bool (Borsh 1 or 0)}, amount 0, from protocol version 9 (a block of an earlier version carries no tag 76): the owner of a live grain opens or closes its donations, off until opened and dropped when it retires; grain_get shows donations; a donation is an ordinary transfer to the grain's owner (grain_get's owner), never to an address typed anywhere",
     "a registered server key signs a notification with cert None, as the owner key does: a wallet checks it against the owner key and the server keys of the grain's registry record (by-registered-key, registered_servers)",
     "a registered server key signs an invoice with cert None too, and only to the grain's owner (invoices.registered): a wallet reads the grain's registry record at its canonical beacon block, refuses any invoice of a retired grain (retired), tries the owner key, then each key the record names (signature when none verifies), and takes a server key's invoice only when to is the record's owner (payee); a certified key's invoice is checked as before, any payee",
     "developer key: saltix-app:1:<hrp>:<first 8 bytes of the genesis hash, hex>:<slug>:<the server key's Ed25519 secret, hex>, lower case, nothing else"
@@ -594,6 +595,23 @@
         "nonce": "0",
         "signed_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b0000000000000000002e5a38a8e24597a45cb76c610f30d66b72f30f2925795b7709c1c847dd858d7e1d7b302d6051bef1ac64e857d7ac819074f342bc852a79f9db41642ed57bd301",
         "transaction_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b0000000000000000",
+        "valid_until_slot": "100000"
+      },
+      {
+        "amount": "0",
+        "call": {
+          "call": "set_grain_donations",
+          "open": true,
+          "protocol": "from version 9",
+          "slug": "chess",
+          "tag": 76
+        },
+        "fee": "150000",
+        "id_hex": "789deba85456a7a72eb475ed5fd96e57fb9e2aba6aabbcff5ac08f7444416be7",
+        "name": "donations",
+        "nonce": "6",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0600000000000000f049020000000000a086010000000000014c05000000636865737301000000000000000000ecd8f02b9e7b92dfb4b85bbe582576f4292a73763a7f01dfff520e20136ec50de0a2a3684b5b19301990651f7a3c4d77557550ecb1cfd851c7e7a83c04804104",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0600000000000000f049020000000000a086010000000000014c050000006368657373010000000000000000",
         "valid_until_slot": "100000"
       }
     ]

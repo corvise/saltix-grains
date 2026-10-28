@@ -2,18 +2,34 @@
 // the registry — the owner's wallet signs it from a QR code, or a key file on test networks — and a website's signed by
 // its operator's key and written where the site serves it.
 import {
-  type ConnectProfile, type GrainCall, type NodeLike, type RegisteredGrain, type SignedConnectProfile, CATEGORIES, CONNECT_PROFILE_PATH, categoryOf, checkSiteProfile,
-  decodeAddress, encodeProfile, grainGet, plainOwnerOf, profileLink, profileProblem, signProfile, signedProfileFromJson, toHex, unownedProfile,
+  type ConnectProfile, type GrainCall, type NodeLike, type ProfileReason, type RegisteredGrain, type SignedConnectProfile, CATEGORIES, CONNECT_PROFILE_PATH,
+  PROFILE_VERSION_2, categoryOf, checkSiteProfile, decodeAddress, encodeProfile, grainGet, nodeCall, plainOwnerOf, profileLink, profileProblem,
+  signProfile, signedProfileFromJson, supportProblem, toHex, unownedProfile,
 } from "@saltix/grain-server";
 import { existsSync, readFileSync } from "node:fs";
 import { CONNECT_FILE, profileOfProject } from "./connect.js";
 import { ownGrain } from "./studio.js";
+import { type NetworkStatus, addressNotTaken, readingOf, supportWords } from "./support.js";
 
-/** The project file's profile, checked as the network checks it, for `owner` at `revision`; throws with the reason. */
-function checkedProfile(value: unknown, owner: string, revision: number): ConnectProfile {
+/** A profile's refusal in words: the support contact's and its consent's say what to do (`grain support`), a format 2
+ *  the network does not take yet says when it will. */
+function problemWords(problem: ProfileReason, profile: ConnectProfile, status: NetworkStatus, slug: string): string {
+  if (problem === "version" && profile.version === PROFILE_VERSION_2) {
+    return `version 2 (a support address): ${addressNotTaken(status) ?? "a format this network does not take"}`;
+  }
+  if (problem === "support" || problem.startsWith("consent_")) return supportWords(problem, profile.support ?? "", slug);
+  return `${problem}: out of bounds (Saltix 19-connect §11.1); grain lint says more`;
+}
+
+/** The project file's profile for `slug`, checked as the network `status` describes checks it now (its protocol
+ *  version, its kind and its genesis hash: a support address and its consent included), for `owner` at `revision`;
+ *  throws with the reason in words. */
+function checkedProfile(value: unknown, slug: string, owner: string, revision: number, status: NetworkStatus): ConnectProfile {
   const profile = profileOfProject(value, owner, revision);
-  const problem = profileProblem(profile);
-  if (problem) throw new Error(`${CONNECT_FILE}: ${problem}: out of bounds (Saltix 19-connect §11.1); grain lint says more`);
+  const reading = readingOf(status);
+  // `supportProblem` adds the consent's signature on this network, which a reader checks after the profile's own.
+  const problem = profileProblem(profile, reading) ?? supportProblem(profile, reading);
+  if (problem) throw new Error(`${CONNECT_FILE}: ${problemWords(problem, profile, status, slug)}`);
   return profile;
 }
 
@@ -25,7 +41,8 @@ const nextRevision = (g: RegisteredGrain): number => Math.max(g.profile_revision
  *  owner, the registry's revision and one. */
 export async function profileCall(node: NodeLike, slug: string, value: unknown, secret: Uint8Array): Promise<GrainCall> {
   const g = await ownGrain(node, slug, secret);
-  const profile = checkedProfile(value, plainOwnerOf(secret), nextRevision(g));
+  const status = await nodeCall<NetworkStatus>(node, "node_status");
+  const profile = checkedProfile(value, slug, plainOwnerOf(secret), nextRevision(g), status);
   return { profile: { slug, profile: signProfile(profile, secret) } };
 }
 
@@ -43,8 +60,9 @@ export async function profileLinkFor(node: NodeLike, slug: string, value: unknow
   const g = await grainGet(node, slug);
   if (g === null) throw new Error(`${slug}: not registered yet: grain publish first`);
   if (g.retired !== null) throw new Error(`${slug}: retired at slot ${g.retired}`);
-  // Checked as the wallet will check it once it fills in the owner and the revision.
-  const profile = checkedProfile(value, g.owner, nextRevision(g));
+  // Checked as the wallet and the network will check it once the wallet fills in the owner and the revision.
+  const status = await nodeCall<NetworkStatus>(node, "node_status");
+  const profile = checkedProfile(value, slug, g.owner, nextRevision(g), status);
   try {
     return { link: profileLink(profile), profile, before: nextRevision(g) - 1 };
   } catch {

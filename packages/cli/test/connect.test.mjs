@@ -93,7 +93,7 @@ test("lint: a missing connect.json stops registering, as every rule of the forma
   assert.match(lintConnect(dir, manifestOf(dir)).errors[0], /connect\.json: not JSON/);
   writeFileSync(join(dir, CONNECT_FILE), connectJson("dice", "Dice", false));
   const cases = [
-    [(c) => { c.version = 2; }, /version: 1/],
+    [(c) => { c.version = 3; }, /version: 1, the format's version; 2 when support is a Saltix address/],
     [(c) => { c.subject = { grain: { slug: "other" } }; }, /subject\.grain\.slug "other" is not grain\.json's slug "dice"/],
     [(c) => { c.subject = { site: { origin: "https://a.example", name: "A", category: 0 } }; }, /subject: \{"grain": \{"slug": "dice"\}\}/],
     [(c) => { delete c.texts.en; }, /texts: 1 to 8 languages, "en" among them/],
@@ -111,7 +111,7 @@ test("lint: a missing connect.json stops registering, as every rule of the forma
     [(c) => { c.texts.en.privacy = ""; }, /texts\.en\.privacy: required: grain\.json asks for storage/],
     [(c) => { c.website = "http://dice.example"; }, /website: an https:\/\/ link of at most 256 bytes/],
     [(c) => { c.terms = "javascript:alert(1)"; }, /terms: an https:\/\/ link/],
-    [(c) => { c.support = "mailto:help@dice.example?subject=hi"; }, /support: an https:\/\/ link, a mailto: address with nothing after it, or a Saltix username/],
+    [(c) => { c.support = "mailto:help@dice.example?subject=hi"; }, /support: an https:\/\/ link, a mailto: address with nothing after it, a Saltix username \(@name\), or a Saltix address/],
     [(c) => { c.support = "@Dice"; }, /support:/],
   ];
   for (const [f, expected] of cases) {

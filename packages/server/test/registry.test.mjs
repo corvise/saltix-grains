@@ -32,11 +32,17 @@ const callOf = (c) => {
 };
 const sender = (hex) => hex.slice(2, 66);
 
+/** The vectors' calls this SDK sends none of yet, each said here: `SetGrainDonations` (tag 76, protocol version 9,
+ *  24-app-studio §2b) is the owner's switch in Saltix's manage page, and a donation is the wallet's own transfer to the
+ *  owner the registry names; no app's program or command here makes one. */
+const NOT_SENT = new Set(["donations"]);
+
 test("registry transactions are the node's", () => {
   const r = v.registry;
-  assert.deepEqual(r.transactions.map((t) => t.name), ["register", "update", "retire", "register-chat", "configure", "configure-v2", "access", "rate"]);
+  assert.deepEqual(r.transactions.map((t) => t.name), ["register", "update", "retire", "register-chat", "configure", "configure-v2", "access", "rate", "donations"]);
   assert.equal(toHex(ed25519.getPublicKey(RATER)), sender(r.transactions.find((t) => t.name === "rate").transaction_hex));
-  for (const t of r.transactions) {
+  assert.equal(r.transactions.find((t) => t.name === "donations").call.tag, 76);
+  for (const t of r.transactions.filter((t) => !NOT_SENT.has(t.name))) {
     const key = t.name === "rate" ? RATER : secret;
     const fields = { nonce: BigInt(t.nonce), fee: BigInt(t.fee), validUntilSlot: BigInt(t.valid_until_slot) };
     const call = callOf(t.call);
@@ -80,7 +86,8 @@ test("a username bound to a grain is the node's", () => {
   assert.equal(toHex(accountId(ed25519.getPublicKey(signer))), handles.commit.sender_hex);
   for (const name of ["bind-handle", "unbind-handle"]) {
     const t = handles.transactions.find((x) => x.name === name);
-    const call = { bind: { handle: { number: "7771234" }, slug: name === "bind-handle" ? "chess" : null } };
+    // A name since the numbers left (v15): the vectors bind `@boris_k`.
+    const call = { bind: { handle: { name: "boris_k" }, slug: name === "bind-handle" ? "chess" : null } };
     const fields = { nonce: BigInt(t.nonce), fee: 3_000n, validUntilSlot: 200_000n };
     const body = encodeGrainTx({ ...fields, sender: toHex(ed25519.getPublicKey(signer)) }, call);
     assert.equal(toHex(body), t.transaction_hex, name);
@@ -89,28 +96,23 @@ test("a username bound to a grain is the node's", () => {
   }
 });
 
-test("handles read, print and encode as the node's", () => {
+test("handles read, print and encode as the node's: names only, since the numbers left with the v15 genesis", () => {
+  assert.ok(handles.forms.length >= 10);
   for (const f of handles.forms) {
-    const h = f.kind === "name" ? { name: f.text } : { number: f.text };
-    // `handleProblem` reads a number as protocol versions 1 and 2 do (`valid_v1`); numbers of one fixed form (21-names
-    // §4a, protocol version 3: the vectors' `valid`) are a later change's, once the network runs it.
-    const valid = f.valid_v1 ?? f.valid;
-    assert.equal(handleProblem(h) === null, valid, `${f.kind} ${f.text}`);
-    if (!valid) continue;
+    const h = { name: f.text };
+    assert.equal(handleProblem(h) === null, f.valid, f.text);
+    if (!f.valid) continue;
     assert.equal(displayHandle(h), f.display);
     assert.equal(toHex(encodeHandle(h)), f.borsh_hex);
   }
   for (const t of handles.typed) {
-    // A number of protocol version 3's fixed form with a leading zero (21-names §4a): not read yet (see above).
-    if (t.kind === "number" && t.text.startsWith("0")) continue;
     const h = parseHandle(t.typed);
-    if (t.kind === null) {
-      assert.equal(h, null, t.typed);
-      continue;
-    }
-    assert.deepEqual(h, t.kind === "name" ? { name: t.text } : { number: t.text }, t.typed);
-    assert.equal(displayHandle(h), t.display);
+    assert.deepEqual(h, t.text === null ? null : { name: t.text }, t.typed);
+    if (h !== null) assert.equal(displayHandle(h), t.display);
   }
+  // A number's old form, typed or as Borsh's tag 1, is no handle.
+  assert.equal(parseHandle("+0 777 1234"), null);
+  assert.ok(handles.typed.some((t) => t.typed.startsWith("+0") && t.text === null), "the vectors say so too");
 });
 
 test("what the shard refuses is refused before a call is signed", () => {

@@ -12,7 +12,11 @@ import {
   httpsLinkOk, supportOk, connectOriginOk, refusedChar, profileTextOk, readProfileLink, profileLink, unownedProfile, ProfileError, ProfileLinkError,
   MAX_PROFILE_BYTES, MAX_PROFILE_LINK, PROFILE_LINK_PREFIX, PROFILE_DOMAIN, CONNECT_PROFILE_PATH, PROFILE_LIMITS, policyOf,
   encodeGrainTx, signGrainTx, grainCallProblem, minimumFee, toHex, fromHex, toBase64, derive, Writer,
+  PROFILE_VERSION_2, SUPPORT_ADDRESS_VERSION, SUPPORT_CONSENT_DOMAIN, supportAddress, supportKind, supportAccount, supportProblem, supportConsentAccount,
+  supportConsentMessage, signSupportConsent, verifySupportConsent, encodeSupportConsent, grainOwnerPayload, serverKeyProofPayload, offlineOwner,
+  callVersions, supportConsentFromEnvironment, SUPPORT_KEY_ENV, accountId, encodeAddress,
 } from "../dist/index.js";
+import { ed25519 } from "@noble/curves/ed25519";
 import * as web from "../dist/web.js";
 
 const v = JSON.parse(readFileSync(new URL("../../../vectors/connect-profiles-v1.json", import.meta.url), "utf8"));
@@ -293,4 +297,185 @@ test("Ed25519 is verified strictly, as the node does: a small-order key verifies
   // A profile "signed" so is refused for its signature.
   const p = signedProfileFromJson(v.accepted[0].json).profile;
   assert.equal(verifyProfile({ profile: p, key: { ed25519: toHex(identity) }, signature: toHex(signature) }), "signature");
+});
+
+// ── Format 2: a support address with its holder's consent (19-connect §11.1, protocol version 9) ─────────────────────
+
+const sa = v.support_address;
+const caseOf = (name) => signedProfileFromJson(sa.cases.find((c) => c.name === name).json);
+const genesisHex = v.chain.genesis_hash_hex;
+/** A block of protocol `version` on the vectors' network. */
+const block = (version) => ({ version, network: v.chain.network, genesis: genesisHex });
+
+test("support addresses: every case byte for byte, and as a block of version 8 and one of version 9 reads it", () => {
+  assert.equal(sa.format, PROFILE_VERSION_2);
+  assert.equal(sa.from_version, SUPPORT_ADDRESS_VERSION);
+  assert.ok(sa.cases.length >= 12);
+  const reasons = new Set();
+  for (const c of sa.cases) {
+    const s = signedProfileFromJson(c.json);
+    assert.equal(toHex(encodeProfile(s.profile)), c.profile_borsh_hex, c.name);
+    assert.equal(toHex(profileMessage(s.profile)), c.message_hex, c.name);
+    assert.equal(toHex(encodeSignedProfile(s)), c.signed_borsh_hex, c.name);
+    assert.deepEqual(decodeSignedProfile(fromHex(c.signed_borsh_hex)), s, c.name);
+    assert.deepEqual(profileToJson(s), s, `${c.name}: the JSON form back`);
+    assert.equal("support_consent" in profileToJson(s).profile, s.profile.version >= 2, `${c.name}: format 1's form has no such key`);
+    const reason = (version) => checkGrainProfile(s, c.for.grain.slug, c.for.grain.owner_hex, block(version));
+    assert.equal(reason(SUPPORT_ADDRESS_VERSION - 1), c.at_version_8, `${c.name} at version 8`);
+    assert.equal(reason(SUPPORT_ADDRESS_VERSION), c.at_version_9, `${c.name} at version 9`);
+    assert.equal(supportAccount(s.profile), c.support_account_hex, `${c.name}: whom a wallet opens a chat with`);
+    reasons.add(c.at_version_9);
+  }
+  for (const reason of [null, "support", "consent_missing", "consent_unneeded", "consent_key", "consent_slug", "consent_owner", "consent_signature"]) {
+    assert.ok(reasons.has(reason), `a case refused at version 9 for ${reason}`);
+  }
+});
+
+test("support contacts in the address form: the canonical text of a kind people write from, any network", () => {
+  assert.ok(sa.contacts.length >= 8);
+  for (const c of sa.contacts) {
+    const a = supportAddress(c.text);
+    assert.equal(a?.network ?? null, c.network, c.name);
+    assert.equal(a?.account ?? null, c.account_hex, c.name);
+    assert.equal(supportOk(c.text), false, `${c.name}: no form of format 1`);
+    assert.equal(supportKind(c.text), a === null ? null : "address", c.name);
+  }
+  assert.equal(supportAddress(sa.contacts.find((c) => c.name === "managed").text).kind, 5);
+  for (const [text, kind] of [["@splitbill_help", "username"], ["mailto:help@splitbill.example", "email"], ["https://splitbill.example", "link"], ["tel:+100", null], [null, null]]) {
+    assert.equal(supportKind(text), kind, String(text));
+  }
+});
+
+test("the consent: payload, message, Borsh and signature as the node's, signed again by the agent's key, and held to them", () => {
+  const c = sa.consent;
+  assert.equal(SUPPORT_CONSENT_DOMAIN, c.domain);
+  const consent = caseOf("consented").profile.support_consent;
+  assert.equal(toHex(grainOwnerPayload(genesisHex, consent.slug, consent.owner)), c.payload_hex);
+  // The payload a server key's proof signs too (24-app-studio §2), each in a domain of its own.
+  assert.equal(toHex(serverKeyProofPayload(genesisHex, consent.slug, consent.owner)), c.payload_hex);
+  assert.equal(toHex(supportConsentMessage(genesisHex, consent.slug, consent.owner)), c.message_hex);
+  assert.equal(toHex(encodeSupportConsent(consent)), c.borsh_hex);
+  assert.deepEqual([consent.key, consent.signature], [c.key_hex, c.signature_hex]);
+  // Ed25519 is deterministic: the agent's key signs the same consent again.
+  assert.deepEqual(signSupportConsent(fromHex(sa.agent_secret_hex, 32), genesisHex, consent.slug, consent.owner), consent);
+  assert.ok(verifySupportConsent(consent, genesisHex));
+  assert.ok(!verifySupportConsent(consent, "5b".repeat(32)), "another network");
+  assert.ok(!verifySupportConsent({ ...consent, slug: "split-bills" }, genesisHex), "another app");
+  assert.ok(!verifySupportConsent({ ...consent, owner: "77".repeat(32) }, genesisHex), "another owner");
+  assert.ok(!verifySupportConsent({ ...consent, signature: "zz" }, genesisHex), "no signature at all");
+  // A personal address is its key's; a managed one is its first root key's root digest, kind 5.
+  const agent = toHex(ed25519.getPublicKey(fromHex(sa.agent_secret_hex, 32)));
+  assert.equal(supportConsentAccount(0, agent), supportAddress(caseOf("consented").profile.support).account);
+  const managed = caseOf("managed-address-consented-by-its-first-root").profile;
+  assert.equal(toHex(ed25519.getPublicKey(fromHex(sa.root_secret_hex, 32))), managed.support_consent.key);
+  assert.equal(supportConsentAccount(5, managed.support_consent.key), supportAddress(managed.support).account);
+  assert.notEqual(supportConsentAccount(0, managed.support_consent.key), supportAddress(managed.support).account);
+  assert.equal(supportConsentAccount(2, agent), null, "a contract's address has no such key");
+  assert.equal(supportConsentAccount(0, "ab"), null);
+});
+
+test("a reading: format 2 from version 9, an address of the reader's network, a consent signed on it, and the contact's rules alone", () => {
+  const consented = caseOf("consented");
+  assert.equal(verifyProfile(consented), null, "every format, any network, the consent's signature unchecked: the bounds alone");
+  assert.equal(verifyProfile(consented, { version: 8 }), "version");
+  assert.equal(verifyProfile(consented, { version: 9 }), null);
+  assert.equal(verifyProfile(consented, { network: "testnet" }), "support", "a devnet address on a testnet");
+  assert.equal(verifyProfile(consented, { genesis: "5b".repeat(32) }), "consent_signature", "the consent of another network");
+  assert.equal(verifyProfile(caseOf("consent-on-another-network")), null, "unchecked without the genesis hash");
+  assert.equal(verifyProfile(caseOf("consent-on-another-network"), { genesis: genesisHex }), "consent_signature");
+  // Format 1 has no room for a consent: one in memory is a format the node would not encode.
+  assert.equal(profileProblem({ ...consented.profile, version: 1 }), "version");
+  // A wallet opens a chat with an address of format 2 alone: format 1 names none, not even the owner's own.
+  const ownersOwn = caseOf("owners-own-address").profile;
+  assert.equal(supportAccount(ownersOwn), v.keys.owner_hex);
+  assert.equal(supportAccount({ ...ownersOwn, version: 1 }), null);
+  // The contact's rules alone, whatever the rest of the profile says: what grain support checks.
+  const broken = { ...consented.profile, texts: {} };
+  assert.equal(profileProblem(broken), "languages");
+  assert.equal(supportProblem(broken), null);
+  assert.equal(supportProblem(broken, { genesis: genesisHex }), null);
+  assert.equal(supportProblem({ ...broken, support_consent: null }), "consent_missing");
+  assert.equal(supportProblem({ ...broken, support: "@splitbill_help" }), "consent_unneeded");
+  assert.equal(supportProblem(broken, { genesis: "5b".repeat(32) }), "consent_signature");
+  assert.equal(supportProblem({ ...broken, support_consent: { ...broken.support_consent, key: "zz" } }), "consent_key", "never throws");
+  assert.equal(supportProblem({ ...broken, support_consent: { ...broken.support_consent, signature: "zz" } }), "consent_signature", "never throws");
+  // A site's profile names its owner's own address alone: a consent binds an app.
+  const site = signedProfileFromJson(v.accepted.find((a) => a.name === "site-plain-key").json).profile;
+  const own = encodeAddress("devnet", fromHex(site.owner, 32));
+  assert.equal(profileProblem({ ...site, version: 2, support: own, support_consent: null }), null, "a site's operator's own address");
+  assert.equal(profileProblem({ ...site, version: 2, support: own, support_consent: null }, { version: 8 }), "version");
+  assert.equal(profileProblem({ ...site, version: 2, support: supportOf("consented"), support_consent: consented.profile.support_consent }), "consent_slug");
+});
+
+/** A case's support contact. */
+function supportOf(name) {
+  return caseOf(name).profile.support;
+}
+
+test("the JSON form reads a consent strictly, and writes format 2's key only for format 2", () => {
+  const json = sa.cases.find((c) => c.name === "consented").json;
+  const bad = (change, what) => {
+    const copy = structuredClone(json);
+    change(copy.profile.support_consent);
+    assert.throws(() => signedProfileFromJson(copy), (e) => e instanceof ProfileError && e.reason === "json", what);
+  };
+  bad((c) => { c.key = c.key.toUpperCase(); }, "an uppercase key");
+  bad((c) => { c.signature = c.signature.slice(2); }, "a short signature");
+  bad((c) => { c.slug = 7; }, "a slug that is no text");
+  bad((c) => { delete c.owner; }, "no owner");
+  const copy = structuredClone(json);
+  copy.profile.support_consent = "yes";
+  assert.throws(() => signedProfileFromJson(copy), (e) => e.reason === "json", "a consent that is no object");
+  const none = structuredClone(json);
+  none.profile.support_consent = null;
+  assert.equal(signedProfileFromJson(none).profile.support_consent, null);
+  // Format 1's form keeps its keys: no support_consent, as every reader before format 2 wrote it.
+  assert.ok(!("support_consent" in profileToJson(signedProfileFromJson(v.accepted[0].json)).profile));
+});
+
+test("SetGrainProfile with a consented support address: the node's bytes, a call of protocol version 9, checked on the network it is signed for", () => {
+  const t = sa.transaction;
+  const s = caseOf("consented");
+  const call = { profile: { slug: "split-bill", profile: s } };
+  const fields = { nonce: BigInt(t.nonce), fee: BigInt(t.fee), validUntilSlot: BigInt(t.valid_until_slot) };
+  const body = encodeGrainTx({ ...fields, sender: s.key.ed25519 }, call);
+  assert.equal(toHex(body), t.transaction_hex);
+  assert.equal(toHex(body).slice(2 * (1 + 32 + 24), -16), "01" + t.call_borsh_hex);
+  const signed = signGrainTx(ownerSecret, fields, call, genesisHex);
+  assert.equal(signed.hex, t.signed_hex);
+  assert.equal(signed.id, t.id_hex);
+  assert.deepEqual(callVersions(call), { since: SUPPORT_ADDRESS_VERSION, until: null }, "windowFor refuses it before version 9");
+  assert.deepEqual(callVersions({ profile: { slug: "split-bill", profile: signedProfileFromJson(v.accepted[0].json) } }), { since: 1, until: null });
+  assert.deepEqual(callVersions({ profile: { slug: "split-bill", profile: null } }), { since: 1, until: null });
+  // The shard checks the consent on its network: signing for another refuses it before it leaves.
+  assert.throws(() => signGrainTx(ownerSecret, fields, call, "5b".repeat(32)), /consent_signature/);
+  assert.match(grainCallProblem({ profile: { slug: "split-bill", profile: caseOf("consent-missing") } }, v.keys.owner_hex), /consent_missing/);
+});
+
+test("the owner a project's profile is checked for offline: the consent's, the address's own, else the manifest's", () => {
+  const consented = caseOf("consented").profile;
+  const manifestOwner = "33".repeat(32);
+  assert.equal(offlineOwner({ support: "@splitbill_help" }, manifestOwner), manifestOwner);
+  assert.equal(offlineOwner({ support: consented.support, support_consent: consented.support_consent }, manifestOwner), consented.support_consent.owner);
+  assert.equal(offlineOwner({ support: consented.support, support_consent: null }, manifestOwner), supportAddress(consented.support).account, "with no consent, the owner's own");
+  assert.equal(offlineOwner({ support: consented.support, support_consent: { owner: "zz" } }, manifestOwner), manifestOwner);
+  assert.equal(offlineOwner(null, manifestOwner), manifestOwner);
+});
+
+test("the consent from the environment: SALTIX_SUPPORT_KEY signs it, and nothing else reads a key", () => {
+  const consent = caseOf("consented").profile.support_consent;
+  const env = { [SUPPORT_KEY_ENV]: sa.agent_secret_hex.toUpperCase() };
+  assert.equal(SUPPORT_KEY_ENV, "SALTIX_SUPPORT_KEY");
+  assert.deepEqual(supportConsentFromEnvironment({ genesis: genesisHex, slug: consent.slug, owner: consent.owner }, env), consent);
+  const refused = (e, o, re) => assert.throws(() => supportConsentFromEnvironment({ genesis: genesisHex, slug: consent.slug, owner: consent.owner, ...o }, e), re);
+  refused({}, {}, /no SALTIX_SUPPORT_KEY/);
+  refused({ [SUPPORT_KEY_ENV]: "12" }, {}, /not an Ed25519 secret/);
+  refused(env, { slug: "Split" }, /the slug/);
+  refused(env, { owner: "dsalt1q" }, /the owner/);
+  refused(env, { genesis: "5a" }, /the genesis hash/);
+  // The message names the variable, never its value.
+  assert.throws(() => supportConsentFromEnvironment({ genesis: genesisHex, slug: consent.slug, owner: consent.owner }, { [SUPPORT_KEY_ENV]: `${sa.agent_secret_hex}0` }),
+    (e) => /SALTIX_SUPPORT_KEY: not an Ed25519 secret/.test(e.message) && !e.message.includes(sa.agent_secret_hex));
+  // The address the consent is for: the key's personal one.
+  assert.equal(toHex(accountId(fromHex(consent.key, 32))), supportAddress(caseOf("consented").profile.support).account);
 });
