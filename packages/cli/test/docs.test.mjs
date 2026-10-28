@@ -90,8 +90,10 @@ test("the pairing command alone leads an agent to the SDK, how it works first, a
   assert.ok(brief.includes("- Owner: {owner}"), "the owner's address is in the brief");
   // Pairing (24-app-studio §3a): grain status, then grain pair, whose QR code (or .grain/pair.html) and 6-digit code the
   // agent shows and waits, then grain doctor; a developer key only for a host where no command runs.
-  assert.ok(brief.indexOf("Run `npx grain status` first") < brief.indexOf("Then `npx grain pair`"));
-  assert.ok(brief.indexOf("Then `npx grain pair`") < brief.indexOf("Then `npx grain doctor`"));
+  const pairAt = brief.indexOf("Then `npx grain pair --app");
+  assert.ok(pairAt > 0, "the brief runs grain pair with the command's fields");
+  assert.ok(brief.indexOf("Run `npx grain status` first") < pairAt);
+  assert.ok(pairAt < brief.indexOf("Then `npx grain doctor`"));
   assert.ok(brief.includes("(also in .grain/pair.html) and a six-digit code") && brief.includes("Show me the QR code and the code, then wait"));
   assert.ok(brief.includes("a developer key (saltix-app:1:…) is retired"));
   assert.ok(brief.includes("One app, one key, one program") && brief.includes("Never run the SDK's example"));
