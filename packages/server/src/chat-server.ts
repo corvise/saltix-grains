@@ -44,7 +44,7 @@ import { type ErrorFacts, REPORT_FOLD_MS, type ReportContext, errorFacts, errorF
 import { STATS_EVERY_MS, type SignedGrainStats, signGrainStats } from "./stats.js";
 import { uploadFile } from "./upload.js";
 import { type Asset, type Invoice, signInvoice, unitsOf } from "./invoice.js";
-import { type Payment, findPayment } from "./node.js";
+import { type Payment, findPayment, paysAsset } from "./node.js";
 
 /** Where a grain serves its chat spec, the server key's certificate and the numbers it reports (§2). */
 export const CHAT_DOCUMENT_PATH = "/.well-known/saltix-grain-chat";
@@ -901,15 +901,16 @@ export class ChatServer {
 
   /**
    * The payment of `invoice` on the canonical chain, found by its reference among the payee's latest `limit` transfers
-   * (`findPayment`) through the server's node or relays; null until it is there. Only a payment of the invoice's asset
-   * and at least its amount counts. Wait for the `confirmations` you need before you deliver.
+   * (`findPayment`) through the server's node or relays; null until it is there. Only a payment of at least its amount
+   * in the invoice's asset counts — for a WORK invoice SALT of the same integer too, how it is paid on chain from
+   * protocol version 4 (`paysAsset`). Wait for the `confirmations` you need before you deliver.
    */
   async paymentOf(invoice: Invoice | SignedAppInvoice, limit = 200): Promise<Payment | null> {
     const inv = "invoice" in invoice ? invoice.invoice : invoice;
     if (!this.view) throw new Error("paymentOf: no node to read the chain from (pass node, or start from a developer key)");
     const payee = encodeAddress(this.chain.network, fromHex(inv.to, 32));
     const payment = await findPayment(this.view.node, payee, inv.reference, limit);
-    if (!payment || payment.asset !== inv.asset.toLowerCase() || BigInt(payment.amount) < inv.amount) return null;
+    if (!payment || !paysAsset(inv.asset, payment.asset) || BigInt(payment.amount) < inv.amount) return null;
     return payment;
   }
 

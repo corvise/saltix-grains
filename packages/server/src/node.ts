@@ -1,4 +1,4 @@
-import { referenceInMemo } from "./invoice.js";
+import { type Asset, referenceInMemo } from "./invoice.js";
 
 /** A payment found on chain. */
 export interface Payment {
@@ -100,7 +100,7 @@ interface HistoryEntry {
  * The payment of the invoice whose reference is `reference` to `address`, if the node's canonical
  * chain has it (the latest `limit` entries of the account's history). `node` is your node's URL, or
  * any wallet interface (`ChatServer` reaches one through the relays: `chat.paymentOf`). Check its
- * amount and asset against your invoice, and wait for the confirmations you need.
+ * amount and asset against your invoice (`paysAsset`), and wait for the confirmations you need.
  */
 export async function findPayment(node: NodeLike, address: string, reference: string, limit = 200): Promise<Payment | null> {
   const { entries } = await nodeCall<{ entries: HistoryEntry[] }>(node, "account_history", { address, limit });
@@ -109,4 +109,15 @@ export async function findPayment(node: NodeLike, address: string, reference: st
   );
   if (!e) return null;
   return { tx: e.tx ?? null, from: e.from ?? null, asset: e.asset, amount: e.amount, height: e.height, confirmations: e.confirmations };
+}
+
+/**
+ * Whether a payment that came in `paid` pays an invoice priced in `asset`: in its own asset, or, for a WORK invoice, in
+ * SALT of the same integer. On a network of protocol version 4 or later — the test network is one — no account holds
+ * WORK on chain, and a WORK invoice is paid from the payer's book or in SALT of the same integer on chain (Saltix
+ * 35-work-on-layer-2 §3.4): the payee's history shows SALT. One µWORK and one base unit of SALT are the same value, so
+ * the amount compares as it is. A payment from the payer's book is not on chain and is not found this way.
+ */
+export function paysAsset(asset: Asset, paid: Payment["asset"]): boolean {
+  return paid === asset.toLowerCase() || (asset === "WORK" && paid === "salt");
 }
