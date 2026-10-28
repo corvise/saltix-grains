@@ -46,24 +46,26 @@ test("a Connect grant is for showing an account, and nothing invites a server to
   assert.match(read("AGENTS.md"), /Connect\s+grant[^.]*display only/i);
 });
 
-test("a developer key alone leads an agent to the SDK, how it works first, and the brief Saltix copies never holds one", () => {
-  // The README's first line is what an agent handed only a key finds first: where to start, and where the key goes.
+test("the pairing command alone leads an agent to the SDK, how it works first, and the brief Saltix copies never holds a key", () => {
+  // The README's first line is what an agent handed only the command finds first: where to start, and what to show; a
+  // developer key made before pairing is named too, and where it goes.
   const readme = read("README.md").split("\n").slice(0, 6).join("\n").replace(/\s+/g, " ");
-  assert.match(readme, /Got a key starting with `saltix-app:1:`\? It is a Saltix mini-app developer key — start with \[docs\/how-it-works\.md\]\(docs\/how-it-works\.md\) and \[AGENTS\.md\]/);
-  assert.match(readme, /AGENTS\.md#start-here-saltixs-brief-or-a-developer-key/);
-  assert.match(readme, /keep the key in `app\.key`, never in a chat or a commit/);
+  assert.match(readme, /Got a command starting with `grain pair --app`\? It is the pairing command from a Saltix mini-app's page — start with \[docs\/how-it-works\.md\]\(docs\/how-it-works\.md\) and \[AGENTS\.md\]/);
+  assert.match(readme, /AGENTS\.md#start-here-saltixs-brief-or-the-pairing-command/);
+  assert.match(readme, /keep the key in `app\.key`, never in a chat or a commit, and pair a server in its place/);
 
   // AGENTS.md sends a reader to how-it-works.md before any other page, then its first steps: the decision table, the
   // key's public parts only, the app's own project, grain status first, the person saves the key, one app one key.
   const agents = read("AGENTS.md");
   const firstLink = /\]\((docs\/[^)#]+)/.exec(agents)[1];
   assert.equal(firstLink, "docs/how-it-works.md", "how it works is the first page AGENTS.md links");
-  const steps = agents.slice(agents.indexOf("## Start here: Saltix's brief, or a developer key"), agents.indexOf("## Building an app: safe by default"))
+  const steps = agents.slice(agents.indexOf("## Start here: Saltix's brief, or the pairing command"), agents.indexOf("## Building an app: safe by default"))
     .replace(/\s+/g, " ");
   for (const words of ["[Do I need a server?](docs/how-it-works.md#do-i-need-a-server)", "`npx grain init ../<slug> --chat --slug <slug>`",
       "**Pair it, every session from `grain status`**", "`npx grain pair`", "`.grain/pair.html`", "the 6-digit code, and wait",
       "**Add this server**", "`npx grain doctor`", "**Never ask the person to paste, type or send a key.**",
-      "**A developer key is only for a host where no command runs.**", "never print, repeat, log or quote it",
+      "**Never ask the person for a key, a token or an address they did not give you**", "`--app`, `--owner`, `--genesis`",
+      "**A developer key is retired.**", "never print, repeat, log or quote it",
       "`npx grain app-key --file app.key --offline`", "**One app, one key, one program.**",
       "Never run the SDK's example (`npm run example`) or any other program with the key of an app that already has a program",
       "never reuse another app's key or slug", "`(umask 077 && cat > app.key)`", "**Replace key**", "`npm start`",
@@ -83,13 +85,15 @@ test("a developer key alone leads an agent to the SDK, how it works first, and t
   assert.ok(brief.includes("A page alone needs no server.") && brief.includes("no domain, open port or certificate"));
   assert.ok(brief.includes("  git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains"));
   assert.ok(brief.includes("  npx grain init ../{slug} --chat --slug {slug} && cd ../{slug} && npm install"), "the app's own project");
-  assert.ok(brief.includes("no key ever passes through this chat") && brief.includes("Never ask me to paste, type or send a key"));
+  assert.ok(brief.includes("no key ever passes through this chat") && brief.includes("Never ask me for a key, a token or an address I did not give you"));
+  assert.ok(brief.includes("Then `npx grain pair --app {slug} --owner {owner} --genesis {genesis}`"), "the command's three facts, as placeholders");
+  assert.ok(brief.includes("- Owner: {owner}"), "the owner's address is in the brief");
   // Pairing (24-app-studio §3a): grain status, then grain pair, whose QR code (or .grain/pair.html) and 6-digit code the
   // agent shows and waits, then grain doctor; a developer key only for a host where no command runs.
   assert.ok(brief.indexOf("Run `npx grain status` first") < brief.indexOf("Then `npx grain pair`"));
   assert.ok(brief.indexOf("Then `npx grain pair`") < brief.indexOf("Then `npx grain doctor`"));
   assert.ok(brief.includes("(also in .grain/pair.html) and a six-digit code") && brief.includes("Show me the QR code and the code, then wait"));
-  assert.ok(brief.includes("a developer key (saltix-app:1:…) is only for a host where no command runs"));
+  assert.ok(brief.includes("a developer key (saltix-app:1:…) is retired"));
   assert.ok(brief.includes("One app, one key, one program") && brief.includes("Never run the SDK's example"));
   assert.doesNotMatch(brief, /npm run example/, "never the example: its spec would outrank the project's");
   assert.doesNotMatch(brief, /saltix-app:1:[a-z]+:/, "no key, not even its start");
@@ -130,7 +134,7 @@ test("how-it-works.md: the pieces, whether an app needs a server, and the lifecy
     "Keep the standards.", "Try it.", "Publish.", "Run the program where it stays up", "Update and rotate."]);
   // What is not built yet says so.
   assert.match(list.replace(/\s+/g, " "), /by \*\*pairing\*\* \(Saltix 24-app-studio \[§3a\]/);
-  assert.match(list.replace(/\s+/g, " "), /\*\*A developer key\*\* stands in only for a host where no command runs/);
+  assert.match(list.replace(/\s+/g, " "), /\*\*A developer key\*\* is retired: Saltix makes no new ones/);
   // A page needs no hosting: the network keeps its bundle, which grain publish puts there.
   assert.match(page.replace(/\s+/g, " "), /\*\*The network keeps the bundle\*\*: `grain publish` seals `public\/` and puts it from your computer straight into the Saltix network/);
   assert.doesNotMatch(page, /coming|will upload|needs a URL/i, "nothing about publishing is still to come");

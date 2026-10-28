@@ -17,59 +17,61 @@ server's key, the chat spec, handlers, tests and shipping are for an app with a 
 The app's server speaks with a server key that the app's registry record names. **That key is made on the computer where
 the server runs and never leaves it** (Saltix 24-app-studio [§3a](../protocol/app-studio.md#3a-pairing-a-server-by-qr-code)): `grain pair` makes it, and the
 app's owner pairs it from Saltix by scanning a QR code. Never ask the user to paste, type or send a key, and never take
-one in a chat when pairing can be done.
+one in a chat when pairing can be done. **Never ask the person for a key, a token or an address they did not give
+you**: the app's page in Saltix shows the whole pairing command, and Saltix's brief carries its three facts.
 
 1. **`npx grain status`, at the start of every session.** `paired`: go on. `not_needed`: a page alone, nothing to pair
-   (it names `grain doctor` next). `pairing`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`,
-   `other_network`: it prints the command to run next (`grain pair`, or `grain pair --new` for a key that stopped
-   working). `--json` gives the same for a program. Exit 0 when paired or not needed.
-2. **`npx grain pair`** prints a QR code (a terminal's, with the colours set; off a terminal, plain half blocks drawn for
+   (it names `grain doctor` next). `waiting`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`,
+   `other_network`: it prints the command to run next (`grain pair` with the fields it knows, or `grain pair --new` for
+   a key that stopped working). `--json` gives the same for a program. Exit 0 when paired or not needed.
+2. **`npx grain pair --app <slug> --owner <address> --genesis <16 hex>`**: the command from the app's page in Saltix
+   (the manage page's **Servers**, or New app's last step), three public facts the registry holds for every app. The
+   person pastes it to you, or the brief holds them; a project paired once keeps them, so `npx grain pair` alone does
+   there, and for an app the registry holds the owner is read from its record. It reads the registry's record first
+   (another account's, or retired: refused before anything is shown, saying so), makes the key, signs its proof for that
+   app and owner, and prints a QR code (a terminal's, with the colours set; off a terminal, plain half blocks drawn for
    a dark background), writes it to `.grain/pair.html` (open it in a browser when the terminal's will not scan), and
    prints the link and a **6-digit code**. Show the QR code to the user and tell them: scan it with Saltix (the phone's
-   camera, or My apps → Pair a server), check that Saltix shows the same code, and confirm with the PIN. If the
-   project's `grain.json` names a slug, the offer pairs that app (Saltix makes it on the spot when the owner has none
-   yet); without one the owner picks an app, or makes one named by `--name`.
-3. **It waits** (10 minutes, `--timeout` seconds), answers the phone through the relays, prints which app and owner
-   asked, and once the registry names the key writes `app.key` (owner-only) and `app.json` (the app, the network, the
-   key's public half; nothing secret), and adds `app.key`, `*.key` and `.grain/` to `.gitignore`. A command you cannot
-   leave running while you talk to the user: `npx grain pair --no-wait` prints the offer and returns at once; show it,
-   then run `npx grain pair` to wait (the same offer, for 30 minutes). Or run `grain pair` in the background and read
-   its output.
-   **It pairs only the app the offer names** (`grain.json`'s slug, or `--slug`). An offer that names none answers
-   whoever asks (anyone who saw the QR code or the link may ask for an app of their own, Saltix
-   [24-app-studio §3a](../protocol/app-studio.md#3a-pairing-a-server-by-qr-code)) and writes nothing by itself: it
-   prints "Saltix asked to pair this server with S, owner …" and exits 1 with the next step. When S is the app the
-   user meant, `npx grain pair --accept S` takes it (the same offer; it finishes once the registry names the key);
-   when it is not, someone else saw the offer: `npx grain pair --new` makes a new key and offer. `npx grain status`
-   says "asked to pair it with S, … not confirmed" and names the same command meanwhile. An earlier offer's answer
-   counts for nothing once a new offer is shown.
+   camera, or My apps → Pair a server), check that Saltix shows the same code, and confirm with the PIN. A slug the
+   registry does not hold is a new app: Saltix registers it when the owner confirms. When a field is missing, say which
+   and where it is (the app's page in Saltix); never guess an address.
+3. **It waits for the registry**: no relay session, no message from the phone; it reads the app's record through the
+   network's public relays, with a short backoff, until the record names the key, renewing the offer when it expires
+   with nobody having scanned it (a line says so: no second command). Then it writes `app.key` (owner-only) and
+   `app.json` (the app, its owner, the network, the key's public half; nothing secret), and adds `app.key`, `*.key` and
+   `.grain/` to `.gitignore`. A command you cannot leave running while you talk to the user: `npx grain pair --no-wait`
+   prints the offer and returns at once; show it, then run `npx grain pair` to wait (the same offer while it lives, 30
+   minutes). Or run `grain pair` in the background and read its output; `--timeout S` stops it after S seconds.
+   The registry names a key for one live app only: a key paired with another app before, or one that serves another app
+   already, is told `npx grain pair --new` (a new key for this app).
 4. **`npx grain doctor`** checks the rest (the key, `.gitignore`, `chat.json`'s version, `npm install`, the bundle, what
    the registry holds, the Connect profile) and names the exact next step. It exits 0 when nothing is left, 1 when
    something is to do, and 75 while it only waits for the network (a transaction on its way: ask again in a minute)
    ([its exit statuses](../../README.md#grain-doctor-where-a-project-stands-and-its-exit-status)).
 
-A wait that ended (`Saltix did not ask in time`, or a managed account's call that waits its delay) is resumed by
-`grain pair` again: the same key, the same offer while it lives. `grain pair --new` pairs a new key, to rotate one or to
-replace one that stopped working; the old `app.key` is kept in `.grain/`.
+A wait that ended (`--timeout`, Ctrl-C, or a managed account's call that waits its delay) is resumed by `grain pair`
+again: the same key, the same offer while it lives. `grain pair --new` pairs a new key, to rotate one or to replace one
+that stopped working; the old `app.key` is kept in `.grain/`.
 
 Every command run in the project appends its steps to `.grain/log.jsonl`: codes and timings, never a key, an address or
 anything typed ([docs/devex.md](../devex.md#the-steps-log)). Attach it to a report about the tools.
 
-## The developer key is a secret
+## A developer key made before pairing is a secret, and retired
 
-Pairing makes no developer key to copy. One exists only where no command runs (a host that takes environment variables
-alone), made in Saltix and handed over; `app.key` holds a paired key in the same form.
-
-`saltix-app:1:<hrp>:<genesis>:<slug>:<secret>` (Saltix 24-app-studio [§3](../protocol/app-studio.md#3-the-developer-key)): the network's address prefix (`dsalt` on the
-test network), the first 8 bytes of its genesis hash, the app's slug, and the server key's Ed25519 secret. Whoever holds
-it speaks for the app until the owner replaces it.
+Pairing makes no developer key to copy, and Saltix makes no new ones (Saltix 24-app-studio
+[§3](../protocol/app-studio.md#3-the-developer-key), retired 2026-10-28): a host where no command runs is where the
+program's own first start runs `grain pair` once. One made before keeps working until its owner pairs a server in its
+place: the server says so at start (`warning: this server runs on a developer key made in Saltix…`), and `grain status`
+too. `app.key` holds a paired key in the same form, `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`: the network's
+address prefix (`dsalt` on the test network), the first 8 bytes of its genesis hash, the app's slug, and the server
+key's Ed25519 secret. Whoever holds it speaks for the app until the owner replaces it.
 
 - Keep it in `app.key`, owner-only, in `SALTIX_APP_KEY` from a secret store, or in a file `SALTIX_APP_KEY_FILE` names
-  (a systemd credential). If the person pastes it to you anyway, write it
-  with `(umask 077 && cat > app.key)` or an editor, never repeat it back, and say that `grain pair` would have kept it
-  off the chat.
-- Saltix's **Copy brief for a coding agent** gives you the app's name, slug, form and network and the first steps, never
-  a key ([the brief](../first-app.md#building-with-a-coding-agent)).
+  (a systemd credential). If the person pastes one to you anyway, write it
+  with `(umask 077 && cat > app.key)` or an editor, never repeat it back, and say that pairing (`grain pair --new`) keeps
+  keys off the chat.
+- Saltix's **Copy brief for a coding agent** gives you the app's name, slug, form, network and owner and the first steps,
+  never a key ([the brief](../first-app.md#building-with-a-coding-agent)).
 - **One app, one key, one program.** The key is one app's, and one program runs with it: that app's own project. Never
   run the SDK's example (`npm run example`) or another program with the key of an app that already has one, and never
   reuse another app's key or slug: two programs on one key both answer in its chat.
@@ -85,8 +87,8 @@ git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains
 npm install && npm run build
 npx grain init ../<slug> --chat --slug <slug>    # grain.json, chat.json, connect.json, chat.mjs, server.mjs, test/, AGENTS.md…
 cd ../<slug> && npm install                      # the SDK and the grain command, from the checkout: not on npm yet
-npx grain status                                 # unpaired
-npx grain pair                                   # the QR code for the owner's Saltix (above); waits, writes app.key
+npx grain status                                 # unpaired: it names the command to run
+npx grain pair --app <slug> --owner <address> --genesis <16 hex>   # the command from the app's page (above); waits, writes app.key
 npm start
 ```
 
@@ -138,7 +140,7 @@ What users can send, declared ahead; the wallet draws each command's form and ch
 ```
 
 - **Raise `version` with every change.** Saltix takes a spec only when its version is higher than the one it holds; an
-  app made in Saltix starts at 1, so your server serves 2 or more (from its developer key it refuses to start on 1,
+  app made in Saltix starts at 1, so your server serves 2 or more (from its registered key it refuses to start on 1,
   `chat_spec_version_starter`, exit 78). A spec changed under the same version reaches nobody, and nothing says so.
 - `keeps` (days you keep what users send) and `ai` (whether a language model answers) are shown to users before their
   first action: they must be true.
@@ -251,7 +253,7 @@ chat.text((ask) => card().text("Pick Plan below."));
 - **Refuse** with `throw new ChatRefusal(text)` (a `refused` status, in the user's language). Any other error answers
   `failed` and is reported to your team's console.
 - **Payments** (`chat.invoice`, `chat.paymentOf`): `const inv = chat.invoice({ amount: "2.5", memo: "Premium, 1 month" })`, then
-  `card().text(…).invoice(inv)`. The developer key's invoice pays the app's owner only. Keep `inv.invoice` with what
+  `card().text(…).invoice(inv)`. A registered key's invoice (the paired key's) pays the app's owner only. Keep `inv.invoice` with what
   the user asked for, and deliver once `await chat.paymentOf(inv.invoice)` has the confirmations you need — one on
   Consensus 2, the test network's, where a block the node shows is final ([../payments.md](../payments.md)).
 
@@ -332,7 +334,7 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   page gets an address only from `grain.requestAddress` (the `address` permission) or `grain.pickContact`.
   Never show a key as a name. To show people to each other, show the name each typed in the app (its own data: say so
   in `connect.json`'s privacy) or a shared address, shortened; a typed name is never proof of who someone is.
-- **Secrets**: never log, print, commit or report a key (the developer key, `owner.key`, `server.key`, `sponsor.key`)
+- **Secrets**: never log, print, commit or report a key (`app.key`'s, `owner.key`, `server.key`, `sponsor.key`)
   or a token. The SDK scrubs developer keys, long hex and the server secret from reports and its own log; name anything
   else in `redact`.
 - **Logs** carry event names and numbers: never what users wrote, their arguments, keys or addresses.
@@ -344,7 +346,7 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
 - **Versions**: raise `chat.json`'s `version` with every change of it, and the program's own version (`version`, which
   `server.mjs` takes from `package.json`) with every release, so error reports name it.
 - **Tests**: test every command end to end with `testChat` (`@saltix/grain-server/testing`), never with a real
-  developer key and never against the live network; a new command comes with its test.
+  key and never against the live network; a new command comes with its test.
 - **One spec a version**: the server keeps the spec it served in its store and refuses to start (78,
   `chat_spec_changed_under_version`) on a `chat.json` changed under that version; never delete `chat.store.json` to get
   past it, raise `version`.
@@ -363,9 +365,9 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   (`git diff --exit-code grain.json`); never edit `entry.sealed` by hand.
 - **Formats**: never build a protocol message by hand. The SDK makes and checks every one, byte for byte the network's.
 - **Money**: never deliver on the page's or the user's word: only on `chat.paymentOf` (or `findPayment`) with enough
-  confirmations. Never put another payee in an invoice: a developer key's invoice pays the owner, and wallets refuse
+  confirmations. Never put another payee in an invoice: a registered key's invoice pays the owner, and wallets refuse
   anything else (`payee`). Say in the card what to do if the payment sheet does not open (Saltix 0.1.54 pays a
-  developer key's invoice, 0.1.53 and older refuse it: update Saltix).
+  registered key's invoice, 0.1.53 and older refuse it: update Saltix).
 
 ## Test
 
@@ -393,7 +395,7 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
   `t.chat` is the `ChatServer`, `t.registry` the development registry (`setAccess`, `setServers`, `retire`, then
   `await t.chat.checkRegistry()`), `user.unasked()` waits for `notify` and the team's cards, `t.logs` holds the server's
   log. A request the spec does not allow is refused in the test itself; a card a wallet would not show fails it.
-- **In Saltix**: run the server with the real developer key and use the app from the owner's phone: its chat is the
+- **In Saltix**: run the server with the real paired key and use the app from the owner's phone: its chat is the
   app's console. Your own chat does not run in the simulator yet (it runs `examples/hello-grain`).
 
 ## Publish a page, and its icon
@@ -511,14 +513,15 @@ Saltix lays an app's page inside the safe area; full screen only with viewport-f
 
 | It says | Do |
 |---|---|
-| `no key: this server is not paired with an app` (`chat_unpaired`) | `npx grain pair`, and show the user its QR code |
-| `this server's key is not paired with an app yet` | `npx grain pair` again: it shows the offer and finishes once Saltix has named the key |
+| `no key: this server is not paired with an app` (`chat_unpaired`) | `npx grain pair` with the command from the app's page, and show the user its QR code |
+| `this server's key is not paired with an app yet` | `npx grain pair` again: it shows the offer and waits until the registry names the key |
+| `warning: this server runs on a developer key made in Saltix…` | It runs; pair a server in its place: `npx grain pair --new`, show the QR code, then the owner removes the old key on the app's page |
 | `app.key: readable by others` (`chat_key_exposed`) | `chmod 600 app.key` |
-| `not a developer key` / `a malformed developer key` | `npx grain pair --new` (or, for a handed-over key, copy the whole key again: it starts with `saltix-app:1:`) |
+| `not a developer key` / `a malformed developer key` (`app.key` is not a key file the server reads) | `npx grain pair --new` |
 | `the developer key is for devnet …, but the network answering is …` | The test network was reset: `npx grain pair --new` |
 | `the registry does not name this server key …: the owner replaced this server key` | `npx grain pair --new`, or run the server that holds the new key |
 | `…: the registry has no such grain` | Just made: wait until Saltix shows the app live in My apps, then start again |
-| `…: the grain is retired` | A retired slug is never used again: `npx grain pair --new` and a new app from its QR code |
+| `…: the grain is retired` | A retired slug is never used again: the owner makes a new app in Saltix; `npx grain pair --new --app <new slug> …` with its command |
 | `chat.json changed but keeps version N` / `…below version N this server already served` | Raise `version` in `chat.json` above N and start again |
 | `wallets write to the first server key the registry names` (a warning) | Requests go to the first key's server: run that one |
 | `no public relays are known for mainnet` | Pass `NODE_RPC`, your own node's wallet interface |

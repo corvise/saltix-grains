@@ -70,10 +70,11 @@ const SEND_TRIES = 3;
 
 export interface ChatServerOptions {
   /**
-   * The developer key Saltix gave for the grain (`saltix-app:1:…`, 24-app-studio §3): its whole configuration. The
-   * server reads the slug, the network and the server key from it, finds the network's public relays and its node
-   * through them, and checks that the registry names the key. Keep it out of code and logs: an environment variable or
-   * an owner-only file.
+   * The server's key as `grain pair` wrote it to `app.key` once the registry named it (`appKeyFromEnvironment`;
+   * 24-app-studio §3a) — or a developer key made in Saltix before pairing (§3, retired), in the same form
+   * (`saltix-app:1:…`): its whole configuration. The server reads the slug, the network and the server key from it,
+   * finds the network's public relays and its node through them, and checks that the registry names the key. Keep it
+   * out of code and logs: an owner-only file, or an environment variable.
    */
   appKey?: string | AppKey;
   /** The chat spec: signed by the owner key (`grain chat-spec`; the object, or the hex of its Borsh), or unsigned, which

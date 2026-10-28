@@ -1,0 +1,668 @@
+{
+  "chain": {
+    "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "network": "devnet"
+  },
+  "command": {
+    "genesis_hex": "5a5a5a5a5a5a5a5a",
+    "owner_address": "dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4",
+    "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+    "slug": "access",
+    "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5a"
+  },
+  "configure_grain": {
+    "amount": "0",
+    "call": {
+      "call": "configure_grain",
+      "category": 0,
+      "servers": [
+        {
+          "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+          "proof_hex": "46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06"
+        }
+      ],
+      "slug": "access",
+      "tag": 39
+    },
+    "fee": "150000",
+    "id_hex": "31623c6377c4242a3a579df34debe633b80ed22bd1545e96cad2d4ee37b6043a",
+    "nonce": "7",
+    "sender_hex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+    "signed_hex": "00db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d0700000000000000f049020000000000a08601000000000001270600000061636365737301000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060000000000000000000057ae8ce3cff36b5963a62e7b8af12a48523043648aa4fe150abedcedbf3552a4b30b3af4ae9b53b88f5fc0927a986bd04c0025471022074027e5abeb2650e409",
+    "transaction_hex": "00db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d0700000000000000f049020000000000a08601000000000001270600000061636365737301000000af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06000000000000000000",
+    "valid_until_slot": "100000"
+  },
+  "keys": {
+    "other_server": {
+      "public_hex": "2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6",
+      "secret_hex": "6262626262626262626262626262626262626262626262626262626262626262"
+    },
+    "owner": {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "address": "dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4",
+      "public_hex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+      "secret_hex": "4141414141414141414141414141414141414141414141414141414141414141"
+    },
+    "server": {
+      "address": "dsalt1qltarh3f9zek4efxqmdfnpc6lun4ydyckn7am8xsv9gf87qpferysrnqyaw",
+      "fingerprint": "af06a3e3",
+      "public_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+      "secret_hex": "6161616161616161616161616161616161616161616161616161616161616161"
+    },
+    "stranger": {
+      "account_hex": "25273da47273a52fb8aaa211ed4712d132ddaf2db6cc94ac295d0642ea954ab8",
+      "address": "dsalt1qy5nnmfrjwwjjlw925gg763cj6yedmtedkmxfftpft5ry9654f2uqsud2s0",
+      "public_hex": "22fc297792f0b6ffc0bfcfdb7edb0c0aa14e025a365ec0e342e86e3829cb74b6",
+      "secret_hex": "4343434343434343434343434343434343434343434343434343434343434343"
+    }
+  },
+  "max_name": 32,
+  "now_ms": "1800000000000",
+  "offer_life_ms": "1800000",
+  "offer_version": 2,
+  "offers": [
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "case": "english",
+      "code": 426082,
+      "code_text": "426 082",
+      "created_at_ms": "1799999940000",
+      "expires_at_ms": "1800001740000",
+      "fingerprint": "af06a3e3",
+      "genesis_hex": "5a5a5a5a5a5a5a5a",
+      "hrp": "dsalt",
+      "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+      "link": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2hoaGhoaGhoaGhoaGhoaGhBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBgwAAABtYWNib29rLWFubmGgZVsYowEAAODcdhijAQAA",
+      "name": "macbook-anna",
+      "nonce_hex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "proof_hex": "46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06",
+      "server_address": "dsalt1qltarh3f9zek4efxqmdfnpc6lun4ydyckn7am8xsv9gf87qpferysrnqyaw",
+      "slug": "access",
+      "version": 2
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a206000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a0617000000d0bdd0bed183d182d0b1d183d0ba20d090d0bdd0bdd18ba0655b18a3010000e0dc7618a3010000",
+      "case": "russian",
+      "code": 273095,
+      "code_text": "273 095",
+      "created_at_ms": "1799999940000",
+      "expires_at_ms": "1800001740000",
+      "fingerprint": "af06a3e3",
+      "genesis_hex": "5a5a5a5a5a5a5a5a",
+      "hrp": "dsalt",
+      "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+      "link": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2ioqKioqKioqKioqKioqKiBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBhcAAADQvdC-0YPRgtCx0YPQuiDQkNC90L3Ri6BlWxijAQAA4Nx2GKMBAAA",
+      "name": "ноутбук Анны",
+      "nonce_hex": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+      "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "proof_hex": "46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06",
+      "server_address": "dsalt1qltarh3f9zek4efxqmdfnpc6lun4ydyckn7am8xsv9gf87qpferysrnqyaw",
+      "slug": "access",
+      "version": 2
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a306000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a0600000000a0655b18a3010000e0dc7618a3010000",
+      "case": "unnamed",
+      "code": 612525,
+      "code_text": "612 525",
+      "created_at_ms": "1799999940000",
+      "expires_at_ms": "1800001740000",
+      "fingerprint": "af06a3e3",
+      "genesis_hex": "5a5a5a5a5a5a5a5a",
+      "hrp": "dsalt",
+      "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+      "link": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2jo6Ojo6Ojo6Ojo6Ojo6OjBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBgAAAACgZVsYowEAAODcdhijAQAA",
+      "name": "",
+      "nonce_hex": "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+      "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "proof_hex": "46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06",
+      "server_address": "dsalt1qltarh3f9zek4efxqmdfnpc6lun4ydyckn7am8xsv9gf87qpferysrnqyaw",
+      "slug": "access",
+      "version": 2
+    }
+  ],
+  "proof": {
+    "domain": "Saltix grain server v1",
+    "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+    "payload": "genesis_hash [32] ‖ u32 LE length ‖ slug ‖ owner [32]",
+    "proof_hex": "46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06",
+    "signed_payload_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a06000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b"
+  },
+  "refused": [
+    {
+      "error": "not_pairing",
+      "text": "salt:grain-publish?m=AAAA",
+      "what": "link",
+      "why": "not a pairing link: a publishing link"
+    },
+    {
+      "error": "malformed",
+      "text": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2hoaGhoaGhoaGhoaGhoaGhBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBgwAAABtYWNib29rLWFubmGgZVsYowEAAODcdhijAQAA=",
+      "what": "link",
+      "why": "padding"
+    },
+    {
+      "error": "malformed",
+      "text": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2hoaGhoaGhoaGhoaGhoaGhBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBgwAAABtYWNib29rLWFubmGgZVsYowEAAODcdhijAQAA&x=1",
+      "what": "link",
+      "why": "a further parameter"
+    },
+    {
+      "error": "malformed",
+      "text": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2ioqKioqKioqKioqKioqKiBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBhcAAADQvdC-0YPRgtCx0YPQuiDQkNC90L3Ri6BlWxijAQAA4Nx2GKMBAAB",
+      "what": "link",
+      "why": "spare bits set in the last character"
+    },
+    {
+      "error": "malformed",
+      "text": "salt:grain-pair?o=AgUAAABkc2FsdFpaWlpaWlparwaj4ykXFOTzVsGcmxXNGVHsbmZiqne-B1R_KJODNB2hoaGhoaGhoaGhoaGhoaGhBgAAAGFjY2Vzc8RrYgLBDn4lvczTsoPZ1inZIeFd-o5_gFXVj4OZNo9bRtnSbmlll3t44_X2lcaep26aoq72o7Rzrq0X-an213lpmNUmoaNS7XHbrckXn5vFT0tjsgFSHl3OEMVu9ERaBgwAAABtYWNib29rLWFubmGgZVsYowEAAODcdhijAQAAAA",
+      "what": "link",
+      "why": "trailing bytes"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a301000000",
+      "error": "malformed",
+      "what": "offer",
+      "why": "trailing bytes"
+    },
+    {
+      "borsh_hex": "01050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a101060000006163636573730b000000416363657373206b657973a0655b18a3010000e0dc7618a3010000",
+      "error": "version",
+      "what": "offer",
+      "why": "an offer of version 1, as the SDK of 2026-10-19 wrote it: from an older SDK"
+    },
+    {
+      "borsh_hex": "03050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "error": "version",
+      "what": "offer",
+      "why": "version 3: a newer SDK than this reader"
+    },
+    {
+      "borsh_hex": "",
+      "error": "malformed",
+      "what": "offer",
+      "why": "no bytes at all"
+    },
+    {
+      "borsh_hex": "02050000007873616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "error": "unknown_network",
+      "what": "offer",
+      "why": "an unknown network"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5a0100000000000000000000000000000000000000000000000000000000000000a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "error": "key",
+      "what": "offer",
+      "why": "a key of small order (the identity)"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000416363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "error": "slug",
+      "what": "offer",
+      "why": "a slug not of form"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a0621000000787878787878787878787878787878787878787878787878787878787878787878a0655b18a3010000e0dc7618a3010000",
+      "error": "name",
+      "what": "offer",
+      "why": "a name of 33 characters"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06070000004b657973e280aea0655b18a3010000e0dc7618a3010000",
+      "error": "name",
+      "what": "offer",
+      "why": "a bidirectional control in the name"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a06050000004b6579730aa0655b18a3010000e0dc7618a3010000",
+      "error": "name",
+      "what": "offer",
+      "why": "a line feed in the name"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000a0655b18a3010000",
+      "error": "life",
+      "what": "offer",
+      "why": "expires when made"
+    },
+    {
+      "borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e1dc7618a3010000",
+      "error": "life",
+      "what": "offer",
+      "why": "a life of 30 minutes and 1 ms"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "testnet"
+      },
+      "error": "other_network",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "another network's prefix"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5b5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "other_network",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "another genesis"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "ahead",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61e1e36018a3010000215b7c18a3010000",
+      "what": "check",
+      "why": "made more than 5 minutes ahead"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "expired",
+      "now_ms": "1800001740000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "expired"
+    },
+    {
+      "account_hex": "25273da47273a52fb8aaa211ed4712d132ddaf2db6cc94ac295d0642ea954ab8",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "other_owner",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "scanned by another account"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6964977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the proof with a flipped byte"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5bf7bf8f2f06b8ff7b95189f3a52779cc7ca290b5bbda8fe72b7b63b069d810917f233e2e571877479a254b5083d4d95eef7a35f5982272d216cd1b4c25b4dc20d0c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the proof for another owner"
+    },
+    {
+      "account_hex": "25273da47273a52fb8aaa211ed4712d132ddaf2db6cc94ac295d0642ea954ab8",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10600000061636365737325273da47273a52fb8aaa211ed4712d132ddaf2db6cc94ac295d0642ea954ab846d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the owner rewritten after signing, scanned by that account"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1050000006368657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the slug rewritten after signing"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b7a86dfc510b22b1461ab2503fcccc5e49181fa04df986f9b464717781caeab9916e8f4350f0e675e91408f08a6bd1e805a67de014affad737336a005c874690c0c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the proof by another key"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5a2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the key rewritten after signing"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5b5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b46d9d26e6965977b78e3f5f695c69ea76e9aa2aef6a3b473aead17f9a9f6d7796998d526a1a352ed71dbadc9179f9bc54f4b63b201521e5dce10c56ef4445a060c0000006d6163626f6f6b2d616e6e61a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "the phone's genesis hash differs beyond the 8 bytes the offer names"
+    },
+    {
+      "account_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+      "chain": {
+        "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "network": "devnet"
+      },
+      "error": "proof",
+      "now_ms": "1800000000000",
+      "offer_borsh_hex": "02050000006473616c745a5a5a5a5a5a5a5aaf06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341da1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a106000000616363657373c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b74401420b45a9a664dddfeec374059e1375e75766d457b1c441d4c9b07c72721891b68412a50011e2941c9e0d1eaf2f0f81b271bc54f2f98a087148cdb56580100000000a0655b18a3010000e0dc7618a3010000",
+      "what": "check",
+      "why": "a proof made for another genesis hash with the same first 8 bytes"
+    },
+    {
+      "error": "not_pairing",
+      "text": "grain publish --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5a",
+      "what": "command",
+      "why": "not the pairing command: grain publish"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4",
+      "what": "command",
+      "why": "a flag missing: no --genesis"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5a --app chess",
+      "what": "command",
+      "why": "a flag twice: --app"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5a --name anna",
+      "what": "command",
+      "why": "an unknown flag: --name"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis",
+      "what": "command",
+      "why": "a value missing after --genesis"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5a now",
+      "what": "command",
+      "why": "a stray word"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5",
+      "what": "command",
+      "why": "the genesis of 15 hex digits"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5A5A5A5A5A5A5A5A",
+      "what": "command",
+      "why": "the genesis in upper-case hex"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5g",
+      "what": "command",
+      "why": "the genesis with a character that is not hex"
+    },
+    {
+      "error": "malformed",
+      "text": "grain pair --app access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9stq --genesis 5a5a5a5a5a5a5a5a",
+      "what": "command",
+      "why": "the owner's address with a wrong checksum"
+    },
+    {
+      "error": "unknown_network",
+      "text": "grain pair --app access --owner xsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3adsjdzk7m --genesis 5a5a5a5a5a5a5a5a",
+      "what": "command",
+      "why": "the owner's address of an unknown prefix"
+    },
+    {
+      "error": "slug",
+      "text": "grain pair --app Access --owner dsalt1qc34kyqkppelzt0wv6weg8kwk98vjrc2al288lqz46k8c8xfk3ads0u9st4 --genesis 5a5a5a5a5a5a5a5a",
+      "what": "command",
+      "why": "a slug not of form"
+    }
+  ],
+  "registry": {
+    "cases": [
+      {
+        "expected": "ok",
+        "setup": [
+          {
+            "by": "owner",
+            "slug": "access",
+            "step": "register"
+          }
+        ],
+        "why": "the owner's live app: the key named with the proof the offer carried"
+      },
+      {
+        "expected": "server_key_taken",
+        "setup": [
+          {
+            "by": "owner",
+            "slug": "access",
+            "step": "register"
+          },
+          {
+            "by": "owner",
+            "slug": "chess",
+            "step": "register"
+          },
+          {
+            "by": "owner",
+            "servers": [
+              {
+                "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+                "proof_hex": "202356305bad3ba7bd15a101b1820b565cfe694ad19a7df35b1357b8d5ccb7c90a7b247734be5271be21a82dd6117670293474e026096beb66e31309a47c560d"
+              }
+            ],
+            "slug": "chess",
+            "step": "configure"
+          }
+        ],
+        "why": "the key serves another live app of the owner's"
+      },
+      {
+        "expected": "server_key_taken",
+        "setup": [
+          {
+            "by": "owner",
+            "slug": "access",
+            "step": "register"
+          },
+          {
+            "by": "stranger",
+            "slug": "chess",
+            "step": "register"
+          },
+          {
+            "by": "stranger",
+            "servers": [
+              {
+                "key_hex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+                "proof_hex": "38495df5ab0f69b093352b9b011dfb132084fcfeda52300277fab5aa1ba1689fd2a6b1bb57cf0d17e26d72a6d4afad0c1eeeaeb3b3e1cfda672c4ff75fa18c0c"
+              }
+            ],
+            "slug": "chess",
+            "step": "configure"
+          }
+        ],
+        "why": "the key serves another account's live app"
+      },
+      {
+        "expected": "not_owner",
+        "setup": [
+          {
+            "by": "stranger",
+            "slug": "access",
+            "step": "register"
+          }
+        ],
+        "why": "the slug held by another account"
+      },
+      {
+        "expected": "grain_retired",
+        "setup": [
+          {
+            "by": "owner",
+            "slug": "access",
+            "step": "register"
+          },
+          {
+            "by": "owner",
+            "slug": "access",
+            "step": "retire"
+          }
+        ],
+        "why": "the owner's app, retired"
+      },
+      {
+        "expected": "unknown_grain",
+        "setup": [],
+        "why": "no app of that slug: the phone registers it instead"
+      }
+    ],
+    "version": 4
+  },
+  "rules": [
+    "the command from the app's page: \"grain pair --app <slug> --owner <address> --genesis <16 hex>\" (the SDK's syntax; the three fields are the protocol's): the app's slug (3-32 of [a-z0-9-], not starting with '-'), the owner's Bech32m address (any kind; its prefix names the network, its id is the offer's owner) and the first 8 bytes of the genesis hash in lower-case hex; a reader takes the three flags once each in any order, with white space free, and nothing else",
+    "PairingOffer is Borsh {version: u8 = 2, hrp: String (\"salt\" | \"tsalt\" | \"dsalt\"), genesis: [u8;8] the first 8 bytes of the genesis hash, key: [u8;32] the server key (a valid Ed25519 key, not of small order), nonce: [u8;16] random, slug: String, owner: [u8;32] the owner's account, proof: [u8;64], name: String (the server's, at most 32 characters, none of Unicode Cc, Cf, U+2028, U+2029; may be empty), created_at: u64 Unix ms, expires_at: u64 Unix ms with created_at < expires_at <= created_at + 30 minutes}; nothing in it is secret, and nothing is signed but the proof; a reader refuses trailing bytes",
+    "proof = ServerKeyProof.proof (24-app-studio §2): Ed25519 by the key over BLAKE3-derive_key(\"Saltix grain server v1\", Borsh((genesis_hash [32], slug: String, owner [32]))) — the full genesis hash, not the 8 bytes the offer names; the wallet sends it as it is in ConfigureGrain (tag 39) and keeps it for the calls that keep the key",
+    "link = \"salt:grain-pair?o=\" base64url without padding of Borsh(PairingOffer); white space around it is allowed; padding, spare bits, any other character or a further parameter is refused",
+    "code = the first 4 bytes of BLAKE3-derive_key(\"Saltix grain pairing code v1\", Borsh(PairingOffer)) as a big-endian u32, modulo 1 000 000; code_text is its 6 digits with leading zeros in two groups of 3 separated by one space; every field, the key and the proof included, changes it",
+    "fingerprint(key) = the first 4 bytes of the key in lower-case hex; server_address = the key's personal address (kind 0) on the offer's network",
+    "a wallet of an account on a chain takes an offer at now when it is of form (version, unknown_network, key, slug, name, life, malformed), hrp is the chain's prefix and genesis its first 8 bytes (other_network), created_at <= now + 5 minutes (ahead), now < expires_at (expired), owner is the account (other_owner), and the proof verifies (strict Ed25519) under key for the chain's full genesis hash, slug and owner (proof), checked in that order; nothing travels to the computer, which watches the registry",
+    "the slug by the registry's record (grain_get) of it: none → free (a new app made in place, the key in its ConfigureGrain); its owner not the offer's → another_account; retired → retired; its servers name the key → paired_already (nothing to sign); else own; a wallet signs for free and own only",
+    "the registry's answers to the phone's ConfigureGrain (version 4 and above checks each proof itself): applied for the owner's live app; server_key_taken for a key another live app names, whoever's (\"run grain pair --new\"); not_owner for a slug another account holds; grain_retired for a retired one; unknown_grain for a free slug, which the phone registers instead (step 4 of §3a)",
+    "an offer of version 1 (2026-10-19) is read for its version only: a reader says to update the SDK and run grain pair again; an offer of a version above 2 says to update the wallet; both are the refusal version"
+  ],
+  "skew_ms": "300000",
+  "slugs": [
+    {
+      "pairs": true,
+      "record": null,
+      "verdict": "free",
+      "why": "no grain of that slug"
+    },
+    {
+      "pairs": true,
+      "record": {
+        "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+        "retired": false,
+        "servers_hex": []
+      },
+      "verdict": "own",
+      "why": "the owner's live app, no server key yet"
+    },
+    {
+      "pairs": true,
+      "record": {
+        "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+        "retired": false,
+        "servers_hex": [
+          "2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6"
+        ]
+      },
+      "verdict": "own",
+      "why": "the owner's live app with another key"
+    },
+    {
+      "pairs": false,
+      "record": {
+        "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+        "retired": false,
+        "servers_hex": [
+          "2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6",
+          "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
+        ]
+      },
+      "verdict": "paired_already",
+      "why": "the owner's live app names the key already"
+    },
+    {
+      "pairs": false,
+      "record": {
+        "owner_hex": "25273da47273a52fb8aaa211ed4712d132ddaf2db6cc94ac295d0642ea954ab8",
+        "retired": false,
+        "servers_hex": []
+      },
+      "verdict": "another_account",
+      "why": "another account's app"
+    },
+    {
+      "pairs": false,
+      "record": {
+        "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+        "retired": true,
+        "servers_hex": []
+      },
+      "verdict": "retired",
+      "why": "the owner's app, retired"
+    },
+    {
+      "pairs": false,
+      "record": {
+        "owner_hex": "25273da47273a52fb8aaa211ed4712d132ddaf2db6cc94ac295d0642ea954ab8",
+        "retired": true,
+        "servers_hex": [
+          "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
+        ]
+      },
+      "verdict": "another_account",
+      "why": "another account's, retired, naming the key: another account's first"
+    },
+    {
+      "pairs": false,
+      "record": {
+        "owner_hex": "c46b6202c10e7e25bdccd3b283d9d629d921e15dfa8e7f8055d58f8399368f5b",
+        "retired": true,
+        "servers_hex": [
+          "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
+        ]
+      },
+      "verdict": "retired",
+      "why": "the owner's, retired, naming the key: retired before the key"
+    }
+  ],
+  "spec": "specs/24-app-studio.md §3a, §8, §9",
+  "version": 2
+}

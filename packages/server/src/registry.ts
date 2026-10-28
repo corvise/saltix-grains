@@ -78,7 +78,7 @@ export type GrainCall =
   | { retire: string }
   | { configure: { slug: string; servers: string[]; category: number } }
   /** `ConfigureGrain` of protocol version 2 (tag 39, 24-app-studio §2): each key with its proof that its holder names it
-   *  for this app and owner (`signServerKeyProof`; a paired key's comes in its pairing answer, §3a). Tag 34
+   *  for this app and owner (`signServerKeyProof`; a paired key's comes in its pairing offer, §3a). Tag 34
    *  (`configure`) while the network runs version 1 (`callVersions`). */
   | { configureProven: { slug: string; servers: Array<{ key: string; proof: string }>; category: number } }
   | { bind: { handle: Handle; slug: string | null } }

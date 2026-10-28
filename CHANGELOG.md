@@ -38,6 +38,45 @@
 
 ### Changed
 
+- **Pairing a server, version 2** (Saltix 24-app-studio §3a, corvise/saltix #488; the owner's rule of 2026-10-28: a
+  developer copies one command from the app's page in Saltix, public data only, runs it and shows the QR code; the owner
+  scans, compares the code and confirms with the PIN; no key, token or secret is ever shown, pasted or carried, and a
+  coding agent never asks a person for a key, a token or an address they did not give it):
+  - **`grain pair [--app <slug>] [--owner <address>] [--genesis <16 hex>] [--name <server name>] [--new] [--no-wait]
+    [--timeout S]`** takes the command's three fields from the command line, else from the project (`app.json`,
+    `.grain/pair.json`, `grain.json`'s slug), else, for an app the registry holds, the owner from its record
+    (`grain_get`) and the genesis from the network; a new app needs `--app` and `--owner`, and it says so plainly. It
+    reads the registry's record first (another account's, or retired: refused before anything is shown; naming the key
+    already: finished), makes or keeps the pending key, signs the key's proof for the app and its owner (the very proof
+    a `ConfigureGrain` of tag 39 carries), prints the app, the owner, the server's name (`--name`, the host name unless
+    told), the code and the QR code (the terminal, the link, `.grain/pair.html`), renews the offer when it expires with
+    nobody having scanned it, and **watches the registry** (the record's server keys, polled with a short backoff; no
+    relay session, no mailbox, no message from the phone) until the key is named, then writes `app.key`, `app.json`
+    (now with `owner`) and `.gitignore`. A key the registry names for another live app (`ServerKeyTaken` at the phone)
+    is told `grain pair --new`. It waits until the key is named unless `--timeout S` bounds it; `--no-wait` shows the
+    offer and returns.
+  - **`@saltix/grain-server`'s `pairing.ts`** is version 2's: `PairingOffer` with `owner` and `proof` (fields and
+    order as §3a), `PairTarget` with `pairCommand`/`parsePairCommand` and `pairTarget`, `makeOffer` signing the proof
+    with `signServerKeyProof` (the one definition, `ConfigureGrain`'s), `offerProblem` checking the form, the version
+    (an offer of version 1: "this offer is from an older SDK: update it and run `grain pair` again"; above 2: "update
+    Saltix"), the network, the clock, the expiry, the owner and the proof in the specification's order, `judgeSlug`
+    (`free`, `own`, `paired_already`, `another_account`, `retired`) over `slugRecordOf(grain_get's record)`,
+    `offerProof` for the phone's call, `versionMessage`. Held to `vectors/server-pairing-v2.json` (synced at
+    corvise/saltix `5c045a9f`): the command, the offers in English, Russian and unnamed, the proof's message and
+    signature, the slug's verdicts, the owner's signed `ConfigureGrain`, and all 42 refusals.
+  - **`grain status`** says `waiting` (an offer shown, the registry not naming the key yet) in place of `pairing`, with
+    the app and the owner the offer is for, and names the whole command when it knows no fields; `grain doctor`'s key
+    finding and next step follow. **A developer key made in Saltix** (`app.key` without an `app.json` naming it, or
+    `SALTIX_APP_KEY`) still works, with a warning at the server's start (`appKeyFromEnvironment`'s `warn`, the console
+    unless told: `DEVELOPER_KEY_WARNING`, `keyPairedHere`) and in `grain status` and `grain doctor` to pair a server in
+    its place; Saltix makes no new ones (§3, retired).
+  - The pages that describe pairing or developer keys say so: `docs/first-app.md` (the command from the app's page,
+    the brief with the owner's address and the three facts as placeholders), `docs/agents/app.md` and `AGENTS.md`
+    (run `grain pair` with the fields from the app's page, show the QR code, wait for the registry; the never-ask rule
+    in bold), `docs/agents/README.md`, `docs/protocol/app-studio.md` (§3 and §3a from the specification),
+    `docs/how-it-works.md`, `docs/chats.md`, `docs/devex.md` (the steps' log: `fields`, `record`, `offer_renewed`,
+    `registry`'s reasons), `docs/payments.md`, the templates' `AGENTS.md` and README, the README and the example.
+
 - **The docs say what an app meets on the network now** (corvise/saltix `fbbc06c3`): Saltix's test network runs
   Consensus 2 since its v15 of 26 October 2026, so a block the node shows is final at its committee's certificate and one
   confirmation is enough to deliver on (`docs/payments.md`, the wallet interface's *Confirmations*); an epoch is 1 600
@@ -62,6 +101,13 @@
   `pool_hex`, its rules) and `handles-v1.json` (the reserved names `pool` and `operator`) changed in words only, no byte
   of any Borsh form or signature. The protocol pages, `AGENTS.md` and the guides use the new words; the old ones
   survive only in this changelog's history.
+
+### Removed
+
+- **Version 1's exchange through the relays**: the `SGP1` frames (`PairRequest`, `PairAnswer`, `PairFrame`,
+  `encodePairFrame`/`decodePairFrame`), `judgePair`, `answerPair`, `checkPairAnswer`, `PAIR_ANSWER_WAIT_MS`,
+  `grain pair --accept`, `--slug` (now `--app`) and `acceptHint`; `vectors/server-pairing-v1.json`. On protocol version
+  6 the messenger's gate held both frames, so version 1 could not pair, and nothing in use was paired by it.
 
 ### Fixed
 

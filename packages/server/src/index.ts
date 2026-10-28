@@ -5,8 +5,9 @@
  * write to users through the relays (frames and notifications), and talk with them in the grain's chat
  * (`ChatServer`, from a developer key alone), its team included: errors reach the team in the app's console. Byte for
  * byte the node's formats (vectors/grains-v1.json, vectors/grain-chats-v1.json, vectors/handles-v1.json,
- * vectors/connect-profiles-v1.json, vectors/server-pairing-v1.json, vectors/images-v1.json). A server pairs its key with
- * its app by a QR code (`pairing.ts`, `grain pair`) and finds it with `appKeyFromEnvironment`; a sealed app's bundle and
+ * vectors/connect-profiles-v1.json, vectors/server-pairing-v2.json, vectors/images-v1.json). A server pairs its key with
+ * its app by a QR code (`pairing.ts`, `grain pair`: the owner scans, compares the code and confirms; no secret travels)
+ * and finds it with `appKeyFromEnvironment`; a sealed app's bundle and
  * icon go into the network itself (`named.ts`: the checks, `bundle-upload.ts`: the server key's statement, `blobs.ts`:
  * `putBundle`, `putIcon`, `getBlob`). `@saltix/grain-server/web` holds the parts that run in a web page too.
  */

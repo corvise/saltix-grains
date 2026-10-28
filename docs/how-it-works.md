@@ -52,9 +52,11 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
   command waits up to 7 days) and are answered when it comes back.
 - **The program's key** is one of the server keys the registry names, kept in the project's `app.key` with the network
   and the slug (`saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`): the program's whole configuration. **It is made on the
-  computer where the program runs and never leaves it**: `grain pair` makes it and the owner's Saltix names it by a QR
-  code ([app-studio §3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code)); a developer key made in Saltix stands
-  in only for a host where no command runs ([§3](protocol/app-studio.md#3-the-developer-key)). It lets the program speak
+  computer where the program runs and never leaves it**: `grain pair`, with the command from the app's page in Saltix
+  (the app, the owner's address, the network: public facts), makes it, and the owner's Saltix names it by a QR code
+  ([app-studio §3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). Developer keys made in Saltix are retired
+  ([§3](protocol/app-studio.md#3-the-developer-key)): one made before keeps working until a server is paired in its
+  place. It lets the program speak
   for the app, sign invoices that pay **the owner only**, and notify. It never changes the manifest, the keys, the
   access or the deposit, and the owner removes or replaces it in Saltix at any time.
 - **Relays** are the network's nodes that carry messages between Saltix, pages and programs, keep mailboxes for whoever
@@ -102,14 +104,18 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
      `npx grain init ../<slug> --chat --slug <slug>` (a chat) or `npx grain init ../<slug> --slug <slug>` (a page), then
      `npm install` in the project, which links the SDK and the `grain` command from the checkout.
    - Then the key, by **pairing** (Saltix 24-app-studio [§3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code)),
-     every session from `npx grain status`. Not `paired`: `npx grain pair` makes the program's server key on your
-     computer (`.grain/pair.key`, owner-only, never printed, logged or sent) and shows a QR code (also
-     `.grain/pair.html`), a link and a 6-digit code. The owner scans it with Saltix (the phone's camera, or **My apps →
-     Pair a server**), checks that Saltix shows the same code, keeps **Add this server** and confirms with the PIN;
-     Saltix asks the computer through the relays, and `grain pair` writes `app.key` and `app.json` once the registry
-     names the key. No key is copied at all. `npx grain doctor` names what is left.
-   - **A developer key** stands in only for a host where no command runs: the owner copies it in Saltix (**Copy key**)
-     and saves it there themselves; a coding agent never asks for one in its chat.
+     every session from `npx grain status`. Not `paired`: `npx grain pair` with the command from the app's page in
+     Saltix (`--app`, `--owner`, `--genesis`; a project paired once keeps them, and an app the registry holds needs its
+     slug alone) makes the program's server key on your computer (`.grain/pair.key`, owner-only, never printed, logged
+     or sent), signs its proof for the app and the owner, and shows a QR code (also `.grain/pair.html`), a link and a
+     6-digit code. The owner scans it with Saltix (the phone's camera, or **My apps → Pair a server**), checks that
+     Saltix shows the same code, keeps **Add this server** and confirms with the PIN; `grain pair` watches the registry
+     and writes `app.key` and `app.json` once it names the key (the offer renews itself while nobody scans). No key is
+     copied at all, and nothing is asked of the owner but the scan. `npx grain doctor` names what is left.
+   - **A developer key** is retired: Saltix makes no new ones; one made before keeps working until the owner pairs a
+     server in its place, and the server warns at start. A host where no command runs is where the program's own first
+     start runs `grain pair` once (its console shows the QR code). A coding agent never asks for a key, a token or an
+     address it was not given.
    - **A page alone pairs nothing**: it has no program, so `npx grain status` says `not_needed` and names the next
      step (`grain doctor`).
 3. **Build.** A chat: `chat.json` (the commands; raise its `version` with every change) and their handlers in
@@ -142,8 +148,9 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
 8. **Update and rotate.** A new command or text: change `chat.json`, raise `version`, restart. A new release of the
    program: raise `package.json`'s `version` (error reports name it), restart. A new name, icon or page: a new manifest
    version the owner approves (`grain publish`, or `chat.proposeUpdate` in the console). A new key, to rotate
-   one or replace one that leaked or stopped working: `npx grain pair --new` on the computer, then **Use only this
-   server** in Saltix, and no key travels (a developer key: **Replace key** on the app's page in Saltix). The old key
+   one or replace one that leaked or stopped working: `npx grain pair --new` on the computer, then **Replace the other
+   servers** in Saltix, and no key travels (a developer key made before pairing: remove it on the app's page once a
+   server is paired in its place). The old key
    stops at the block that takes the change, its program exits with 78, and the new key in `app.key` starts it again.
    Requests sent meanwhile wait in the mailbox.
 

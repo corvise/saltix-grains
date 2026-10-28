@@ -43,7 +43,7 @@ export const FLAGS: Readonly<Record<string, readonly string[]>> = {
   rate: ["slug", "score", "review", ...KEYED],
   bind: ["handle", "slug", "clear", ...OWNER],
   "app-key": ["file", ...NET, "offline", "slug", "server", "out"],
-  pair: ["slug", "name", "accept", "new", "wait", "no-wait", "timeout", ...NET],
+  pair: ["app", "owner", "genesis", "name", "new", "wait", "no-wait", "timeout", ...NET],
   status: ["json", ...NET],
   doctor: ["json", ...NET],
   sponsor: ["exchange", "amount", ...SIGNED],
