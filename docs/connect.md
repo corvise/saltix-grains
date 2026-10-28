@@ -87,9 +87,13 @@ npx grain connect-profile --origin https://dex.example --name "Example DEX" --ca
   the file.
 - Serve the file at `/.well-known/saltix-connect` as `application/json`, with no redirect (a wallet follows none), at most
   64 KiB. A wallet fetches it without cookies or a referrer and waits at most 5 seconds.
-- `readSiteProfile(origin, { node, genesis, policy })` (in `@saltix/connect`) reads it as a wallet does, owner's key
-  event log included: a status page or a test of the site can call it. In Node, the server SDK's `signProfile`,
-  `profileToJson` and `checkSiteProfile` do the same work as the command.
+- `readSiteProfile(origin, { node, genesis, policy, network })` (in `@saltix/connect`) reads it as a wallet does,
+  owner's key event log included (`network`, `node_status`'s, holds a support address to it): a status page or a test of
+  the site can call it. In Node, the server SDK's `signProfile`, `profileToJson` and `checkSiteProfile` do the same work
+  as the command.
+- `support` is a link, a `mailto:` address or a username, as a mini-app's; from protocol version 9 also the operator's
+  own Saltix address (`"version": 2`), which a wallet opens as a chat. A consent binds a mini-app, so a site's profile
+  names no other address ([Support for your app](support.md)).
 
 Two things then vouch for each other: the origin serves the profile, so the origin claims the account; the account's key
 signs the origin, so the account claims the site.

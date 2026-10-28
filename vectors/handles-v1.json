@@ -1,17 +1,50 @@
 {
   "auction": {
-    "codes": [
-      "000",
-      "111",
-      "222",
-      "333",
-      "444",
-      "555",
-      "666",
-      "777",
-      "888",
-      "999"
-    ],
+    "bound_bids": {
+      "domain": "Saltix auction terms v1",
+      "terms": [
+        {
+          "extension": 900,
+          "handle": "@boris_k",
+          "handle_borsh_hex": "0007000000626f7269735f6b",
+          "hash_hex": "961b6379880d0586dd7bf96f317c58c977b5d7f0731dc902e95b570946bdea06",
+          "name": "holders-auction",
+          "opened": 1000,
+          "preimage_hex": "0007000000626f7269735f6b0112d13022694ec2032f65b6d45d83ef9fb3582e490287c17697fed48761d350efe803000000000000683e090000000000005cb2ec22000000e8038403000000000000",
+          "scheduled": 605800,
+          "seller_hex": "12d13022694ec2032f65b6d45d83ef9fb3582e490287c17697fed48761d350ef",
+          "start": "150000000000",
+          "step_bp": 1000
+        },
+        {
+          "extension": 900,
+          "handle": "@boris_k",
+          "handle_borsh_hex": "0007000000626f7269735f6b",
+          "hash_hex": "c42654ef3f04151ca98921db8f576d0578aa54fc67d2b816f652142685f1ddd7",
+          "name": "holders-auction-put-up-again",
+          "opened": 1001,
+          "preimage_hex": "0007000000626f7269735f6b0112d13022694ec2032f65b6d45d83ef9fb3582e490287c17697fed48761d350efe903000000000000693e090000000000005cb2ec22000000e8038403000000000000",
+          "scheduled": 605801,
+          "seller_hex": "12d13022694ec2032f65b6d45d83ef9fb3582e490287c17697fed48761d350ef",
+          "start": "150000000000",
+          "step_bp": 1000
+        },
+        {
+          "extension": 3600,
+          "handle": "@anna_k",
+          "handle_borsh_hex": "0006000000616e6e615f6b",
+          "hash_hex": "6fad67c3d4a2710a7d68ea5c8f2ddd94589531fececb4477d1bb117e4e546fb9",
+          "name": "new-handles-auction",
+          "opened": 2000,
+          "preimage_hex": "0006000000616e6e615f6b00d007000000000000509f06000000000000e8764817000000f401100e000000000000",
+          "scheduled": 434000,
+          "seller_hex": null,
+          "start": "100000000000",
+          "step_bp": 500
+        }
+      ],
+      "version": 5
+    },
     "epochs": 5,
     "extension_parts": 24,
     "extensions": [
@@ -147,32 +180,6 @@
       "50000000000",
       "10000000000"
     ],
-    "number_starts": [
-      {
-        "start_price": "100000000000000",
-        "tier": "ten"
-      },
-      {
-        "start_price": "20000000000000",
-        "tier": "nine"
-      },
-      {
-        "start_price": "5000000000000",
-        "tier": "seven_without_code"
-      },
-      {
-        "start_price": "3000000000000",
-        "tier": "eight"
-      },
-      {
-        "start_price": "500000000000",
-        "tier": "seven_with_code"
-      },
-      {
-        "start_price": "20000000000",
-        "tier": "plain"
-      }
-    ],
     "raises": [
       {
         "bid": "1",
@@ -195,8 +202,8 @@
         "min_next": "107"
       },
       {
-        "bid": "20000000000",
-        "min_next": "21000000000"
+        "bid": "10000000000",
+        "min_next": "10500000000"
       },
       {
         "bid": "100000000000000",
@@ -217,595 +224,168 @@
   "forms": [
     {
       "borsh_hex": "000100000061",
-      "code": null,
       "display": "@a",
-      "kind": "name",
       "mint_price": "100000000000000",
       "reserved": false,
       "short": true,
       "start_price": "100000000000000",
       "text": "a",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": "0004000000616e6e61",
-      "code": null,
       "display": "@anna",
-      "kind": "name",
       "mint_price": "1000000000000",
       "reserved": false,
       "short": true,
       "start_price": "1000000000000",
       "text": "anna",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": "0006000000616e6e615f6b",
-      "code": null,
       "display": "@anna_k",
-      "kind": "name",
       "mint_price": "100000000000",
       "reserved": false,
       "short": false,
       "start_price": "100000000000",
       "text": "anna_k",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": "000700000061626364656667",
-      "code": null,
       "display": "@abcdefg",
-      "kind": "name",
       "mint_price": "50000000000",
       "reserved": false,
       "short": false,
       "start_price": "50000000000",
       "text": "abcdefg",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": "00200000007878787878787878787878787878787878787878787878787878787878787878",
-      "code": null,
       "display": "@xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "kind": "name",
       "mint_price": "10000000000",
       "reserved": false,
       "short": false,
       "start_price": "10000000000",
       "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": "000500000061646d696e",
-      "code": null,
       "display": "@admin",
-      "kind": "name",
       "mint_price": "250000000000",
       "reserved": true,
       "short": false,
       "start_price": "250000000000",
       "text": "admin",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": "000b00000073616c7469785f73686f70",
-      "code": null,
       "display": "@saltix_shop",
-      "kind": "name",
       "mint_price": "10000000000",
       "reserved": true,
       "short": false,
       "start_price": "10000000000",
       "text": "saltix_shop",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": true
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "Anna",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "_anna",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "an__na",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "anna_",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "1anna",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "name",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
       "text": "",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": "010400000031323334",
-      "code": null,
-      "display": "+0 1234",
-      "kind": "number",
-      "mint_price": "10000000000000",
-      "reserved": false,
-      "short": true,
-      "start_price": null,
-      "text": "1234",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "01050000003132333435",
-      "code": null,
-      "display": "+0 1 2345",
-      "kind": "number",
-      "mint_price": "2000000000000",
-      "reserved": false,
-      "short": true,
-      "start_price": null,
-      "text": "12345",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "0106000000313233343536",
-      "code": null,
-      "display": "+0 12 3456",
-      "kind": "number",
-      "mint_price": "500000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "123456",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010700000037373731323334",
-      "code": null,
-      "display": "+0 777 1234",
-      "kind": "number",
-      "mint_price": "100000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "7771234",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000031323334353637383930",
-      "code": null,
-      "display": "+0 12 3456 7890",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "1234567890",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
+      "valid": false
     },
     {
       "borsh_hex": null,
-      "code": null,
       "display": null,
-      "kind": "number",
       "mint_price": null,
       "reserved": false,
       "short": false,
       "start_price": null,
-      "text": "0123",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": null,
-      "code": null,
-      "display": null,
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "123",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": null,
-      "code": null,
-      "display": null,
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "12345678901",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": null,
-      "code": null,
-      "display": null,
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "12a4",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": "010a00000030303031323334353637",
-      "code": "000",
-      "display": "+0 000 123 4567",
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000",
-      "text": "0001234567",
-      "tier": "plain",
-      "valid": true,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": "010a00000037373731323334353637",
-      "code": "777",
-      "display": "+0 777 123 4567",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000",
       "text": "7771234567",
-      "tier": "plain",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000039393939393939393939",
-      "code": "999",
-      "display": "+0 999 999 9999",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "100000000000000",
-      "text": "9999999999",
-      "tier": "ten",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000031323331323334353637",
-      "code": null,
-      "display": "+0 12 3123 4567",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "1231234567",
-      "tier": null,
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": null,
-      "code": null,
-      "display": null,
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "0011234567",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": null,
-      "code": null,
-      "display": null,
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": null,
-      "text": "000123456",
-      "tier": null,
-      "valid": false,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": "010a00000030303030303030303030",
-      "code": "000",
-      "display": "+0 000 000 0000",
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": "100000000000000",
-      "text": "0000000000",
-      "tier": "ten",
-      "valid": true,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": "010a00000037373737373737373731",
-      "code": "777",
-      "display": "+0 777 777 7771",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000000",
-      "text": "7777777771",
-      "tier": "nine",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000030303039303030303030",
-      "code": "000",
-      "display": "+0 000 900 0000",
-      "kind": "number",
-      "mint_price": null,
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000000",
-      "text": "0009000000",
-      "tier": "nine",
-      "valid": true,
-      "valid_v1": false
-    },
-    {
-      "borsh_hex": "010a00000039393931313131313131",
-      "code": "999",
-      "display": "+0 999 111 1111",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "5000000000000",
-      "text": "9991111111",
-      "tier": "seven_without_code",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373730303030303030",
-      "code": "777",
-      "display": "+0 777 000 0000",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "5000000000000",
-      "text": "7770000000",
-      "tier": "seven_without_code",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373737373737373132",
-      "code": "777",
-      "display": "+0 777 777 7712",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "3000000000000",
-      "text": "7777777712",
-      "tier": "eight",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373731373737373731",
-      "code": "777",
-      "display": "+0 777 177 7771",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "3000000000000",
-      "text": "7771777771",
-      "tier": "eight",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373737373737313233",
-      "code": "777",
-      "display": "+0 777 777 7123",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "500000000000",
-      "text": "7777777123",
-      "tier": "seven_with_code",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373731323337373737",
-      "code": "777",
-      "display": "+0 777 123 7777",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "500000000000",
-      "text": "7771237777",
-      "tier": "seven_with_code",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373737373731323334",
-      "code": "777",
-      "display": "+0 777 777 1234",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000",
-      "text": "7777771234",
-      "tier": "plain",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373731313131313132",
-      "code": "777",
-      "display": "+0 777 111 1112",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000",
-      "text": "7771111112",
-      "tier": "plain",
-      "valid": true,
-      "valid_v1": true
-    },
-    {
-      "borsh_hex": "010a00000037373737373738383838",
-      "code": "777",
-      "display": "+0 777 777 8888",
-      "kind": "number",
-      "mint_price": "20000000000",
-      "reserved": false,
-      "short": false,
-      "start_price": "20000000000",
-      "text": "7777778888",
-      "tier": "plain",
-      "valid": true,
-      "valid_v1": true
+      "valid": false
     }
   ],
   "rules": [
-    "a name: 1 to 32 of a-z 0-9 _, the first a letter, no __, not ending in _; lowercase only on chain",
-    "a number of the first form (protocol versions 1 and 2, and held on after): the 4 to 10 digits after +0, the first 1-9",
-    "a number of the fixed form (protocol version 3): a code of three equal digits, one of 000 111 222 333 444 555 666 777 888 999, then 7 digits: 10 digits on chain, written +0 777 123 4567; a block of version 1 or 2 takes the first form only, one of version 3 both; a new handle (a bid) only a name or a fixed number",
+    "a name: 1 to 32 of a-z 0-9 _, the first a letter, no __, not ending in _; lowercase only on chain; the numbers (+0 ...) are gone from the v15 genesis and parse as nothing",
     "reserved names: saltix salt work admin support help official security wallet bank pool operator treasury exchange faucet explorer system root null, and every name starting with saltix",
-    "name prices in SALT by length 1..7, then 8 and longer: 100000 25000 5000 1000 250 100 50 10 (from version 3 the starting bid of a name's auction); mint_price and short are the price rule's, null and false for a form it does not mint (+0 000 ...)",
-    "the starting bids of version 3's auction terms: a name's length price; a fixed number's by its tier, the count of its 10 digits that are the code's digit or the seven after the code alone: ten (all 10 one digit) 100000 SALT, nine (the code's digit 9 times) 20000, seven_without_code (the 7 after the code one other digit) 5000, eight (the code's digit 8 times) 3000, seven_with_code (the code's digit 7 times) 500, plain (every other) 20; the tiers are disjoint, and the first in that order whose rule a number meets is its tier; tier and start_price are null for a name or a number of the first form only",
-    "number prices in SALT by digits 4..7, then 8 and longer: 10000 2000 500 100 20",
-    "short handles (names of 1-4 characters, numbers of 4-5 digits) are minted with the secret of a commit taken 600 to 86400 slots before (versions 1 and 2; MintHandle is refused from version 3)",
-    "auctions (version 3): BidHandle's value is the bid; a bid on a free handle opens the auction at its starting bid or more, ends = opened + 5 * E slots for an epoch of E slots (432000 on the main network: five days); a raise is at least bid + ceil(bid * 5 / 100) and not by the leader, and the beaten bid goes back; a bid taken at slot s sets ends = max(ends, s + max(1, floor(E / 24))) (3600 on the main network: an hour); the first beacon block with slot >= ends settles it (at most 1000 a block, the earliest end first): the leader holds the handle, the bid splits as a mint's price",
-    "a holder's auction (version 3, 21-names §4b): AuctionHandle {handle, start, step_bp, duration, extension}, amount 0, by the handle's holder, of a handle bound to no app and not on auction (or on its own auction without a bid, whose terms and time it replaces); start >= 1 SALT (holder_min_start), step_bp 100..=5000, duration E..=30 * E slots, extension 0..=E; a listing ends; ends = opened + duration; the first bid is at least start, a later one at least bid + max(1, ceil(bid * step_bp / 10000)), never by the holder nor the leader; a bid taken at slot s sets ends = max(ends, s + extension); while on auction no ListHandle, TransferHandle, ReleaseHandle or BindHandle; the first beacon block with slot >= ends hands the handle to the leader as a sale (the holder's primary cleared, minted kept) and pays the holder the bid less the 5% royalty, which splits as a sale's; with no bid it expires and the handle stays; CancelAuction {handle} by the holder before the first bid and before the end",
+    "name prices in SALT by length 1..7, then 8 and longer: 100000 25000 5000 1000 250 100 50 10 (the price rule of protocol versions 1 and 2; from version 3 the starting bid of a name's auction)",
+    "short names (1-4 characters) are minted with the secret of a commit taken 600 to 86400 slots before (versions 1 and 2; MintHandle is refused from version 3)",
+    "auctions (version 3): BidHandle's value is the bid; a bid on a free name opens the auction at its starting bid or more, ends = opened + 5 * E slots for an epoch of E slots (432000 on the main network: five days); a raise is at least bid + ceil(bid * 5 / 100) and not by the leader, and the beaten bid goes back; a bid taken at slot s sets ends = max(ends, s + max(1, floor(E / 24))) (3600 on the main network: an hour); the first beacon block with slot >= ends settles it (at most 1000 a block, the earliest end first): the leader holds the name, the bid splits as a mint's price",
+    "a holder's auction (version 3, 21-names §4b): AuctionHandle {handle, start, step_bp, duration, extension}, amount 0, by the name's holder, of a name bound to no app and not on auction (or on its own auction without a bid, whose terms and time it replaces); start >= 1 SALT (holder_min_start), step_bp 100..=5000, duration E..=30 * E slots, extension 0..=E; a listing ends; ends = opened + duration; the first bid is at least start, a later one at least bid + max(1, ceil(bid * step_bp / 10000)), never by the holder nor the leader; a bid taken at slot s sets ends = max(ends, s + extension); while on auction no ListHandle, TransferHandle, ReleaseHandle or BindHandle; the first beacon block with slot >= ends hands the name to the leader as a sale (the holder's primary cleared, minted kept) and pays the holder the bid less the 5% royalty, which splits as a sale's; with no bid it expires and the name stays; CancelAuction {handle} by the holder before the first bid and before the end",
     "commit hash = derive \"Saltix handle commit v1\" of borsh(handle) ‖ sender account id ‖ 32-byte secret",
-    "borsh(Handle): tag 0 Name(String) or 1 Number(String); HandleKind: u8 0 name, 1 number",
-    "registry calls (action tag 1 {call, amount}), paid in SALT: CommitHandle 23 {hash}, MintHandle 24 {handle, secret: Option<[u8;32]>}, TransferHandle 25 {handle, to}, SetPrimary 26 {handle}, ClearPrimary 27 {kind}, ReleaseHandle 28 {handle}, ListHandle 29 {handle, price: u64}, UnlistHandle 30 {handle}, BuyHandle 31 {handle}, BindHandle 35 {handle, slug: Option<String>} (24-app-studio §2: the holder points it at a live grain it owns, or clears it with none; a transfer, a sale or a release clears it, and so does retiring the grain), BidHandle 60 {handle} (version 3), AuctionHandle 61 {handle, start: u64, step_bp: u16, duration: u64, extension: u64} (version 3), CancelAuction 62 {handle} (version 3)",
+    "bids bound to their auction (protocol version 5, 21-names §4b): BidAuction {handle, terms: [u8; 32]}, its value the bid, is taken only on a live auction of handle whose terms hash is terms, as BidHandle raises one (escrow, the beaten bid back, the extension); otherwise it fails with its value back, and it never opens an auction; from version 5 BidHandle on a holder's auction fails with its value back (it still opens and raises a new name's); terms hash = derive \"Saltix auction terms v1\" of borsh(handle) ‖ borsh(seller: Option<account id>: 0, or 1 ‖ 32 bytes; none for a new name's auction) ‖ opened u64 LE ‖ scheduled u64 LE ‖ start u64 LE ‖ step_bp u16 LE ‖ extension u64 LE — the auction's fields as handle_get writes them (`terms`); ends, the leader, the bid and the count are not terms",
+    "borsh(Handle): tag 0 Name(String) (tag 1, the numbers', decodes as nothing); HandleKind: u8 0 name",
+    "registry calls (action tag 1 {call, amount}), paid in SALT: CommitHandle 23 {hash}, MintHandle 24 {handle, secret: Option<[u8;32]>}, TransferHandle 25 {handle, to}, SetPrimary 26 {handle}, ClearPrimary 27 {kind}, ReleaseHandle 28 {handle}, ListHandle 29 {handle, price: u64}, UnlistHandle 30 {handle}, BuyHandle 31 {handle}, BindHandle 35 {handle, slug: Option<String>} (24-app-studio §2: the holder points it at a live grain it owns, or clears it with none; a transfer, a sale or a release clears it, and so does retiring the grain), BidHandle 60 {handle} (version 3), AuctionHandle 61 {handle, start: u64, step_bp: u16, duration: u64, extension: u64} (version 3), CancelAuction 62 {handle} (version 3), BidAuction 75 {handle, terms: [u8; 32]} (version 5)",
     "a sale's royalty is 5% of the price, rounded down; 10% of a mint and of a royalty go to the future payments fund, the rest to the service treasury",
-    "display: @name; a fixed number as +0, its code, 3 digits and 4 (+0 777 123 4567); another number as +0 then its digits in groups of four from the right"
+    "display: @name"
   ],
   "spec": "specs/21-names.md",
   "transactions": [
@@ -834,11 +414,11 @@
       "version": 1
     },
     {
-      "id_hex": "f9cbdec40a67c5d25ca40b7b55201c660afa9722d7f3cfb7634efed0994c9a62",
-      "name": "mint-number",
+      "id_hex": "251a1a4b982d184405d81966e0c700ad81713cbd24d38a6f6de6afc7efbbb366",
+      "name": "mint-another-name",
       "nonce": "4",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0400000000000000b80b000000000000400d03000000000001180107000000373737313233340000e8764817000000000134685a92f9377a790bb083a5afb9a755cdb6e7044ea93cfc148b52f68c92e540f5881b3923aed566c083a81b06539aca019e986a0bd9dbdb884cc0019d7701",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0400000000000000b80b000000000000400d03000000000001180107000000373737313233340000e8764817000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0400000000000000b80b000000000000400d03000000000001180007000000626f7269735f6b0000743ba40b000000004a51544e6879747d50195a8a2fdacb254f40918e0fd229d36a550a157ff0ed6ffd4c0b1532f394862e7a4095e6dca5164d42cd8028df854fa73ffe15bbe9ac08",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0400000000000000b80b000000000000400d03000000000001180007000000626f7269735f6b0000743ba40b000000",
       "version": 1
     },
     {
@@ -850,11 +430,11 @@
       "version": 1
     },
     {
-      "id_hex": "af674d5c5dd1f66ffdbb8312a64f2269dd99b00ba8711eb78056c01777b1c45e",
+      "id_hex": "ddec8d7fe78ac6734de05099743d84a50c8165192d8dc8f2d713550aad9d808a",
       "name": "clear-primary",
       "nonce": "6",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0600000000000000b80b000000000000400d030000000000011b0100000000000000000086f0aad84e92b97f06c839f0061d52d09be36e206fc47f263ec3053fa4c979810fb158fb9c74d2c0a46f795c90db33409ae03736c218d6327da120e5fb6c780a",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0600000000000000b80b000000000000400d030000000000011b010000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0600000000000000b80b000000000000400d030000000000011b000000000000000000005d64902185b9ae3fddf756d4f17220bf33a922cf137af647ae1de4f5e90ab5965511a5ac77327c668141b4d4d4b74fbac9085cdfd01923326e630d4ad95c590c",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0600000000000000b80b000000000000400d030000000000011b000000000000000000",
       "version": 1
     },
     {
@@ -866,19 +446,19 @@
       "version": 1
     },
     {
-      "id_hex": "b2edae0ef3f24d2a783afd8a2908bb8646b7592ab9bd18d324a3c77506c82274",
+      "id_hex": "6559c0ea5c329954ca889f18a6339bd658df63f7daab7eba1e6d6d1cf0dd8554",
       "name": "list-handle",
       "nonce": "8",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0800000000000000b80b000000000000400d030000000000011d010700000037373731323334005cb2ec220000000000000000000000001714a9e70d7ab56e9311d4b5b80d69026204310c6ee400513a5e3f23f48cb047bc0ed4f0eec8c95c9a7e9825cb803daf59e70899287a30d62ae68de1263c7a00",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0800000000000000b80b000000000000400d030000000000011d010700000037373731323334005cb2ec220000000000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0800000000000000b80b000000000000400d030000000000011d0007000000626f7269735f6b005cb2ec220000000000000000000000002590ed15cddf144583b9d2b919591262f90a593798d33ff95c57ef79654cd3deeee8f2104359a3e98dfd2f3a2050a814b006112f6754c665eff99c2cd1586c02",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0800000000000000b80b000000000000400d030000000000011d0007000000626f7269735f6b005cb2ec220000000000000000000000",
       "version": 1
     },
     {
-      "id_hex": "1a381685248ac16948171aed3aebfd1a2a295a7da800e6f04962eaee9e32a620",
+      "id_hex": "c9e8a9c16ae5fbaecbe84d0c29e5273edc68ac00a7f4bc019452a4a37c73533c",
       "name": "unlist-handle",
       "nonce": "9",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0900000000000000b80b000000000000400d030000000000011e01070000003737373132333400000000000000000045f7f0cea8573f3d581336578141d1b612968f1f11e165a5f5d98fa371b3d72186f7e330a2829eef489b38dea7f67b5d0c11996747f4de6579a2213450bc3e01",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0900000000000000b80b000000000000400d030000000000011e0107000000373737313233340000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0900000000000000b80b000000000000400d030000000000011e0007000000626f7269735f6b000000000000000000d03151b3d68d2691a2d449b7d14d0a1750b193ecc21132f2aab8139e7ee3fbb7b4e2ee098612c2568b809226885aba77631c5d0ee541b9604b141c913806a907",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0900000000000000b80b000000000000400d030000000000011e0007000000626f7269735f6b0000000000000000",
       "version": 1
     },
     {
@@ -890,43 +470,43 @@
       "version": 1
     },
     {
-      "id_hex": "3188fb28eae59aa36cdaa0e711f4c8c35e7017b0dfece0c321e2579418db695d",
+      "id_hex": "1e5bfaca744a18b699ff0d3f90880f01222d92cbc0d0fd3982dfdbe2787ca8cd",
       "name": "buy-handle",
       "nonce": "11",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0b00000000000000b80b000000000000400d030000000000011f010700000037373731323334005cb2ec2200000000afaa56a819d6c71f6187fd5be6dedf1e693af1cd87687373f183c731b6014bb23da5bf371124783c858519a23d547ab970b400aee2d8e228ad84439a91397901",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0b00000000000000b80b000000000000400d030000000000011f010700000037373731323334005cb2ec22000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0b00000000000000b80b000000000000400d030000000000011f0007000000626f7269735f6b005cb2ec2200000000e02a841160e274eb0e1ae76bea89e910bf0a7770d43d3b0c4756c5efb0f4d5d6bfc153b05d1f848d061952445941c0152584d56c55f8eb1639020445fef8da02",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0b00000000000000b80b000000000000400d030000000000011f0007000000626f7269735f6b005cb2ec22000000",
       "version": 1
     },
     {
-      "id_hex": "06a96432abc33455ad5611a850711280f3868000edb2af78df3218b2d599b231",
+      "id_hex": "3bd5b304ee1a8a4e544301cf0364e1c139051b7fe470522432e442163e1e9df9",
       "name": "bind-handle",
       "nonce": "12",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0c00000000000000b80b000000000000400d030000000000012301070000003737373132333401050000006368657373000000000000000000e6366a58fcc9984ccb3e8359c9ac79b379f2750e66e736b699748fb704c4d0bb61d398e68303a20a5cd625efdd38c59d9af421ac13369de6126bad328040e20a",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0c00000000000000b80b000000000000400d0300000000000123010700000037373731323334010500000063686573730000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0c00000000000000b80b000000000000400d03000000000001230007000000626f7269735f6b01050000006368657373000000000000000000d3637824f5a37e6a73644dbae6be3763422f72174fd17525aa85fd5ad7580e2ee9f29bfa0539e077739bf490d84ed90fafcb994c7c39a9540f208dc9fb9f1904",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0c00000000000000b80b000000000000400d03000000000001230007000000626f7269735f6b010500000063686573730000000000000000",
       "version": 1
     },
     {
-      "id_hex": "326258f4456a7b259ea9c702585ad2e2aa6f14f230609da33c93ff180d90a7b3",
+      "id_hex": "eed152073d096e1591ae03ef95275d283efba85ea7e5f3a049afaad74741b58a",
       "name": "unbind-handle",
       "nonce": "13",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0d00000000000000b80b000000000000400d0300000000000123010700000037373731323334000000000000000000007a3876f8ffd50606801863f5cbc4bf6a9bb94e54216fbc316aaefc8af2bf4780659daae0c248535ceed5eeee57937864b64219be4a653dcc32aeab72c9f7120c",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0d00000000000000b80b000000000000400d0300000000000123010700000037373731323334000000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0d00000000000000b80b000000000000400d03000000000001230007000000626f7269735f6b000000000000000000001d48b298aefc0a7c554995a28eea8505029eb736a0666ee9c8039b2b12c659f6aac5c27563216489e1b49f8e6ce958063ea5d5a0f0cf1ba6df853a28b8c7620c",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0d00000000000000b80b000000000000400d03000000000001230007000000626f7269735f6b000000000000000000",
       "version": 1
     },
     {
-      "id_hex": "a8264afec22c24849b2ef20569301820722b69bd4d3c65ab384edc40cd605ef9",
-      "name": "bid-open-number",
+      "id_hex": "bcb1bbb67b68ac54e5c88e9619d1aab2660097c55fad704e5cb97296912362d5",
+      "name": "bid-open-long-name",
       "nonce": "14",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0e00000000000000b80b000000000000400d030000000000013c010a0000003737373132333435363700c817a80400000000644850f0f5d84f5334129e2660b36c40103cc9ee6dfb65b9a57548fadff78cee3c14b280f18ec76fb8f62dfeef618ef78bec7d0bbf169701f7bb486956582403",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0e00000000000000b80b000000000000400d030000000000013c010a0000003737373132333435363700c817a804000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0e00000000000000b80b000000000000400d030000000000013c000d000000616e6e615f6b6172656e696e6100e40b540200000000e44d6f0709e3a5b384edbc10929e0cf2a5f9a8b71e5c460cc0534857e3a53442d45de0f72b57298580f1a8eb40364caac226e64d00746e1640ce4e2261401f0a",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0e00000000000000b80b000000000000400d030000000000013c000d000000616e6e615f6b6172656e696e6100e40b5402000000",
       "version": 3
     },
     {
-      "id_hex": "8cb5f807c6bb4283f91f6157374f118b836039a6dce2fb884dce8fd74db5d924",
-      "name": "bid-raise-number",
+      "id_hex": "ea88763c3670b74dcdf240d4ce326de37499f564f43991c400ab41c754bca47d",
+      "name": "bid-raise-long-name",
       "nonce": "15",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0f00000000000000b80b000000000000400d030000000000013c010a000000373737313233343536370092b2e30400000000e50e9c84863926aa17faf155c2829970fd1751dec6620254a64c668b433c78b931929bc51eb59f039173b233e7b7a4d26cdb4fa5c348a5b12630b75d4c7aa400",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0f00000000000000b80b000000000000400d030000000000013c010a000000373737313233343536370092b2e304000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0f00000000000000b80b000000000000400d030000000000013c000d000000616e6e615f6b6172656e696e610049d971020000000060e3a64a5f4d6a3c94c32e910747800a25a41e0751f15dafef3ef9fc71a0490ced5f8cd35b37f8408511a865e74b4b597c2c8f0e89399b5ca670fca635644308",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d0f00000000000000b80b000000000000400d030000000000013c000d000000616e6e615f6b6172656e696e610049d97102000000",
       "version": 3
     },
     {
@@ -938,19 +518,11 @@
       "version": 3
     },
     {
-      "id_hex": "0119be1e2bd1e21069ac74bee48815e6af498f99eeff2dc0683a081a012a6846",
-      "name": "transfer-code-000",
-      "nonce": "17",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1100000000000000b80b000000000000400d0300000000000119010a00000030303031323334353637f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1000000000000000000dd35ffa3712ef03dd636d27fde141e1b070c1bb76cf3860597017ca39ed7527a6c7d77e6a6f6788be0b842efe4b95f2151eff7740526a8b03e48843b39188902",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1100000000000000b80b000000000000400d0300000000000119010a00000030303031323334353637f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f10000000000000000",
-      "version": 3
-    },
-    {
-      "id_hex": "f505923599ba5afc333191c37ec143e29056d34d230468152322336a3d8c1e51",
-      "name": "auction-held-number",
+      "id_hex": "d1a508f99b2310c9a42f6fd426a20662792cf3433920c1388f7ab218af421f94",
+      "name": "auction-held-name",
       "nonce": "18",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1200000000000000b80b000000000000400d030000000000013d010a00000037373731323334353637005cb2ec22000000e803803a090000000000840300000000000000000000000000000083e61a81881adac452529a59dca8d86120d502f4d3303a6238e6d260d9d9130690ef9febcb0ffc3120bb7bc06853fd6681ebc8d06c052cb4f57c98bfca994603",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1200000000000000b80b000000000000400d030000000000013d010a00000037373731323334353637005cb2ec22000000e803803a09000000000084030000000000000000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1200000000000000b80b000000000000400d030000000000013d0007000000626f7269735f6b005cb2ec22000000e803803a0900000000008403000000000000000000000000000000d70eb4a16d1052e29fb98e24ec6baaa73bc360aa96952ec4b84dc618493f1e228bdd48d0a9005b104740b72a178a25b8d2fe8969702f4f2754b79846909e4d0c",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1200000000000000b80b000000000000400d030000000000013d0007000000626f7269735f6b005cb2ec22000000e803803a09000000000084030000000000000000000000000000",
       "version": 3
     },
     {
@@ -962,94 +534,70 @@
       "version": 3
     },
     {
-      "id_hex": "6dbec29ca5ea09fda361e8f9698acdb6cc09284d0036f9a63243e3027ae133a0",
+      "id_hex": "480b7e014ee8be969b739c928ed9dbcc90b3d65d1d9ee52155371c98eda0715a",
       "name": "bid-first-on-a-holders-auction",
       "nonce": "20",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1400000000000000b80b000000000000400d030000000000013c010a00000037373731323334353637005cb2ec2200000000c1197af842339c7111d9166f4f3986b9c422d14c3e6b42201794851b248283e08a5baa21ca13995d08bb347584ba8f18b1bcda8aaae7c073d999d968e18fef0e",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1400000000000000b80b000000000000400d030000000000013c010a00000037373731323334353637005cb2ec22000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1400000000000000b80b000000000000400d030000000000013c0007000000626f7269735f6b005cb2ec22000000006856275d44a040fa115ff67c8fd09f00e21881c1d9b30775f06bca4ac6f1f977ab045e2ac3c3f5594d58869a0348c89568b85f0cdbee656232fc13e3490ee809",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1400000000000000b80b000000000000400d030000000000013c0007000000626f7269735f6b005cb2ec22000000",
       "version": 3
     },
     {
-      "id_hex": "a5fa6c0518401fd67b4157d897b4109dbb6483411029f0786884af9a1120c652",
+      "id_hex": "9da3dee5db7bd1a3cde773809c549f1264d7530ad073d075801217edd99f8e19",
       "name": "cancel-auction",
       "nonce": "21",
-      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1500000000000000b80b000000000000400d030000000000013e010a000000373737313233343536370000000000000000000ab53db1a17194455ad71bf3de734afc1facdab2d27961f9ff6233d28786570db44cff2e9c8b3f8c89a1efac3ea01aa2136361b4f532d251a67a74aeda139e0e",
-      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1500000000000000b80b000000000000400d030000000000013e010a000000373737313233343536370000000000000000",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1500000000000000b80b000000000000400d030000000000013e0007000000626f7269735f6b0000000000000000003366fa23bfd386c1d9a0ebd9977cecd2f428b795ffdffef612e16d3f9425ad58f7982bfb9f9b1f84405a9f717e297cec8a8b75bb688f57ebf9d0a07ec1a70c00",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1500000000000000b80b000000000000400d030000000000013e0007000000626f7269735f6b0000000000000000",
       "version": 3
+    },
+    {
+      "id_hex": "fdd17674a18677a559d91744655a092caa4d67f9a89486a2cd769cfd98373d88",
+      "name": "bid-bound-to-a-holders-auction",
+      "nonce": "22",
+      "signed_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1600000000000000b80b000000000000400d030000000000014b0007000000626f7269735f6b961b6379880d0586dd7bf96f317c58c977b5d7f0731dc902e95b570946bdea06005cb2ec220000000095c2c68c709c2de38f845c2a98e9dfa4508e7ba771397bd7127304175ec8f9a2753f5c7c9065af81dd7d86e27a51ac34c3ced145bee73e31abc4eddcd1d10f05",
+      "transaction_hex": "0092147e7c91ec652b1f18ebd955a37c95c7263bd92183988aa217b3701ee9275d1600000000000000b80b000000000000400d030000000000014b0007000000626f7269735f6b961b6379880d0586dd7bf96f317c58c977b5d7f0731dc902e95b570946bdea06005cb2ec22000000",
+      "version": 5
     }
   ],
   "typed": [
     {
       "display": "@anna_k",
-      "kind": "name",
       "text": "anna_k",
       "typed": "@Anna_K"
     },
     {
       "display": "@anna",
-      "kind": "name",
       "text": "anna",
       "typed": "  anna "
     },
     {
-      "display": "+0 777 1234",
-      "kind": "number",
-      "text": "7771234",
-      "typed": "+0 777 1234"
-    },
-    {
-      "display": "+0 1234 5678",
-      "kind": "number",
-      "text": "12345678",
-      "typed": "+0-1234-5678"
-    },
-    {
-      "display": "+0 1234",
-      "kind": "number",
-      "text": "1234",
-      "typed": "+01234"
+      "display": "@anna",
+      "text": "anna",
+      "typed": "ANNA"
     },
     {
       "display": null,
-      "kind": null,
       "text": null,
       "typed": "@"
     },
     {
       "display": null,
-      "kind": null,
-      "text": null,
-      "typed": "+0 0123"
-    },
-    {
-      "display": null,
-      "kind": null,
       "text": null,
       "typed": "anna__k"
     },
     {
       "display": null,
-      "kind": null,
       "text": null,
-      "typed": "+1 234 5678"
-    },
-    {
-      "display": "+0 000 123 4567",
-      "kind": "number",
-      "text": "0001234567",
-      "typed": "+0 000 123 4567"
-    },
-    {
-      "display": "+0 777 123 4567",
-      "kind": "number",
-      "text": "7771234567",
-      "typed": "+0 777-123-4567"
+      "typed": "+0 777 1234"
     },
     {
       "display": null,
-      "kind": null,
       "text": null,
-      "typed": "+0 001 234 5678"
+      "typed": "+0 777 123 4567"
+    },
+    {
+      "display": null,
+      "text": null,
+      "typed": "7771234"
     }
   ],
   "version": 1

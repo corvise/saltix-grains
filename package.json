@@ -14,7 +14,8 @@
     "build:simulator": "tsc -p simulator/tsconfig.json && esbuild simulator/simulator.ts --bundle --format=esm --outfile=simulator/dist/simulator.js",
     "test": "npm run build && npm test --workspaces",
     "dev": "npm run build && node scripts/dev.mjs",
-    "example": "npm run build --workspace packages/server && node examples/hello-grain/server.mjs"
+    "example": "npm run build --workspace packages/server && node examples/hello-grain/server.mjs",
+    "support-agent": "npm run build --workspace packages/server && node examples/support-agent/server.mjs"
   },
   "engines": {
     "node": ">=20"

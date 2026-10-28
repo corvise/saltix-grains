@@ -21,6 +21,30 @@ export const APP_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/doc
 export const CARDS_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/agents/cards.md";
 /** The SDK's pages on the Saltix protocol, as an app needs it (the protocol's own repository is not public). */
 export const PROTOCOL_DOCS = "https://github.com/corvise/saltix-grains/blob/main/docs/protocol";
+/** Who answers an app's users, on GitHub: a project has no copy of the SDK's docs. */
+export const SUPPORT_GUIDE = "https://github.com/corvise/saltix-grains/blob/main/docs/support.md";
+
+/** Every project's AGENTS.md section on its support contact (19-connect §11.1): the four forms, setting it, the
+ *  consent, the support agent, what a user sees; the SDK's AGENTS.md has the same, longer. */
+export const supportSection = `## Support for your app
+
+\`connect.json\`'s \`support\` names who answers the app's users; Saltix shows it on the Connect sheet and the app's card.
+Four forms: an \`https://\` link or a \`mailto:\` address (opened outside Saltix); a username \`@name\` (a chat: one bound
+to this app, \`npx grain bind --handle @name --slug <slug>\`, opens the app's chat, where its program answers and every user
+reaches it; another, the person who holds it, once the user's messenger is activated); or, from protocol version 9, a
+Saltix address (a chat every user reaches, before activating the messenger too: the owner's own, or one whose holder
+signed its consent for this app, owner and network).
+
+- \`npx grain support <contact>\` writes it into \`connect.json\` and checks it as the network will (a username somebody
+  holds; an address of this network, the owner's own or with \`--consent F\`, the file its holder's
+  \`SALTIX_SUPPORT_KEY=… npx grain support consent --slug <slug>\` wrote: the key from the environment, never a file);
+  then \`npx grain profile\` sets it.
+- A program that answers support is the SDK's \`examples/support-agent\`: the app's notes first, a language model whose
+  key is in the environment (\`chat.json\` then says \`"ai": true\`), a person's \`@name\` when neither can answer or the
+  user asks; it logs names and numbers, never what users wrote. Mount it on this app's own server (one app, one key,
+  one program) and name it with a username bound to the app.
+- [Support for your app](${SUPPORT_GUIDE}): the forms, the consent, the agent, and what a user sees.
+`;
 
 /** `public/index.html`: a page that works on its own, or (`signIn`) one that shows only its splash until its sign-in
  *  decides. */
@@ -364,7 +388,8 @@ export const appRules = `1. **The server's key is made where it runs and never l
    permission nothing in the app uses: drop it, since the sheet shows every one. \`grain profile\` sets it (a QR code for
    the owner's Saltix, or on the test network the key file that owns the app); the registry takes each change at a
    higher revision. \`grain init\`'s \`connect.json\` describes the template's app: rewrite it, as \`grain lint\` says
-   (\`connect-template\`) and \`grain profile\` insists.
+   (\`connect-template\`) and \`grain profile\` insists. Its \`support\` names who answers users (\`grain support\`,
+   *Support for your app*).
 10. **Check first, then render.** A page that is for some people only (its team, a private circle) shows nothing of
    itself before it knows who signed in: a splash (its icon and name, in an element marked \`data-grain-splash\`; the
    rest \`hidden\`) until \`grain.signIn({ url })\` resolves, then \`gateOf(signIn, TEAM)\` decides: the app, or a refusal
@@ -454,7 +479,8 @@ ${chat ? `- \`grain.json\`: the manifest of a chat-only app (\`entry: chat\`): n
 ## Commands
 
 ${chat ? CHAT_COMMANDS : PAGE_COMMANDS}
-${chat ? "" : `
+
+${supportSection}${chat ? "" : `
 ## The page's frame, and what Saltix gives a page
 
 ${fullScreenRules}`}

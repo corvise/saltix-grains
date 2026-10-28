@@ -318,6 +318,44 @@ the band, the margins and the icons in the same order and reads the colour at th
 the page loads and goes once it has loaded: `grain.ready()` neither holds nor hides it, and Saltix ignores that call
 today (so does the simulator). A page that checks first shows a splash of its own until its gate decides (above).
 
+## Support for your app
+
+An app's Connect profile names who answers its users: `connect.json`'s `support`, which Saltix shows on the app's
+Connect sheet and card (Saltix 19-connect [§11.1](docs/protocol/connect.md#111-the-format)). The whole of it is
+[docs/support.md](docs/support.md).
+
+| `support` | A user's Saltix | Who reaches it |
+|---|---|---|
+| `https://…` | opens the link outside Saltix | anyone |
+| `mailto:help@…` | opens the user's e-mail app | anyone |
+| `@name`, a username | opens a chat: the app's chat when the name is bound to the app (`grain bind --handle @name --slug <slug>`), where its program answers; else a chat with the person who holds it | the app's chat: every user; a person: users whose messenger is activated |
+| a Saltix address (`dsalt1…`), from protocol version 9 | opens a chat with that address | every user while the app is live, before they activate their messenger too |
+
+- **Set it with `npx grain support <contact>`**: it writes `connect.json` (`"version": 2` and `support_consent` for an
+  address, 1 for the rest, which every network takes) and checks it as the network will: a username somebody holds
+  (whoever minted a free one would get the app's users' questions), an address of this network's prefix in its
+  canonical text, the owner's own or with its holder's consent. Then `npx grain profile` sets it in the registry, as
+  for any change of the profile, and refuses format 2 before the network runs protocol version 9. Or in Saltix: My
+  apps → the app → Connect profile.
+- **An address other than the owner's own carries its holder's consent**, so nobody becomes an app's support without
+  saying so: the address's key signs `"Saltix support consent v1"` over the network's genesis hash, the app's slug and
+  the owner's account (`SupportConsent`). A person signs in their Saltix. An agent's key signs from the environment,
+  never a file: `SALTIX_SUPPORT_KEY=… npx grain support consent --slug <slug>` (or `supportConsentFromEnvironment`)
+  writes `support-consent.json`, public, and the owner runs `npx grain support <address> --consent
+  support-consent.json`. Refused, each for its reason: `consent_missing`, `consent_unneeded`, `consent_key`,
+  `consent_slug`, `consent_owner`, `consent_signature`, and `version` before protocol version 9.
+- **The support agent** (`examples/support-agent`, `createSupportAgent`) is the app's own program answering in the
+  app's chat: the app's notes (`faq.json`) first, then a language model when `ANTHROPIC_API_KEY` is in the environment
+  (then `chat.json` says `"ai": true`), and a person's `@name` (`SUPPORT_HUMAN`) takes over when neither can answer,
+  the user asks for a person, or the model answered a user's daily share. It logs event names and numbers, never what
+  users wrote, an answer, a key or an address. One app, one key, one program: mount its handlers on the app's own
+  `ChatServer`, and name it as the support with a username bound to the app. An agent with an address of its own is not
+  in the SDK yet: [what it lacks](docs/support-agent-address.md).
+- **What a user sees**: Support on the Connect sheet; in the app's chat its intro and, before the first message,
+  whether a language model answers; answers as cards "from <slug>, verified", a model's marked so; a hand-over card
+  that names the person. A user whose messenger is not activated reaches the app's chat and a support address, not a
+  person's `@name`.
+
 ## Naming: apps and people
 
 - **Words.** The product is Saltix, everywhere. Saltix calls apps *mini-apps* in what users read (lower case; Russian

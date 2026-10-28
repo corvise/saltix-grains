@@ -1,0 +1,44 @@
+{
+  "entries": [
+    {
+      "id": "what",
+      "label": { "en": "What it does", "ru": "Что это" },
+      "question": { "en": "What does this app do?", "ru": "Что умеет это приложение?" },
+      "answer": {
+        "en": "It is a support chat: write a question, and it answers from the app's notes. When they do not help, a person on the app's team takes over.",
+        "ru": "Это чат поддержки: напишите вопрос, и он ответит по заметкам приложения. Если они не помогут, вопрос возьмёт человек из команды приложения."
+      },
+      "words": { "en": ["what does this app", "what is this app", "what can it do", "about the app"], "ru": ["что умеет", "что это за", "о приложении"] }
+    },
+    {
+      "id": "data",
+      "label": { "en": "Your data", "ru": "Ваши данные" },
+      "question": { "en": "What does the app keep about me?", "ru": "Что приложение хранит обо мне?" },
+      "answer": {
+        "en": "Nothing past its answer, and it never sees your address unless you share it. A question its notes do not answer goes to a language model's provider when the app uses one, and to nobody else.",
+        "ru": "Ничего после ответа, и ваш адрес оно не видит, пока вы им не поделитесь. Вопрос, на который нет ответа в заметках, уходит поставщику языковой модели, если приложение её использует, и больше никому."
+      },
+      "words": { "en": ["keep", "data", "privacy", "store", "delete"], "ru": ["хран", "данн", "приватн", "удал"] }
+    },
+    {
+      "id": "pay",
+      "label": { "en": "Payments", "ru": "Оплата" },
+      "question": { "en": "How do payments work?", "ru": "Как устроена оплата?" },
+      "answer": {
+        "en": "You confirm every payment in Saltix's own sheet, and it goes to the app's owner alone. The app never sees your phrase or your PIN.",
+        "ru": "Каждый платёж вы подтверждаете в окне самого Saltix, и он уходит только владельцу приложения. Приложение никогда не видит вашу фразу и PIN."
+      },
+      "words": { "en": ["payment", "pay", "invoice", "price", "cost"], "ru": ["оплат", "плат", "счёт", "счет", "цена", "стоим"] }
+    },
+    {
+      "id": "phrase",
+      "label": { "en": "Phrase and PIN", "ru": "Фраза и PIN" },
+      "question": { "en": "Will you ask for my phrase or PIN?", "ru": "Вы спросите мою фразу или PIN?" },
+      "answer": {
+        "en": "Never: nobody needs your recovery phrase or your PIN, not the app and not its support. Whoever asks for them is not the app's support.",
+        "ru": "Никогда: вашу фразу восстановления и PIN не нужно знать никому — ни приложению, ни его поддержке. Тот, кто их просит, не поддержка приложения."
+      },
+      "words": { "en": ["phrase", "seed", "pin", "password", "recovery"], "ru": ["фраз", "пин", "парол", "восстанов"] }
+    }
+  ]
+}

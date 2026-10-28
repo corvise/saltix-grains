@@ -246,3 +246,27 @@ test("(l) the frame's variables, the splash and the band, as the SDK does them: 
   assert.match(flat(appRules), /a status first \(build the card with it first/);
   assert.match(flat(guide), /a status first \(build the card with it first/);
 });
+
+test("(m) support: every project's AGENTS.md says who answers users, as the SDK's AGENTS.md and the guide do", async () => {
+  const { supportSection, SUPPORT_GUIDE } = await import("../dist/template.js");
+  const agents = readFileSync(new URL("../../../AGENTS.md", import.meta.url), "utf8");
+  assert.equal(SUPPORT_GUIDE, "https://github.com/corvise/saltix-grains/blob/main/docs/support.md");
+  assert.ok(existsSync(new URL("../../../docs/support.md", import.meta.url)), "the guide the section links");
+  assert.ok(supportSection.includes(`](${SUPPORT_GUIDE})`));
+  for (const chat of [false, true]) {
+    const text = agentsMd("coach", chat);
+    assert.ok(text.includes(supportSection), "the section, word for word");
+    assert.ok(text.indexOf("## Support for your app") < text.indexOf("## The rules every app follows"), "before the rules that name it");
+  }
+  const flat = (text) => text.replace(/\s+/g, " ");
+  for (const [where, text] of [["a project's AGENTS.md", supportSection], ["AGENTS.md", agents], ["the guide", guide]]) {
+    for (const words of ["npx grain support <contact>", "SALTIX_SUPPORT_KEY=… npx grain support consent --slug <slug>", "examples/support-agent",
+      "protocol version 9", "grain bind --handle @name --slug <slug>", "consent"]) {
+      assert.ok(flat(text).includes(words), `${where}: ${words}`);
+    }
+  }
+  assert.match(agents, /^## Support for your app$/m);
+  assert.match(flat(appRules), /Its `support` names who answers users \(`grain support`, \*Support for your app\*\)/);
+  // A key never comes from a file: the agent's from the environment, as the app's own key never from a command line.
+  for (const text of [supportSection, agents]) assert.match(flat(text), /the key from the environment, never a file|from the environment, never a file/);
+});

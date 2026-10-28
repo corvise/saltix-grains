@@ -3,7 +3,8 @@
 > Reflects Saltix 12-grains (approved 2026-10-05; bridge version 3, the page's frame, check-first sign-in, invoices
 > from a registered server key and the Connect profile, 2026-10-16; the icon standard and bundles the network keeps,
 > 2026-10-19), as of corvise/saltix `b9019fdf` (2026-10-19); the pool vocabulary (storage pools among a bundle's
-> keepers) as of corvise/saltix `e6448704` (2026-10-22). Section numbers are the specification's.
+> keepers) as of corvise/saltix `e6448704` (2026-10-22); a profile's support address and the donations switch
+> (protocol version 9) as of corvise/saltix `6671fabb` (2026-10-28). Section numbers are the specification's.
 
 A **grain** is an app that opens inside a Saltix wallet, from the Apps section, a chat or a link, with the wallet's
 identity, payments, storage and relays at hand and never its keys. Saltix calls grains *mini-apps* in what users read;
@@ -110,14 +111,16 @@ The chain's registry keeps every grain by slug. Its calls go in a transaction's 
 | `BindHandle { handle, slug: Option<String> }` | 35 | 0 | a username the owner holds opens the grain's chat ([app studio §2](app-studio.md#2-the-registry)) |
 | `SetGrainAccess { slug, public: bool, members: Vec<([u8; 32], u8)> }` | 36 | 0 | public or private, and the members with their roles ([app studio §2a](app-studio.md#2a-access-private-or-public-and-members)) |
 | `RateGrain { slug, score: u8, review: String }` | 37 | 0 | any account but the owner rates the grain, or withdraws its rating ([app studio §6a](app-studio.md#6a-statistics-and-ratings)) |
-| `SetGrainProfile { slug, profile: Option<SignedConnectProfile> }` | 38 | 0 | the grain's Connect profile, or `None` to clear it ([connect §11](connect.md#11-the-connect-profile)) |
+| `SetGrainProfile { slug, profile: Option<SignedConnectProfile> }` | 38 | 0 | the grain's Connect profile, or `None` to clear it ([connect §11](connect.md#11-the-connect-profile)); a profile of format 2 (a support address) from protocol version 9 |
 | `ConfigureGrain { slug, servers: Vec<ServerKeyProof>, category: u8 }` | 39 | 0 | the same as 34, each key proving its holder named it; from protocol version 2 |
+| `SetGrainDonations { slug, open: bool }` | 76 | 0 | the owner opens or closes the grain's donations: its card offers *Support the developer*, a transfer to the owner the registry names, never to an address anyone types; from protocol version 9 (no SDK call: the owner's switch in Saltix) |
 
 - **Who calls.** A grain's own calls (register, update, retire, configure, access, profile) only its owner: the
   transaction's sender is the manifest's `owner`, and `owner_key` speaks for the sender when the call is taken (and
   again when a managed owner's pending call takes effect). `RateGrain` is any account's but the owner's, `BindHandle`
   the handle's holder's. A node refuses a grain call that breaks a rule it can check alone (the slug, the bounds, the
-  manifest's signature, the profile's slug, owner and signature) before it enters a block.
+  manifest's signature, the profile's slug, owner and signature, a support address's network and its consent's
+  signature) before it enters a block; a block of protocol version 8 or earlier refuses a profile of format 2.
 - **A managed owner's calls wait** for the account's delay, unless a quorum signs ([basics](basics.md#accounts-whose-keys-change)):
   a stolen phone cannot replace or retire a grain before its owner cancels. `RateGrain` does not wait.
 - **Register.** The slug was never registered, retired ones included. The value is at least the slug's deposit:

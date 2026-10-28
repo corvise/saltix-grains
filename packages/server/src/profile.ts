@@ -5,21 +5,33 @@
 // - a website's (subject `site`) is served by the site at `/.well-known/saltix-connect` in its JSON form, and a wallet
 //   checks it with `checkSiteProfile` and, by the owner's key event log, `checkProfileOwner`.
 //
+// Format 2 (protocol version 9) lets the support contact be a Saltix address too: the owner's own, or one whose holder
+// signed its consent (`SupportConsent`), so that nobody becomes an app's support without saying so.
+//
 // The TypeScript objects are the JSON form (bytes in lowercase hex, absent links null); Borsh is what is signed. Byte for
 // byte `saltix-types` `connect::profile`, refusals and their reasons included (vectors/connect-profiles-v1.json). Plain
 // TypeScript for any runtime (a page, the simulator); the profile link's writer needs Node's zlib (`profile-link.ts`).
 import { ed25519 } from "@noble/curves/ed25519";
-import { accountId } from "./address.js";
+import { type NetworkName, accountId, decodeAddress, encodeAddress } from "./address.js";
 import { Reader, Writer, compareUtf8, derive, fromBase64, fromHex, toHex } from "./bytes.js";
 import { handleProblem } from "./handle.js";
 import { inflateRaw } from "./inflate.js";
-import { type DeviceKey, deviceKeyOf, readDeviceKey, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
-import { type AccountPolicy, keySpeaksFor } from "./keylog.js";
+import { type DeviceKey, deviceKeyOf, readDeviceKey, verifyByDeviceKey, verifyEd25519, writeDeviceKey } from "./keys.js";
+import { type AccountPolicy, keySpeaksFor, rootDigest } from "./keylog.js";
 
 /** The domain of the message a profile's key signs. */
 export const PROFILE_DOMAIN = "Saltix connect profile v1";
-/** The format's version, the profile's first byte. */
+/** The format's version, the profile's first byte: format 1, which every reader takes, its support contact a link, a
+ *  `mailto:` or a username. */
 export const PROFILE_VERSION = 1;
+/** Format 2 (19-connect §11.1): format 1's fields, then `support_consent`; its support contact may also be a Saltix
+ *  address, the owner's own or one whose holder consents. A block takes it from `SUPPORT_ADDRESS_VERSION`. */
+export const PROFILE_VERSION_2 = 2;
+/** The protocol version from which a block takes a profile of format 2; one of an earlier version refuses it
+ *  (`version`), as every node built before it does. */
+export const SUPPORT_ADDRESS_VERSION = 9;
+/** The domain a support address's holder signs its consent in. */
+export const SUPPORT_CONSENT_DOMAIN = "Saltix support consent v1";
 /** A profile's Borsh form, at most. */
 export const MAX_PROFILE_BYTES = 8192;
 /** Where a site serves its signed profile, at its origin (19-connect §11.3). */
@@ -77,10 +89,47 @@ export interface ConnectProfile {
   texts: Record<string, ProfileText>;
   /** An `https://` link. */
   website: string | null;
-  /** An `https://` link, a `mailto:` address or a Saltix username (`@name`). */
+  /** Where users get help: an `https://` link, a `mailto:` address, a Saltix username (`@name`) or, in format 2, a
+   *  Saltix address of the network (`supportAddress`). */
   support: string | null;
   /** An `https://` link to its terms of use. */
   terms: string | null;
+  /** Format 2 only: the support address's consent, which an address other than the owner's own needs and nothing else
+   *  carries; null or absent for none. Format 1 has no such field (its JSON form has no such key). */
+  support_consent?: SupportConsent | null;
+}
+
+/**
+ * A support address's consent to answer an app's users (19-connect §11.1): its holder signs, with the key the address is
+ * made of, that it is the support contact of `owner`'s app `slug` on one network. Without it an owner could name anyone's
+ * address, and the relays would let people who have not activated their messenger write to that person
+ * (44-messenger-activation §5). The JSON form's `support_consent` object; Borsh `slug ‖ owner ‖ key ‖ signature`.
+ */
+export interface SupportConsent {
+  /** The app it answers for. */
+  slug: string;
+  /** The app's owner it consents to: an account id in hex. */
+  owner: string;
+  /** The Ed25519 key the support address is Address v1 of, hex: a personal address's own key (kind 0), or a managed
+   *  address's first root key (kind 5, whose digest the address commits to). */
+  key: string;
+  /** 64 bytes of hex: strict Ed25519 by `key` over `supportConsentMessage(genesis, slug, owner)`. */
+  signature: string;
+}
+
+/**
+ * The rules a reader holds a profile to (19-connect §11.1, `connect::profile::Reading`): the protocol version of the
+ * block that carries it, the network a support address must be of, and the genesis hash a consent signs. Each left out
+ * is the loosest: every format this SDK knows, any network, a consent's signature unchecked (the bounds alone). A wallet
+ * reads with its network and genesis hash; a node's block of protocol `version` with all three.
+ */
+export interface ProfileReading {
+  /** The protocol version of the block that carries the profile: format 2 from `SUPPORT_ADDRESS_VERSION`. */
+  version?: number;
+  /** The network a support address must be of. */
+  network?: NetworkName;
+  /** The network's genesis hash (hex), which a consent's signature covers. */
+  genesis?: string;
 }
 
 /** A profile with its signature: the JSON form a site serves and `grain_get` shows. */
@@ -92,7 +141,10 @@ export interface SignedConnectProfile {
   signature: string;
 }
 
-/** Why a profile is refused, as the vectors and every reader name it; checked in this order. */
+/** Why a profile is refused, as the vectors and every reader name it; checked in this order. The consent's: none where
+ *  one is needed (`consent_missing`) or one where none is (`consent_unneeded`), a key that does not make the support
+ *  address (`consent_key`), another app (`consent_slug`; a site's profile names its owner's own address alone), another
+ *  owner (`consent_owner`), a signature that does not verify on the reader's network (`consent_signature`). */
 export type ProfileReason =
   | "encoding"
   | "version"
@@ -105,9 +157,15 @@ export type ProfileReason =
   | "privacy"
   | "website"
   | "support"
+  | "consent_missing"
+  | "consent_unneeded"
+  | "consent_key"
+  | "consent_slug"
+  | "consent_owner"
   | "terms"
   | "size"
   | "signature"
+  | "consent_signature"
   | "service"
   | "owner"
   | "key"
@@ -124,6 +182,12 @@ export class ProfileError extends TypeError {
 }
 
 // ── Texts, origins and links ─────────────────────────────────────────────────
+
+const SLUG = /^[a-z0-9][a-z0-9-]{2,31}$/;
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+/** Lowercase hex of exactly `size` bytes. */
+const byteKey = (v: unknown, size: number): v is string => typeof v === "string" && new RegExp(`^[0-9a-f]{${2 * size}}$`).test(v);
+const integerIn = (v: unknown, min: number, max: number): v is number => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 
 /** The Unicode format characters (Cf) as of 15.1: the node's list (`connect::refused_char`), so every reader refuses
  *  the same whatever its Unicode tables. */
@@ -217,22 +281,115 @@ function mailtoOk(link: string): boolean {
   return link.length <= PROFILE_LIMITS.linkBytes && localOk && domainOk;
 }
 
-/** Where users get help: an `https://` link, a `mailto:` address, or a Saltix username in its canonical form (`@name`,
- *  21-names). Anything else (`http:`, `javascript:`, `tel:`…) is refused, so a wallet never opens a link a profile
- *  could turn against it. */
+/** Where users get help, in the forms of every format: an `https://` link, a `mailto:` address, or a Saltix username in
+ *  its canonical form (`@name`, 21-names). Anything else (`http:`, `javascript:`, `tel:`…) is refused, so a wallet never
+ *  opens a link a profile could turn against it. Format 2 also takes a Saltix address (`supportAddress`). */
 export function supportOk(support: unknown): boolean {
   if (typeof support !== "string") return false;
   if (support.startsWith("@")) return handleProblem({ name: support.slice(1) }) === null;
   return httpsLinkOk(support) || mailtoOk(support);
 }
 
+/** A support contact that is a Saltix address: its network, its kind (0 personal, 5 managed) and its account (hex). */
+export interface SupportAddress {
+  network: NetworkName;
+  kind: 0 | 5;
+  account: string;
+}
+
+/**
+ * A support contact that is a Saltix address (19-connect §11.1, format 2): its canonical text, lowercase Bech32m as an
+ * address is written (an uppercase spelling, a broken checksum or another text of it refused), of a kind an account
+ * messages from (0 personal, 5 managed: an AI agent's address is a personal one of its own; a contract's or a system
+ * module's refused), on any network: whether the network is the reader's is `ProfileReading`'s. Null otherwise.
+ */
+export function supportAddress(support: unknown): SupportAddress | null {
+  if (typeof support !== "string") return null;
+  const address = decodeAddress(support);
+  if (address === null || (address.kind !== 0 && address.kind !== 5)) return null;
+  if (encodeAddress(address.network, address.id, address.kind) !== support) return null;
+  return { network: address.network, kind: address.kind, account: toHex(address.id) };
+}
+
+/** What a support contact is, for a reader that shows it: an `https://` link and an e-mail address open outside the
+ *  wallet; a username and an address open a chat in it (19-connect §12.1). Null for a contact no format takes. */
+export type SupportKind = "link" | "email" | "username" | "address";
+
+export function supportKind(support: unknown): SupportKind | null {
+  if (supportAddress(support) !== null) return "address";
+  if (!supportOk(support)) return null;
+  const text = support as string;
+  return text.startsWith("@") ? "username" : text.startsWith("mailto:") ? "email" : "link";
+}
+
+/**
+ * The owner a project's profile (`connect.json`: the JSON form's `profile` object without `owner` and `revision`) is
+ * checked for where the registry is not asked (`grain lint`, `grain dev`'s preview): `manifestOwner`, unless the support
+ * contact is a Saltix address, whose consent names the owner it is for, or which, with none, can only be the owner's own.
+ * So what holds whoever owns the app is checked (the consent's key and app, none where none is needed); whether the
+ * consent is for the registry's owner, and its signature, are for a reader that knows them (`grain support`,
+ * `grain profile`).
+ */
+export function offlineOwner(value: unknown, manifestOwner: string): string {
+  if (!isObject(value)) return manifestOwner;
+  const address = supportAddress(value.support);
+  if (address === null) return manifestOwner;
+  const consent = value.support_consent;
+  if (consent === undefined || consent === null) return address.account;
+  return isObject(consent) && byteKey(consent.owner, 32) ? consent.owner : manifestOwner;
+}
+
+/** What a key signs to stand for `owner`'s (hex account) app `slug` on the chain of `genesis` (hash, hex):
+ *  `Borsh((genesis_hash, slug, owner))`. A server key's proof (24-app-studio §2) and a support address's consent
+ *  (19-connect §11.1) sign it, each in a domain of its own. */
+export const grainOwnerPayload = (genesis: string, slug: string, owner: string): Uint8Array =>
+  new Writer().fixed(fromHex(genesis, 32), 32).string(slug).fixed(fromHex(owner, 32), 32).done();
+
+/** What a support address's key signs: `derive("Saltix support consent v1", Borsh((genesis_hash, slug, owner)))`. */
+export const supportConsentMessage = (genesis: string, slug: string, owner: string): Uint8Array =>
+  derive(SUPPORT_CONSENT_DOMAIN, grainOwnerPayload(genesis, slug, owner));
+
+/** The consent of the address of `secret` (a 32-byte Ed25519 secret: a personal address's own key, or a managed
+ *  address's first root key) to answer for `owner`'s (hex account) app `slug` on the network of `genesis` (hex). */
+export function signSupportConsent(secret: Uint8Array, genesis: string, slug: string, owner: string): SupportConsent {
+  const signature = ed25519.sign(supportConsentMessage(genesis, slug, owner), secret);
+  return { slug, owner, key: toHex(ed25519.getPublicKey(secret)), signature: toHex(signature) };
+}
+
+/** Whether the consent's signature holds over its own slug and owner on the network of `genesis` (hex): strict
+ *  Ed25519, the node's. */
+export function verifySupportConsent(consent: SupportConsent, genesis: string): boolean {
+  if (!isObject(consent) || typeof consent.slug !== "string" || !byteKey(consent.owner, 32) || !byteKey(consent.key, 32) ||
+    !byteKey(consent.signature, 64) || !byteKey(genesis, 32)) {
+    return false;
+  }
+  return verifyEd25519(fromHex(consent.key, 32), supportConsentMessage(genesis, consent.slug, consent.owner), fromHex(consent.signature, 64));
+}
+
+/** The account (hex) of `kind` that `key` (hex) makes by Address v1: a personal address's of the key itself, a managed
+ *  address's of the key's root digest (13-accounts §3); null for any other kind or a key that is not 32 bytes. */
+export function supportConsentAccount(kind: number, key: unknown): string | null {
+  if (!byteKey(key, 32)) return null;
+  const bytes = fromHex(key, 32);
+  if (kind === 0) return toHex(accountId(bytes, 0));
+  if (kind === 5) return toHex(accountId(rootDigest(bytes), 5));
+  return null;
+}
+
+/**
+ * The account (hex) a profile's support contact names, when it is a Saltix address of format 2 that is the owner's own
+ * or carries a consent: whom a wallet opens a chat with for help, and whom a relay lets an address whose messenger is not
+ * activated write to while the app is live (44-messenger-activation §5). A username, a link or an e-mail address never.
+ */
+export function supportAccount(p: ConnectProfile): string | null {
+  if (!isObject(p) || typeof p.version !== "number" || p.version < PROFILE_VERSION_2) return null;
+  const address = supportAddress(p.support);
+  if (address === null) return null;
+  return address.account === p.owner || (p.support_consent ?? null) !== null ? address.account : null;
+}
+
 /** A language code as maps of texts have them (12-grains §2): 2–8 of `[a-z-]`. */
 export const languageOk = (lang: string): boolean => /^[a-z-]{2,8}$/.test(lang);
-
-const SLUG = /^[a-z0-9][a-z0-9-]{2,31}$/;
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const byteKey = (v: unknown, size: number): boolean => typeof v === "string" && new RegExp(`^[0-9a-f]{${2 * size}}$`).test(v);
-const integerIn = (v: unknown, min: number, max: number): v is number => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 
 /** The languages of `texts` in the node's order (their UTF-8 bytes): the order they are encoded and checked in. */
 const languagesOf = (texts: Record<string, ProfileText>): string[] => Object.keys(texts).sort(compareUtf8);
@@ -263,8 +420,18 @@ function writeProfile(w: Writer, p: ConnectProfile): Writer {
   w.u32(langs.length);
   for (const lang of langs) writeText(w.string(lang), p.texts[lang]!);
   const link = (w: Writer, v: string) => w.string(v);
-  return w.option(p.website, link).option(p.support, link).option(p.terms, link);
+  w.option(p.website, link).option(p.support, link).option(p.terms, link);
+  // Format 2's field, after `terms`; format 1 keeps its bytes.
+  return p.version >= PROFILE_VERSION_2 ? w.option(p.support_consent ?? null, writeConsent) : w;
 }
+
+/** A consent's Borsh form: `slug` (a `u32` length and UTF-8), `owner` [32], `key` [32], `signature` [64]. */
+function writeConsent(w: Writer, c: SupportConsent): Writer {
+  return w.string(c.slug).fixed(fromHex(c.owner, 32), 32).fixed(fromHex(c.key, 32), 32).fixed(fromHex(c.signature, 64), 64);
+}
+
+/** A consent's Borsh form (19-connect §11.1). Throws on a value Borsh cannot hold. */
+export const encodeSupportConsent = (c: SupportConsent): Uint8Array => writeConsent(new Writer(), c).done();
 
 /** The profile's Borsh form: what is signed and what `MAX_PROFILE_BYTES` bounds. Throws on a value Borsh cannot hold. */
 export const encodeProfile = (p: ConnectProfile): Uint8Array => writeProfile(new Writer(), p).done();
@@ -294,7 +461,12 @@ function readProfile(r: Reader): ConnectProfile {
   const website = r.option((r) => r.string());
   const support = r.option((r) => r.string());
   const terms = r.option((r) => r.string());
-  return { version, subject, owner, revision, texts, website, support, terms };
+  const profile: ConnectProfile = { version, subject, owner, revision, texts, website, support, terms };
+  // Format 2 (and any later, which the checks refuse) carries the consent after `terms`.
+  if (version >= PROFILE_VERSION_2) {
+    profile.support_consent = r.option((r) => ({ slug: r.string(), owner: toHex(r.fixed(32)), key: toHex(r.fixed(32)), signature: toHex(r.fixed(64)) }));
+  }
+  return profile;
 }
 
 /** One canonical encoding: what decodes is encoded again and must be the same bytes (keys in order, none repeated). */
@@ -357,14 +529,19 @@ function textProblem(t: unknown): ProfileReason | null {
 }
 
 /**
- * What is out of bounds in `p` (19-connect §11.1), in the order every reader checks: `version`, `subject`, `revision`,
- * `languages`, then each language's `tagline`, `about`, `highlights` and `privacy` (languages in the node's order),
- * `website`, `support`, `terms` and `size` (the Borsh form at most 8 192 bytes); null when it is in bounds. Never throws,
- * whatever `p` holds.
+ * What is out of bounds in `p` (19-connect §11.1) by `reading`'s rules (`ProfileReading`: by default every format this
+ * SDK knows, any network), in the order every reader checks: `version` (format 1, or 2 from protocol version 9),
+ * `subject`, `revision`, `languages`, then each language's `tagline`, `about`, `highlights` and `privacy` (languages in
+ * the node's order), `website`, `support` (a Saltix address only in format 2, of the reading's network), the consent's
+ * `consent_missing` or `consent_unneeded`, `consent_key`, `consent_slug` and `consent_owner`, `terms` and `size` (the
+ * Borsh form at most 8 192 bytes); null when it is in bounds. Whether a consent's signature holds is `verifyProfile`'s,
+ * on the reading's network. Never throws, whatever `p` holds.
  */
-export function profileProblem(p: ConnectProfile): ProfileReason | null {
+export function profileProblem(p: ConnectProfile, reading: ProfileReading = {}): ProfileReason | null {
   if (!isObject(p)) return "version";
-  if (p.version !== PROFILE_VERSION) return "version";
+  const known = p.version === PROFILE_VERSION || (p.version === PROFILE_VERSION_2 && (reading.version ?? Infinity) >= SUPPORT_ADDRESS_VERSION);
+  // Format 1 has no room for a consent: one in memory is no profile its bytes could carry.
+  if (!known || (p.version === PROFILE_VERSION && (p.support_consent ?? null) !== null)) return "version";
   if (!subjectOk(p.subject)) return "subject";
   if (!integerIn(p.revision, 1, 0xffff_ffff)) return "revision";
   if (!byteKey(p.owner, 32)) return "owner";
@@ -377,33 +554,87 @@ export function profileProblem(p: ConnectProfile): ProfileReason | null {
     if (problem) return problem;
   }
   if (p.website !== null && !httpsLinkOk(p.website)) return "website";
-  if (p.support !== null && !supportOk(p.support)) return "support";
+  const problem = supportRules(p, reading);
+  if (problem) return problem;
   if (p.terms !== null && !httpsLinkOk(p.terms)) return "terms";
   if (encodeProfile(p).length > MAX_PROFILE_BYTES) return "size";
   return null;
 }
 
-/** In bounds and signed by its key: the reason it is not, or null. Whether the key speaks for the owner is the
- *  registry's to check for a grain, and `checkProfileOwner`'s for a site. */
-export function verifyProfile(s: SignedConnectProfile): ProfileReason | null {
-  const problem = profileProblem(s.profile);
-  if (problem) return problem;
-  if (deviceKeyOf(s.key) === null || !verifyByDeviceKey(s.key, profileMessage(s.profile), s.signature)) return "signature";
+/** The fields the support contact's rules read: the format, whose app and owner, the contact and its consent. */
+export type SupportFields = Pick<ConnectProfile, "version" | "subject" | "owner" | "support" | "support_consent">;
+
+/**
+ * The support contact's and its consent's reasons alone, by `reading`'s rules and in the readers' order: `support` (a
+ * Saltix address only in format 2, of the reading's network), the consent's `consent_missing` or `consent_unneeded`,
+ * `consent_key`, `consent_slug`, `consent_owner`, and, with the reading's genesis hash, `consent_signature`; null when
+ * they hold. What `grain support` checks before it writes a contact, whatever the rest of the profile says; whether the
+ * reading's protocol version takes format 2 at all is `profileProblem`'s (`version`). `p.subject` and `p.owner` are a
+ * profile's (a grain's slug, an account in hex).
+ */
+export function supportProblem(p: SupportFields, reading: ProfileReading = {}): ProfileReason | null {
+  return supportRules(p, reading) ?? consentSignatureProblem(p, reading);
+}
+
+/** A consent whose signature does not hold on the reading's network (`consent_signature`); none to check without the
+ *  reading's genesis hash. */
+function consentSignatureProblem(p: SupportFields, reading: ProfileReading): ProfileReason | null {
+  const consent = p.support_consent ?? null;
+  return consent !== null && reading.genesis !== undefined && !verifySupportConsent(consent, reading.genesis) ? "consent_signature" : null;
+}
+
+/** `supportProblem` but the consent's signature, which a reader checks after the profile's own (`verifyProfile`). */
+function supportRules(p: SupportFields, reading: ProfileReading): ProfileReason | null {
+  const address = supportAddress(p.support);
+  if (p.support !== null) {
+    const taken = supportOk(p.support) ||
+      (p.version >= PROFILE_VERSION_2 && address !== null && (reading.network === undefined || address.network === reading.network));
+    if (!taken) return "support";
+  }
+  return consentProblem(p, address, p.support_consent ?? null);
+}
+
+/**
+ * The consent's rules but its signature (19-connect §11.1): one with a support address of another account than the
+ * owner's, of that address's key, naming the profile's app and owner; none anywhere else. A consent this SDK could not
+ * encode (no text for a slug, an owner or a signature that is not hex of its size) fails the rule its field is for.
+ */
+function consentProblem(p: SupportFields, address: SupportAddress | null, consent: SupportConsent | null): ProfileReason | null {
+  const other = address !== null && address.account !== p.owner ? address : null;
+  if (other === null) return consent === null ? null : "consent_unneeded";
+  if (consent === null) return "consent_missing";
+  if (!isObject(consent) || supportConsentAccount(other.kind, consent.key) !== other.account) return "consent_key";
+  // A consent binds an app: a site's profile names its owner's own address alone.
+  const slug = isObject(p.subject) && "grain" in p.subject && isObject(p.subject.grain) ? p.subject.grain.slug : null;
+  if (typeof consent.slug !== "string" || consent.slug !== slug) return "consent_slug";
+  if (consent.owner !== p.owner) return "consent_owner";
+  if (!byteKey(consent.signature, 64)) return "consent_signature";
   return null;
 }
 
-/** Verified, and the profile of the grain `slug` owned by `owner` (hex), as its registry record has them: the reason it
- *  is not (`service` for another grain or a site, `owner` for another owner), or null. */
-export function checkGrainProfile(s: SignedConnectProfile, slug: string, owner: string): ProfileReason | null {
-  const problem = verifyProfile(s);
+/** In bounds by `reading`'s rules and signed by its key, and, where `reading` names the network's genesis hash, its
+ *  consent signed by the support address's key for that network: the reason it is not, or null. Whether the key speaks
+ *  for the owner is the registry's to check for a grain, and `checkProfileOwner`'s for a site. */
+export function verifyProfile(s: SignedConnectProfile, reading: ProfileReading = {}): ProfileReason | null {
+  const problem = profileProblem(s.profile, reading);
+  if (problem) return problem;
+  if (deviceKeyOf(s.key) === null || !verifyByDeviceKey(s.key, profileMessage(s.profile), s.signature)) return "signature";
+  return consentSignatureProblem(s.profile, reading);
+}
+
+/** Verified by `reading`'s rules, and the profile of the grain `slug` owned by `owner` (hex), as its registry record has
+ *  them: the reason it is not (`service` for another grain or a site, `owner` for another owner), or null. A wallet
+ *  reads with its network and genesis hash; a shard's block with its protocol version too. */
+export function checkGrainProfile(s: SignedConnectProfile, slug: string, owner: string, reading: ProfileReading = {}): ProfileReason | null {
+  const problem = verifyProfile(s, reading);
   if (problem) return problem;
   if (!("grain" in s.profile.subject) || s.profile.subject.grain.slug !== slug) return "service";
   return s.profile.owner === owner ? null : "owner";
 }
 
-/** Verified, and the profile of the site of `origin` (the offer's): the reason it is not, or null. */
-export function checkSiteProfile(s: SignedConnectProfile, origin: string): ProfileReason | null {
-  const problem = verifyProfile(s);
+/** Verified by `reading`'s rules, and the profile of the site of `origin` (the offer's): the reason it is not, or null. */
+export function checkSiteProfile(s: SignedConnectProfile, origin: string, reading: ProfileReading = {}): ProfileReason | null {
+  const problem = verifyProfile(s, reading);
   if (problem) return problem;
   return "site" in s.profile.subject && s.profile.subject.site.origin === origin ? null : "service";
 }
@@ -452,11 +683,13 @@ export function profileToJson(s: SignedConnectProfile): SignedConnectProfile {
     const t = p.texts[lang]!;
     return [lang, { tagline: t.tagline, about: t.about, highlights: [...t.highlights], privacy: t.privacy }];
   }));
-  return {
-    profile: { version: p.version, subject, owner: p.owner, revision: p.revision, texts, website: p.website, support: p.support, terms: p.terms },
-    key: "ed25519" in s.key ? { ed25519: s.key.ed25519 } : { p256: s.key.p256 },
-    signature: s.signature,
-  };
+  const profile: ConnectProfile = { version: p.version, subject, owner: p.owner, revision: p.revision, texts, website: p.website, support: p.support, terms: p.terms };
+  // Format 2's field, null for none; format 1's form stays as it was, without the key.
+  if (p.version >= PROFILE_VERSION_2) {
+    const c = p.support_consent ?? null;
+    profile.support_consent = c === null ? null : { slug: c.slug, owner: c.owner, key: c.key, signature: c.signature };
+  }
+  return { profile, key: "ed25519" in s.key ? { ed25519: s.key.ed25519 } : { p256: s.key.p256 }, signature: s.signature };
 }
 
 /** A string of the JSON form: a lone surrogate (which `\ud800` in JSON makes) is no text, as the node reads JSON. */
@@ -509,7 +742,7 @@ export function profileFromJson(value: unknown): ConnectProfile {
     if (v === undefined || v === null) return null;
     return jsonText(value, key);
   };
-  return {
+  const profile: ConnectProfile = {
     version: jsonInteger(value, "version", 0xff),
     subject,
     owner,
@@ -519,6 +752,23 @@ export function profileFromJson(value: unknown): ConnectProfile {
     support: optional("support"),
     terms: optional("terms"),
   };
+  // Read whatever the version says, as the node reads it: a format 1 profile with a consent is `profileProblem`'s
+  // `version`. Absent stays absent, so format 1's form reads back as it was written.
+  if (value.support_consent !== undefined) profile.support_consent = supportConsentFromJson(value.support_consent);
+  return profile;
+}
+
+/** A consent's JSON form (`{"slug", "owner", "key", "signature"}`, bytes in lowercase hex, as a profile's
+ *  `support_consent` and a holder's file carry it), or null for null; throws a `ProfileError` (`json`) for anything
+ *  else. Whether it holds is `supportProblem`'s. */
+export function supportConsentFromJson(value: unknown): SupportConsent | null {
+  if (value === null) return null;
+  if (!isObject(value)) throw new ProfileError("json", "support_consent");
+  const { slug, owner, key, signature } = value;
+  if (typeof slug !== "string" || /\p{Cs}/u.test(slug) || !byteKey(owner, 32) || !byteKey(key, 32) || !byteKey(signature, 64)) {
+    throw new ProfileError("json", "support_consent");
+  }
+  return { slug, owner, key, signature };
 }
 
 /** A signed profile from its JSON form (`{profile, key, signature}`); throws a `ProfileError` (`json`) for what is not

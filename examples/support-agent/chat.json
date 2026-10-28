@@ -1,0 +1,24 @@
+{
+  "slug": "support-agent",
+  "version": 2,
+  "intro": {
+    "en": "This app's support. Write your question: the answer comes from the app's notes, and a person on the app's team takes over when they do not help.",
+    "ru": "Поддержка этого приложения. Напишите вопрос: ответ придёт из заметок приложения, а если они не помогут, вопрос возьмёт человек из команды."
+  },
+  "commands": [
+    {
+      "name": "topics",
+      "title": { "en": "Common questions", "ru": "Частые вопросы" },
+      "help": { "en": "The questions people ask most, each answered at a tap", "ru": "Самые частые вопросы: ответ по одному касанию" },
+      "params": []
+    },
+    {
+      "name": "human",
+      "title": { "en": "Talk to a person", "ru": "Позвать человека" },
+      "help": { "en": "Who on the app's team answers what the notes do not", "ru": "Кто из команды ответит на то, чего нет в заметках" },
+      "params": []
+    }
+  ],
+  "keeps": 0,
+  "ai": false
+}

@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from
 import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AppKey, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, type GrainCall, type Manifest,
+  AppKey, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, supportKind, type GrainCall,
+  type Manifest, type NetworkName,
 } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
@@ -25,6 +26,7 @@ import { lintPages } from "./pages.js";
 import { SPONSOR_KEY_FILE, channel, parseWork, sponsorStatus } from "./sponsor.js";
 import { CONNECT_FILE, lintConnect, lintIcon, lintPermissionsUse, placeholderLinks, readConnectFile, templateTexts } from "./connect.js";
 import { clearCall, profileCall, profileLinkFor, servedSiteRevision, siteProfile, waitForProfile, wellKnownOf } from "./profile.js";
+import { contactOf, holderConsent, ownerAccountOf, supportFor, withSupport } from "./support.js";
 import { makeBundle, sealed, secretsUnder } from "./bundle.js";
 import * as template from "./template.js";
 import * as chatTemplate from "./chat-template.js";
@@ -117,6 +119,18 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            in: a QR code for the owner's Saltix, or the key file that owns the app
                                            (revision: the registry's + 1); grain init's own words are refused;
                                            --clear removes it
+  grain support [<contact> | --clear] [--consent F] [--profile connect.json]
+                                           who answers the app's users: connect.json's support contact, which grain
+                                           profile then sets. An https:// link, a mailto: address, a username (@name;
+                                           one bound to the app opens its chat, where its program answers) or, from
+                                           protocol version 9, a Saltix address: the owner's own, or one whose holder
+                                           consents (--consent F, the consent it signed, or its key in
+                                           SALTIX_SUPPORT_KEY, which signs it here and never leaves). Without a
+                                           contact it says which one connect.json names
+  grain support consent [--slug S] [--owner A] [--out support-consent.json]
+                                           the holder's side: the consent of the address whose key is in
+                                           SALTIX_SUPPORT_KEY to answer for the app S (grain.json's) of its owner (the
+                                           registry's, or A), written to the file the owner's grain support takes
   grain connect-profile --origin URL --name N --category C --key site.key [--profile F] [--revision N] [--out F]
                         [--offline]        a website's Connect profile signed by its operator's key file (or a
                                            device's of the account --owner names), written where the site serves
@@ -599,12 +613,18 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         console.log(`  servers  ${g.servers.length === 0 ? "none named (a page alone needs none)" : `${g.servers.length} key${g.servers.length === 1 ? "" : "s"}, the app's chat goes to ${g.servers[0]!.slice(0, 16)}…`}`);
       }
       if (g.profile) {
-        // As a wallet takes it: checked against the record's slug and owner (whether its key still speaks for the owner
-        // is the registry's, which took it).
-        const problem = checkGrainProfile(g.profile, g.slug, g.owner);
+        // As a wallet on this network takes it: checked against the record's slug and owner, a support address against
+        // the network and its consent's signature (whether its key still speaks for the owner is the registry's, which
+        // took it).
+        const problem = checkGrainProfile(g.profile, g.slug, g.owner, { network: status.network as NetworkName, genesis: status.genesis });
         const p = g.profile.profile;
         console.log(`  profile  Connect profile revision ${p.revision}: "${profileText(p, "en").tagline}" (${Object.keys(p.texts).sort().join(", ")})` +
           (problem ? `; a wallet refuses it: ${problem}` : "; it checks"));
+        if (p.support !== null) {
+          const kind = supportKind(p.support);
+          const opens = kind === "address" || kind === "username" ? "a chat in Saltix" : "outside Saltix";
+          console.log(`  support  ${p.support} (${kind ?? "no contact any format takes"}${kind ? `, ${opens}` : ""}${p.support_consent ? ", its holder consents" : ""})`);
+        }
       } else if (g.profile === null) {
         console.log(`  profile  none: grain profile sets it from connect.json`);
       }
@@ -726,7 +746,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const r = reach();
       const typed = text(flags, "handle");
       const handle = parseHandle(typed);
-      if (handle === null) throw new Error(`${typed}: not a name (@anna) or a number (+0 777 1234)`);
+      if (handle === null) throw new Error(`${typed}: not a name (@anna: 1 to 32 of a-z 0-9 _, a letter first)`);
       // A username is its holder's: the holder's key file, or their Saltix, binds it.
       const signer = await ownerSigner(typed, (await handleGet(r.node, handle))?.owner ?? null, keyPath, flags, r, log);
       return ownerCall(signer, (secret) => (secret ? bindCall(r.node, typed, slug, secret) : Promise.resolve({ bind: { handle, slug } })), flags, r, log);
@@ -865,6 +885,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       }
       console.log(await QRCode.toString(link, { type: "terminal", small: true, errorCorrectionLevel: "L" }));
       console.log(`Scan it with the owner's Saltix: it shows ${slug}'s Connect profile as the sheet will, and sets it after the PIN.`);
+      if (profile.version >= 2) console.log("It names a support address (the profile's format 2): a Saltix from before support addresses cannot read it, so update Saltix first.");
       console.log(`The link: ${link}`);
       console.log(`Waiting for the owner's Saltix, then the registry (${LANDS_IN} once they confirm)…`);
       log.step("link", "waiting", "shown");
@@ -875,6 +896,66 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       log.step("registry", set ? "ok" : "timeout", set ? "set" : "not_signed");
       console.log(set ? `the registry has it: revision ${set.profile.revision}` : `not in the registry yet: grain show --slug ${slug}${r.flags} says when it is`);
       return set ? 0 : 1;
+    }
+    case "support": {
+      // Each side takes its own flags: none of the other's is ever silently ignored.
+      const holderSide = positional[0] === "consent";
+      const others = (holderSide ? ["consent", "clear", "profile"] : ["slug", "owner", "out"]).filter((f) => flags.has(f));
+      if (others.length > 0) {
+        throw new UsageError(`${others.map((f) => `--${f}`).join(", ")}: ${holderSide ? "grain support <contact>'s" : "grain support consent's"}, not this command's`);
+      }
+      if (holderSide) {
+        // The holder's side: the key stays in the environment, the consent (public) goes to a file for the owner.
+        const slug = typeof flags.get("slug") === "string" ? (flags.get("slug") as string) : readManifest(manifestPath).manifest.slug;
+        const given = flags.get("owner");
+        const r = reach();
+        const { consent, address, status } = await holderConsent({
+          slug, owner: typeof given === "string" ? ownerAccountOf(given) : undefined, node: r.node, env: process.env,
+        });
+        log.onNetwork(status.network);
+        const out = text(flags, "out", "support-consent.json");
+        writeFileSync(out, JSON.stringify(consent, null, 2) + "\n");
+        log.step("consent", "ok", "signed");
+        console.log(`${out}: the consent of ${address} to answer for ${slug} of the owner ${consent.owner.slice(0, 16)}… on ${status.network} ` +
+          `(${status.genesis.slice(0, 16)}…); public, nothing secret in it`);
+        console.log(`next, the owner: grain support ${address} --consent ${out} in the app's project, then grain profile`);
+        return 0;
+      }
+      if (positional.length > 1) throw new UsageError("grain support <contact>: one contact (grain support consent signs a consent)");
+      const projectDir = dirname(resolve(manifestPath));
+      const path = text(flags, "profile", join(projectDir, CONNECT_FILE));
+      const value = readConnectFile(path);
+      if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${path}: an object of the Connect profile's fields`);
+      const fields = value as Record<string, unknown>;
+      const typed = positional[0];
+      if (flags.get("clear") === true) {
+        if (typed !== undefined) throw new UsageError("grain support <contact> or --clear, not both");
+        writeFileSync(path, JSON.stringify(withSupport(fields, null, null), null, 2) + "\n");
+        log.step("support", "ok", "cleared");
+        console.log(`${path}: no support contact; next: grain profile sets it in the registry`);
+        return 0;
+      }
+      if (typed === undefined) {
+        const now = typeof fields.support === "string" ? fields.support : null;
+        console.log(now === null ? `${path}: no support contact (grain support <contact> names one)` : `${path}: support ${now} (${supportKind(now) ?? "not a contact any format takes"})`);
+        return 0;
+      }
+      const slug = readManifest(manifestPath).manifest.slug;
+      const contact = contactOf(typed);
+      const consentPath = flags.get("consent");
+      if (consentPath === true) throw new UsageError("--consent F: the file its holder's consent is in (grain support consent writes one)");
+      if (consentPath !== undefined && contact.form !== "address") throw new UsageError("--consent goes with a Saltix address: a link, an e-mail address or a username needs none");
+      let reached: Reach | null = null;
+      const { consent, said } = await supportFor({
+        contact, slug, env: process.env,
+        consent: consentPath === undefined ? undefined : readFileSync(consentPath, "utf8"),
+        node: () => (reached ??= reach()).node,
+      });
+      writeFileSync(path, JSON.stringify(withSupport(fields, contact, consent), null, 2) + "\n");
+      log.step("support", "ok", contact.form);
+      console.log(said);
+      console.log(`${path}: support ${contact.text}${consent ? " with its holder's consent" : ""} (version ${contact.form === "address" ? 2 : 1}); next: grain profile sets it in the registry`);
+      return 0;
     }
     case "connect-profile": {
       const out = text(flags, "out", ".well-known/saltix-connect");

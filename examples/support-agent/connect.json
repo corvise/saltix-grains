@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "subject": { "grain": { "slug": "support-agent" } },
+  "texts": {
+    "en": {
+      "tagline": "This app's support, in its chat",
+      "about": "Write a question in the app's chat: it answers from the app's notes, and a person on the app's team takes over when they do not help.",
+      "highlights": ["Answers at once, day and night", "A person takes over on request", "Keeps nothing past its answer"],
+      "privacy": "Keeps nothing past its answer, under the ID it sees for you. A question its notes do not answer goes to a language model's provider when the app uses one."
+    },
+    "ru": {
+      "tagline": "Поддержка приложения в его чате",
+      "about": "Напишите вопрос в чат приложения: он ответит по заметкам приложения, а если они не помогут, вопрос возьмёт человек из команды.",
+      "highlights": ["Отвечает сразу, днём и ночью", "Человек подключится по просьбе", "Ничего не хранит после ответа"],
+      "privacy": "Ничего не хранит после ответа под идентификатором, который видит для вас. Вопрос без ответа в заметках уходит поставщику языковой модели, если приложение её использует."
+    }
+  },
+  "website": null,
+  "support": null,
+  "terms": null
+}

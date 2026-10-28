@@ -190,10 +190,19 @@ How to write a good one:
   not secret data: what is on chain is public, and the address links it to the user, so the sheet words it as "it can
   follow your activity on the blockchain".
 - **English and Russian.** `en` is required; a reader sees their own language, else English.
-- **Links**: `website` and `terms` are `https://` links; `support` is an `https://` link, a `mailto:` address or a
-  Saltix username (`@name`). Anything else is refused, so the sheet never opens a link a profile could turn against
-  its user; so is a link to a host reserved for examples (`splitbill.example` above, `example.com`, `.test`), which
-  leads nowhere: the app's own links, or `null` for none (`grain init` writes `null`).
+- **Links**: `website` and `terms` are `https://` links; `support` is an `https://` link, a `mailto:` address, a
+  Saltix username (`@name`) or, from protocol version 9, a Saltix address (below). Anything else is refused, so the
+  sheet never opens a link a profile could turn against its user; so is a link to a host reserved for examples
+  (`splitbill.example` above, `example.com`, `.test`), which leads nowhere: the app's own links, or `null` for none
+  (`grain init` writes `null`).
+- **Support: who answers users.** Set it with `npx grain support <contact>`, which writes `connect.json` and checks it
+  as the network will, then `grain profile`. A username bound to the app (`grain bind --handle @name --slug <slug>`)
+  opens the app's chat, where its program answers, and every user reaches it; another username, the person who holds
+  it, once the user's messenger is activated. An address (`"version": 2`) is the owner's own, or carries its holder's
+  consent (`support_consent`: `npx grain support <address> --consent support-consent.json`, the file the holder's
+  `SALTIX_SUPPORT_KEY=… npx grain support consent --slug <slug>` wrote), and every user reaches it before activating the
+  messenger too. A program that answers support is `examples/support-agent` (the app's notes, a language model whose
+  key is in the environment, then a person's `@name`): [docs/support.md](../support.md).
 - **Ask only for what you use.** Every permission is a row on the sheet, and `address` and `notifications` are switches
   users may leave off. `grain.json`'s `permissions` is the sum of their bits: 1 storage (`grain.storage`), 2 relay
   (`grain.relay`), 4 notifications, 8 camera, 16 microphone, 32 location, 64 address (`grain.requestAddress`); `grain

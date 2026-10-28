@@ -17,7 +17,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { type NetworkName, accountId, encodeAddress } from "./address.js";
 import { Reader, Writer, concat, derive, fromBase64, fromHex, toBase64, toHex } from "./bytes.js";
 import { ed25519KeyValid, verifyEd25519 } from "./keys.js";
-import { refusedChar } from "./profile.js";
+import { grainOwnerPayload, refusedChar } from "./profile.js";
 
 /** The domain of an offer's code. */
 export const PAIRING_CODE_DOMAIN = "Saltix grain pairing code v1";
@@ -234,9 +234,8 @@ export function offerAddress(offer: PairingOffer): string {
 }
 
 /** What a server key signs for `owner`'s (hex account) app `slug` on the chain of `genesis` (hash, hex):
- *  Borsh((genesis_hash, slug, owner)). */
-export const serverKeyProofPayload = (genesis: string, slug: string, owner: string): Uint8Array =>
-  new Writer().fixed(fromHex(genesis, 32), 32).string(slug).fixed(fromHex(owner, 32), 32).done();
+ *  Borsh((genesis_hash, slug, owner)), as a support address's consent does in a domain of its own (`grainOwnerPayload`). */
+export const serverKeyProofPayload: (genesis: string, slug: string, owner: string) => Uint8Array = grainOwnerPayload;
 
 /** The server key `secret`'s proof that it serves `owner`'s app `slug` (hex, 64 bytes). */
 export function signServerKeyProof(secret: Uint8Array, genesis: string, slug: string, owner: string): string {
