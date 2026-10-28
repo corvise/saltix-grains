@@ -241,10 +241,13 @@ they are, and profile names are personal data no app receives from Saltix.
   transaction carries (a registry call, an action, a memo, a key scheme, a manifest's `Entry`) comes with a new
   version: before its epoch a node refuses it. `node_status.protocol` gives `version` (the current one), `supported`,
   and `next` (`{version, epoch}` or `null`).
-- Version 1 is what every network runs today. Version 2 (built, scheduled on no network yet) brings, for apps,
-  `ConfigureGrain` tag 39 with proofs of its server keys ([app studio §2](app-studio.md#2-the-registry)); a client sends
+- Saltix's test network runs version 6 from its v15 genesis of 26 October 2026, every version up to it in force, and
+  takes version 7 at epoch 60, 8 at epoch 96 and 9 at epoch 132 (`node_status.protocol.next`; when an epoch begins:
+  [the wallet interface](wallet-interface.md#epochs-and-their-times)). Version 9 brings, for apps, `SetGrainDonations`
+  (tag 76) and the Connect profile's format 2, whose support contact may be a Saltix address
+  ([support](../support.md)). Version 2 brought, for apps, `ConfigureGrain` tag 39 with proofs of its server keys ([app studio §2](app-studio.md#2-the-registry)); a client sends
   tag 34 while `protocol.version` is 1, tag 39 from 2, and never signs tag 34 valid past the switch `next` names. It
-  also brings a quorum's message (above), and a sealed manifest that names no source, the network keeping its bundle
+  also brought a quorum's message (above), and a sealed manifest that names no source, the network keeping its bundle
   ([grains §2](grains.md#2-manifest)); before it, a sealed manifest names 1–8 sources. `outdated` (`{version, …}` or
   `null`) says the node saw a block of a version it does not know: the network runs that one.
 - **Readers.** An unknown tag fails Borsh, so a reader that predates it drops the whole object: an older wallet drops a

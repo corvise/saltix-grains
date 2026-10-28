@@ -356,6 +356,16 @@ Connect sheet and card (Saltix 19-connect [§11.1](docs/protocol/connect.md#111-
   that names the person. A user whose messenger is not activated reaches the app's chat and a support address, not a
   person's `@name`.
 
+## Donations to your app
+
+An app's owner may take donations (Saltix 24-app-studio §2b, protocol version 9: the test network's from epoch 132).
+The owner switches them on in Saltix, on the app's page (**Donations** → *Take donations*, off by default; before
+version 9 it says when the network takes them and signs nothing). Everyone else then sees *Support the developer*,
+which names the owner's @name or short address and opens Send with the owner's address and the memo
+"<app> · donation": the money goes straight to the owner's account, with no invoice, and the app's server takes no part.
+The SDK reads the switch (`grainGet(…).donations`, `grain_get`'s `donations`) and sends no `SetGrainDonations`
+(tag 76).
+
 ## Naming: apps and people
 
 - **Words.** The product is Saltix, everywhere. Saltix calls apps *mini-apps* in what users read (lower case; Russian

@@ -38,6 +38,15 @@
 
 ### Changed
 
+- **The docs say what an app meets on the network now** (corvise/saltix `fbbc06c3`): Saltix's test network runs
+  Consensus 2 since its v15 of 26 October 2026, so a block the node shows is final at its committee's certificate and one
+  confirmation is enough to deliver on (`docs/payments.md`, the wallet interface's *Confirmations*); an epoch is 1 600
+  certified beacon heights, reckoned by `node_status.pace` and `epochs_ahead`, never `genesis_time + epoch ·
+  epoch_slots` (the wallet interface's new *Epochs and their times*, with `node_status`'s `epoch_heights`, `pace`,
+  `epochs_ahead` and `committee`); the test network runs protocol version 6 and takes 7, 8 and 9 at epochs 60, 96 and
+  132 (`docs/protocol/basics.md`, where version 1 was "what every network runs"); ask for SALT in an invoice from
+  version 4, since WORK lives in the pools' books; donations are the owner's switch in Saltix, which the SDK reads and
+  never sends (`AGENTS.md`'s *Donations to your app*, the README); the node installs on macOS and Windows too.
 - **The vectors are synced at corvise/saltix `6671fabb`** (#474's head), and the SDK follows what the sync brought:
   **usernames alone** (the numbers left with the v15 genesis, 2026-10-25): `Handle` is `{ name }`, a number's text
   (`+0 777 1234`) reads as no handle, and `grain bind` says so; `grain_get`'s `donations` (`RegisteredGrain`), whose

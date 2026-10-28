@@ -119,7 +119,11 @@ SUPPORT_HUMAN=@anna npm run support-agent   # or the support agent as that app's
 
 Saltix's **test network** is of the devnet kind: addresses `dsalt1…`, developer keys `saltix-app:1:dsalt:…`, and
 `network: "devnet"` wherever the SDK asks (`testnet` is a kind no public network runs yet). It is reset now and then;
-a developer key names the genesis it was made on, and the SDK refuses a key of a network that was reset.
+a developer key names the genesis it was made on, and the SDK refuses a key of a network that was reset. Since its v15
+of 26 October 2026 it runs **Consensus 2**: a committee certifies every block, so a payment the node shows is final
+with one confirmation; and an epoch is 1 600 certified beacon heights, which run behind the slot clock, so read when an
+epoch begins from `node_status.epochs_ahead` and `pace`, never from `genesis_time + epoch · epoch_slots`
+([the wallet interface](docs/protocol/wallet-interface.md#epochs-and-their-times)).
 
 - **The chat server and every command** reach the test network through its public relays: each relay serves the
   wallet interface at `POST /rpc` on its client port (Saltix [09-relay §10.7](docs/protocol/relays.md#the-wallet-interface-at-a-relay)) behind a self-signed certificate, which
@@ -129,7 +133,8 @@ a developer key names the genesis it was made on, and the SDK refuses a key of a
 - **`--relay wss://host:30335/#<sha256>`** (repeatable) names relays of your own instead, each pinned by its
   certificate's SHA-256 as its relay record names it.
 - **`--node URL`** is your own node's wallet interface over plain HTTP instead: a test-network node
-  (`https://download.saltix.io/node/install.sh`, Linux x86-64; it listens on `http://127.0.0.1:30334`), or one reached
+  (`https://download.saltix.io/node/install.sh` on Linux x86-64 or macOS, `install.ps1` on Windows; it listens on
+  `http://127.0.0.1:30334`), or one reached
   through a tunnel, `ssh -N -L 30334:127.0.0.1:30334 you@your-server`.
 - **Test SALT**: `grain faucet` asks the test network's faucet for owner.key's account (or `--address`), once every 5
   minutes; `--wait` until it is there. Then `grain publish --key owner.key` can pay the deposit.
@@ -330,6 +335,9 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `grain support` alone says which contact `connect.json` names, `--clear` removes it. `grain support consent --slug S
   [--owner A]` is the holder's side: the consent of the address whose key is in `SALTIX_SUPPORT_KEY` (never a file) to
   answer for the app S of its owner (the registry's, or A) on this network, written to `support-consent.json` (public).
+- **Donations** (Saltix 24-app-studio §2b, protocol version 9) are the owner's switch in Saltix, on the app's page:
+  no command sends `SetGrainDonations` (tag 76). `grainGet(…).donations` says whether they are open; wallets then offer
+  *Support the developer*, a transfer to the registry's owner ([AGENTS.md](AGENTS.md#donations-to-your-app)).
 - `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
   operator's key file, from the texts and links of `--profile` (`connect.json`), at a revision above the one the site
   serves now and the file it writes (`--out`, `.well-known/saltix-connect`), or `--revision N`; when neither can be
