@@ -13,6 +13,10 @@ export const MAX_ANSWER = 1200;
 /** Questions a day the model answers for one user (their key in the app), at most: past it, a person. A language model
  *  costs money per question, and one user's flood must not run up the app's bill. */
 export const MODEL_QUESTIONS_PER_DAY = 20;
+/** Questions a day the model answers for all users together, at most: past it, a person for everyone until the day
+ *  turns. A key in the app costs nothing to make, so a share per key alone bounds nothing: a thousand fresh accounts
+ *  would have the model answer twenty thousand questions a day. Set your own with `perDayTotal`. */
+export const MODEL_QUESTIONS_PER_DAY_TOTAL = 500;
 /** Notes the agent holds at most, and how many a `topics` card offers (a card has at most 6 actions). */
 const MAX_NOTES = 64;
 const TOPICS = 6;
@@ -31,6 +35,7 @@ const WORDS = {
       asked: "A person on the app's team answers you: write to them in Saltix.",
       unknown: "This one is for a person on the app's team: write to them in Saltix.",
       limit: "That is all the questions the assistant answers for you today: a person on the app's team takes it from here.",
+      total: "The assistant has answered all the questions it takes today: a person on the app's team takes it from here.",
     },
   },
   ru: {
@@ -44,6 +49,7 @@ const WORDS = {
       asked: "Вам ответит человек из команды приложения: напишите ему в Saltix.",
       unknown: "На этот вопрос ответит человек из команды приложения: напишите ему в Saltix.",
       limit: "На сегодня помощник ответил на все ваши вопросы: дальше поможет человек из команды приложения.",
+      total: "На сегодня помощник ответил на все вопросы, какие мог: дальше поможет человек из команды приложения.",
     },
   },
 };
@@ -142,25 +148,32 @@ export const asksForPerson = (text, lang) => {
 /** A note's text in `lang`, else English. */
 const inLang = (map, lang) => map[lang] ?? map.en;
 
-/** Questions the model answered, per user, in the current UTC day: forgotten when the day turns (and on a restart,
- *  which costs at most a day's share again). */
+/** Questions the model answered in the current UTC day, per user and in all: forgotten when the day turns (and on a
+ *  restart, which costs at most a day's again). A user past the total is never counted, so the map holds at most the
+ *  total's users. */
 class DailyShare {
-  constructor(limit) {
+  constructor(limit, total) {
     this.limit = limit;
+    this.total = total;
     this.day = -1;
+    this.all = 0;
     this.used = new Map();
   }
-  /** Take one of `key`'s questions at `now`: false once the day's are spent. */
+  /** Take one of `key`'s questions at `now`: `null` when taken, else why not — `limit` (the user's share is spent) or
+   *  `total` (everyone's is). */
   take(key, now) {
     const day = Math.floor(now / DAY_MS);
     if (day !== this.day) {
       this.day = day;
+      this.all = 0;
       this.used.clear();
     }
+    if (this.all >= this.total) return "total";
     const n = this.used.get(key) ?? 0;
-    if (n >= this.limit) return false;
+    if (n >= this.limit) return "limit";
     this.used.set(key, n + 1);
-    return true;
+    this.all++;
+    return null;
   }
 }
 
@@ -179,13 +192,19 @@ const failureOf = (e) => (typeof e?.status === "number" ? `http_${e.status}` : t
  *   (`claudeAnswerer`), or null for none: the notes alone answer, and a person the rest.
  * - `log`: `(level, event, meta)`, names and numbers only.
  * - `perDay`: the questions a day the model answers for one user (`MODEL_QUESTIONS_PER_DAY`).
+ * - `perDayTotal`: the questions a day it answers for all users together (`MODEL_QUESTIONS_PER_DAY_TOTAL`): a user's
+ *   share alone bounds nothing, since anyone can make keys without end.
  * - `personCommand`: the command a card's "Talk to a person" runs (`human`), or null when the spec has none.
  */
-export function createSupportAgent({ notes, human, model = null, log = () => {}, perDay = MODEL_QUESTIONS_PER_DAY, personCommand = "human", now = Date.now }) {
+export function createSupportAgent({
+  notes, human, model = null, log = () => {}, perDay = MODEL_QUESTIONS_PER_DAY, perDayTotal = MODEL_QUESTIONS_PER_DAY_TOTAL,
+  personCommand = "human", now = Date.now,
+}) {
   const person = parseHandle(human ?? "");
   if (person === null) throw new Error("human: the username of the person who takes over (@anna)");
+  if (!Number.isSafeInteger(perDayTotal) || perDayTotal < 0) throw new Error("perDayTotal: the model's questions a day for everyone, a whole number");
   const contact = `@${person.name}`;
-  const share = new DailyShare(perDay);
+  const share = new DailyShare(perDay, perDayTotal);
 
   const withPerson = (c, words) => (personCommand === null ? c : c.run(words.person, personCommand));
   const handover = (words, why) => card().text(words.handover[why]).fields({ [words.writeTo]: contact });
@@ -205,7 +224,8 @@ export function createSupportAgent({ notes, human, model = null, log = () => {},
       const note = matchNote(notes, question, lang);
       if (note) return answered(withPerson(card().text(inLang(note.answer, lang)), words), "rules", lang, started, { note: note.id });
       if (model === null) return answered(handover(words, "unknown"), "person", lang, started, { why: "unknown" });
-      if (!share.take(ask.key, now())) return answered(handover(words, "limit"), "person", lang, started, { why: "limit" });
+      const spent = share.take(ask.key, now());
+      if (spent !== null) return answered(handover(words, spent), "person", lang, started, { why: spent });
       let answer;
       try {
         answer = await model(question, { lang });

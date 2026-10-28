@@ -87,6 +87,15 @@
 - **An answer from a node or a relay is read up to 4 MiB** (`MAX_ANSWER_BYTES`): `rpc`, the gateways and
   `relayRequest` refuse a longer one instead of buffering it.
 - **CI pins its actions by commit and runs `npm ci --ignore-scripts`**; the docs say the same.
+- **The support agent's model answers at most 500 questions a day for all users together** (`perDayTotal`,
+  `MODEL_QUESTIONS_PER_DAY_TOTAL`, `SUPPORT_MODEL_DAILY` in `examples/support-agent/server.mjs`), then a person takes
+  over until the day turns. A user's daily share (20) is per key in the app, and keys cost nothing to make: a flood of
+  new accounts could have run up the app's bill without end (the threat audit of 2026-10-28). The hand-over card says
+  why, the log counts `why: "total"`, and the per-user map holds at most the day's total users.
+- **`PUBLIC_RELAYS` pins the test network's current certificates**: a relay makes a new certificate when its network
+  starts over, and the pins were the previous network's since 2026-10-26, so every call through the public relays
+  failed on them (and a developer was pushed to pass unpinned endpoints). The comment no longer claims the
+  certificates outlive a reset.
 
 ### Changed
 

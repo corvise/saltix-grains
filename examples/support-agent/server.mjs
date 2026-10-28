@@ -8,6 +8,7 @@
 //   ANTHROPIC_API_KEY    optional: a language model answers what the notes do not (npm install --no-save @anthropic-ai/sdk;
 //                        chat.json's "ai" must say true, its version raised, as users are told before they write)
 //   SUPPORT_MODEL        the model, claude-opus-5-5 by default
+//   SUPPORT_MODEL_DAILY  the questions a day the model answers for all users together (500 by default): past it, a person
 //   SUPPORT_FAQ          the app's notes (faq.json next to this file by default)
 //   SALTIX_APP_KEY, SALTIX_APP_KEY_FILE, CHAT_SPEC, CHAT_STORE, NODE_RPC: as examples/hello-grain/server.mjs reads them
 //
@@ -62,11 +63,13 @@ if (spec.ai !== (client !== null)) {
     : 'no language model answers (no ANTHROPIC_API_KEY), so chat.json says "ai": false (and its "version" goes up)');
 }
 const model = client && claudeAnswerer(client, { app: key.slug, notes, model: process.env.SUPPORT_MODEL || DEFAULT_MODEL });
+const daily = process.env.SUPPORT_MODEL_DAILY;
+const perDayTotal = daily === undefined || daily === "" ? undefined : Number(daily);
 let agent;
 try {
-  agent = createSupportAgent({ notes, human: process.env.SUPPORT_HUMAN, model, log });
+  agent = createSupportAgent({ notes, human: process.env.SUPPORT_HUMAN, model, log, perDayTotal });
 } catch (e) {
-  cannot(`SUPPORT_HUMAN: ${e.message}`);
+  cannot(e.message.startsWith("perDayTotal") ? `SUPPORT_MODEL_DAILY: a whole number of questions a day` : `SUPPORT_HUMAN: ${e.message}`);
 }
 
 console.log(`starting ${key}`);

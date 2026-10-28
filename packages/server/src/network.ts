@@ -12,16 +12,19 @@ import { relayRequest } from "./upload.js";
 /**
  * The public relays a server starts from on each kind of network, before it asks them for the rest (`relay_list`):
  * their client endpoints and the SHA-256 of the self-signed certificate each relay's record publishes. Saltix's test
- * network is of the devnet kind (`dsalt1…`); its relays keep their certificates across the network's resets. No public
- * mainnet or testnet runs yet. A server on another network passes `node` or `endpoints`.
+ * network is of the devnet kind (`dsalt1…`). A network that starts over sets its relays' old data aside, certificate
+ * included, so each relay makes a new one: these pins follow every launch of the test network (Saltix's
+ * `scripts/set-network.py` says when they are stale), else every call fails on them, as from 2026-10-26 to the threat
+ * audit of 2026-10-28, which found them stale. They are the trust anchors: a relay's own `relay_list` never moves them
+ * (`RelayGateways`). No public mainnet or testnet runs yet. A server on another network passes `node` or `endpoints`.
  */
 export const PUBLIC_RELAYS: Readonly<Record<NetworkName, readonly RelayEndpoint[]>> = {
   mainnet: [],
   testnet: [],
   devnet: [
-    { url: "wss://138.124.52.41:30335/", cert_sha256: "dc1ece5e64b22d087d85659a325191b667bdb1c3547e6095504385816b85bb3f" },
-    { url: "wss://45.141.177.244:30335/", cert_sha256: "3c3d43b9a2f9c7448d7a6714ef6a11f31b5c82a535724aabb36d6e6ee7ef8449" },
-    { url: "wss://85.192.42.65:30335/", cert_sha256: "a94187bc36785212e149f6d32a6cd01633712ac0c9b1bc900ebacda23d4e8fad" },
+    { url: "wss://138.124.52.41:30335/", cert_sha256: "d8856d012e51e4f782b554eb754694468d1b3475bc7ed2daeb67788fa568c617" },
+    { url: "wss://45.141.177.244:30335/", cert_sha256: "3bd162ee78f3df1530caf274a5ba022a7315b383131c3ce7c341d991f29c8787" },
+    { url: "wss://85.192.42.65:30335/", cert_sha256: "f0627aadef682012fd673462be795ed4ed672c3f952054697661abe32c78ba21" },
   ],
 };
 
