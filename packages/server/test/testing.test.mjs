@@ -169,6 +169,48 @@ test("the development registry answers as a node's wallet interface, each change
   await assert.rejects(r.call("transaction_submit", {}), /does not answer transaction_submit/);
 });
 
+test("the development node's clocks are a node's of Consensus 2: the registry's position by the heights, the slot by their pace", async () => {
+  const owner = fromHex("41".repeat(32), 32);
+  const NOW = 1_800_000_000_000;
+  const r = createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [], now: () => NOW });
+  const s = await r.call("node_status");
+  assert.deepEqual([s.epoch_slots, s.epoch_heights, s.pace, s.epochs_ahead], [2400, 1600, 2000, []]);
+  // At height 1 the next beacon block's position is ⌊2 · 2400 / 1600⌋; the slot, a height of 2 000 ms gone, is 2.
+  assert.deepEqual([s.beacon.height, s.position, s.slot, s.epoch], [1, 3, 2, 0]);
+  assert.equal((s.genesis_time + s.slot) * 1000, NOW, "the node's time is the computer's");
+  for (let i = 0; i < 99; i++) r.block();
+  const t = await r.call("node_status");
+  assert.deepEqual([t.beacon.height, t.position, t.slot], [100, 151, 200]);
+  assert.ok(t.slot > t.position, "the slots run ahead of the registry's clock, as on the test network");
+  // What the registry keeps is dated by its clock: the record's last change, at height 100.
+  assert.equal((await r.call("grain_get", { slug: "coach" })).grain.updated, 150);
+  r.retire();
+  assert.equal((await r.call("grain_get", { slug: "coach" })).grain.retired, 151);
+  // An epoch is 1 600 heights: the block after height 1 599 opens epoch 1.
+  for (let i = 0; i < 1_498; i++) r.block();
+  const before = await r.call("node_status");
+  assert.deepEqual([before.beacon.height, before.position, before.epoch], [1_599, 2_400, 1]);
+  const prior = createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [] });
+  for (let i = 0; i < 1_597; i++) prior.block();
+  assert.equal((await prior.call("node_status")).epoch, 0, "height 1 598: the next block is the epoch's last");
+  // A node that has not measured its pace yet says so; a faster chain's slots run behind its positions.
+  const fresh = createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [], clock: { kind: "consensus2", measured: false } });
+  assert.equal((await fresh.call("node_status")).pace, null);
+  const fast = createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [], clock: { kind: "consensus2", paceMs: 1_000 } });
+  for (let i = 0; i < 99; i++) fast.block();
+  const f = await fast.call("node_status");
+  assert.deepEqual([f.slot, f.position, f.pace], [100, 151, 1_000]);
+  // The longest chain: a block a slot, the position the slot, no heights' epoch and no pace.
+  const old = createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [], clock: { kind: "longest" } });
+  old.block();
+  const o = await old.call("node_status");
+  assert.deepEqual([o.slot, o.position, o.epoch_heights, o.pace, o.epoch], [2, 2, null, null, 0]);
+  assert.equal((await old.call("grain_get", { slug: "coach" })).grain.updated, 2);
+  // A clock no network has is refused.
+  assert.throws(() => createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [], clock: { kind: "consensus2", epochHeights: 3_000 } }), /clock/);
+  assert.throws(() => createDevRegistry({ slug: "coach", ownerSecret: owner, servers: [], clock: { kind: "consensus2", paceMs: 0 } }), /clock/);
+});
+
 test("a card a wallet would not show fails the test: here, dated 10 minutes ahead", async (t) => {
   const { ChatServer } = await import("../dist/index.js");
   const chat = await testChat({

@@ -4,7 +4,8 @@
 > `b9019fdf` (2026-10-19); the pool vocabulary (`exchange_list`'s `pool` and `pool_key`, `grain_list`'s `miners` sort,
 > the ratings' `miners_count`, `miners_sum` and `miner`) as of corvise/saltix `e6448704` (2026-10-22); `grain_get`'s
 > `donations` (protocol version 9) as of corvise/saltix `6671fabb` (2026-10-28); Consensus 2's `node_status` fields,
-> finality and epochs as of corvise/saltix `fbbc06c3` (2026-10-28). Only the methods an app, its server or its tools
+> finality and epochs as of corvise/saltix `fbbc06c3` (2026-10-28), `position` as of corvise/saltix `8d372d87`
+> (2026-10-28). Only the methods an app, its server or its tools
 > call; a node answers more (the explorer's reads, pools, books, licenses).
 
 A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line read the chain through.
@@ -33,7 +34,7 @@ or an account id in hex. A transaction is the hex of its signed Borsh.
 
 | Method | Parameters | Result |
 |---|---|---|
-| `node_status` | — | `network` (the kind), `genesis` (the genesis hash), `genesis_time` (Unix seconds of slot 0), `slot`, `epoch` (on Consensus 2 the next beacon block's, by its height), `epoch_slots`, `epoch_heights` (on Consensus 2 the certified beacon heights of an epoch, else `null`), `pace` and `epochs_ahead` ([below](#epochs-and-their-times)), `beacon {height, hash, slot, final_height, …}`, `committee` (on Consensus 2 each chain's agreement, else `null`), `shards [{shard, height, hash, followed, slot}]`, `peers`, `faucet` (`{amount, work, every}` or `null`), `accounts` (`{derivation, policy: {delay, dispute_timeout}}`: the network's first account policy, which an offline key event log check needs), `build {version, commit}`, `protocol {version, supported, next, outdated}` ([basics](basics.md#protocol-versions)) |
+| `node_status` | — | `network` (the kind), `genesis` (the genesis hash), `genesis_time` (Unix seconds of slot 0), `slot`, `epoch` (on Consensus 2 the next beacon block's, by its height), `epoch_slots`, `epoch_heights` (on Consensus 2 the certified beacon heights of an epoch, else `null`), `position` (the registry's clock, [below](#epochs-and-their-times)), `pace` and `epochs_ahead` ([below](#epochs-and-their-times)), `beacon {height, hash, slot, final_height, …}`, `committee` (on Consensus 2 each chain's agreement, else `null`), `shards [{shard, height, hash, followed, slot}]`, `peers`, `faucet` (`{amount, work, every}` or `null`), `accounts` (`{derivation, policy: {delay, dispute_timeout}}`: the network's first account policy, which an offline key event log check needs), `build {version, commit}`, `protocol {version, supported, next, outdated}` ([basics](basics.md#protocol-versions)) |
 | `account_get` | `address` | `account` (hex), `shard`, `salt`, `work`, `nonce` (the next transaction's), `channels` (`[{exchange, deposit, closing_at}]`), `stake`, `controller` (a managed account's: `devices [{key: {ed25519 \| p256}, kind, limit, …}]`, `policy`, `pending`, `log_seq`, `log_tip`, …; `null` for a plain account), `alias` |
 | `account_log` | `address` | a managed account's key event log: `account`, `origin` (`{root_digest}` of a kind 5 address or `{key}` of an upgraded kind 0 one; `null` with no events), `events` (`[{seq, slot, id, event}]`, `event` its Borsh in hex), along the canonical chain |
 | `account_history` | `address`, `limit` (50 by default, at most 500), `before` (a height) | `entries`, newest first (below) |
@@ -94,9 +95,16 @@ come slower than the slots assume (1 600 heights in about 2 580 slots on v15) an
   milliseconds, at the node's pace; `null` while the pace is);
 - `pace` is the mean milliseconds a certified beacon height took over the last epoch's heights as the node saw them,
   `null` until it measured 64 heights after a start; a span of epochs lasts about `epochs · epoch_heights · pace`
-  milliseconds.
+  milliseconds;
+- `position` is the registry's clock, the position of the next beacon block, `⌊height · epoch_slots / epoch_heights⌋`:
+  every deadline the registry keeps — an auction's end, a cooling, a guest pass's `expires`, a record's `registered`
+  and `retired` — is one. Compare a deadline with `position`, never with `slot`, which runs ahead of it (three hours on
+  the test network on 2026-10-28), and date it from where the node stands: position `p` comes about
+  `(p − position) · pace · epoch_heights / epoch_slots` milliseconds after the node answered (at a second a position,
+  the least, while `pace` is `null`).
 
-On the longest chain an epoch is `epoch_slots` slots of a second, and `pace` is `null`.
+On the longest chain an epoch is `epoch_slots` slots of a second, `position` is the slot, and `pace` is `null`.
+`createDevRegistry` (`@saltix/grain-server/dev`) answers both clocks as a node does (`DevClock`).
 
 ## Errors
 

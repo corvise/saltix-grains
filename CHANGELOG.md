@@ -65,6 +65,15 @@
 
 ### Fixed
 
+- **The simulator's node answers Consensus 2's clocks, as a node of 0.2.5 does** (Saltix 43-consensus-2 §8;
+  [the wallet interface](docs/protocol/wallet-interface.md#epochs-and-their-times)). `createDevRegistry`'s
+  `node_status` modelled the longest chain only, a block a slot, so an app tested against it never met the test
+  network's two clocks. It now gives `epoch`, `epoch_slots`, `epoch_heights`, the registry's `position` (the next beacon
+  block's, `⌊(height + 1) · E / E_H⌋`) and `pace` (the ms a height takes), consistent with its own heights: the slot clock
+  reads the heights at their pace and runs ahead of the position, as on the test network, and a record's `registered`,
+  `updated` and `retired` are positions. `clock` (`DevClock`) chooses: Consensus 2 by default (1 600 heights of 2 400
+  positions an epoch, `DEV_PACE_MS` 2 000 ms a height), its pace not measured yet (`measured: false`, `pace: null`), or
+  the longest chain (`kind: "longest"`, the old answers).
 - **`chat.paymentOf` finds a WORK invoice paid on chain** ([docs/payments.md](docs/payments.md)). On a network of
   protocol version 4 or later — the test network is one — no account holds WORK on chain, so a WORK invoice is paid
   from the payer's book or in SALT of the same integer on chain (Saltix 35-work-on-layer-2 §3.4), and `paymentOf`

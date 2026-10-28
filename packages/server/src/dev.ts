@@ -306,11 +306,33 @@ export interface DevRegistryOptions {
   name?: string;
   /** The protocol version `node_status` names (23-upgrades §6): 1 by default, as the test network runs. */
   protocol?: number;
+  /** The network's clocks `node_status` gives ([DevClock]): Consensus 2's by default, as the test network runs. */
+  clock?: DevClock;
   /** False: nobody registered the slug yet, until `publish` (a wallet's `RegisterGrain`). */
   registered?: boolean;
   /** The clock statements are checked against (Unix ms). */
   now?: () => number;
 }
+
+/**
+ * The clocks the development node answers `node_status` with, as a node of 0.2.5 does (Saltix 43-consensus-2 §8;
+ * docs/protocol/wallet-interface.md, *Epochs and their times*).
+ *
+ * - `consensus2`, the default, as the test network runs: an epoch is `epochHeights` certified beacon heights (1 600) and
+ *   `epochSlots` positions of the registry's clock (2 400); the registry's `position` is the next beacon block's,
+ *   `⌊(height + 1) · epochSlots / epochHeights⌋`, and every deadline the registry keeps — what a record's `registered`,
+ *   `updated` and `retired` say here — is one; a height takes `paceMs` (2 000 ms by default, about the test network's),
+ *   so the slot clock, a second a slot, reads `⌊height · paceMs / 1000⌋` and runs ahead of the position as it does
+ *   there. `pace` is `null`, as a node answers before it has measured 64 heights, with `measured: false`.
+ * - `longest`: a network of the longest chain, a block a slot: the position is the slot, `epoch_heights` and `pace` null.
+ */
+export type DevClock =
+  | { kind: "consensus2"; epochSlots?: number; epochHeights?: number; paceMs?: number; measured?: boolean }
+  | { kind: "longest"; epochSlots?: number };
+
+/** The ms a beacon height takes on the development node of Consensus 2 unless its [DevClock] says: about the test
+ *  network's (1.6 to 2.1 s a height in October 2026). */
+export const DEV_PACE_MS = 2_000;
 
 /** A relay as `relay_list` names it. */
 export interface DevRelayEntry {
@@ -378,6 +400,19 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
   };
   const signed: SignedManifest = signManifest(manifest, o.ownerSecret);
   let height = 1;
+  // The node's clocks (DevClock): the registry's position by the heights, the slot clock by the heights' pace.
+  const clock: DevClock = o.clock ?? { kind: "consensus2" };
+  const epochSlots = clock.epochSlots ?? 2_400;
+  const c2 = clock.kind === "consensus2"
+    ? { epochHeights: clock.epochHeights ?? 1_600, paceMs: clock.paceMs ?? DEV_PACE_MS, measured: clock.measured ?? true }
+    : null;
+  if (!Number.isSafeInteger(epochSlots) || epochSlots <= 0 || (c2 && (!Number.isSafeInteger(c2.epochHeights) || c2.epochHeights <= 0 ||
+    c2.epochHeights > epochSlots || !Number.isSafeInteger(c2.paceMs) || c2.paceMs <= 0))) {
+    throw new Error("clock: whole positive epochSlots, epochHeights (at most epochSlots) and paceMs");
+  }
+  /** The registry's position of the beacon block at height `h`: ⌊h · E / E_H⌋ on Consensus 2, its slot (a block a slot)
+   *  on the longest chain. */
+  const positionOf = (h: number): number => (c2 ? Math.floor((h * epochSlots) / c2.epochHeights) : h);
   let registered = o.registered ?? true;
   const now = o.now ?? Date.now;
   const blobs = new Map<string, DevBlob>();
@@ -385,18 +420,27 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
   /** Until when a statement holds each bundle being uploaded on its word. */
   const pendingFor = new Map<string, number>();
   const grain: RegisteredGrain = {
-    slug: o.slug, owner, version: 1, id: toHex(randomBytes(32)), registered: 1,
-    updated: 1, retired: null, deposit: "10000000000", manifest: signed, servers: [...o.servers], category: 9, public: o.public ?? true,
+    slug: o.slug, owner, version: 1, id: toHex(randomBytes(32)), registered: positionOf(1),
+    updated: positionOf(1), retired: null, deposit: "10000000000", manifest: signed, servers: [...o.servers], category: 9, public: o.public ?? true,
     members: [...(o.members ?? [])], handles: [], ratings: { count: 0, sum: 0, miners_count: 0, miners_sum: 0 },
   };
   const controllers = new Map<string, Controller>();
   const calls: Record<string, number> = {};
-  const status = () => ({
-    network, genesis, genesis_time: Math.floor(now() / 1000) - height, slot: height,
-    beacon: { height, hash: height.toString(16).padStart(64, "0") },
-    shards: [{ shard: "", hash: (height + 0x8000).toString(16).padStart(64, "0") }],
-    protocol: { version: o.protocol ?? 1, supported: [1, 2], next: null, outdated: null },
-  });
+  const status = () => {
+    // The slot clock at the tip: the heights at their pace on Consensus 2, a block a slot on the longest chain; its slot
+    // is now (genesis_time follows), so the node's time is the computer's.
+    const slot = c2 ? Math.floor((height * c2.paceMs) / 1000) : height;
+    // The registry's clock: the next beacon block's position (on the longest chain the slot).
+    const position = c2 ? positionOf(height + 1) : slot;
+    return {
+      network, genesis, genesis_time: Math.floor(now() / 1000) - slot, slot,
+      epoch: Math.floor(position / epochSlots), epoch_slots: epochSlots, epoch_heights: c2?.epochHeights ?? null,
+      position, pace: c2?.measured ? c2.paceMs : null, epochs_ahead: [],
+      beacon: { height, hash: height.toString(16).padStart(64, "0") },
+      shards: [{ shard: "", hash: (height + 0x8000).toString(16).padStart(64, "0") }],
+      protocol: { version: o.protocol ?? 1, supported: [1, 2], next: null, outdated: null },
+    };
+  };
   const relayList = (): DevRelayEntry[] => {
     const given = o.relays ?? [];
     if (given.length > 0 && "endpoints" in given[0]!) return given as DevRelayEntry[];
@@ -536,7 +580,7 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
     },
     block() {
       height++;
-      grain.updated = height;
+      grain.updated = positionOf(height);
     },
     setAccess(open, members) {
       grain.public = open;
@@ -548,7 +592,7 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
       registry.block();
     },
     retire() {
-      grain.retired = height + 1;
+      grain.retired = positionOf(height + 1);
       registry.block();
     },
     publish(next) {
@@ -557,7 +601,7 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
       if (registered && m.version <= grain.version) throw new Error(`version ${grain.version} is registered`);
       if (!registered) {
         registered = true;
-        grain.registered = height + 1;
+        grain.registered = positionOf(height + 1);
       }
       grain.manifest = next;
       grain.version = m.version;
