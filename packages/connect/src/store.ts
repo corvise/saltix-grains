@@ -5,8 +5,9 @@
 //
 // The grant is for display only. It is a bearer artefact: whoever holds its bytes (any script of this origin, whoever
 // the page sent them to) holds all it proves, and it answers no server's challenge, so a server cannot tell the visitor
-// from a copy. Never send it to a server as a login or exchange it for a session (docs/connect.md, "never a server's
-// login").
+// from a copy. Never send it to a server as a login or exchange it for a session: a server's login is the server-held
+// mode (19-connect §15), whose keys the server made and whose `sid` it spends, and in that mode the page keeps nothing
+// here (the session is the server's) and never sees the login's bytes (docs/connect.md, "The two modes").
 import { CONNECT_LIFE_MS } from "./grant.js";
 
 export interface Connection {
@@ -17,13 +18,16 @@ export interface Connection {
   /** The account's address (Address v1), as the page shows it. */
   address: string;
   /** The grant's Borsh, base64url: what this page checked, kept for display only (which key signed for the account);
-   *  never a login to a server. */
-  grant: string;
+   *  never a login to a server. Absent when the site's server took the login (19-connect §15): the page never sees it. */
+  grant?: string;
   signer: "ed25519" | "p256";
   /** Whether a device of a managed account signed it (else the plain account's own key). */
   managed: boolean;
-  /** When the page took it, Unix ms. */
+  /** When the page took it, Unix ms; in the server-held mode, when the server did, by its clock. */
   since: number;
+  /** What the site's server answered beside the account in the server-held mode (where to go, a name: its own fields,
+   *  as its `connected` answer carried them); nothing in the page's own mode. */
+  answer?: Record<string, unknown>;
 }
 
 /** The key the connections are kept under in `localStorage`. */

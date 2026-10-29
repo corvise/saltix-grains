@@ -1,5 +1,5 @@
 /*
- * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5, §14), a port of the explorer's
+ * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5, §14, §15), a port of the explorer's
  * `explorer/src/connect/session.ts`: a slot at a relay, the offer for the QR code and the link, the wallet's notice that
  * it saw the offer, and the grant, checked before the page takes it — then the page's confirmation to the wallet's
  * reply slot (§14.2), sent before the slot closes, so the wallet shows "connected" on the page's word.
@@ -9,12 +9,19 @@
  *      ▼          ▼  │       ▼          └─► a refused grant: back to offer or seen, with the reason
  *    failed    (2 minutes unseen: a new slot and new keys)
  *
+ * Two modes. In the page's own (§2–§5) the keys are made here, and the grant is opened and checked here. In the
+ * server-held mode (§15) the site's server makes the keys and keeps `Q`'s secret; the page holds no secret, forwards
+ * every payload that reaches its slot sealed, as it came, through a `Courier`, and takes the server's word: the
+ * wallet's notice, a refusal, or the session the server opened, with the confirmation the server sealed for the page
+ * to deliver. The slot, the offer, the link to Saltix and the slot kept across a reload are the same in both.
+ *
  * The slot belongs to the connection that opened it, so a dropped connection (a phone's browser in the background)
  * opens the same slot again at the same relay; the wallet's delivery finds it then. Everything that waits is a timer
  * the session owns, so `stop()` leaves nothing running. Telemetry never carries a key, a slot or an account.
  */
 import { ed25519 } from "@noble/curves/ed25519";
 import { b64url, equal, fromB64Loose } from "./codec.js";
+import type { Courier, CourierAnswer } from "./courier.js";
 import {
   CONFIRM_DELIVERED_MS, CONFIRM_VERSION, ConnectError, type ConnectGrant, type ConnectReply, type Session, decodePayload, encodeConfirm,
   loginMessage, signerKind,
@@ -27,7 +34,7 @@ import { boxPublic, openLinkPayload, randomSecret, sealLinkPayload } from "./sea
 export const QR_LIFE_MS = 2 * 60_000;
 /** The slot is opened again this often, so it never goes idle (5 minutes, 09-relay §10.3). */
 export const KEEP_MS = 60_000;
-/** A slot lives this long in all; the page gives up waiting then. */
+/** A slot lives this long in all; the page gives up waiting then. An offer at a server lives as long (§15.4). */
 export const SLOT_LIFE_MS = 30 * 60_000;
 /** How long the relay has to answer `link_open`. */
 export const OPEN_MS = 10_000;
@@ -38,7 +45,8 @@ const HIDDEN_CHECK_MS = 15_000;
 
 export interface SessionKeys {
   sid: Uint8Array;
-  boxSecret: Uint8Array;
+  /** `Q`'s secret, the page's own; null in the server-held mode, where the server keeps it and the page holds none. */
+  boxSecret: Uint8Array | null;
   boxKey: Uint8Array;
   /** `P`: its public key, and the private key as a non-extractable Web Crypto key where the browser offers Ed25519. */
   page: Uint8Array;
@@ -65,13 +73,17 @@ export async function makeKeys(): Promise<SessionKeys> {
   }
 }
 
+/** Why a session failed before any offer: no relay answers, a relay is of another network, or — in the server-held
+ *  mode — the site's server gave no offer the page can show. */
+export type FailKind = "no_relay" | "refused" | "network" | "server";
+
 export type Phase =
   | { kind: "opening" }
   | { kind: "offer"; offer: Offer; text: string; link: string; app: string; expiresAt: number }
   | { kind: "seen"; offer: Offer; text: string; link: string; app: string }
   | { kind: "checking"; offer: Offer; text: string; link: string; app: string }
   | { kind: "connected" }
-  | { kind: "failed"; reason: "no_relay" | "refused" | "network" };
+  | { kind: "failed"; reason: FailKind };
 
 /** What a refused grant tells the visitor: the reason, and whether it may help to try again. */
 export interface Refused {
@@ -90,18 +102,25 @@ export interface SessionEvents {
 
 export interface SessionOptions<T> {
   relays: readonly string[];
-  /** The network's genesis hash and its kind (`relay`'s hello must name the same kind). */
-  network: Uint8Array;
+  /** The network's kind (`relay`'s hello must name the same kind). */
   networkKind: string;
   origin: string;
-  name: string;
   dial: Dial;
-  keys: () => Promise<SessionKeys>;
-  /** The chain's side of §5 (rule 5, and whatever the page keeps): throws a [ConnectError] to refuse. */
-  verify: (grant: ConnectGrant, bytes: Uint8Array, session: Session) => Promise<T>;
-  /** Called once with what `verify` returned. */
+  /** Called once with what `verify` returned, or with what the server told of the sign-in. */
   connected: (value: T) => void;
   events: SessionEvents;
+  // ── The page's own mode (§2–§5): all four, and no courier ─────────────────
+  /** The network's genesis hash. */
+  network?: Uint8Array;
+  /** What the page calls itself in the offer. */
+  name?: string;
+  keys?: () => Promise<SessionKeys>;
+  /** The chain's side of §5 (rule 5, and whatever the page keeps): throws a [ConnectError] to refuse. */
+  verify?: (grant: ConnectGrant, bytes: Uint8Array, session: Session) => Promise<T>;
+  // ── The server-held mode (§15): the courier alone ─────────────────────────
+  /** The site's server, which made the offer's keys and takes every payload: the offer's origin must be this page's
+   *  (the courier holds it to that), and the offer's name is the server's. */
+  courier?: Courier<T>;
   now?: () => number;
   setTimeout?: (f: () => void, ms: number) => unknown;
   clearTimeout?: (t: unknown) => void;
@@ -113,7 +132,8 @@ export interface SessionOptions<T> {
   /**
    * Where the slot is kept across a reload of the page (§14.1): `sessionStorage` by default, so a page the browser
    * unloaded while handing the offer to Saltix and loaded again opens the same slot with the same keys, and the
-   * wallet's delivery, tried again for 30 seconds, still lands. Null keeps nothing.
+   * wallet's delivery, tried again for 30 seconds, still lands. Null keeps nothing. In the server-held mode nothing
+   * secret is kept: the server gave the page none (§15.1 step 1).
    */
   keep?: KeptSlotStore | null;
 }
@@ -128,13 +148,16 @@ export interface KeptSlotStore {
 /** Where a page keeps its slot across a reload. */
 export const KEPT_SLOT_KEY = "saltix-connect-slot";
 
-/** A slot as the page keeps it: enough to open it again and to open what the wallet delivers to it. */
+/** A slot as the page keeps it: enough to open it again and to show the same offer; `Q`'s secret only in the page's
+ *  own mode, where the page opens what the wallet delivers. */
 interface KeptSlot {
   base: string;
   relay: string;
   sid: string;
-  boxSecret: string;
+  boxKey: string;
+  boxSecret?: string;
   page: string;
+  name: string;
   opened: number;
   seen: boolean;
   held: boolean;
@@ -160,6 +183,12 @@ interface Slot {
   link_: RelayLink | null;
   /** The latest reply that opened for the slot: where the wallet waits for the page's confirmation (§14.2). */
   reply: ConnectReply | null;
+  /** The server-held mode: payloads waiting for the server's word, forwarded one at a time in the order they came, so
+   *  the wallet's reply is at the server before the grant it goes with (§14.2 step 1); and whether the server took a
+   *  reply, after which what comes is the grant. */
+  queue: Uint8Array[];
+  forwarding: boolean;
+  replied: boolean;
 }
 
 export class ConnectSession<T> {
@@ -183,6 +212,9 @@ export class ConnectSession<T> {
   private confirming: RelayLink | null = null;
 
   constructor(private readonly o: SessionOptions<T>) {
+    if (!o.courier && (!o.keys || !o.verify || !o.network || o.name === undefined)) {
+      throw new TypeError("ConnectSession: the page's own mode needs keys, verify, network and name; the server-held mode a courier");
+    }
     this.now = o.now ?? (() => Date.now());
     this.setT = o.setTimeout ?? ((f, ms) => setTimeout(f, ms));
     this.clearT = o.clearTimeout ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
@@ -200,13 +232,14 @@ export class ConnectSession<T> {
    * Open a slot and show its offer; again with new keys whenever asked (`fresh`) or when an unseen offer expires. Not
    * fresh, a slot the page kept across a reload (§14.1) is opened again first — the same id at the same relay, with the
    * same keys and the same offer — so that a wallet already delivering to it still reaches the page; a relay that no
-   * longer answers with the same node key, or a kept slot past its life, gives way to a fresh one.
+   * longer answers with the same node key, or a kept slot past its life, gives way to a fresh one. In the server-held
+   * mode the keys and the offer's words come from the server (§15.1 step 1), before any relay is dialed.
    */
   async start(options: { fresh?: boolean } = {}): Promise<void> {
     const generation = ++this.generation;
     this.clearTimers();
     this.closeLink();
-    this.slot?.keys.boxSecret.fill(0);
+    this.slot?.keys.boxSecret?.fill(0);
     this.slot = null;
     this.seen = false;
     this.held = false;
@@ -216,14 +249,18 @@ export class ConnectSession<T> {
     const kept = options.fresh ? null : this.kept();
     if (options.fresh) this.forget();
     if (kept) {
-      const keys: SessionKeys = { sid: fromB64Loose(kept.sid)!, boxSecret: fromB64Loose(kept.boxSecret)!, boxKey: boxPublic(fromB64Loose(kept.boxSecret)!), page: fromB64Loose(kept.page)!, pageKey: null, webCrypto: false };
+      const boxSecret = kept.boxSecret === undefined ? null : fromB64Loose(kept.boxSecret)!;
+      const keys: SessionKeys = {
+        sid: fromB64Loose(kept.sid)!, boxSecret, boxKey: boxSecret ? boxPublic(boxSecret) : fromB64Loose(kept.boxKey)!, page: fromB64Loose(kept.page)!,
+        pageKey: null, webCrypto: false,
+      };
       const opened = await this.open(kept.base, keys.sid);
       if (this.stopped || generation !== this.generation) {
         opened?.link.close();
         return;
       }
       if (opened && opened.link.network === this.o.networkKind && equal(opened.relay, fromB64Loose(kept.relay) ?? new Uint8Array())) {
-        const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
+        const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: kept.name };
         this.seen = kept.seen;
         this.held = kept.held;
         this.place(kept.base, keys, offer, kept.opened, opened.link, opened.early);
@@ -234,7 +271,24 @@ export class ConnectSession<T> {
       this.forget();
       this.o.events.telemetry("connect_resume_failed", { kind: opened ? "other_relay" : "unreachable" });
     }
-    const keys = await this.o.keys();
+    let keys: SessionKeys;
+    let name: string;
+    if (this.o.courier) {
+      try {
+        const given = await this.o.courier.offer();
+        keys = { sid: given.sid, boxSecret: null, boxKey: given.boxKey, page: given.page, pageKey: null, webCrypto: false };
+        name = given.name;
+      } catch (e) {
+        if (this.stopped || generation !== this.generation) return;
+        const kind = (e as { kind?: unknown } | null)?.kind;
+        this.o.events.telemetry("connect_server_failed", { kind: typeof kind === "string" ? kind : "error" });
+        return this.fail("server");
+      }
+      if (this.stopped || generation !== this.generation) return;
+    } else {
+      keys = await this.o.keys!();
+      name = this.o.name!;
+    }
     for (const base of this.shuffled(this.o.relays)) {
       if (this.stopped || generation !== this.generation) return;
       const opened = await this.open(base, keys.sid);
@@ -248,9 +302,9 @@ export class ConnectSession<T> {
         opened.link.close();
         return this.fail("network");
       }
-      const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name: this.o.name };
+      const offer: Offer = { relay: opened.relay, sid: keys.sid, boxKey: keys.boxKey, page: keys.page, origin: this.o.origin, name };
       this.place(base, keys, offer, this.now(), opened.link, opened.early);
-      this.o.events.telemetry("connect_open", { relay: this.o.relays.indexOf(base) + 1, webcrypto: keys.webCrypto });
+      this.o.events.telemetry("connect_open", { relay: this.o.relays.indexOf(base) + 1, webcrypto: keys.webCrypto, courier: !!this.o.courier });
       return;
     }
     this.o.events.telemetry("connect_slot_failed", { kind: "no_relay", relays: this.o.relays.length });
@@ -260,7 +314,7 @@ export class ConnectSession<T> {
   /** The slot is held: its offer shown, kept across a reload, kept open, and its times set. */
   private place(base: string, keys: SessionKeys, offer: Offer, opened: number, link: RelayLink, early: Frame[] = []): void {
     const text = offerText(offer);
-    this.slot = { base, keys, offer, text, link: offerLink(offer), app: offerAppLink(offer, this.userAgent), opened, link_: link, reply: null };
+    this.slot = { base, keys, offer, text, link: offerLink(offer), app: offerAppLink(offer, this.userAgent), opened, link_: link, reply: null, queue: [], forwarding: false, replied: false };
     this.remember();
     const slot = this.slot;
     if (this.seen) this.setPhase({ kind: "seen", offer, text, link: slot.link, app: slot.app });
@@ -277,7 +331,8 @@ export class ConnectSession<T> {
 
   // ── The slot across a reload (§14.1) ───────────────────────────────────────
 
-  /** The slot kept by a page that was unloaded within its life, or null. */
+  /** The slot kept by a page that was unloaded within its life, or null: one of the other mode (a secret kept where
+   *  the server holds it, or none where the page opens the payloads itself) is no slot of this session. */
   private kept(): KeptSlot | null {
     if (!this.keep) return null;
     let kept: KeptSlot;
@@ -288,9 +343,11 @@ export class ConnectSession<T> {
     } catch {
       return null;
     }
+    const key = (v: unknown) => typeof v === "string" && fromB64Loose(v)?.length === 32;
     const sound =
-      typeof kept.base === "string" && this.o.relays.includes(kept.base) && typeof kept.opened === "number" &&
-      [kept.relay, kept.sid, kept.boxSecret, kept.page].every((v) => typeof v === "string" && fromB64Loose(v)?.length === 32);
+      typeof kept === "object" && kept !== null && typeof kept.base === "string" && this.o.relays.includes(kept.base) && typeof kept.opened === "number" &&
+      typeof kept.name === "string" && [kept.relay, kept.sid, kept.boxKey, kept.page].every(key) &&
+      (this.o.courier ? kept.boxSecret === undefined : key(kept.boxSecret));
     if (!sound || this.now() - kept.opened >= SLOT_LIFE_MS || this.now() < kept.opened) {
       this.forget();
       return null;
@@ -302,8 +359,9 @@ export class ConnectSession<T> {
     const slot = this.slot;
     if (!this.keep || !slot) return;
     const kept: KeptSlot = {
-      base: slot.base, relay: b64url(slot.offer.relay), sid: b64url(slot.keys.sid), boxSecret: b64url(slot.keys.boxSecret), page: b64url(slot.keys.page),
-      opened: slot.opened, seen: this.seen, held: this.held,
+      base: slot.base, relay: b64url(slot.offer.relay), sid: b64url(slot.keys.sid), boxKey: b64url(slot.keys.boxKey), page: b64url(slot.keys.page),
+      name: slot.offer.name, opened: slot.opened, seen: this.seen, held: this.held,
+      ...(slot.keys.boxSecret ? { boxSecret: b64url(slot.keys.boxSecret) } : {}),
     };
     try {
       this.keep.setItem(KEPT_SLOT_KEY, JSON.stringify(kept));
@@ -328,7 +386,7 @@ export class ConnectSession<T> {
     this.closeLink();
     this.confirming?.close();
     this.confirming = null;
-    this.slot?.keys.boxSecret.fill(0);
+    this.slot?.keys.boxSecret?.fill(0);
     this.slot = null;
   }
 
@@ -477,7 +535,15 @@ export class ConnectSession<T> {
     const slot = this.slot;
     if (!slot || f.type !== "link_payload" || f.sid !== b64url(slot.keys.sid)) return;
     const sealed = fromB64Loose(String(f.payload ?? ""));
-    const plain = sealed ? openLinkPayload(slot.keys.boxSecret, slot.keys.sid, slot.keys.page, sealed) : null;
+    if (!sealed) return;
+    if (this.o.courier) {
+      // The server-held mode: sealed as it came, to the server, in the order it came (§15.1 step 3).
+      if (this.phase.kind === "connected") return;
+      slot.queue.push(sealed);
+      void this.forward(slot);
+      return;
+    }
+    const plain = openLinkPayload(slot.keys.boxSecret!, slot.keys.sid, slot.keys.page, sealed);
     // Anyone who saw the QR can deliver to the slot: what does not open or decode is ignored (§5).
     if (!plain) return;
     let payload;
@@ -488,12 +554,7 @@ export class ConnectSession<T> {
       return;
     }
     if (payload.kind === "seen") {
-      if (!this.seen && this.phase.kind === "offer") {
-        this.seen = true;
-        this.remember();
-        this.o.events.telemetry("connect_seen", { ms: this.now() - slot.opened });
-        this.setPhase({ kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
-      }
+      this.noticed(slot);
       return;
     }
     if (payload.kind === "reply") {
@@ -507,40 +568,121 @@ export class ConnectSession<T> {
     void this.check(slot, payload.grant, payload.bytes);
   }
 
-  private async check(slot: Slot, grant: ConnectGrant, bytes: Uint8Array): Promise<void> {
-    const back: Phase = this.seen
+  /** The wallet read the offer: "continue on your phone", once. In the page's own mode a notice that comes while a
+   *  grant is checked is nothing new; the server's word on a forwarded payload may say it first (§15.1 step 4). */
+  private noticed(slot: Slot, whileChecking = false): void {
+    if (this.seen || !(this.phase.kind === "offer" || (whileChecking && this.phase.kind === "checking"))) return;
+    this.seen = true;
+    this.remember();
+    this.o.events.telemetry("connect_seen", { ms: this.now() - slot.opened });
+    this.setPhase({ kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
+  }
+
+  /** The phase a refused grant goes back to: the offer, or the wallet's notice. */
+  private backPhase(slot: Slot): Phase {
+    return this.seen
       ? { kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app }
       : { kind: "offer", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app, expiresAt: slot.opened + QR_LIFE_MS };
+  }
+
+  /** A refused grant, or one that could not be checked: the reason to the page, the offer back, and the offer's two
+   *  minutes, which may have passed while the grant was checked (its expiry found it `checking` and let it be). */
+  private refused(slot: Slot, reason: string, meta: Record<string, string | number | boolean>): void {
+    const back = this.backPhase(slot);
+    this.o.events.telemetry("connect_refused", { reason, ...meta });
+    this.o.events.refused({ reason, at: this.now() });
+    this.setPhase(back);
+    if (back.kind === "offer" && this.now() >= back.expiresAt) this.expire();
+  }
+
+  /** The grant checks: the page shows the connection now (§14.1); the confirmation goes to the wallet behind it, and
+   *  the slot closes once it is on its way (§14.2 step 3). The slot's connection comes back for that. */
+  private taken(slot: Slot, value: T, meta: Record<string, string | number | boolean>): RelayLink | null {
+    this.o.events.telemetry("connect_grant", { ms: this.now() - slot.opened, seen: this.seen, ...meta });
+    this.clearTimers();
+    const link = slot.link_;
+    slot.link_ = null;
+    this.slot = null;
+    this.forget();
+    this.setPhase({ kind: "connected" });
+    this.o.connected(value);
+    return link;
+  }
+
+  private async check(slot: Slot, grant: ConnectGrant, bytes: Uint8Array): Promise<void> {
     this.setPhase({ kind: "checking", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
-    const session: Session = { network: this.o.network, origin: this.o.origin, sid: slot.keys.sid, page: slot.keys.page };
+    const session: Session = { network: this.o.network!, origin: this.o.origin, sid: slot.keys.sid, page: slot.keys.page };
     try {
-      const value = await this.o.verify(grant, bytes, session);
+      const value = await this.o.verify!(grant, bytes, session);
       if (this.slot !== slot || this.stopped) return;
-      this.o.events.telemetry("connect_grant", {
-        ms: this.now() - slot.opened,
-        signer: signerKind(grant.signer),
-        seen: this.seen,
-      });
-      this.clearTimers();
-      // The page shows the connection now (§14.1); the confirmation goes to the wallet behind it, and the slot closes
-      // once it is on its way (§14.2 step 3).
-      const link = slot.link_;
-      slot.link_ = null;
-      this.slot = null;
-      this.forget();
-      this.setPhase({ kind: "connected" });
-      this.o.connected(value);
+      const link = this.taken(slot, value, { signer: signerKind(grant.signer) });
       void this.confirm(link, slot, grant);
     } catch (e) {
       if (this.slot !== slot || this.stopped) return;
       const reason = e instanceof ConnectError ? e.reason : "unchecked";
       const kind = (e as { kind?: unknown } | null)?.kind;
-      this.o.events.telemetry("connect_refused", { reason, signer: signerKind(grant.signer), ...(typeof kind === "string" ? { kind } : {}) });
-      this.o.events.refused({ reason, at: this.now() });
-      this.setPhase(back);
-      // The offer's two minutes may have passed while the grant was checked: its expiry found it `checking` and let it
-      // be, so it is due now, or the offer would stay to the slot's thirty.
-      if (back.kind === "offer" && this.now() >= back.expiresAt) this.expire();
+      this.refused(slot, reason, { signer: signerKind(grant.signer), ...(typeof kind === "string" ? { kind } : {}) });
+    }
+  }
+
+  /**
+   * The server-held mode (§15.1 steps 3–5): each payload to the server as it came, one at a time, and the server's
+   * word on it. The page cannot tell a notice from a grant without `Q`'s secret, so it says it is checking only once
+   * the wallet was seen and its reply taken: what comes then is the grant (§14.2 step 1).
+   */
+  private async forward(slot: Slot): Promise<void> {
+    if (slot.forwarding) return;
+    slot.forwarding = true;
+    try {
+      while (slot.queue.length > 0 && this.slot === slot && !this.stopped && this.phase.kind !== "connected") {
+        const sealed = slot.queue.shift()!;
+        if (this.seen && slot.replied && this.phase.kind === "seen") this.setPhase({ kind: "checking", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
+        const started = this.now();
+        let answer: CourierAnswer<T>;
+        try {
+          answer = await this.o.courier!.take(slot.keys.sid, sealed);
+        } catch (e) {
+          const kind = (e as { kind?: unknown } | null)?.kind;
+          answer = { kind: "unchecked", detail: typeof kind === "string" ? kind : "server" };
+        }
+        if (this.slot !== slot || this.stopped) return;
+        this.answered(slot, answer, this.now() - started);
+      }
+    } finally {
+      slot.forwarding = false;
+    }
+  }
+
+  /** The server's word on a forwarded payload. */
+  private answered(slot: Slot, answer: CourierAnswer<T>, ms: number): void {
+    const checking = this.phase.kind === "checking";
+    switch (answer.kind) {
+      case "ignored":
+        this.o.events.telemetry("connect_payload_ignored", { reason: "server", ms });
+        if (checking) this.setPhase(this.backPhase(slot));
+        return;
+      case "seen":
+        if (!this.seen) this.noticed(slot, true);
+        else if (checking) this.setPhase(this.backPhase(slot));
+        return;
+      case "reply":
+        slot.replied = true;
+        this.o.events.telemetry("connect_reply", { ms });
+        if (checking) this.setPhase(this.backPhase(slot));
+        return;
+      case "refused":
+        this.refused(slot, answer.reason, { ms });
+        // The server holds no such offer (past its life, or dropped): a fresh one, as an expired offer's.
+        if (answer.reason === "offer" && this.slot === slot) void this.start({ fresh: true });
+        return;
+      case "unchecked":
+        this.refused(slot, "unchecked", { kind: answer.detail, ms });
+        return;
+      case "connected": {
+        const link = this.taken(slot, answer.value, { ms_server: ms });
+        void this.confirmFromServer(link, answer.confirm);
+        return;
+      }
     }
   }
 
@@ -553,7 +695,7 @@ export class ConnectSession<T> {
   private async confirm(link: RelayLink | null, slot: Slot, grant: ConnectGrant): Promise<void> {
     const reply = slot.reply;
     const login = loginMessage(grant.login);
-    slot.keys.boxSecret.fill(0);
+    slot.keys.boxSecret?.fill(0);
     if (!link) {
       this.o.events.telemetry("connect_confirm", { outcome: "no_link" });
       return;
@@ -563,10 +705,30 @@ export class ConnectSession<T> {
       link.close();
       return;
     }
-    this.confirming = link;
     const confirm = encodeConfirm({ version: CONFIRM_VERSION, login, at: BigInt(this.now()) });
-    const payload = sealLinkPayload(reply.key, reply.sid, slot.keys.page, confirm);
-    const sid = b64url(reply.sid);
+    await this.deliver(link, reply.relay, reply.sid, sealLinkPayload(reply.key, reply.sid, slot.keys.page, confirm));
+  }
+
+  /** The server-held mode's confirmation (§15.3): sealed by the server, which held the reply and `Q`; the page
+   *  delivers it as its own. Without one, the slot just closes. */
+  private async confirmFromServer(link: RelayLink | null, confirm: { relay: Uint8Array; sid: Uint8Array; payload: Uint8Array } | null): Promise<void> {
+    if (!link) {
+      this.o.events.telemetry("connect_confirm", { outcome: "no_link" });
+      return;
+    }
+    if (!confirm) {
+      this.o.events.telemetry("connect_confirm", { outcome: "no_reply" });
+      link.close();
+      return;
+    }
+    await this.deliver(link, confirm.relay, confirm.sid, confirm.payload);
+  }
+
+  /** `link_deliver` on the slot's own connection, which a relay takes from a connection holding a slot (09-relay
+   *  §10.3 step 5), and the relay's word on it; then the connection closes. */
+  private async deliver(link: RelayLink, relay: Uint8Array, replySid: Uint8Array, payload: Uint8Array): Promise<void> {
+    this.confirming = link;
+    const sid = b64url(replySid);
     const delivered = await new Promise<boolean | null>((resolve) => {
       const timer = this.setT(() => resolve(null), CONFIRM_DELIVERED_MS);
       link.onFrame = (f) => {
@@ -579,7 +741,7 @@ export class ConnectSession<T> {
         this.clearT(timer);
         resolve(false);
       };
-      if (!link.send({ type: "link_deliver", relay: b64url(reply.relay), sid, payload: b64url(payload) })) {
+      if (!link.send({ type: "link_deliver", relay: b64url(relay), sid, payload: b64url(payload) })) {
         this.clearT(timer);
         resolve(false);
       }
@@ -596,7 +758,7 @@ export class ConnectSession<T> {
     this.o.events.phase(p);
   }
 
-  private fail(reason: "no_relay" | "refused" | "network"): void {
+  private fail(reason: FailKind): void {
     this.clearTimers();
     this.closeLink();
     this.forget();

@@ -8,9 +8,11 @@ transaction the visitor signs in Saltix.
 
 `@saltix/connect` (`packages/connect`) is the page's side: the session, the offer as a QR code and a link, the grant's
 checks (the account's key event log included), the connection kept for 30 days, the **Sign in with Saltix** button and
-its dialog. The site's own profile is signed once, offline, with `grain connect-profile`. This package's check of a grant
+its dialog. `@saltix/connect/server` is a server's side, for a site that keeps a session: the server makes the offer's
+keys and takes the login, the page is its courier ([§5, the two modes](#5-the-two-modes-the-pages-own-and-the-server-held)).
+The site's own profile is signed once, offline, with `grain connect-profile`. This package's check of a grant
 (`verifyGrant`, `checkGrant`, `checkAccount`, and when the node is asked again) is the reference: Saltix's explorer
-(`/explorer/me`), where it began, follows it rule for rule.
+(`/explorer/me`), where it began, follows it rule for rule, and the server runs the very same check.
 
 ## The flow, end to end
 
@@ -40,12 +42,14 @@ its dialog. The site's own profile is signed once, offline, with `grain connect-
    unchecked. Then the page keeps `{account, address, grant}` in this origin's `localStorage` for 30 days or until the
    visitor disconnects, **shows the connection at once** (`connected`), and **confirms it to the wallet** through the
    reply slot before its own slot closes, so Saltix says "Connected" on the page's word ([§6](#6-connection-feedback-the-page-shows-and-confirms)).
+   In the server-held mode ([§5](#5-the-two-modes-the-pages-own-and-the-server-held)) the site's server made the keys,
+   does this check, opens its own session and seals the confirmation; the page forwards and renders.
 7. **The page reads public data** through a node (`account_get`, `account_history`, `book_links`…) with that account
    first, and asks Saltix to sign every action ([19-connect §7](protocol/connect.md#7-actions)): the page never signs.
 
 Anyone who saw the QR code could deliver a grant of their own account to the slot: the page always shows which account
-it now shows. The grant proves the account to one page session, for display; it is never a server's login
-([below](#5-a-grant-is-for-display-never-a-servers-login)).
+it now shows. A grant the page opened proves the account to one page session, for display; a server's login is the
+server-held mode ([below](#5-the-two-modes-the-pages-own-and-the-server-held)).
 
 ## 1. The site's profile
 
@@ -200,29 +204,105 @@ location = /saltix/r/1/ {
 - Telemetry (`telemetry: (event, meta) => …`) names events and numbers (`connect_open`, `connect_seen`,
   `connect_grant`, `connect_refused` with its reason), never a key, a slot, an account or an address.
 
-## 5. A grant is for display, never a server's login
+## 5. The two modes: the page's own, and the server-held
 
-The grant shows the page which account its visitor holds; that is all it is for. Use it to show the account and its
-public data, and ask Saltix to sign every action ([19-connect §7](protocol/connect.md#7-actions)).
+Saltix Connect signs a visitor in two ways, with the same offer, the same sheet in Saltix and the same bytes (Saltix
+19-connect §15: no format changed, the vectors hold, and every Saltix released signs into both):
 
-- **It is a bearer artefact.** Whoever holds its bytes holds everything it proves: any script of the origin (it sits in
-  `localStorage`), a browser extension, any server or log the page sent it to, and the other end of a QR code someone
-  relayed. It names the page's own session key and slot, not a challenge of any server, so a server cannot tell the
-  visitor from someone who copied it, within its 10 minutes or after them.
-- **So a server never takes it as a login**: never exchanges it for a session or a token, never lets it stand for the
-  visitor, and never acts for the account because of it. A server that did would sign in whoever copied the grant.
-  `Connection.grant` is kept for the page to show which key signed, nothing more.
-- **A server's own login needs its own design**, which Saltix Connect does not have yet: the server gives a fresh
-  random nonce, bound to its origin and spent once; the wallet signs that nonce with a key of the account; the server
-  checks the signature and the account's key event log itself, within a short window, before it opens a session. A
-  mini-app's server has exactly that already: `grain.signIn` and `SignIns` ([12-grains §5.1](protocol/grains.md#51-identity): a challenge the server gives
-  and spends once). A website's server waits for the same in Connect's spec; until then it keeps no session by a grant.
+| | The page's own mode (§2–§5) | The server-held mode (§15) |
+|---|---|---|
+| Who makes the keys | the page (`makeKeys`) | the site's server (`createServerConnect`), which keeps `Q`'s secret |
+| Who opens and checks the login | the page (`verifyGrant`) | the server — the same `verifyGrant`, in §15.2's order |
+| What the page holds | `Q`'s secret for the slot's life; the connection for 30 days (`localStorage`) | nothing secret, nothing kept: it forwards every payload sealed, as it came, and asks its server who is signed in |
+| The session | the page's: `connect.connection` | the server's: a cookie or a token it mints after every check |
+| What it is for | a page that shows the visitor's account and asks Saltix to sign every action: a DApp whose every action is a transaction | anything with a session: accounts, a shop, an admin page, a closed site, a DApp's back end, a mini-app's own website |
+| The API | `createConnect({ node, name, … })` | `createConnect({ server: { offer, login } })` and `@saltix/connect/server` |
+
+**In the page's own mode the grant is for display only.** It is a bearer artefact: whoever holds its bytes (any script
+of the origin — it sits in `localStorage` —, a browser extension, any server or log the page sent it to, the other
+end of a relayed QR code) holds all it proves, and it names the page's own session key and slot, not a challenge of
+any server, so a server cannot tell the visitor from someone who copied it, within its 10 minutes or after them. So
+**a server never takes a page's grant as a login**: never exchanges it for a session or a token, never lets it stand
+for the visitor, never acts for the account because of it. `Connection.grant` is kept for the page to show which key
+signed, nothing more.
+
+**The server-held mode is a server's login**, built from the same pieces: the server gives the page a fresh `sid`,
+the single-use nonce of the server's own, with `Q`'s and `P`'s public keys; the wallet signs a login naming the page's
+origin, that `sid` and `P` with a key of the account; the server checks the signature and the account's key event log
+itself, within the login's 10 minutes, and spends `sid` in the same step that opens the session. The page is a courier:
+
+1. **The server** (`@saltix/connect/server`, Node 20 and later) makes and keeps the keys of each offer for 30
+   minutes, bounded in number (10 000, the oldest dropped first):
+
+   ```js
+   import { createServerConnect } from "@saltix/connect/server";
+   const connect = createServerConnect({
+     node: "http://127.0.0.1:30334",      // a node of your own, or a relay's gateway through a pinned proxy (§3)
+     network: "devnet", genesis: "<the network's genesis hash>",
+     origin: "https://shop.example",       // the page's origin: the login is held to it
+     name: "Example shop",
+   });
+   // POST /connect/offer  → answer JSON.stringify(await connect.offer())            {sid, boxKey, page, origin, name}
+   // POST /connect/login  → const taken = await connect.take(body, admit);          body: {sid, payload} as the page sent them
+   //                        if (taken.outcome === "connected") mint your session for taken.connection (a cookie: HttpOnly,
+   //                        SameSite=Lax, Secure), then answer JSON.stringify(taken) — with your own fields beside, if any
+   ```
+
+   `take` answers the server's word on each payload, which the page is answered with as it is: `ignored` (it did not
+   open or decode: anyone who saw the QR code can deliver to the slot), `seen` (the wallet's notice), `reply` (the
+   wallet's reply, kept), `refused` with its reason (a grant's reasons — `origin`, `time`, `signature`,
+   `not_a_device`… —, `offer` for an offer the server does not hold or holds no more, `spent` for one whose grant was
+   taken, or the site's own from `admit`), `unchecked` (the node could not answer: not a refusal, and never a session),
+   or `connected`: `connection` (the account's public facts: `network`, `account`, `address`, `signer`, `managed`,
+   `since` — never the grant's bytes) and `confirm` (the confirmation sealed for the page to deliver, or null). The
+   checks run in §15.2's order and stop at the first that fails; a refusal spends nothing, so the person the code was
+   shown to may still sign in. `admit(connection)` is the site's own rule after the protocol's — an allow-list, a time
+   window, a role — answering null or a reason; `confirm(sid)` seals the confirmation again for a server that answers in
+   two steps; `drop(sid)` ends an offer early.
+
+2. **The page** (`createConnect({ server })`) asks the server for the offer, opens the slot at a relay as any page
+   does ([§3](#3-the-relay-and-the-node-paths-of-your-own-site)), shows the code, forwards every payload the slot
+   receives to the server sealed, opens nothing, and renders what the server answered; the button and the dialog are
+   the same:
+
+   ```js
+   const connect = createConnect({
+     network: "devnet", relays: ["/saltix/r/1/", "/saltix/r/2/"],
+     server: { offer: "/connect/offer", login: "/connect/login" },   // no node, no name: the offer is the server's
+   });
+   connect.on("connected", (c) => location.assign(c.answer?.next ?? "/"));   // the server's cookie is set by then
+   ```
+
+   `connected` carries the account's facts and, in `answer`, whatever the server answered beside (where to go, a
+   name); `connect.connection` is null (the session is the server's: ask it, as the example's `/me`); `refused` says
+   the server's reason, `unchecked` when the server could not be reached or could not check; `failed {reason:
+   "server"}` when the server gave no offer, or one for another origin. A server with another transport brings a
+   `Courier` of its own in place of the two paths.
+
+3. **The confirmation** stays the page's duty: the server, which held the wallet's reply and `Q`, seals
+   `ConnectConfirm` to the reply's key and hands the page the bytes with the session; the page delivers them on its
+   own slot connection and closes the slot, so Saltix says **Connected** on the server's word, carried by the page.
+
+**The reference server.** `packages/connect/example` ([its README](../packages/connect/example/README.md), `npm run
+example:connect`) is a whole site on Node's own `http` module: the two routes, a session cookie minted after the
+checks, `/me`, sign-out, an allow-list, the `Origin` check on every `POST`, the limits (a body of 16 KiB, 10 offers a
+minute a client), a journal of names and numbers. Copy it.
+
+**Never a hosted check as the only way.** A site that trusts a login server of someone else's is signed in by whoever
+runs that server, and that server stands in every site's critical path. The check is a library any site runs, against
+a node the site chooses; a hosted convenience may come later beside it, never instead of it.
+
+**What a site must never do** (19-connect §15.5): take a page-held grant as a login; hand the page a secret (`Q`'s
+secret, a reply's key, a session's token before the checks); open a session on less than every check (a signature
+alone proves a key, not an account; a node of another network or genesis proves nothing; an unchecked grant is not a
+refusal and not a login); reuse an offer, keep one past its life, or make one whose origin is not the page's own; keep
+or log the login's bytes, the account or the address beyond what serving the person needs.
 
 ## 6. Connection feedback: the page shows and confirms
 
 The owner's rule (2026-10-21, Saltix 19-connect [§14](protocol/connect.md#14-connection-feedback)): the reference
-standard for every site, mini-app and developer. The standard client does the page's part; a page built on it has only
-to render what the client tells it.
+standard for every site, mini-app and developer. The standard client does the page's part, in both modes; a page built
+on it has only to render what the client tells it.
 
 **The checklist**, which `grain lint` cannot run for a site, so run it yourself:
 
@@ -247,7 +327,8 @@ to render what the client tells it.
 4. **A page unloaded on the way comes back to its slot.** Should the browser unload the page anyway (a browser that
    navigates on the link, a tab discarded in the background) and load it again within the slot's life, the client
    opens the **same slot with the same keys** (kept in `sessionStorage`: the slot id, `Q`'s secret and `P`'s public
-   key, never a private key of the page; forgotten once connected, on New code, or past 30 minutes), so the wallet's
+   key, never a private key of the page; in the server-held mode the public keys alone, the server having given the
+   page no secret; forgotten once connected, on New code, or past 30 minutes), so the wallet's
    delivery, tried again every 2.5 s for 30 s, still lands: a relay **parks** a slot whose connection closed for the
    rest of its half hour, holds what the wallet delivers to it meanwhile, and hands it over the moment the page opens
    the slot again (09-relay §10.3 step 6a; the client takes what comes right after `link_opened`). While the page is
@@ -257,7 +338,8 @@ to render what the client tells it.
    `connect_resume_failed {kind}`.
 5. **The confirmation is the client's.** When the grant checks, the client sends the wallet's reply slot a
    `ConnectConfirm` sealed to the wallet's key (the reply the wallet delivered right before the grant names the slot,
-   the key and the login), waits up to 5 seconds for the relay's `link_delivered`, and closes its slot. Saltix shows
+   the key and the login; in the server-held mode the server seals it and the client delivers it), waits up to 5
+   seconds for the relay's `link_delivered`, and closes its slot. Saltix shows
    "Connected" on that confirmation alone; without it (an older page, a refused grant, a frozen tab) it says, after 10
    seconds, that the login was sent and the page has not confirmed. Telemetry: `connect_reply` (the wallet named its
    slot), `connect_confirm` with `outcome` `delivered`, `not_delivered`, `no_answer`, `no_reply` (an older wallet),
@@ -277,6 +359,7 @@ to render what the client tells it.
 | A login's time | within 10 minutes of the page's clock |
 | A connection kept | 30 days, or until the visitor disconnects |
 | An offer shown | 2 minutes unseen, then a new slot and new keys; the slot is kept open every minute, 30 minutes in all |
+| An offer at a server (the server-held mode) | 30 minutes from its making, then dropped with its keys; one grant per offer (`sid` spent with it); 10 000 offers kept at most, the oldest dropped first |
 | An offer's name | 1–40 bytes; its origin at most 128 bytes |
 | A site's profile | at `/.well-known/saltix-connect`, at most 64 KiB, read within 5 seconds, kept a day by a wallet |
 | The wallet's delivery | tried again every 2.5 seconds while the relay finds no slot, 30 seconds in all; the page's confirmation waited for 10 seconds after |

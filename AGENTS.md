@@ -227,9 +227,12 @@ sign their users in: [docs/connect.md](docs/connect.md) (`@saltix/connect`). **A
 the client's `connected` event the moment it fires, in the same tab, and the client confirms the login to the wallet**
 (19-connect §14, the owner's reference standard, 2026-10-21): a page that still shows its QR code after `connected`, or
 whose Open Saltix link unloads the page (a new tab, or the https link navigated in an Android tab: use `offer.app`),
-is wrong; the checklist is [docs/connect.md §6](docs/connect.md#6-connection-feedback-the-page-shows-and-confirms). A Connect grant is for display only: a
-bearer artefact that answers no server's challenge, so a server never takes it as a login
-([docs/connect.md](docs/connect.md#5-a-grant-is-for-display-never-a-servers-login)).
+is wrong; the checklist is [docs/connect.md §6](docs/connect.md#6-connection-feedback-the-page-shows-and-confirms). A Connect grant a page opened is for display only: a
+bearer artefact that answers no server's challenge, so a server never takes it as a login. A site with a session of its
+own signs its visitors in by the **server-held mode** (19-connect §15): the server makes the offer's keys and checks the
+login itself with `@saltix/connect/server` (`createServerConnect`: `offer`, `take`, the offer spent once), the page is
+its courier (`createConnect({server})`), and `packages/connect/example` is a whole site to copy; never a hosted check
+as the only way ([docs/connect.md §5](docs/connect.md#5-the-two-modes-the-pages-own-and-the-server-held)).
 
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).

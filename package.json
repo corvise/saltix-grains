@@ -15,7 +15,8 @@
     "test": "npm run build && npm test --workspaces",
     "dev": "npm run build && node scripts/dev.mjs",
     "example": "npm run build --workspace packages/server && node examples/hello-grain/server.mjs",
-    "support-agent": "npm run build --workspace packages/server && node examples/support-agent/server.mjs"
+    "support-agent": "npm run build --workspace packages/server && node examples/support-agent/server.mjs",
+    "example:connect": "npm run build && node packages/connect/example/server.mjs"
   },
   "engines": {
     "node": ">=20"
