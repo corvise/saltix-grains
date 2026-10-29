@@ -52,7 +52,8 @@ Connect sheet shows before anyone signs in (Saltix 19-connect [§11](docs/protoc
 users: a link, an e-mail address, a username, or a Saltix address with its holder's consent; and a program can answer
 them in the app's chat, handing over to a person (**[Support for your app](docs/support.md)**, `grain support`,
 `examples/support-agent`). Websites and DApps sign their users in with the same standard:
-**[Sign in with Saltix](docs/connect.md)** (`@saltix/connect`).
+**[Sign in with Saltix](docs/connect.md)** (`@saltix/connect`): into the page, for display, or into a session the
+site's server holds (`@saltix/connect/server`) — never a hosted check as the only way.
 
 **Safe by default; full screen only with viewport-fit=cover and the insets**: Saltix lays an app's page inside the safe
 area, below its controls; a page that declares `viewport-fit=cover` is drawn edge to edge and pads by the variables
@@ -74,7 +75,7 @@ Saltix sets. Test at the Galaxy Z Fold's sizes in `grain dev` ([AGENTS.md](AGENT
 | [`docs/chats.md`](docs/chats.md) | grain chats: the spec, the server, registered and certified keys, private apps and members, the console and the team's hellos, the numbers an app reports, files, and what a wallet shows and refuses |
 | [`docs/payments.md`](docs/payments.md) | payments: invoices from a registered key (a paired one: to the app's owner) or a certified key, in a chat card or from a page, finding the payment on chain, and what a wallet refuses |
 | [`docs/support.md`](docs/support.md) | support for your app: the four forms of the support contact, `grain support`, a support address's consent, the support agent, what a user sees; and [what an agent with an address of its own still needs](docs/support-agent-address.md) |
-| [`docs/connect.md`](docs/connect.md) | Sign in with Saltix on a website or DApp: the site's Connect profile, the button, the QR code or the link, the Connect sheet, the grant checked, the relay path a page needs, and the two modes (the page's own, and the session a site's server holds) |
+| [`docs/connect.md`](docs/connect.md) | Sign in with Saltix on a website or DApp, three ways with one sheet: the site's Connect profile, the button, the QR code or the link, the Connect sheet, the grant checked and the relay path a page needs (the page's own sign-in); the server's sign-in for a site with a session (the server-held mode: the library, a worked example for a DApp's back end and one for a plain website, the test plan a site runs — the login taken once, a replay, a stale `at`, a wrong signature); never a hosted check as the only way |
 | [`docs/icons.md`](docs/icons.md) | an app's icon: the standard (512 × 512, opaque, sRGB, 64 KiB, the rounded-square mask, the keyline circle), what `grain icon` makes from any picture, its checks and preview, and how it goes into the network |
 | [`docs/cards.md`](docs/cards.md) | the card design standard: how every Saltix draws a card (the capsule, the action bar, emphasis, polls, states after a tap), what each block is for, do's and don'ts, and the lint |
 | [`docs/protocol/`](docs/protocol/README.md) | the Saltix protocol as an app needs it, page by specification (12-grains, 22-grain-chats, 24-app-studio, 19-connect, relays, the wallet interface, the basics), each naming the protocol commit it reflects: the formats, the bridge, what wallets check and refuse |

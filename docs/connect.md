@@ -6,6 +6,16 @@ account its visitor holds, proven by that account's key on the visitor's phone. 
 connecting grants the page nothing: everything it then shows is public on the chain, and every action stays a
 transaction the visitor signs in Saltix.
 
+**Three ways, one sheet.** A mini-app inside Saltix signs in through its Connect sheet
+([docs/agents/app.md](agents/app.md#the-connect-profile-connectjson)); a website or a DApp signs a visitor into its
+*page* ([§2–§4](#2-the-button-and-the-dialog): the page shows the account, for display, and asks Saltix to sign every
+action); and a site with a *session* — accounts, a shop, an admin page, a DApp's back end, a mini-app's own website —
+signs people in at its *server*, the third way ([§5](#5-the-two-modes-the-pages-own-and-the-server-held): the server's
+sign-in with this library, the page its courier; [§5.1](#51-a-worked-example-a-dapps-back-end-node) and
+[§5.2](#52-a-worked-example-a-plain-website) are worked examples, [§5.3](#53-the-test-plan-a-site-runs) the test plan a
+site runs before it goes live). Never a hosted check as the only way: the check is a library any site runs, against a
+node it chooses.
+
 `@saltix/connect` (`packages/connect`) is the page's side: the session, the offer as a QR code and a link, the grant's
 checks (the account's key event log included), the connection kept for 30 days, the **Sign in with Saltix** button and
 its dialog. `@saltix/connect/server` is a server's side, for a site that keeps a session: the server makes the offer's
@@ -297,6 +307,167 @@ secret, a reply's key, a session's token before the checks); open a session on l
 alone proves a key, not an account; a node of another network or genesis proves nothing; an unchecked grant is not a
 refusal and not a login); reuse an offer, keep one past its life, or make one whose origin is not the page's own; keep
 or log the login's bytes, the account or the address beyond what serving the person needs.
+
+### 5.1. A worked example: a DApp's back end (Node)
+
+A DEX whose swaps are transactions the person signs in Saltix needs no session for the swaps. Its back end keeps what is
+not on the chain — each account's watch-list, its order drafts, its notification settings — and that is what it signs
+people in for: the server-held mode, a session of its own, the page a courier. On Node's own `http` module, in the
+shape of `packages/connect/example/server.mjs` (the whole, tested site; Express or Fastify change only the plumbing);
+`json`, `body` and `cookieOf` are three small helpers as the example's — a JSON answer with `no-store`, a JSON body of
+at most 16 KiB, a cookie's value by name:
+
+```js
+import { randomBytes } from "node:crypto";
+import { createServer } from "node:http";
+import { createServerConnect } from "@saltix/connect/server";
+
+const ORIGIN = "https://dex.example";                 // the page's origin as a browser serializes it: the login is held to it
+const connect = createServerConnect({
+  node: "http://127.0.0.1:30334",                      // a node of your own (§3), or a relay's gateway through your pinned proxy
+  network: "devnet", genesis: process.env.SALTIX_GENESIS,
+  origin: ORIGIN, name: "Example DEX",
+  telemetry: (event, meta) => console.log(JSON.stringify({ event, ...meta })),   // outcomes, reasons and timings; never an address
+});
+const SESSION_MS = 30 * 24 * 3600_000;
+const sessions = new Map();     // token → the account's public facts and the session's end; a table in production
+const watchlists = new Map();   // account → what this back end keeps for it: nothing the chain holds
+
+createServer(async (req, res) => {
+  const route = `${req.method} ${new URL(req.url, ORIGIN).pathname}`;
+  if (req.method === "POST" && req.headers.origin !== ORIGIN) return json(res, 403, { error: "origin" });   // a POST is this page's own
+  if (route === "POST /connect/offer") return json(res, 200, await connect.offer());
+  if (route === "POST /connect/login") {
+    const { sid, payload } = await body(req);
+    const taken = await connect.take({ sid: String(sid ?? ""), payload: String(payload ?? "") });   // §15.2, the offer spent with the grant
+    if (taken.outcome !== "connected") return json(res, 200, taken);   // seen, reply, refused {reason} or unchecked: no cookie
+    const token = randomBytes(32).toString("base64url");               // minted here, after every check, from nothing the page sent
+    sessions.set(token, { ...taken.connection, expires: Date.now() + SESSION_MS });
+    return json(res, 200, { ...taken, next: "/" }, { "set-cookie": `dex_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MS / 1000}` });
+  }
+  const session = sessions.get(cookieOf(req, "dex_session"));
+  if (!session || session.expires <= Date.now()) return json(res, 401, { error: "signed_out" });   // every route below is the account's own
+  if (route === "GET /me") return json(res, 200, { address: session.address, since: session.since, until: session.expires });
+  if (route === "GET /watchlist") return json(res, 200, watchlists.get(session.account) ?? []);
+  if (route === "PUT /watchlist") { watchlists.set(session.account, await body(req)); return json(res, 200, { ok: true }); }
+  if (route === "POST /signout") { sessions.delete(cookieOf(req, "dex_session")); return json(res, 200, { ok: true }, { "set-cookie": "dex_session=; Path=/; Max-Age=0" }); }
+  json(res, 404, { error: "not_found" });
+}).listen(8091);
+```
+
+The page is the example's `page/app.js` as it is: `createConnect({ network, relays, server: { offer: "/connect/offer",
+login: "/connect/login" } })`, the button, the dialog, then `/me` and `/watchlist` with `credentials: "same-origin"`. A
+swap is still a transaction the person signs in Saltix ([19-connect §7](protocol/connect.md#7-actions)): nothing in this
+back end signs, and the session never stands for the account on the chain — it ties the back end's own data to the
+account that signed in. `admit` is where a DApp's rule goes when it has one (a role, a list); without it anyone whose
+login passes the protocol's checks gets a session, which is right for a DEX.
+
+### 5.2. A worked example: a plain website
+
+A site of pages — a club's, a newsletter's, a company's — with a members' area and no application code keeps the sign-in
+in one small process beside the web server and lets the web server ask it on every request: nginx's `auth_request`. The
+members' pages stay files.
+
+The sidecar (Node, the same library) answers four routes: the two of the sign-in, `/session/check` (204 with a live
+session, 401 without — nothing else, never who) and `/signout`. It is §5.1's server without the data routes, with
+the members' list as `admit`, as the example's `SITE_ALLOW` is, and with `next` read from a cookie the web server set,
+held to a path of this site:
+
+```js
+const members = new Set(readFileSync("members.txt", "utf8").split("\n").filter(Boolean));   // addresses, one a line
+const admit = (c) => (members.has(c.address) ? null : "not_listed");                           // §15.2 step 6: after the protocol's checks
+const nextOf = (req) => { const n = cookieOf(req, "next") ?? "/"; return /^\/(?!\/)\S*$/.test(n) ? n : "/"; };   // this site's, never another host
+…
+const taken = await connect.take({ sid: String(sid ?? ""), payload: String(payload ?? "") }, admit);
+…
+return json(res, 200, { ...taken, next: nextOf(req) }, { "set-cookie": … });
+…
+if (route === "GET /session/check") { res.writeHead(session ? 204 : 401, { "cache-control": "no-store" }); return res.end(); }
+```
+
+The web server asks the sidecar before every members' page; a visitor without a session goes to the sign-in page,
+remembering where they were going:
+
+```nginx
+location /members/ {
+    auth_request /_session;
+    error_page 401 = @signin;
+    add_header Cache-Control "private, no-store" always;
+}
+location = /_session {
+    internal;
+    proxy_pass http://127.0.0.1:8091/session/check;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Cookie $http_cookie;
+}
+location @signin {
+    add_header Set-Cookie "next=$request_uri; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax" always;
+    return 302 /signin/;
+}
+location = /connect/offer { proxy_pass http://127.0.0.1:8091; }
+location = /connect/login { proxy_pass http://127.0.0.1:8091; }
+location = /saltix/r/1/   { … }   # the relay path of §3, pinned
+```
+
+The sign-in page at `/signin/` is the example's `page/` with one line more: on `connected` it goes where the sidecar
+said — `connect.on("connected", (c) => location.assign(c.answer?.next ?? "/"))` — and nothing in the members' pages
+knows about Saltix. What to keep: `/session/check` answers the web server alone (`internal`) and says nothing but yes or
+no; `next` is a path of this site; the list is edited by people who know the addresses — a sign-in proves the account,
+the list says who may enter; the session cookie's flags and the `Origin` check are the example's.
+
+### 5.3. The test plan a site runs
+
+Before a site goes live, its sign-in is run through the cases below against its own routes. The library's tests
+(`packages/connect/test/server.test.mjs` against the library, `example.test.mjs` against the example's routes) do the
+same and are the place to copy from. A login for the test comes from a key the test holds, never a wallet's, and the
+node is one the test plays: `node_status` with the site's network and genesis, `account_log` with an empty log (a
+plain account, whose own key signs). Everything needed is exported by `@saltix/connect` and `@saltix/grain-server/web`:
+
+```js
+import { ed25519 } from "@noble/curves/ed25519";
+import { accountId, fromHex, toHex } from "@saltix/grain-server/web";
+import { b64url, encodeGrant, encodeSeen, fromB64url, loginMessage, sealLinkPayload } from "@saltix/connect";
+
+const SECRET = new Uint8Array(32).fill(0x44), KEY = ed25519.getPublicKey(SECRET);   // the test's account, never a real key
+const node = {   // what the site's server is pointed at for the test (`node` takes an object that answers calls)
+  call: async (method, params) =>
+    method === "node_status" ? { network: "devnet", genesis: GENESIS, accounts: { policy: { delay: 600, dispute_timeout: 3600 } } }
+    : method === "account_log" ? { account: params.address, events: [] }
+    : null,
+};
+/** The test account's login for `offer` (as `POST /connect/offer` answered it) at `at`, `change` on it, sealed to the offer. */
+function loginFor(offer, at, change = {}, secret = SECRET) {
+  const sid = fromB64url(offer.sid), page = fromB64url(offer.page);
+  const login = { network: fromHex(GENESIS, 32), account: accountId(KEY), origin: offer.origin, sid, page, at: BigInt(at), ...change };
+  const grant = encodeGrant({ version: 1, login, signer: { ed25519: toHex(KEY) }, signature: ed25519.sign(loginMessage(login), secret) });
+  return { sid: offer.sid, payload: b64url(sealLinkPayload(fromB64url(offer.boxKey), sid, page, grant)) };
+}
+```
+
+Each case is one `POST /connect/login` with the page's `Origin`, read for its `outcome` and its `Set-Cookie`:
+
+| Case | What is sent | What the site must answer |
+|---|---|---|
+| The login taken once | `loginFor(offer, now)` | `connected`, `connection.address` the test account's, the session cookie set (`HttpOnly`, `SameSite`, `Secure` on https), `/me` answering with it |
+| A replay | the same payload again | `refused {reason: "spent"}`, no cookie; the same for a fresh `loginFor(offer, now)`, and for a `seen` (`encodeSeen(1n)` sealed to the offer) after the grant |
+| A stale `at` | `loginFor(offer, now - 10 * 60_000 - 1)`, and `now + 10 * 60_000 + 1` | `refused {reason: "time"}`, no cookie — and the offer still live: `loginFor(offer, now)` after it is `connected` |
+| A wrong signature | `loginFor(offer, now, {}, anotherSecret)` | `refused {reason: "signature"}`, the offer still live |
+| Another origin | `loginFor(offer, now, { origin: "https://evil.example" })` | `refused {reason: "origin"}` |
+| Another slot or key | `sid` or `page` of a second offer in `change` | `refused {reason: "slot"}`, `"page"` |
+| Another network | `{ network: new Uint8Array(32).fill(0x66) }` | `refused {reason: "network"}` |
+| An offer the server never made | a random `sid` with a payload sealed to the offer | `refused {reason: "offer"}` |
+| Not this offer's, junk, too long | a payload sealed to a second offer's keys; 80 zero bytes; 8 KiB and a byte | `ignored`, no cookie |
+| The node down | `account_log` throws (`NodeUnreachable`) | `unchecked {kind}`, no cookie; the same payload once the node answers: `connected` |
+| The site's own rule | an address not on the list | `refused` with the site's reason (`not_listed`), no cookie, the offer still live |
+| Not the page's request | no `Origin`, or another one | `403` before anything is read |
+| The session's end | the clock past `until`; `/signout` | `/me` answers `401` |
+
+Then the journal: no line names the address or a 64-hex account id (the tests search every line for the address and
+for `/[0-9a-f]{64}/`). A refusal never spends the offer and `unchecked` never opens a session: a site whose routes pass
+`take`'s answer through as it is gets both from the library; one that reshapes the answer proves it here. The vectors'
+grants (`vectors/connect-v1.json`) go through the server's path in the library's own test; a server that calls `take`
+inherits that.
 
 ## 6. Connection feedback: the page shows and confirms
 

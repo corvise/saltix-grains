@@ -4,8 +4,8 @@
 > with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `a6d0de6b` (2026-10-21); the pool
 > vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22); the profile's format 2, a
 > support address with its holder's consent (protocol version 9, 2026-10-28), as of corvise/saltix `6671fabb`
-> (2026-10-28); a server's login (§15, 2026-10-29), written from the analysis at corvise/saltix `70fdda58`
-> (2026-10-29), the amendment's own commit named here when it lands. Section numbers are the specification's.
+> (2026-10-28); a server's login (§15, 2026-10-29) as of corvise/saltix `78618ec4` (2026-10-29), the amendment that
+> wrote it. Section numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
@@ -501,8 +501,9 @@ signs into a server that follows this section.
 
 ### 15.1. The mode
 
-1. **The server makes the session** of §2 and keeps it: `sid`, `Q` (its secret kept) and `P` (nothing signs with it),
-   with the origin it serves this page at and the moment it was made, for the offer's life (§15.4), bounded in number.
+1. **The server makes the session** of §2 and keeps it: `sid` (32 random bytes), `Q` (an X25519 key pair, its secret
+   kept) and `P` (an Ed25519 key pair, as a page makes one; nothing signs with it), with the origin it serves this page
+   at and the moment it was made, for the offer's life (§15.4), bounded in number.
    It hands the page only `sid`, `Q`'s public key and `P`'s public key: **the page holds no secret**, and a page
    unloaded and loaded again (§14.1) keeps in its `sessionStorage` nothing a server did not already give it.
 2. **The page opens the slot** at a relay with that `sid`, shows the offer of §3 — the relay's node key, `sid`, `Q`,
@@ -531,8 +532,9 @@ A grant opens a session only when every check holds, in this order; the server s
    `s`.
 5. **The signer is the account's** (§5 rule 5): the account's key event log from a node of the server's network
    (`node_status` first — its genesis the server's, its first account policy the one the log is replayed under; then
-   `account_log`), checked offline as a page does. A node that cannot answer leaves the grant **unchecked**, which is
-   not a refusal: the server asks another node, or tells the page to have the login approved again; it never opens a
+   `account_log`), checked offline as a page does: an empty log and the account's own Ed25519 key, or a current device
+   of the controller the log replays, never a guardian, never the kind 0 key of an account that upgraded. A node that
+   cannot answer leaves the grant **unchecked**, which is not a refusal: the server asks another node, or tells the page to have the login approved again; it never opens a
    session on a signature alone.
 6. **The site's own rules** come after the protocol's — an allow-list, a time window, a role — and are the site's
    business.
@@ -546,7 +548,8 @@ The page's confirmation to the wallet (§14.2) stays the page's duty, with the s
 the grant is taken, the server finds the kept reply whose `login` is the grant's login message, seals
 `ConnectConfirm {version: 1, login, at}` to the reply's `K` with `aad = reply sid ‖ P`, and hands the sealed bytes and
 the reply's `relay` and `sid` to the page with the session; the page delivers them on its own slot connection
-(`link_deliver`), waits for `link_delivered` up to 5 seconds, and closes its slot. The wallet then says **Connected**
+(`link_deliver`, which the relay takes from a connection holding a slot), waits for `link_delivered` up to 5 seconds,
+and closes its slot. The wallet then says **Connected**
 (§14.3) on the server's word, carried by the page. Without a kept reply (an older wallet), or one for another login,
 the page just closes its slot and the wallet ends in *Login sent*, as before.
 

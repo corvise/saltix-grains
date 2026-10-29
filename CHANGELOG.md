@@ -37,6 +37,17 @@
     site's rule, the bound and the life of offers, two grants in flight, the vectors' grants, refusals, reply and
     confirmation through the server's path byte for byte), the client's mode end to end over a relay and a fetch the
     test plays (the state machine, the kept slot, the wire, the dialog), and the example's routes.
+  - **The guide's third way, with worked examples and a test plan**: [docs/connect.md](docs/connect.md) opens with the
+    three ways that share one sheet (a mini-app's, a page's, a server's), and §5 gains §5.1, a DApp's back end on Node
+    (the two routes, a session cookie minted after the checks, the back end's own data by account, the swaps still
+    signed in Saltix), §5.2, a plain website whose members' pages stay files (a sidecar with `/session/check`, nginx's
+    `auth_request`, the members' list as `admit`, `next` a path of the site), and §5.3, the test plan a site runs
+    against its own routes before it goes live (a login from a key the test holds and a node it plays: the login taken
+    once, a replay refused as `spent`, a stale `at` as `time`, a wrong signature, another origin, slot, key or network,
+    an unknown offer, junk ignored, the node down as `unchecked`, the site's rule, the `Origin` check, the session's
+    end, a journal without addresses). [docs/protocol/connect.md](docs/protocol/connect.md) §15 is held to the
+    amendment as merged (corvise/saltix `78618ec4`): the keys' kinds, the signer's rules of rule 5, the relay's side of
+    `link_deliver`; the protocol index, `AGENTS.md` (what a site needs, in order) and the README name the third way.
 
 - **Support for your app** (Saltix 19-connect §11.1, corvise/saltix #474, protocol version 9; [docs/support.md](docs/support.md)):
   an app's Connect profile names who answers its users, and the SDK holds every form to the network's rules.

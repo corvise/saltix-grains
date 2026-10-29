@@ -232,7 +232,14 @@ bearer artefact that answers no server's challenge, so a server never takes it a
 own signs its visitors in by the **server-held mode** (19-connect §15): the server makes the offer's keys and checks the
 login itself with `@saltix/connect/server` (`createServerConnect`: `offer`, `take`, the offer spent once), the page is
 its courier (`createConnect({server})`), and `packages/connect/example` is a whole site to copy; never a hosted check
-as the only way ([docs/connect.md §5](docs/connect.md#5-the-two-modes-the-pages-own-and-the-server-held)).
+as the only way ([docs/connect.md §5](docs/connect.md#5-the-two-modes-the-pages-own-and-the-server-held)). **What a
+site needs**, in order: its profile at `/.well-known/saltix-connect`, the button, a relay path of its own and a node
+([docs/connect.md §1–§3](docs/connect.md#1-the-sites-profile)); with a session, the two routes of the server's sign-in —
+a DApp's back end ([§5.1](docs/connect.md#51-a-worked-example-a-dapps-back-end-node)) or a plain website behind
+`auth_request` ([§5.2](docs/connect.md#52-a-worked-example-a-plain-website)) — and its test plan run against its own
+routes before it goes live ([§5.3](docs/connect.md#53-the-test-plan-a-site-runs)): the login taken once, a replay
+refused as `spent`, a stale `at` as `time`, a wrong signature as `signature`, none of them spending the offer, and no
+session on `unchecked`.
 
 A chat-only app has no page: Saltix draws its home from the chat spec. Its server reaches the team in the app's console
 without anyone writing first, because the team's wallets say hello (docs/chats.md).
