@@ -4,11 +4,11 @@
 
 ### Added
 
-- **The code changes by itself, at the page's pace** (Saltix 19-connect §15.4 and §10 as amended on 2026-10-29, the
-  owner's decision: a code shown for a minute, then a new one on its own, with nothing to press; `@saltix/connect`
-  0.2.0, no format change): `createConnect({…, qrLifeMs})` sets how long a code nobody scanned is shown before a new
-  slot and new keys replace it — 2 minutes by default, 30 seconds to 10 minutes, at most 3 in the server-held mode, and
-  anything else refused when the client is made (`qrLifeOf`, `QR_LIFE_MIN_MS`, `QR_LIFE_MAX_MS`,
+- **The code changes by itself, at the page's pace** (Saltix 19-connect §15.4 and §10 as amended on 2026-10-29 by
+  corvise/saltix #498, the owner's decision: a code shown for a minute, then a new one on its own, with nothing to
+  press; `@saltix/connect` 0.2.0, no format change): `createConnect({…, qrLifeMs})` sets how long a code nobody scanned
+  is shown before a new slot and new keys replace it — 2 minutes by default, 30 seconds to 10 minutes, at most 3 in the
+  server-held mode, and anything else refused when the client is made (`qrLifeOf`, `QR_LIFE_MIN_MS`, `QR_LIFE_MAX_MS`,
   `SERVER_QR_LIFE_MAX_MS`); never once the wallet read the code or the visitor took it to Saltix, and only while the
   page is in front, with `wake()` now replacing at once a code that ran out while the page was hidden.
   `@saltix/connect/server` keeps an offer 5 minutes (`OFFER_LIFE_MS`, `SERVER_OFFER_LIFE_MS`; first the slot's 30), so a

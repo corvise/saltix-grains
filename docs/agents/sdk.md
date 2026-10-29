@@ -120,8 +120,8 @@ Tests import `dist/`: build the package before running its tests by path, and ag
 
 What the SDK decided, and why, where a choice was made; the newest first. A change that goes against one says so here.
 
-- **2026-10-29, the code changes by itself** (Saltix 19-connect §15.4 and §10 as amended that day, the owner's
-  decision: a QR code shown for a minute, then changed on its own, with no *New code* to press):
+- **2026-10-29, the code changes by itself** (Saltix 19-connect §15.4 and §10 as amended that day, corvise/saltix #498;
+  the owner's decision: a QR code shown for a minute, then changed on its own, with no *New code* to press):
   - **The page gives its code a life, `qrLifeMs`**: 2 minutes by default, 30 seconds to 10 minutes, and 3 at most in the
     server-held mode, refused with a `TypeError` when the client is made (`qrLifeOf`, one rule for the client and the
     session). Rejected: clamping a value out of bounds (the site would not learn that its setting is not in force);

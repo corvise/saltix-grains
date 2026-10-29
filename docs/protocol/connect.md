@@ -5,8 +5,8 @@
 > vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22); the profile's format 2, a
 > support address with its holder's consent (protocol version 9, 2026-10-28), as of corvise/saltix `6671fabb`
 > (2026-10-28); a server's login (§15, 2026-10-29) as of corvise/saltix `78618ec4` (2026-10-29), the amendment that
-> wrote it, and its offer's 5 minutes (§15.4, §10) as the amendment of the same day sets them. Section numbers are the
-> specification's.
+> wrote it, and its offer's 5 minutes (§15.4, §10) as corvise/saltix #498, the amendment of the same day, sets them.
+> Section numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
