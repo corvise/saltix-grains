@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BUTTON_CLASSES, DIALOG_CLASSES, MARK_PATH, WORDS, openConnectDialog, signInButton } from "../dist/index.js";
+import { BUTTON_CLASSES, DIALOG_CLASSES, MARK_PATH, WORDS, codeCountdown, openConnectDialog, signInButton } from "../dist/index.js";
 import { FakeDocument, flush } from "./helpers.mjs";
 
 const css = readFileSync(new URL("../dist/connect.css", import.meta.url), "utf8");
@@ -70,6 +70,10 @@ test("the words are the standard's, in English and Russian", () => {
   assert.equal(WORDS.en.title, "Saltix Connect");
   assert.equal(WORDS.en.scan, "Scan with Saltix to sign in");
   assert.equal(WORDS.en.open, "Open Saltix");
+  // The code changes by itself: a countdown, and no words for a button that asks for a new one.
+  assert.equal(WORDS.en.changesIn, "The code changes in {time}");
+  assert.equal(WORDS.ru.changesIn, "Код обновится через {time}");
+  assert.equal(WORDS.en.newCode, undefined);
   assert.deepEqual(Object.keys(WORDS.ru).sort(), Object.keys(WORDS.en).sort());
 });
 
@@ -99,18 +103,50 @@ function fakeConnect(offer) {
   };
 }
 
+const NOW = 1_800_000_000_000;
 const OFFER = {
   text: "saltix-connect:1:x",
   link: "https://saltix.io/connect#saltix-connect:1:x",
   app: "intent:1:x#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=https%3A%2F%2Fsaltix.io%2Fconnect%23saltix-connect%3A1%3Ax;end",
   qr: { size: 33, path: "M4 4h7v1h-7z", svg: "" },
-  expiresAt: 0,
+  expiresAt: NOW + 108_000,
 };
+
+/** The dialog's clock: the time the test sets, and the countdown's ticks run when the test moves it. */
+function dialogClock(now = NOW) {
+  const ticking = new Map();
+  let next = 1;
+  return {
+    now: () => now,
+    setInterval: (f) => {
+      ticking.set(next, f);
+      return next++;
+    },
+    clearInterval: (id) => ticking.delete(id),
+    advance(ms) {
+      now += ms;
+      for (const f of [...ticking.values()]) f();
+    },
+    get running() {
+      return ticking.size;
+    },
+  };
+}
+
+test("the countdown under the code: m:ss, rounded up, never below 0:00", () => {
+  assert.equal(codeCountdown(120_000, 12_000), "1:48");
+  assert.equal(codeCountdown(120_000, 0), "2:00");
+  assert.equal(codeCountdown(120_000, 119_001), "0:01");
+  assert.equal(codeCountdown(120_000, 120_000), "0:00");
+  assert.equal(codeCountdown(120_000, 130_000), "0:00");
+  assert.equal(codeCountdown(65_500, 0), "1:06");
+});
 
 test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix; it follows the session", async () => {
   const doc = new FakeDocument(true);
   const connect = fakeConnect(OFFER);
-  const result = openConnectDialog(connect, { document: doc });
+  const clock = dialogClock();
+  const result = openConnectDialog(connect, { document: doc, clock });
   await flush();
   const dialog = doc.body.children[0];
   assert.ok(dialog.classList.contains(DIALOG_CLASSES.dialog));
@@ -127,10 +163,26 @@ test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix
   assert.equal(open.getAttribute("target"), null, "never a new tab: the visitor would come back to a page still offering a consumed offer");
   open.click();
   assert.deepEqual(connect.calls, ["offer", "handOff"]);
+  // Under the code, when it changes by itself, ticking each second; no button asks for a new one.
+  const countdown = dialog.find(DIALOG_CLASSES.countdown);
+  assert.equal(countdown.hidden, false);
+  assert.equal(countdown.textContent, "The code changes in 1:48");
+  assert.equal(countdown.getAttribute("aria-hidden"), "true", "read by eye: a screen reader would speak every second");
+  clock.advance(1_000);
+  assert.equal(countdown.textContent, "The code changes in 1:47");
+  assert.equal(dialog.find(DIALOG_CLASSES.actions).hidden, true, "nothing to press while a code is shown");
+  for (const el of dialog.all()) assert.doesNotMatch(el.textValue, /New code|Новый код/);
+  // The session's next code (its own, at the old one's time) is drawn, and counted down afresh.
+  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:y", qr: { ...OFFER.qr, path: "M5 5h7v1h-7z" }, expiresAt: NOW + 1_000 + 120_000 });
+  assert.equal(dialog.find(DIALOG_CLASSES.qrDark).getAttribute("d"), "M5 5h7v1h-7z");
+  assert.equal(countdown.textContent, "The code changes in 2:00");
+  assert.equal(clock.running, 1, "one ticker, however many codes");
   const status = dialog.find(DIALOG_CLASSES.status);
   assert.equal(status.hidden, true);
   connect.fire("seen", OFFER);
   assert.equal(status.textContent, WORDS.en.seen);
+  assert.equal(countdown.hidden, true, "a code the wallet read stays: nothing to count down");
+  assert.equal(clock.running, 0);
   connect.fire("refused", { reason: "time" });
   assert.match(status.textContent, /\(time\)/);
   connect.fire("refused", { reason: "unchecked" });
@@ -140,30 +192,75 @@ test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix
   assert.equal(await result, connection);
   assert.equal(doc.body.children.length, 0, "the dialog is gone");
   assert.ok(!connect.calls.includes("cancel"), "a connected session is not cancelled");
+  assert.equal(clock.running, 0, "nothing ticks after it");
+});
+
+test("a refusal stays under its code — the session shows that code again right after — and goes with it", async () => {
+  const doc = new FakeDocument(false);
+  const connect = fakeConnect(OFFER);
+  const clock = dialogClock();
+  openConnectDialog(connect, { document: doc, clock });
+  await flush();
+  const dialog = doc.body.children[0];
+  const status = dialog.find(DIALOG_CLASSES.status);
+  connect.fire("checking", {});
+  assert.equal(status.textContent, WORDS.en.checking);
+  connect.fire("refused", { reason: "time" });
+  connect.fire("offer", OFFER);
+  assert.match(status.textContent, /\(time\)/, "the same code: the reason stays");
+  assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, false, "and its countdown goes on");
+  // Read again and refused again: the reason, not "continue", until a new check.
+  connect.fire("refused", { reason: "not_a_device" });
+  connect.fire("seen", OFFER);
+  assert.match(status.textContent, /\(not_a_device\)/);
+  connect.fire("checking", {});
+  assert.equal(status.textContent, WORDS.en.checking);
+  connect.fire("refused", { reason: "unchecked" });
+  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:z" });
+  assert.equal(status.hidden, true, "a new code: the old one's reason is gone");
+  dialog.find(DIALOG_CLASSES.close).click();
+  assert.equal(clock.running, 0);
 });
 
 test("the dialog on a computer has no Open Saltix; closing it cancels the session; a failure offers to try again", async () => {
   const doc = new FakeDocument(false);
   const connect = fakeConnect(OFFER);
-  const result = openConnectDialog(connect, { document: doc, lang: "ru", theme: "dark" });
+  const result = openConnectDialog(connect, { document: doc, lang: "ru", theme: "dark", clock: dialogClock() });
   await flush();
   const dialog = doc.body.children[0];
   assert.ok(dialog.classList.contains(DIALOG_CLASSES.dark));
   assert.equal(dialog.find(DIALOG_CLASSES.open).hidden, true);
   assert.equal(dialog.find(DIALOG_CLASSES.scan).textContent, WORDS.ru.scan);
+  assert.equal(dialog.find(DIALOG_CLASSES.actions).hidden, true);
   connect.fire("failed", { reason: "no_relay" });
   const action = dialog.find(DIALOG_CLASSES.action);
+  assert.equal(dialog.find(DIALOG_CLASSES.actions).hidden, false, "Try again only after a failure");
   assert.equal(action.textContent, WORDS.ru.retry);
   assert.equal(dialog.find(DIALOG_CLASSES.status).textContent, WORDS.ru.failed);
+  assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, true, "no code to wait for");
   action.click();
   assert.ok(connect.calls.includes("renew"));
+  assert.equal(dialog.find(DIALOG_CLASSES.actions).hidden, true);
+  connect.fire("offer", OFFER);
+  assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, false);
+  assert.equal(dialog.find(DIALOG_CLASSES.countdown).textContent, "Код обновится через 1:48");
   dialog.find(DIALOG_CLASSES.close).click();
   assert.equal(await result, null);
   assert.ok(connect.calls.includes("cancel"));
   assert.equal(doc.body.children.length, 0);
   // Escape closes it the same way.
-  const again = openConnectDialog(connect, { document: doc });
+  const again = openConnectDialog(connect, { document: doc, clock: dialogClock() });
   await flush();
   doc.body.children[0].dispatch("cancel");
   assert.equal(await again, null);
+  // Closed before the session gave its code: nothing is drawn, and no countdown is left ticking.
+  let give;
+  const slow = { ...fakeConnect(OFFER), offer: () => new Promise((ok) => (give = ok)) };
+  const clock = dialogClock();
+  const early = openConnectDialog(slow, { document: doc, clock });
+  doc.body.children[0].dispatch("cancel");
+  assert.equal(await early, null);
+  give(OFFER);
+  await flush();
+  assert.equal(clock.running, 0);
 });

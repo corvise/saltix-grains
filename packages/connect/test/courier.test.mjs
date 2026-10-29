@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server/web";
 import {
-  ConnectFailed, ConnectSession, CourierError, DIALOG_CLASSES, KEPT_SLOT_KEY, SERVER_OFFER_LIFE_MS, SERVER_QR_LIFE_MAX_MS, b64url, createConnect,
+  ConnectFailed, ConnectSession, CourierError, DIALOG_CLASSES, KEPT_SLOT_KEY, SEEN_WAIT_MS, SERVER_OFFER_LIFE_MS, SERVER_QR_LIFE_MAX_MS, b64url, createConnect,
   decodeConfirm, decodePayload, encodeGrant, encodeReply, encodeSeen, fromB64url, httpCourier, loginMessage, openConnectDialog, openLinkPayload,
   parseOffer, sealLinkPayload,
 } from "../dist/index.js";
@@ -331,16 +331,21 @@ test("a server-held code changes by itself at the page's life, each time a fresh
   assert.equal(h.links[0].closed, true, "the old slot closed with its connection");
   await h.clock.advance(60_000);
   assert.equal(h.offers, 3);
-  // The wallet read it (the server said so): the code stays while the person signs.
+  // The wallet read it (the server said so): the code stays while the person signs...
   const third = sidOf(h);
   h.links[2].deliver(new Uint8Array(60), third);
   await h.clock.advance(0);
   assert.equal(h.phases.at(-1).kind, "seen");
-  await h.clock.advance(60_000 * 3);
+  await h.clock.advance(SEEN_WAIT_MS - 1);
   h.session.wake();
   await h.clock.advance(0);
   assert.equal(h.offers, 3);
   assert.equal(sidOf(h), third);
+  // ...and when no login came in its three minutes (cancelled in Saltix), a fresh offer from the server, by itself.
+  await h.clock.advance(1);
+  assert.equal(h.offers, 4);
+  assert.notEqual(sidOf(h), third);
+  assert.equal(h.phases.at(-1).kind, "offer");
   h.session.stop();
   assert.equal(h.clock.timers.size, 0);
   // Longer than the server's offer leaves for signing: refused before the server is asked for anything.
@@ -459,6 +464,11 @@ test("the dialog over the server-held mode: the code, the notice, and the sessio
   link.deliver(sealedTo(parsed, encodeSeen(1n)), b64url(parsed.sid));
   await flush();
   assert.match(dialog.find(DIALOG_CLASSES.status).textContent, /Continue in Saltix/);
+  assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, true, "a code the wallet read: no countdown");
+  // A grant the server refuses: the reason stays under the code the session shows again, until the next check.
+  link.deliver(sealedTo(parsed, grantFor(parsed, Date.now() - 11 * 60_000)), b64url(parsed.sid));
+  await flush();
+  assert.match(dialog.find(DIALOG_CLASSES.status).textContent, /\(time\)/);
   const grant = grantFor(parsed, Date.now());
   link.deliver(sealedTo(parsed, replyFor(grant)), b64url(parsed.sid));
   link.deliver(sealedTo(parsed, grant), b64url(parsed.sid));

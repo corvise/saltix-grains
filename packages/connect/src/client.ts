@@ -131,7 +131,8 @@ export interface SaltixConnect {
   /** Start a session and give its offer (the current one while a session runs); rejects with `ConnectFailed`. A slot
    *  the page kept across a reload is opened again (§14.1). */
   offer(): Promise<OfferView>;
-  /** A new offer at once: a new slot and new keys. */
+  /** A new offer at once: a new slot and new keys. Rarely needed: the code changes by itself (`qrLifeMs`), so a page
+   *  shows no button for a new code; it is for a page's own Try again after a failure, as the dialog's. */
   renew(): Promise<OfferView>;
   /** Stop the session: its slot goes with its connection. */
   cancel(): void;

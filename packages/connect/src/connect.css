@@ -77,7 +77,10 @@
   border-radius: 11px; background: #0b1220; color: #ffffff; font-weight: 600; text-decoration: none;
 }
 .saltix-connect-dialog--dark .saltix-connect-dialog__open { background: #ffffff; color: #0b1220; }
-.saltix-connect-dialog__open[hidden], .saltix-connect-dialog__status[hidden] { display: none; }
+.saltix-connect-dialog__open[hidden], .saltix-connect-dialog__status[hidden], .saltix-connect-dialog__countdown[hidden],
+.saltix-connect-dialog__actions[hidden] { display: none; }
+/* When the code changes by itself: a quiet line under it, its digits of one width so the line stands still. */
+.saltix-connect-dialog__countdown { margin: 8px 0 0; font-size: 13px; opacity: .7; font-variant-numeric: tabular-nums; }
 .saltix-connect-dialog__status { margin: 12px 0 0; font-weight: 600; }
 .saltix-connect-dialog__actions { display: flex; justify-content: center; margin-top: 8px; }
 .saltix-connect-dialog__action {

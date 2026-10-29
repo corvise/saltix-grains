@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MAX_MS, QR_LIFE_MIN_MS, QR_LIFE_MS, SERVER_QR_LIFE_MAX_MS, SLOT_LIFE_MS, b64url,
+  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MAX_MS, QR_LIFE_MIN_MS, QR_LIFE_MS, SEEN_WAIT_MS, SERVER_QR_LIFE_MAX_MS, SLOT_LIFE_MS, b64url,
   checkConfirm, decodeConfirm, encodeGrant, encodeReply, encodeSeen, fromB64url, loginMessage, offerText, openLinkPayload, parseOffer, qrLifeOf,
   sealLinkPayload,
 } from "../dist/index.js";
@@ -105,8 +105,8 @@ test("the slot is kept open every minute, for 30 minutes at most", async () => {
   const h = harness();
   await started(h);
   const link = h.links[0];
-  const { offer, sid } = offerOf(h);
-  link.deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeSeen(1n)), sid);
+  // Taken to Saltix on this phone: the code is neither replaced at its life nor waited out, only the slot ends.
+  h.session.handOff();
   await h.clock.advance(KEEP_MS * 3 + 10);
   assert.equal(link.sent.filter((f) => f.type === "link_open").length, 4);
   await h.clock.advance(SLOT_LIFE_MS - KEEP_MS * 3);
@@ -206,11 +206,12 @@ test("a code of the page's own life is replaced at it, never once the wallet rea
   h.session.wake();
   await h.clock.advance(60_000 - 1);
   assert.equal(offerOf(h).sid, third.sid);
-  // Once the wallet read it, the code stays while the person signs, however long, and a wake does not take it.
+  // Once the wallet read it, the code stays while the person signs (its login waited for, below), and a wake does not
+  // take it.
   h.links[2].deliver(sealLinkPayload(third.offer.boxKey, third.offer.sid, third.offer.page, encodeSeen(1n)), third.sid);
   await h.clock.advance(0);
   assert.equal(last(h).kind, "seen");
-  await h.clock.advance(60_000 * 5);
+  await h.clock.advance(SEEN_WAIT_MS - 1);
   h.session.wake();
   await h.clock.advance(0);
   assert.equal(offerOf(h).sid, third.sid);
@@ -312,6 +313,121 @@ test("an offer refused after its two minutes is replaced at once, not left for t
   assert.equal(h.keyCount, 4);
   h.session.stop();
   assert.equal(h.clock.timers.size, 0);
+});
+
+test("a code the wallet read waits three minutes for its login, then a new one comes by itself — never under a check", async () => {
+  assert.equal(SEEN_WAIT_MS, 3 * 60_000);
+  const pending = [];
+  const h = harness({ verify: () => new Promise((_, fail) => pending.push(fail)) });
+  await started(h);
+  const first = offerOf(h);
+  const deliver = (bytes) => h.links[0].deliver(sealLinkPayload(first.offer.boxKey, first.offer.sid, first.offer.page, bytes), first.sid);
+  deliver(encodeSeen(1n));
+  await h.clock.advance(0);
+  assert.equal(last(h).kind, "seen");
+  await h.clock.advance(SEEN_WAIT_MS - 1_000);
+  assert.equal(offerOf(h).sid, first.sid, "not before its three minutes");
+  // A grant comes and its check runs across the mark: nothing is replaced under it.
+  deliver(encodeGrant(grantFor(first.offer, h.clock.now)));
+  await h.clock.advance(0);
+  assert.equal(last(h).kind, "checking");
+  await h.clock.advance(KEEP_MS * 2);
+  assert.equal(last(h).kind, "checking");
+  assert.equal(h.keyCount, 1);
+  // Refused: back to the read code with the reason, waited for afresh from the refusal.
+  pending.shift()(new ConnectError("not_a_device"));
+  await h.clock.advance(0);
+  assert.equal(last(h).kind, "seen");
+  await h.clock.advance(SEEN_WAIT_MS - 1);
+  assert.equal(offerOf(h).sid, first.sid, "the reason is read before a new code comes");
+  await h.clock.advance(1);
+  assert.equal(last(h).kind, "offer");
+  assert.notEqual(offerOf(h).sid, first.sid, "a new code by itself, with nothing to press");
+  assert.equal(h.keyCount, 2);
+  assert.equal(h.links[0].closed, true);
+  assert.ok(named(h, "connect_seen_expired"));
+  h.session.stop();
+  assert.equal(h.clock.timers.size, 0);
+});
+
+test("a read code waits while the page is hidden or its slot reconnects, so a login the relay parked is taken first", async () => {
+  let up = true;
+  const h = harness({ failDial: () => !up });
+  await started(h);
+  const o = offerOf(h);
+  h.session.handOff();
+  h.links[0].deliver(sealLinkPayload(o.offer.boxKey, o.offer.sid, o.offer.page, encodeSeen(1n)), o.sid);
+  await h.clock.advance(0);
+  // The phone's browser behind Saltix: hidden, its connection gone, well past the wait.
+  h.visible.value = false;
+  up = false;
+  h.links[0].drop();
+  await h.clock.advance(SEEN_WAIT_MS * 2);
+  assert.equal(h.keyCount, 1, "nothing replaced while hidden");
+  // In front again, the same slot opens first and the login it held is taken: no new code came before it.
+  up = true;
+  h.visible.value = true;
+  h.session.wake();
+  await h.clock.advance(0);
+  const again = h.links.at(-1);
+  assert.deepEqual(again.sent[0], { type: "link_open", sid: o.sid });
+  again.deliver(sealLinkPayload(o.offer.boxKey, o.offer.sid, o.offer.page, encodeGrant(grantFor(o.offer, h.clock.now))), o.sid);
+  await h.clock.advance(0);
+  assert.equal(h.connected.length, 1);
+  assert.equal(h.keyCount, 1);
+  assert.ok(!named(h, "connect_seen_expired"));
+  // In front but its slot reconnecting (the relay away a while): no new code until the slot is back, its login first.
+  let reachable = true;
+  const flaky = harness({ failDial: () => !reachable });
+  await started(flaky);
+  const f = offerOf(flaky);
+  flaky.links[0].deliver(sealLinkPayload(f.offer.boxKey, f.offer.sid, f.offer.page, encodeSeen(1n)), f.sid);
+  await flaky.clock.advance(0);
+  reachable = false;
+  flaky.links[0].drop();
+  await flaky.clock.advance(SEEN_WAIT_MS + KEEP_MS * 2);
+  assert.equal(flaky.keyCount, 1, "nothing replaced while the slot is away");
+  assert.ok(!named(flaky, "connect_seen_expired"));
+  reachable = true;
+  await flaky.clock.advance(30_000);
+  const back = flaky.links.at(-1);
+  assert.deepEqual(back.sent[0], { type: "link_open", sid: f.sid }, "the same slot");
+  back.deliver(sealLinkPayload(f.offer.boxKey, f.offer.sid, f.offer.page, encodeGrant(grantFor(f.offer, flaky.clock.now))), f.sid);
+  await flaky.clock.advance(0);
+  assert.equal(flaky.connected.length, 1);
+  assert.equal(flaky.keyCount, 1);
+  // Cancelled in Saltix instead: back in front, the read code gives way to a new one within a minute.
+  const cancelled = harness({ failDial: () => !up });
+  await started(cancelled);
+  const c = offerOf(cancelled);
+  cancelled.session.handOff();
+  cancelled.links[0].deliver(sealLinkPayload(c.offer.boxKey, c.offer.sid, c.offer.page, encodeSeen(1n)), c.sid);
+  await cancelled.clock.advance(0);
+  cancelled.visible.value = false;
+  await cancelled.clock.advance(SEEN_WAIT_MS * 2);
+  assert.equal(cancelled.keyCount, 1);
+  cancelled.visible.value = true;
+  await cancelled.clock.advance(KEEP_MS);
+  assert.equal(last(cancelled).kind, "offer");
+  assert.equal(cancelled.keyCount, 2);
+  cancelled.session.stop();
+  // A read code kept across a reload waits for its login the same way.
+  const keep = new MemoryStorage();
+  const before = harness({ keep });
+  await started(before);
+  const k = offerOf(before);
+  before.links[0].deliver(sealLinkPayload(k.offer.boxKey, k.offer.sid, k.offer.page, encodeSeen(1n)), k.sid);
+  await before.clock.advance(0);
+  before.session.stop();
+  const resumed = harness({ keep, clock: before.clock });
+  await resumed.session.start();
+  await resumed.clock.advance(0);
+  assert.equal(last(resumed).kind, "seen");
+  assert.equal(resumed.keyCount, 0, "the same slot");
+  await resumed.clock.advance(SEEN_WAIT_MS);
+  assert.equal(last(resumed).kind, "offer");
+  assert.equal(resumed.keyCount, 1);
+  resumed.session.stop();
 });
 
 test("an offer the visitor took to Saltix on this phone stays", async () => {

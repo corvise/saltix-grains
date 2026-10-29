@@ -7,7 +7,7 @@
  *   opening ──► offer ──► seen ──► checking ──► connected (the page shows it at once; the confirmation goes out behind)
  *      │          │  ▲       │          │
  *      ▼          ▼  │       ▼          └─► a refused grant: back to offer or seen, with the reason
- *    failed    (the code's life unseen, 2 minutes unless the page says: a new slot and new keys)
+ *    failed    (the code's life unseen, 2 minutes unless the page says; read and no login for 3: a new slot and keys)
  *
  * Two modes. In the page's own (§2–§5) the keys are made here, and the grant is opened and checked here. In the
  * server-held mode (§15) the site's server makes the keys and keeps `Q`'s secret; the page holds no secret, forwards
@@ -43,6 +43,11 @@ export const SERVER_OFFER_LIFE_MS = 5 * 60_000;
 /** The longest life of a code in the server-held mode: the server's offer outlives it by two minutes, for the scan,
  *  the sheet and the PIN (§15.4). */
 export const SERVER_QR_LIFE_MAX_MS = SERVER_OFFER_LIFE_MS - 2 * 60_000;
+/** How long a code the wallet read waits for its login before a new code replaces it by itself: the person cancelled in
+ *  Saltix or put the phone down, and no page shows a button for a new code. Counted again from a refused grant; only
+ *  while the page is in front with its slot connected and no grant being checked, so that a login the relay parked for
+ *  a page in the background is taken first. */
+export const SEEN_WAIT_MS = 3 * 60_000;
 /** The slot is opened again this often, so it never goes idle (5 minutes, 09-relay §10.3). */
 export const KEEP_MS = 60_000;
 /** A slot lives this long in all; the page gives up waiting then (09-relay §10.3). A server's offer lives less
@@ -237,6 +242,8 @@ export class ConnectSession<T> {
   private readonly qrLife: number;
   /** The visitor took the offer to the wallet on this phone: it stays until the slot's end. */
   private held = false;
+  /** When the code was last shown as read: the wait for its login counts from it (`SEEN_WAIT_MS`). */
+  private seenAt = 0;
   /** The slot's connection while the page's confirmation is on its way, after the page connected. */
   private confirming: RelayLink | null = null;
 
@@ -347,8 +354,10 @@ export class ConnectSession<T> {
     this.slot = { base, keys, offer, text, link: offerLink(offer), app: offerAppLink(offer, this.userAgent), opened, link_: link, reply: null, queue: [], forwarding: false, replied: false };
     this.remember();
     const slot = this.slot;
-    if (this.seen) this.setPhase({ kind: "seen", offer, text, link: slot.link, app: slot.app });
-    else this.setPhase({ kind: "offer", offer, text, link: slot.link, app: slot.app, expiresAt: opened + this.qrLife });
+    if (this.seen) {
+      this.setPhase({ kind: "seen", offer, text, link: slot.link, app: slot.app });
+      this.awaitLogin();
+    } else this.setPhase({ kind: "offer", offer, text, link: slot.link, app: slot.app, expiresAt: opened + this.qrLife });
     // Attached after the offer is shown: a payload the relay held for a parked slot goes straight to its check.
     this.attach(link, early);
     this.every(KEEP_MS, () => this.keepOpen());
@@ -616,6 +625,26 @@ export class ConnectSession<T> {
     this.remember();
     this.o.events.telemetry("connect_seen", { ms: this.now() - slot.opened });
     this.setPhase({ kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app });
+    this.awaitLogin();
+  }
+
+  /** The code was read: its login is waited for `SEEN_WAIT_MS` from now. */
+  private awaitLogin(): void {
+    const at = (this.seenAt = this.now());
+    this.after(SEEN_WAIT_MS, () => this.loginLate(at));
+  }
+
+  /** A read code whose login did not come: a new one, once the page is in front with its slot connected and no grant
+   *  is being checked; until then it looks again every minute. A refused grant waited for afresh ends this wait. */
+  private loginLate(at: number): void {
+    const kind = this.phase.kind;
+    if (this.seenAt !== at || (kind !== "seen" && kind !== "checking")) return;
+    if (kind === "checking" || !this.visible() || !this.slot?.link_) {
+      this.after(KEEP_MS, () => this.loginLate(at));
+      return;
+    }
+    this.o.events.telemetry("connect_seen_expired");
+    void this.start({ fresh: true });
   }
 
   /** The phase a refused grant goes back to: the offer, or the wallet's notice. */
@@ -633,6 +662,8 @@ export class ConnectSession<T> {
     this.o.events.refused({ reason, at: this.now() });
     this.setPhase(back);
     if (back.kind === "offer" && this.now() >= back.expiresAt) this.expire();
+    // Back to the read code: its login is waited for afresh, so the reason is read before a new code comes.
+    if (back.kind === "seen") this.awaitLogin();
   }
 
   /** The grant checks: the page shows the connection now (§14.1); the confirmation goes to the wallet behind it, and

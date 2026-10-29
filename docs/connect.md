@@ -151,8 +151,10 @@ signs the origin, so the account claims the site.
 - **`openConnectDialog(connect, { lang, theme })`** shows the QR code titled "Saltix Connect" with "Scan with Saltix to
   sign in", and on a phone (a coarse pointer) the **Open Saltix** link (`offer.app`: an intent link on Android, the
   https link elsewhere — it opens Saltix without unloading the page, [§6](#6-connection-feedback-the-page-shows-and-confirms));
-  it follows the session (the phone's notice, a refusal and why, a failure with Try again, New code) and resolves with
-  the connection, or null when closed (the session is cancelled then).
+  it follows the session (the phone's notice, a refusal and why, kept while its code is shown, a failure with Try
+  again) and shows under the code the quiet countdown to the next one, "The code changes in 1:48" («Код обновится через
+  1:48»), which comes by itself: no button asks for a new code. It resolves with the connection, or null when closed
+  (the session is cancelled then).
 - **Your own UI** instead: `const offer = await connect.offer()` gives `offer.text` (what the QR code holds),
   `offer.link` (the https link, for a message or another device), `offer.app` (what Open Saltix on this device points
   at: an intent link on Android, `offer.link` elsewhere), `offer.qr` (`size` and one SVG `path`, or `svg` as text) and `offer.expiresAt`; events
@@ -168,7 +170,12 @@ signs the origin, so the account claims the site.
   for a countdown ("The code changes in 0:42"). Only while the page is in front: hidden, the code waits (it may be on
   its way to Saltix on this phone), and `connect.wake()` replaces one that ran out meanwhile at once; never once the
   wallet read it (`seen`) or the visitor took it to Saltix (`handOff`). A short life leaves a photographed or relayed
-  code less time: saltix.io's own sign-in page shows each code for a minute (`qrLifeMs: 60_000`).
+  code less time: saltix.io's own sign-in page shows each code for a minute (`qrLifeMs: 60_000`). A code the wallet
+  read waits 3 minutes for its login (`SEEN_WAIT_MS`; afresh after a refused grant): when none comes — the person
+  cancelled in Saltix or put the phone down — a new code comes by itself, once the page is in front with its slot
+  connected and no grant is being checked, so a login the relay held for a page in the background is taken first.
+  Show no button for a new code, as the dialog shows none: `connect.renew()` (a new code at once) is rarely needed — a
+  page's own *Try again* after a failure, when there is no code to wait for.
 - Without a bundler, serve `dist/saltix-connect.js` (one self-contained module) and `dist/connect.css` from the package;
   with one, `import … from "@saltix/connect"` and `@saltix/connect/connect.css`.
 
@@ -510,7 +517,7 @@ on it has only to render what the client tells it.
    navigates on the link, a tab discarded in the background) and load it again within the slot's life, the client
    opens the **same slot with the same keys** (kept in `sessionStorage`: the slot id, `Q`'s secret and `P`'s public
    key, never a private key of the page; in the server-held mode the public keys alone, the server having given the
-   page no secret; forgotten once connected, on New code, or past 30 minutes), so the wallet's
+   page no secret; forgotten once connected, when a fresh code replaces it, or past 30 minutes), so the wallet's
    delivery, tried again every 2.5 s for 30 s, still lands: a relay **parks** a slot whose connection closed for the
    rest of its half hour, holds what the wallet delivers to it meanwhile, and hands it over the moment the page opens
    the slot again (09-relay §10.3 step 6a; the client takes what comes right after `link_opened`). While the page is
@@ -540,7 +547,7 @@ on it has only to render what the client tells it.
 |---|---|
 | A login's time | within 10 minutes of the page's clock |
 | A connection kept | 30 days, or until the visitor disconnects |
-| An offer shown | 2 minutes unseen (`qrLifeMs`: 30 seconds to 10 minutes; 3 at most in the server-held mode), then a new slot and new keys; the slot is kept open every minute, 30 minutes in all |
+| An offer shown | 2 minutes unseen (`qrLifeMs`: 30 seconds to 10 minutes; 3 at most in the server-held mode), and 3 minutes read with no login (`SEEN_WAIT_MS`), then a new slot and new keys by itself; the slot is kept open every minute, 30 minutes in all |
 | An offer at a server (the server-held mode) | 5 minutes from its making, then dropped with its keys; one grant per offer (`sid` spent with it); 10 000 offers kept at most, the oldest dropped first |
 | An offer's name | 1–40 bytes; its origin at most 128 bytes |
 | A site's profile | at `/.well-known/saltix-connect`, at most 64 KiB, read within 5 seconds, kept a day by a wallet |
