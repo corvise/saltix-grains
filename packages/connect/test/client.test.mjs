@@ -162,6 +162,20 @@ test("what a page passes is checked at once", () => {
   assert.doesNotThrow(() => createConnect({ ...base, name: "Example DEX", origin: "http://localhost:5173" }));
 });
 
+test("the page's code life reaches its offers: expiresAt is that far ahead, 2 minutes without one", async () => {
+  for (const [options, life] of [[{ qrLifeMs: 45_000 }, 45_000], [{}, 2 * 60_000]]) {
+    const t = setup({ options });
+    const before = Date.now();
+    const offer = await t.connect.offer();
+    assert.ok(offer.expiresAt >= before + life && offer.expiresAt <= Date.now() + life, `${offer.expiresAt - before} for ${life}`);
+    t.connect.cancel();
+  }
+  const base = { network: "devnet", relays: [], node: "http://127.0.0.1:1/", storage: null, name: "Example", origin: ORIGIN };
+  assert.throws(() => createConnect({ ...base, qrLifeMs: 29_999 }), /qrLifeMs/);
+  assert.throws(() => createConnect({ ...base, qrLifeMs: 600_001 }), /qrLifeMs/);
+  assert.doesNotThrow(() => createConnect({ ...base, qrLifeMs: 600_000 }));
+});
+
 test("a connection is kept 30 days, for its own network only", () => {
   const storage = new MemoryStorage();
   const c = { network: GENESIS, account: "11".repeat(32), address: "dsalt1q", grant: "AA", signer: "ed25519", managed: false, since: Date.now() };

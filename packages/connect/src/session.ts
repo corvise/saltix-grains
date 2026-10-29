@@ -7,7 +7,7 @@
  *   opening ──► offer ──► seen ──► checking ──► connected (the page shows it at once; the confirmation goes out behind)
  *      │          │  ▲       │          │
  *      ▼          ▼  │       ▼          └─► a refused grant: back to offer or seen, with the reason
- *    failed    (2 minutes unseen: a new slot and new keys)
+ *    failed    (the code's life unseen, 2 minutes unless the page says: a new slot and new keys)
  *
  * Two modes. In the page's own (§2–§5) the keys are made here, and the grant is opened and checked here. In the
  * server-held mode (§15) the site's server makes the keys and keeps `Q`'s secret; the page holds no secret, forwards
@@ -30,11 +30,23 @@ import { type Offer, offerAppLink, offerLink, offerText } from "./offer.js";
 import type { Dial, Frame, RelayLink } from "./relay.js";
 import { boxPublic, openLinkPayload, randomSecret, sealLinkPayload } from "./seal.js";
 
-/** How long one offer is shown unseen before a new slot and new keys replace it. */
+/** How long one offer is shown unseen before a new slot and new keys replace it, unless the page gives its code another
+ *  life (`qrLifeMs`, within `QR_LIFE_MIN_MS` and the mode's longest). */
 export const QR_LIFE_MS = 2 * 60_000;
+/** The shortest life a page may give its code: time to take out a phone and scan it. */
+export const QR_LIFE_MIN_MS = 30_000;
+/** The longest in the page's own mode: a third of the slot's life; a code shown longer is a door left open. */
+export const QR_LIFE_MAX_MS = 10 * 60_000;
+/** An offer lives this long at the site's server, from its making, with its keys (19-connect §15.4): a code shown for
+ *  a minute or two, then the scan, the sheet and the PIN fit in it, and a relayed or photographed code dies sooner. */
+export const SERVER_OFFER_LIFE_MS = 5 * 60_000;
+/** The longest life of a code in the server-held mode: the server's offer outlives it by two minutes, for the scan,
+ *  the sheet and the PIN (§15.4). */
+export const SERVER_QR_LIFE_MAX_MS = SERVER_OFFER_LIFE_MS - 2 * 60_000;
 /** The slot is opened again this often, so it never goes idle (5 minutes, 09-relay §10.3). */
 export const KEEP_MS = 60_000;
-/** A slot lives this long in all; the page gives up waiting then. An offer at a server lives as long (§15.4). */
+/** A slot lives this long in all; the page gives up waiting then (09-relay §10.3). A server's offer lives less
+ *  (`SERVER_OFFER_LIFE_MS`, §15.4). */
 export const SLOT_LIFE_MS = 30 * 60_000;
 /** How long the relay has to answer `link_open`. */
 export const OPEN_MS = 10_000;
@@ -127,6 +139,8 @@ export interface SessionOptions<T> {
   random?: () => number;
   /** Whether the page is in front of the visitor: an offer is replaced only then. */
   visible?: () => boolean;
+  /** How long a code is shown unseen before a new one replaces it: `QR_LIFE_MS` by default; see `qrLifeOf`. */
+  qrLifeMs?: number;
   /** The browser's user agent: on Android the link that opens Saltix is an intent link (§14.1). */
   userAgent?: string;
   /**
@@ -161,6 +175,19 @@ interface KeptSlot {
   opened: number;
   seen: boolean;
   held: boolean;
+}
+
+/** The life of a page's code (`qrLifeMs`): the default without one, the one given within its mode's bounds, and a
+ *  `TypeError` for anything else — a code that changes faster than a phone scans it, or one the slot (or, in the
+ *  server-held mode, the server's offer) would not outlive. */
+export function qrLifeOf(ms: number | undefined, serverHeld: boolean): number {
+  if (ms === undefined) return QR_LIFE_MS;
+  const max = serverHeld ? SERVER_QR_LIFE_MAX_MS : QR_LIFE_MAX_MS;
+  if (!Number.isSafeInteger(ms) || ms < QR_LIFE_MIN_MS || ms > max) {
+    const why = serverHeld ? ", in the server-held mode, whose server keeps an offer 5 minutes" : "";
+    throw new TypeError(`Saltix Connect: qrLifeMs is a whole number of milliseconds from ${QR_LIFE_MIN_MS} to ${max}${why}`);
+  }
+  return ms;
 }
 
 function defaultKeep(): KeptSlotStore | null {
@@ -206,6 +233,8 @@ export class ConnectSession<T> {
   private readonly visible: () => boolean;
   private readonly userAgent: string;
   private readonly keep: KeptSlotStore | null;
+  /** How long an unseen code is shown (`qrLifeMs`). */
+  private readonly qrLife: number;
   /** The visitor took the offer to the wallet on this phone: it stays until the slot's end. */
   private held = false;
   /** The slot's connection while the page's confirmation is on its way, after the page connected. */
@@ -222,6 +251,7 @@ export class ConnectSession<T> {
     this.visible = o.visible ?? (() => typeof document === "undefined" || document.visibilityState !== "hidden");
     this.userAgent = o.userAgent ?? (typeof navigator === "undefined" ? "" : navigator.userAgent);
     this.keep = o.keep === undefined ? defaultKeep() : o.keep;
+    this.qrLife = qrLifeOf(o.qrLifeMs, !!o.courier);
   }
 
   get current(): Phase {
@@ -318,12 +348,12 @@ export class ConnectSession<T> {
     this.remember();
     const slot = this.slot;
     if (this.seen) this.setPhase({ kind: "seen", offer, text, link: slot.link, app: slot.app });
-    else this.setPhase({ kind: "offer", offer, text, link: slot.link, app: slot.app, expiresAt: opened + QR_LIFE_MS });
+    else this.setPhase({ kind: "offer", offer, text, link: slot.link, app: slot.app, expiresAt: opened + this.qrLife });
     // Attached after the offer is shown: a payload the relay held for a parked slot goes straight to its check.
     this.attach(link, early);
     this.every(KEEP_MS, () => this.keepOpen());
     const left = Math.max(0, opened + SLOT_LIFE_MS - this.now());
-    this.after(Math.max(0, opened + QR_LIFE_MS - this.now()), () => this.expire());
+    this.after(Math.max(0, opened + this.qrLife - this.now()), () => this.expire());
     this.after(left, () => {
       if (this.phase.kind !== "connected" && this.phase.kind !== "checking") void this.start({ fresh: true });
     });
@@ -412,9 +442,19 @@ export class ConnectSession<T> {
     void this.start({ fresh: true });
   }
 
-  /** The page came back to the foreground: a dropped connection is opened again at once. */
+  /** The page came back to the foreground: an unseen code past its life is replaced at once, not at the next look a
+   *  minute later (a page hidden that long shows a code that already changed), and a dropped connection is opened
+   *  again at once. */
   wake(): void {
-    if (this.slot && !this.slot.link_ && !this.stopped) {
+    const slot = this.slot;
+    if (!slot || this.stopped) return;
+    // An offer the wallet read is no longer in the offer phase; one taken to Saltix here keeps its slot, opened below.
+    const p = this.phase;
+    if (p.kind === "offer" && !this.held && this.now() >= p.expiresAt) {
+      this.expire();
+      return;
+    }
+    if (!slot.link_) {
       this.reopenAttempt = 0;
       void this.reopen();
     }
@@ -582,11 +622,11 @@ export class ConnectSession<T> {
   private backPhase(slot: Slot): Phase {
     return this.seen
       ? { kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app }
-      : { kind: "offer", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app, expiresAt: slot.opened + QR_LIFE_MS };
+      : { kind: "offer", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app, expiresAt: slot.opened + this.qrLife };
   }
 
-  /** A refused grant, or one that could not be checked: the reason to the page, the offer back, and the offer's two
-   *  minutes, which may have passed while the grant was checked (its expiry found it `checking` and let it be). */
+  /** A refused grant, or one that could not be checked: the reason to the page, the offer back, and the code's life,
+   *  which may have passed while the grant was checked (its expiry found it `checking` and let it be). */
   private refused(slot: Slot, reason: string, meta: Record<string, string | number | boolean>): void {
     const back = this.backPhase(slot);
     this.o.events.telemetry("connect_refused", { reason, ...meta });

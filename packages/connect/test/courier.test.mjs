@@ -8,10 +8,11 @@ import assert from "node:assert/strict";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server/web";
 import {
-  ConnectFailed, ConnectSession, CourierError, DIALOG_CLASSES, KEPT_SLOT_KEY, b64url, createConnect, decodeConfirm, decodePayload, encodeGrant, encodeReply,
-  encodeSeen, fromB64url, httpCourier, loginMessage, openConnectDialog, openLinkPayload, parseOffer, sealLinkPayload,
+  ConnectFailed, ConnectSession, CourierError, DIALOG_CLASSES, KEPT_SLOT_KEY, SERVER_OFFER_LIFE_MS, SERVER_QR_LIFE_MAX_MS, b64url, createConnect,
+  decodeConfirm, decodePayload, encodeGrant, encodeReply, encodeSeen, fromB64url, httpCourier, loginMessage, openConnectDialog, openLinkPayload,
+  parseOffer, sealLinkPayload,
 } from "../dist/index.js";
-import { createServerConnect } from "../dist/server.js";
+import { OFFER_LIFE_MS, createServerConnect } from "../dist/server.js";
 import { Clock, FakeDocument, FakeLink, MemoryStorage, RELAY_KEY, flush, opened } from "./helpers.mjs";
 
 const GENESIS = "5a".repeat(32);
@@ -195,6 +196,19 @@ test("an offer for another origin, or under another name than the page's, fails 
   assert.throws(() => createConnect({ ...base, node: "http://127.0.0.1:1/" }), /name/);
   assert.doesNotThrow(() => createConnect({ ...base, server: { offer: "/o", login: "/l" } }));
   assert.throws(() => createConnect({ ...base, server: { offer: "/o", login: "/l" }, name: "" }), /name/);
+  // A code's life within the server's offer: a minute, three at most; longer is refused here, where the page's own mode
+  // takes it.
+  assert.doesNotThrow(() => createConnect({ ...base, server: { offer: "/o", login: "/l" }, qrLifeMs: 60_000 }));
+  assert.doesNotThrow(() => createConnect({ ...base, server: { offer: "/o", login: "/l" }, qrLifeMs: 180_000 }));
+  assert.throws(() => createConnect({ ...base, server: { offer: "/o", login: "/l" }, qrLifeMs: 180_001 }), /server-held/);
+  assert.throws(() => createConnect({ ...base, server: { offer: "/o", login: "/l" }, qrLifeMs: 29_999 }), /qrLifeMs/);
+  assert.doesNotThrow(() => createConnect({ ...base, node: "http://127.0.0.1:1/", name: "Example", qrLifeMs: 600_000 }));
+});
+
+test("the server keeps an offer 5 minutes, which outlives the longest code a server-held page shows by the time to sign", () => {
+  assert.equal(OFFER_LIFE_MS, 5 * 60_000);
+  assert.equal(OFFER_LIFE_MS, SERVER_OFFER_LIFE_MS, "one number for the page and the server");
+  assert.equal(OFFER_LIFE_MS - SERVER_QR_LIFE_MAX_MS, 2 * 60_000);
 });
 
 // ── The session's state machine with a scripted courier ─────────────────────
@@ -240,6 +254,7 @@ function harness(opts = {}) {
     random: () => 0.999,
     visible: () => true,
     keep: opts.keep ?? null,
+    qrLifeMs: opts.qrLifeMs,
   });
   return h;
 }
@@ -300,6 +315,36 @@ test("a server that holds no such offer makes the page ask for a fresh one; one 
   assert.deepEqual(none.phases.at(-1), { kind: "failed", reason: "server" });
   assert.equal(none.events.find((e) => e.event === "connect_server_failed").meta.kind, "http");
   assert.equal(none.links.length, 0);
+});
+
+test("a server-held code changes by itself at the page's life, each time a fresh offer from the server, and stays once read", async () => {
+  const h = harness({ qrLifeMs: 60_000, take: () => ({ kind: "seen" }) });
+  await started(h);
+  const first = sidOf(h);
+  assert.equal(h.phases.at(-1).expiresAt, h.clock.now + 60_000);
+  await h.clock.advance(60_000 - 1);
+  assert.equal(h.offers, 1, "not before its minute");
+  await h.clock.advance(1);
+  assert.equal(h.offers, 2, "a fresh offer from the server, nothing asked of the visitor");
+  const second = sidOf(h);
+  assert.notEqual(second, first);
+  assert.equal(h.links[0].closed, true, "the old slot closed with its connection");
+  await h.clock.advance(60_000);
+  assert.equal(h.offers, 3);
+  // The wallet read it (the server said so): the code stays while the person signs.
+  const third = sidOf(h);
+  h.links[2].deliver(new Uint8Array(60), third);
+  await h.clock.advance(0);
+  assert.equal(h.phases.at(-1).kind, "seen");
+  await h.clock.advance(60_000 * 3);
+  h.session.wake();
+  await h.clock.advance(0);
+  assert.equal(h.offers, 3);
+  assert.equal(sidOf(h), third);
+  h.session.stop();
+  assert.equal(h.clock.timers.size, 0);
+  // Longer than the server's offer leaves for signing: refused before the server is asked for anything.
+  assert.throws(() => harness({ qrLifeMs: SERVER_QR_LIFE_MAX_MS + 1, take: () => CONNECTED }), /server-held/);
 });
 
 test("the confirmation the server sealed is delivered as the page's own; without one the slot just closes", async () => {

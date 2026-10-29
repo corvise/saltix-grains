@@ -32,7 +32,8 @@ The site's own profile is signed once, offline, with `grain connect-profile`. Th
 3. **A tap opens a session** (`createConnect(…).offer()`): the page makes a slot at a relay and fresh keys, and shows the
    offer: on a computer a QR code in a dialog titled "Saltix Connect" ("Scan with Saltix to sign in"), on a phone the link
    `https://saltix.io/connect#saltix-connect:1:…` ("Open Saltix"), which opens Saltix. An offer nobody scanned is
-   replaced after 2 minutes, at once when a grant for it is refused after them.
+   replaced by itself after 2 minutes (the page's `qrLifeMs`, below), at once when a grant for it is refused after
+   them.
 4. **Saltix shows its Connect sheet**: "Saltix Connect" on top, the site's host in large type and its origin in full,
    the profile it fetched from the origin (checked: signed by a key that speaks for the owner it names, and the
    profile of this origin) "in its own words", and what the site gets: the wallet's address, worded as "it can follow
@@ -161,6 +162,13 @@ signs the origin, so the account claims the site.
   of another kind; `retryable` says which), `failed` (`no_relay`, `network`, `node`),
   `reconnecting`, `disconnected`. Call `connect.handOff()` when the visitor opens the link on this phone (the offer then
   stays), `connect.wake()` when the page is in front again, `connect.disconnect()` to forget the connection.
+- **The code changes by itself.** An offer nobody scanned is replaced after `qrLifeMs` — 2 minutes by default, from 30
+  seconds to 10 minutes, and to 3 in the server-held mode ([§5](#5-the-two-modes-the-pages-own-and-the-server-held)) —
+  with a new slot and new keys and nothing asked of the visitor: a new `offer` event, whose `expiresAt` is the moment
+  for a countdown ("The code changes in 0:42"). Only while the page is in front: hidden, the code waits (it may be on
+  its way to Saltix on this phone), and `connect.wake()` replaces one that ran out meanwhile at once; never once the
+  wallet read it (`seen`) or the visitor took it to Saltix (`handOff`). A short life leaves a photographed or relayed
+  code less time: saltix.io's own sign-in page shows each code for a minute (`qrLifeMs: 60_000`).
 - Without a bundler, serve `dist/saltix-connect.js` (one self-contained module) and `dist/connect.css` from the package;
   with one, `import … from "@saltix/connect"` and `@saltix/connect/connect.css`.
 
@@ -210,7 +218,7 @@ location = /saltix/r/1/ {
 - Saltix's test network is of the `devnet` kind (`dsalt` addresses). A release Saltix connects only to `https://`
   origins; a debug build also takes `http://localhost`, `127.0.0.1` and `[::1]`, any port.
 - `createConnect` checks what it is given at once: an origin that is not one a browser serializes, a name of more than
-  40 bytes or with control or format characters, a genesis that is not 64 hex digits.
+  40 bytes or with control or format characters, a genesis that is not 64 hex digits, a `qrLifeMs` outside its bounds.
 - Telemetry (`telemetry: (event, meta) => …`) names events and numbers (`connect_open`, `connect_seen`,
   `connect_grant`, `connect_refused` with its reason), never a key, a slot, an account or an address.
 
@@ -241,8 +249,9 @@ the single-use nonce of the server's own, with `Q`'s and `P`'s public keys; the 
 origin, that `sid` and `P` with a key of the account; the server checks the signature and the account's key event log
 itself, within the login's 10 minutes, and spends `sid` in the same step that opens the session. The page is a courier:
 
-1. **The server** (`@saltix/connect/server`, Node 20 and later) makes and keeps the keys of each offer for 30
-   minutes, bounded in number (10 000, the oldest dropped first):
+1. **The server** (`@saltix/connect/server`, Node 20 and later) makes and keeps the keys of each offer for 5
+   minutes (19-connect §15.4: a code shown for a minute or two, then the scan, the sheet and the PIN fit, and a relayed
+   or photographed code dies sooner), bounded in number (10 000, the oldest dropped first):
 
    ```js
    import { createServerConnect } from "@saltix/connect/server";
@@ -287,7 +296,9 @@ itself, within the login's 10 minutes, and spends `sid` in the same step that op
    name); `connect.connection` is null (the session is the server's: ask it, as the example's `/me`); `refused` says
    the server's reason, `unchecked` when the server could not be reached or could not check; `failed {reason:
    "server"}` when the server gave no offer, or one for another origin. A server with another transport brings a
-   `Courier` of its own in place of the two paths.
+   `Courier` of its own in place of the two paths. Each code the page shows is a fresh offer from the server, and its
+   life (`qrLifeMs`) is at most 3 minutes here, so that the server's 5 leave the person 2 to sign: a longer one is
+   refused.
 
 3. **The confirmation** stays the page's duty: the server, which held the wallet's reply and `Q`, seals
    `ConnectConfirm` to the reply's key and hands the page the bytes with the session; the page delivers them on its
@@ -529,8 +540,8 @@ on it has only to render what the client tells it.
 |---|---|
 | A login's time | within 10 minutes of the page's clock |
 | A connection kept | 30 days, or until the visitor disconnects |
-| An offer shown | 2 minutes unseen, then a new slot and new keys; the slot is kept open every minute, 30 minutes in all |
-| An offer at a server (the server-held mode) | 30 minutes from its making, then dropped with its keys; one grant per offer (`sid` spent with it); 10 000 offers kept at most, the oldest dropped first |
+| An offer shown | 2 minutes unseen (`qrLifeMs`: 30 seconds to 10 minutes; 3 at most in the server-held mode), then a new slot and new keys; the slot is kept open every minute, 30 minutes in all |
+| An offer at a server (the server-held mode) | 5 minutes from its making, then dropped with its keys; one grant per offer (`sid` spent with it); 10 000 offers kept at most, the oldest dropped first |
 | An offer's name | 1–40 bytes; its origin at most 128 bytes |
 | A site's profile | at `/.well-known/saltix-connect`, at most 64 KiB, read within 5 seconds, kept a day by a wallet |
 | The wallet's delivery | tried again every 2.5 seconds while the relay finds no slot, 30 seconds in all; the page's confirmation waited for 10 seconds after |

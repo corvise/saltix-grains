@@ -4,11 +4,27 @@
 
 ### Added
 
+- **The code changes by itself, at the page's pace** (Saltix 19-connect §15.4 and §10 as amended on 2026-10-29, the
+  owner's decision: a code shown for a minute, then a new one on its own, with nothing to press; `@saltix/connect`
+  0.2.0, no format change): `createConnect({…, qrLifeMs})` sets how long a code nobody scanned is shown before a new
+  slot and new keys replace it — 2 minutes by default, 30 seconds to 10 minutes, at most 3 in the server-held mode, and
+  anything else refused when the client is made (`qrLifeOf`, `QR_LIFE_MIN_MS`, `QR_LIFE_MAX_MS`,
+  `SERVER_QR_LIFE_MAX_MS`); never once the wallet read the code or the visitor took it to Saltix, and only while the
+  page is in front, with `wake()` now replacing at once a code that ran out while the page was hidden.
+  `@saltix/connect/server` keeps an offer 5 minutes (`OFFER_LIFE_MS`, `SERVER_OFFER_LIFE_MS`; first the slot's 30), so a
+  code relayed or photographed off a screen dies sooner, and the server-held page's 3 leave 2 for the sheet and the PIN.
+  saltix.io's own sign-in page shows each code for a minute. The guide ([docs/connect.md](docs/connect.md) §2, §4, §5,
+  *Numbers*), [docs/protocol/connect.md](docs/protocol/connect.md) (§10, §15.4) and the example's README say so. Tests:
+  a code replaced at its life and not a millisecond before, at both bounds; never once read or handed off; waiting while
+  hidden and replaced at once on `wake()`, a handed-off one's dropped slot opened again instead; every value out of
+  bounds refused, the server-held mode's bound apart; a server-held code a fresh offer from the server at each change;
+  an offer live a millisecond before its 5 minutes and gone at them. Mutation-tested: 12 mutants of the bounds, the
+  server's life and its boundary, the client's and the session's use of the life and `wake()`, all killed.
 - **Sign in with Saltix, the session at the server** (Saltix 19-connect §15, the server-held mode; `@saltix/connect`
   0.2.0; [docs/connect.md §5](docs/connect.md#5-the-two-modes-the-pages-own-and-the-server-held)): no format changes,
   the vectors hold, every Saltix released signs into it.
   - **`@saltix/connect/server`** for Node 20 and later: `createServerConnect({ node, network, genesis, origin, name })`
-    makes and keeps the keys of every offer (30 minutes, bounded, the oldest dropped first) and hands the page only the
+    makes and keeps the keys of every offer (5 minutes, bounded, the oldest dropped first) and hands the page only the
     public parts (`offer()`); `take({sid, payload}, admit)` opens each payload the page forwarded with `Q`'s secret and
     answers the server's word — `ignored`, `seen`, `reply` (kept), `refused` with its reason (`offer`, `spent`, a
     grant's, or the site's own from `admit`), `unchecked`, or `connected` with the account's public facts (never the

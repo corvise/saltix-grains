@@ -176,7 +176,7 @@ test("a node that cannot answer leaves the grant unchecked, the site's own rule 
   );
 });
 
-test("offers live 30 minutes and are bounded, the oldest dropped first; drop ends one early", async () => {
+test("offers live 5 minutes and are bounded, the oldest dropped first; drop ends one early", async () => {
   const t = site({ options: { maxOffers: 3 } });
   const first = await t.connect.offer();
   t.clock.now += 1_000;
@@ -202,6 +202,20 @@ test("offers live 30 minutes and are bounded, the oldest dropped first; drop end
   assert.equal(t.connect.drop("junk"), false);
   assert.equal(t.connect.size, 0);
   assert.deepEqual(await t.connect.take(forwarded(fifth, encodeSeen(1n))), { outcome: "refused", reason: "offer" });
+});
+
+test("an offer is live until 5 minutes after its making and gone at them, for the wallet's notice and the grant alike", async () => {
+  assert.equal(OFFER_LIFE_MS, 5 * 60_000);
+  const t = site();
+  const offer = await t.connect.offer();
+  t.clock.now += 5 * 60_000 - 1;
+  assert.deepEqual(await t.connect.take(forwarded(offer, encodeSeen(1n))), { outcome: "seen" }, "a millisecond before");
+  assert.equal((await t.connect.take(forwarded(offer, grantFor(offer, t.clock.now)))).outcome, "connected");
+  const late = await t.connect.offer();
+  t.clock.now += 5 * 60_000;
+  assert.deepEqual(await t.connect.take(forwarded(late, encodeSeen(1n))), { outcome: "refused", reason: "offer" }, "at the mark");
+  assert.deepEqual(await t.connect.take(forwarded(late, grantFor(late, t.clock.now))), { outcome: "refused", reason: "offer" });
+  assert.equal(t.connect.size, 0, "its keys went with it");
 });
 
 test("two grants for one offer in flight: one session, the other spent", async () => {
