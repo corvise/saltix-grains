@@ -1,7 +1,7 @@
 {
   "name": "@saltix/connect",
-  "version": "0.1.0",
-  "description": "Sign in with Saltix on a website or DApp: the page's side of Saltix Connect, its button and dialog (Saltix 19-connect, docs/protocol/connect.md)",
+  "version": "0.2.0",
+  "description": "Sign in with Saltix on a website or DApp: the page's side of Saltix Connect, its button and dialog, and the server's side for a session the server holds (Saltix 19-connect, docs/protocol/connect.md)",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     },
     "./connect.css": "./dist/connect.css",
     "./bundle": "./dist/saltix-connect.js"

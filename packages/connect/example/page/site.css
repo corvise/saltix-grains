@@ -1,0 +1,10 @@
+/* The example site's own look: the Sign in with Saltix button keeps its standard's (connect.css). */
+:root { color-scheme: light dark; }
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #ffffff; color: #0b1220; }
+main { max-width: 36rem; margin: 0 auto; padding: 2rem 1rem; }
+.note { color: #5b6472; font-size: 0.9rem; }
+#signout { min-height: 44px; padding: 0 1rem; border: 1px solid #5b6472; border-radius: 11px; background: transparent; color: inherit; font: inherit; }
+@media (prefers-color-scheme: dark) {
+  body { background: #0b1220; color: #ffffff; }
+  .note { color: #a9b2c0; }
+}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Example site</title>
+<link rel="stylesheet" href="/connect.css">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<main>
+  <h1>Example site</h1>
+  <p id="status" role="status">Loading…</p>
+  <p id="who" hidden></p>
+  <div id="signin" hidden></div>
+  <button id="signout" type="button" hidden>Sign out</button>
+  <p class="note">A sign-in opens a session on this site's server for 30 days; nothing else is kept about you. Scan only
+    a code you see on this site.</p>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -33,17 +33,22 @@ test("examples name the test network by its kind", () => {
   }
 });
 
-test("a Connect grant is for showing an account, and nothing invites a server to take it as a login", () => {
+test("a Connect grant a page opened is for showing an account; a server's login is the server-held mode, never a hosted check alone", () => {
   // Whoever holds a grant's bytes (anyone the page leaked them to, a relayed QR's other end) holds all it proves: it
-  // carries no server's challenge, so a server that took it would sign in whoever copied it (19-connect §5, §8).
+  // carries no server's challenge, so a server that took it would sign in whoever copied it (19-connect §5, §8). A
+  // server's login is §15's: the keys made at the server, `sid` its single-use nonce, spent once.
   const store = read("packages/connect/src/store.ts");
   assert.doesNotMatch(store, /server that checks it/i);
   assert.match(store, /for display only/i);
   const doc = read("docs/connect.md");
-  assert.match(doc, /^## .*never a server's login/m);
+  assert.match(doc, /^## 5\. The two modes: the page's own, and the server-held$/m);
   assert.match(doc, /bearer/i);
   assert.match(doc, /nonce/i, "a server's own login needs a challenge of its own");
+  assert.match(doc, /a server never takes a page's grant as a login/);
+  assert.match(doc, /Never a hosted check as the only way/);
+  assert.match(doc, /@saltix\/connect\/server/);
   assert.match(read("AGENTS.md"), /Connect\s+grant[^.]*display only/i);
+  assert.match(read("AGENTS.md"), /never a hosted check\s+as the only way/i);
 });
 
 test("the pairing command alone leads an agent to the SDK, how it works first, and the brief Saltix copies never holds a key", () => {

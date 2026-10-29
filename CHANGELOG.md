@@ -4,6 +4,40 @@
 
 ### Added
 
+- **Sign in with Saltix, the session at the server** (Saltix 19-connect §15, the server-held mode; `@saltix/connect`
+  0.2.0; [docs/connect.md §5](docs/connect.md#5-the-two-modes-the-pages-own-and-the-server-held)): no format changes,
+  the vectors hold, every Saltix released signs into it.
+  - **`@saltix/connect/server`** for Node 20 and later: `createServerConnect({ node, network, genesis, origin, name })`
+    makes and keeps the keys of every offer (30 minutes, bounded, the oldest dropped first) and hands the page only the
+    public parts (`offer()`); `take({sid, payload}, admit)` opens each payload the page forwarded with `Q`'s secret and
+    answers the server's word — `ignored`, `seen`, `reply` (kept), `refused` with its reason (`offer`, `spent`, a
+    grant's, or the site's own from `admit`), `unchecked`, or `connected` with the account's public facts (never the
+    grant's bytes) and the confirmation sealed for the page — in §15.2's order, reusing the page's own `verifyGrant`,
+    the offer spent in the same step that takes the grant, a refusal spending nothing; `confirm(sid)`, `drop(sid)`,
+    `size`. Telemetry of outcomes, reasons and timings only.
+  - **The client's server-held mode**: `createConnect({ server: { offer, login } })` (or a `Courier` of the site's own)
+    takes the offer from the server, opens the slot and shows the code as before, forwards every payload sealed as it
+    came and in order, says it is checking once the wallet's reply was taken, renders `connected` with what the server
+    answered (`Connection.answer`; `grant` absent — the page never sees the login's bytes), keeps nothing
+    (`connection` is null: the session is the server's), delivers the confirmation the server sealed, and keeps the
+    slot across a reload with no secret in it; `failed {reason: "server"}` when the server gives no offer, or one for
+    another origin or name. `courier.ts` is the JSON both sides speak (`ServerOffer`, `Forwarded`, `Taken`,
+    `Confirmation`) and `httpCourier`.
+  - **The example site** (`packages/connect/example`, `npm run example:connect`): a whole site on Node's `http` module
+    to copy — the two routes behind an `Origin` check and the limits (16 KiB a body, 10 offers a minute a client), a
+    session cookie minted after the checks (HttpOnly, SameSite=Lax, Secure on https), `/me`, sign-out, an allow-list,
+    a journal that names no address — with its page, the courier.
+  - **The guide's §5 rewritten around the two modes** (the page's own, for display; the server-held, a server's
+    login), the rule *never a hosted check as the only way*, and what a site must never do;
+    [docs/protocol/connect.md](docs/protocol/connect.md) carries §15; `AGENTS.md`, the README and
+    [docs/agents/sdk.md](docs/agents/sdk.md) name the mode. `Connection.grant` is optional now (absent in the
+    server-held mode) and `Connection.answer` carries the server's own fields.
+  - Tests: the server library (the login taken once, the second `take` refused as `spent`, a login for another slot,
+    a stale `at`, a wrong signature, another origin or network refused and the offer kept, the node unreachable, the
+    site's rule, the bound and the life of offers, two grants in flight, the vectors' grants, refusals, reply and
+    confirmation through the server's path byte for byte), the client's mode end to end over a relay and a fetch the
+    test plays (the state machine, the kept slot, the wire, the dialog), and the example's routes.
+
 - **Support for your app** (Saltix 19-connect §11.1, corvise/saltix #474, protocol version 9; [docs/support.md](docs/support.md)):
   an app's Connect profile names who answers its users, and the SDK holds every form to the network's rules.
   - **The profile's format 2**: `support` may be a Saltix address too, the owner's own or one whose holder signed its

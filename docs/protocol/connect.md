@@ -4,7 +4,8 @@
 > with Saltix", 2026-10-16; connection feedback, 2026-10-21), as of corvise/saltix `a6d0de6b` (2026-10-21); the pool
 > vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22); the profile's format 2, a
 > support address with its holder's consent (protocol version 9, 2026-10-28), as of corvise/saltix `6671fabb`
-> (2026-10-28). Section numbers are the specification's.
+> (2026-10-28); a server's login (§15, 2026-10-29), written from the analysis at corvise/saltix `70fdda58`
+> (2026-10-29), the amendment's own commit named here when it lands. Section numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
@@ -12,8 +13,9 @@ is public on the chain, and every action stays a transaction the phone signs. Th
 profile** and **Connect sheet**, is what Saltix shows the first time a mini-app opens.
 
 The SDK: `@saltix/connect` is the page's side (the session, the offer, the grant's checks, the button and dialog, a
-site's profile read as a wallet reads it); `@saltix/grain-server` and `grain profile` / `grain connect-profile` make
-and sign profiles. [docs/connect.md](../connect.md) is the guide. The vectors: `vectors/connect-v1.json` (offers,
+site's profile read as a wallet reads it) and, as `@saltix/connect/server`, a server's (§15: the keys made and kept at
+the server, the login checked there, the page a courier); `@saltix/grain-server` and `grain profile` /
+`grain connect-profile` make and sign profiles. [docs/connect.md](../connect.md) is the guide. The vectors: `vectors/connect-v1.json` (offers,
 grants, logs) and `vectors/connect-profiles-v1.json` (profiles).
 
 ## 1. What it is
@@ -132,11 +134,12 @@ The page keeps `{account, address, grant}` in the browser's storage for its orig
 `CONNECT_LIFE` (30 days) passes. Anyone who saw the QR code could deliver a grant of their own account, so the page
 always shows which account it now shows.
 
-**A grant is for display, never a server's login.** It carries no key, no token and no authority (§8), and no
-server's challenge: whoever holds its bytes holds all it proves, and a relayed QR code (§8) can carry a real user's
-grant into someone else's session, even one a server made. Saltix Connect signs nobody in to a website's server, and a
-grant authenticates no one; a mini-app's server signs its users in with `grain_login` ([grains §5.1](grains.md#51-identity)). The SDK: `verifyGrant` (`checkGrant`,
-`checkAccount`), `openLinkPayload`, `decodePayload`.
+**A grant the page opened is for display, never a server's login.** It carries no key, no token and no authority
+(§8), and no server's challenge: whoever holds its bytes holds all it proves, and a relayed QR code (§8) can carry a
+real user's grant into someone else's session. A website's server signs its visitors in by the server-held mode (§15),
+whose keys the server made and whose `sid` it spends; a mini-app's server by `grain_login`
+([grains §5.1](grains.md#51-identity)). The SDK: `verifyGrant` (`checkGrant`, `checkAccount`), `openLinkPayload`,
+`decodePayload`.
 
 ## 6. What the page shows
 
@@ -417,7 +420,7 @@ A DEX or any DApp signs its users in with Saltix Connect:
 Relays use self-signed certificates that apps pin by their records ([relays](relays.md#relay-records-and-certificate-pinning));
 a browser cannot pin, so a site reaches them through a WebSocket path of its own that pins them, or through a public
 gateway once one exists. `@saltix/connect` does the page's side: `createConnect`, `signInButton`, `openConnectDialog`,
-`verifyGrant`.
+`verifyGrant`; a site with a session of its own signs in by §15 (`createConnect({server})`, `@saltix/connect/server`).
 
 ## 14. Connection feedback
 
@@ -486,3 +489,93 @@ A site's profile is at `/.well-known/saltix-connect` and nowhere else; the regis
 answer that is not a JSON object is **no profile** (the site's silence); a JSON document that is not a profile that
 checks **did not check** (the site's mistake, with its reason). A single-page site that answers its page for every path
 is never shown as a site whose profile failed.
+
+## 15. A server's login
+
+Everything above signs a visitor into a *page*: the grant is opened in the page, proves the account to that page's
+session and is kept there for display. It is a bearer artefact — whoever holds its bytes within its ten minutes is the
+visitor, and it names no challenge of any server — so a server must never take it as a login. The server-held mode
+(2026-10-29) is normative for any site with a session: **the server holds the session, the page is a courier.** No
+byte of any format changes; the wallet's part is §4, §5 and §14 unchanged, so every wallet that signs a login today
+signs into a server that follows this section.
+
+### 15.1. The mode
+
+1. **The server makes the session** of §2 and keeps it: `sid`, `Q` (its secret kept) and `P` (nothing signs with it),
+   with the origin it serves this page at and the moment it was made, for the offer's life (§15.4), bounded in number.
+   It hands the page only `sid`, `Q`'s public key and `P`'s public key: **the page holds no secret**, and a page
+   unloaded and loaded again (§14.1) keeps in its `sessionStorage` nothing a server did not already give it.
+2. **The page opens the slot** at a relay with that `sid`, shows the offer of §3 — the relay's node key, `sid`, `Q`,
+   `P`, its own origin and name — as the QR code and the link, and keeps the slot alive as any page does. **The origin
+   in the offer is the page's own**, which the server knows and holds the login to; a server that serves several
+   origins makes an offer per origin.
+3. **The page forwards every payload** that reaches its slot to the server **sealed, as it came**, with its `sid`; it
+   opens nothing and decodes nothing.
+4. **The server opens** each payload with `Q`'s secret and `aad = sid ‖ P` (§5) and reads it as a page would: one that
+   does not open or decode is ignored; a `ConnectSeen` is told to the page, which shows "Continue on your phone"; a
+   `ConnectReply` (§14.2) is kept, the latest per offer; a grant goes through the checks of §15.2.
+5. **The server opens the session** it grants — its own cookie or token, minted after the checks, never derived from
+   `sid`, `P` or the grant, never chosen by the page — and answers the page with it and with the confirmation's sealed
+   bytes (§15.3). The page renders the connected state the moment the answer comes (§14.1 holds).
+
+### 15.2. The checks, in order
+
+A grant opens a session only when every check holds, in this order; the server stops at the first that fails:
+
+1. **The offer is live**: `sid` names an offer the server made, not spent, within its life.
+2. **The payload opens** for this offer's `Q` with `aad = sid ‖ P`, decodes to one Borsh value with nothing after it,
+   and its first byte is 1: a grant (§5).
+3. **The login is this offer's** (§5 rules 2–3): `network` the server's, `origin` the one the offer was made for, `sid`
+   and `page` this offer's, `|at − now| ≤ CONNECT_SKEW` by the server's clock.
+4. **The signature verifies** under `signer` (§5 rule 4): Ed25519 strictly, as the node verifies, or P-256 with a low
+   `s`.
+5. **The signer is the account's** (§5 rule 5): the account's key event log from a node of the server's network
+   (`node_status` first — its genesis the server's, its first account policy the one the log is replayed under; then
+   `account_log`), checked offline as a page does. A node that cannot answer leaves the grant **unchecked**, which is
+   not a refusal: the server asks another node, or tells the page to have the login approved again; it never opens a
+   session on a signature alone.
+6. **The site's own rules** come after the protocol's — an allow-list, a time window, a role — and are the site's
+   business.
+7. **`sid` is spent** in the same step that takes the grant, so a second grant for the offer, or the first again, is
+   refused as `spent`. A grant refused at any check **does not spend the offer**: the page keeps its code and the
+   person it was shown to may still sign in; what a stranger who saw the QR delivers costs the offer nothing.
+
+### 15.3. The confirmation
+
+The page's confirmation to the wallet (§14.2) stays the page's duty, with the server doing what needs `Q` and `K`: once
+the grant is taken, the server finds the kept reply whose `login` is the grant's login message, seals
+`ConnectConfirm {version: 1, login, at}` to the reply's `K` with `aad = reply sid ‖ P`, and hands the sealed bytes and
+the reply's `relay` and `sid` to the page with the session; the page delivers them on its own slot connection
+(`link_deliver`), waits for `link_delivered` up to 5 seconds, and closes its slot. The wallet then says **Connected**
+(§14.3) on the server's word, carried by the page. Without a kept reply (an older wallet), or one for another login,
+the page just closes its slot and the wallet ends in *Login sent*, as before.
+
+### 15.4. Lifetimes and bounds
+
+| What | Value | Rule |
+|---|---|---|
+| An offer at the server | `SLOT_LIFE`, 30 minutes | from its making; then dropped with its keys, whether or not its slot was ever opened |
+| A login's `at` | `CONNECT_SKEW`, 10 minutes | by the server's clock (§5 rule 3) |
+| Grants per offer | one | `sid` spent with the grant taken (§15.2 step 7) |
+| The confirmation's delivery | 5 seconds | the page's wait for `link_delivered` (§14.2) |
+| Offers kept | bounded by the server | the oldest dropped first; the SDK keeps 10 000 at most, and the example site makes at most 10 a minute per client |
+| The session's length | the site's policy | never longer than the site's own rule says |
+
+### 15.5. What a site must never do
+
+- **Take a page-held grant as a login**: a grant opened in a page (§5, §13) is for display there, and a server that
+  exchanges one for a session, a token or an action signs in whoever copied its bytes. The server's login is the one
+  whose keys the server made and whose `sid` it spends.
+- **Hand the page a secret**: `Q`'s secret, a reply's `K`, a session's token before the checks; the page gets public
+  keys, sealed bytes and the session the server minted.
+- **Open a session on less than every check** of §15.2: a signature alone proves a key, not an account; a node of
+  another network or genesis proves nothing; an unchecked grant is not a refusal and not a login.
+- **Reuse an offer**, or keep one past its life; or make an offer whose origin is not the page's own.
+- **Keep or log** the login's bytes, the account or the address beyond what the site needs to serve the person: a
+  journal names outcomes, reasons and timings, as the wallet's telemetry does (§14.3).
+
+The SDK: `createServerConnect({ node, network, genesis, origin, name })` with `offer()`, `take(forwarded, admit)`,
+`confirm(sid)` and `drop(sid)` (`@saltix/connect/server`); `createConnect({ server: { offer, login } })` or a `Courier`
+of the site's own (`@saltix/connect`); the JSON between them (`ServerOffer`, `Forwarded`, `Taken`, `Confirmation`) in
+`courier.ts`; the whole site to copy in `packages/connect/example`. No new vectors: `vectors/connect-v1.json`'s grants,
+reply and confirmation serve the server's path byte for byte ([docs/connect.md §5](../connect.md#5-the-two-modes-the-pages-own-and-the-server-held)).

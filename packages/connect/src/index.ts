@@ -5,8 +5,12 @@
  * dialog of the standard. Framework-free, for the browser. A port of Saltix's explorer's tested Connect code, byte for
  * byte vectors/connect-v1.json; docs/protocol/connect.md is the protocol it follows. A site's own Connect profile is signed once by its operator with
  * `grain connect-profile` (the server SDK's `signProfile`), never in a page; `readSiteProfile` checks it as a wallet does.
+ * Two modes (§15): the page's own, where the page makes the keys and checks the grant, and the server-held, where the
+ * site's server does both and the page is its courier (`createConnect({server})`, `courier.ts` the wire between them;
+ * `@saltix/connect/server` is the server's side, for Node, and never part of this bundle).
  */
 export * from "./client.js";
+export * from "./courier.js";
 export * from "./button.js";
 export * from "./dialog.js";
 export * from "./words.js";
