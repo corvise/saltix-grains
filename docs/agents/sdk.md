@@ -134,6 +134,20 @@ What the SDK decided, and why, where a choice was made; the newest first. A chan
   - **A page back in front replaces a code that ran out meanwhile at once** (`wake()`), rather than at its next look a
     minute later: with a one-minute code a tab brought back would otherwise show a code already gone, its countdown at
     0:00. Never once the wallet read the code or the visitor took it to Saltix (`handOff`).
+  - **The dialog shows the countdown, never a button for a new code** (the owner's rule for every place Connect shows a
+    code, the same day): "The code changes in 1:48" («Код обновится через 1:48») under the code, ticking each second,
+    hidden from screen readers (it would be spoken every second), gone once the wallet read the code; *Try again* only
+    after a failure. A refusal's reason stays under its code, which the session shows again at once, and goes with it
+    (until then the session's next `offer` event wiped it the moment it was said). `connect.renew()` stays in the API,
+    documented as rarely needed. Rejected: keeping *New code* beside the countdown (two ways to do one thing, and it
+    paid no heed to the countdown: the owner's complaint about the sites' gate).
+  - **A code the wallet read waits 3 minutes for its login, then a new one comes by itself** (`SEEN_WAIT_MS`): without
+    a button, a person who cancelled in Saltix would otherwise face "continue on your phone" for the slot's 30
+    minutes, and a reload would not help (the slot, read, is kept across it, §14.1). Afresh after a refused grant, so
+    its reason is read; never under a check, nor while the page is hidden or its slot reconnects, so a login the relay
+    held for a page in the background is taken before any new code. Rejected: a *Start over* button (the same button
+    by another name); waiting the slot's 30 minutes (a dead end); counting while hidden (a phone back from Saltix with
+    its login parked at the relay would find a new code and lose the login).
 
 - **2026-10-28, pairing a server, version 2** (Saltix 24-app-studio §3a, corvise/saltix #488; the owner's rule: scan the
   QR code, compare the code, confirm with the PIN, and nothing else — no key, token or address is ever pasted or carried,

@@ -4,6 +4,22 @@
 
 ### Added
 
+- **The dialog's code changes by itself, with a countdown and no *New code*** (`@saltix/connect`; the owner's rule of
+  2026-10-29 for every place Connect shows a code): `openConnectDialog` shows under the code "The code changes in 1:48"
+  («Код обновится через 1:48»; `WORDS.changesIn`, `codeCountdown`, the class `saltix-connect-dialog__countdown`),
+  ticking each second, hidden from screen readers, gone once the wallet read the code; the session's next code comes by
+  itself. The *New code* button and `WORDS.newCode` are gone; *Try again* shows only after a failure. A refusal's
+  reason now stays under its code (the session's next `offer` event for the same code wiped it at once) and goes with
+  it; a dialog closed before the session answered draws nothing and leaves no ticker running (`clock`, a test's).
+  `connect.renew()` stays, documented as rarely needed. A code the wallet read now waits 3 minutes for its login
+  (`SEEN_WAIT_MS`), then a new one comes by itself — in front, its slot connected, never under a check, afresh after a
+  refused grant — where it waited the slot's 30 minutes, even across a reload: without a button that was a dead end
+  for a person who cancelled in Saltix. The guide (§2, §6, *Numbers*) says so. Tests: the countdown's text and ticks,
+  one ticker for any number of codes and none after the dialog, Try again only after a failure, a refusal kept through
+  the same code and gone with a new one, end to end through the server-held mode; a read code renewed at its three
+  minutes and not before, never under a check, afresh after a refusal, waiting while hidden or reconnecting so a parked
+  login is taken first, and kept across a reload. Mutation-tested: 19 mutants of the countdown, Try again, the
+  refusal's keeping and the read code's wait, all killed.
 - **The code changes by itself, at the page's pace** (Saltix 19-connect §15.4 and §10 as amended on 2026-10-29 by
   corvise/saltix #498, the owner's decision: a code shown for a minute, then a new one on its own, with nothing to
   press; `@saltix/connect` 0.2.0, no format change): `createConnect({…, qrLifeMs})` sets how long a code nobody scanned

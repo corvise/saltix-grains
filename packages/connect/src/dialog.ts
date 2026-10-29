@@ -1,7 +1,9 @@
 // The dialog a tap on "Sign in with Saltix" opens (Saltix 19-connect §13 step 3): titled "Saltix Connect", the offer's
 // QR code with "Scan with Saltix to sign in", and on a phone the "Open Saltix" link that opens the wallet on the phone
-// itself. It follows the session: "continue in Saltix" once the wallet read the code, a refusal with its reason, a new
-// code when one expires. Built with DOM calls and the classes of `connect.css`: no inline style, no markup parsed.
+// itself. It follows the session: "continue in Saltix" once the wallet read the code, a refusal with its reason, and
+// under the code the quiet countdown to the next one, which comes by itself (19-connect §15.4: no button for a new code;
+// "Try again" only after a failure). Built with DOM calls and the classes of `connect.css`: no inline style, no markup
+// parsed.
 import { type ConnectEvents, ConnectFailed, type OfferView, type SaltixConnect } from "./client.js";
 import { markElement } from "./mark.js";
 import type { Connection } from "./store.js";
@@ -17,6 +19,27 @@ export interface DialogOptions {
   phone?: boolean;
   /** The document to draw in: the page's by default. */
   document?: Document;
+  /** The clock the countdown reads and ticks by (tests): `Date.now` and the page's own timers by default. */
+  clock?: DialogClock;
+}
+
+/** What the countdown under the code needs of a clock. */
+export interface DialogClock {
+  now(): number;
+  setInterval(f: () => void, ms: number): unknown;
+  clearInterval(t: unknown): void;
+}
+
+const PAGE_CLOCK: DialogClock = {
+  now: () => Date.now(),
+  setInterval: (f, ms) => setInterval(f, ms),
+  clearInterval: (t) => clearInterval(t as ReturnType<typeof setInterval>),
+};
+
+/** The time left until `expiresAt` as the dialog writes it under the code: `m:ss`, rounded up, never below 0:00. */
+export function codeCountdown(expiresAt: number, now: number): string {
+  const left = Math.max(0, Math.ceil((expiresAt - now) / 1000));
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
 }
 
 /** The classes the dialog uses (connect.css). */
@@ -30,6 +53,7 @@ export const DIALOG_CLASSES = {
   scan: "saltix-connect-dialog__scan",
   qr: "saltix-connect-dialog__qr",
   open: "saltix-connect-dialog__open",
+  countdown: "saltix-connect-dialog__countdown",
   status: "saltix-connect-dialog__status",
   actions: "saltix-connect-dialog__actions",
   action: "saltix-connect-dialog__action",
@@ -92,26 +116,59 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
   const open = element(doc, "a", DIALOG_CLASSES.open, words.open);
   open.setAttribute("rel", "noopener noreferrer");
   open.hidden = true;
+  // When the code changes by itself: read by eye, so out of the screen reader's way (it would speak every second).
+  const countdown = element(doc, "p", DIALOG_CLASSES.countdown);
+  countdown.setAttribute("aria-hidden", "true");
+  countdown.hidden = true;
   const status = element(doc, "p", DIALOG_CLASSES.status);
   status.setAttribute("role", "status");
   status.hidden = true;
+  // Only after a failure: there is no code to wait for then.
   const actions = element(doc, "div", DIALOG_CLASSES.actions);
-  const renew = element(doc, "button", DIALOG_CLASSES.action, words.newCode);
-  renew.setAttribute("type", "button");
-  actions.append(renew);
+  actions.hidden = true;
+  const retry = element(doc, "button", DIALOG_CLASSES.action, words.retry);
+  retry.setAttribute("type", "button");
+  actions.append(retry);
   const note = element(doc, "p", DIALOG_CLASSES.note, words.note);
-  dialog.append(head, scan, code, open, status, actions, note);
+  dialog.append(head, scan, code, countdown, open, status, actions, note);
   doc.body.append(dialog);
 
+  const clock = o.clock ?? PAGE_CLOCK;
+  /** The code on screen, and why the last grant for it was refused: the reason stays while that code does (the session
+   *  shows the same code again right after a refusal), and goes with it. */
+  let shown: string | null = null;
+  let refusal: string | null = null;
+  let expiresAt: number | null = null;
+  let ticker: unknown = null;
+  const tick = () => {
+    if (expiresAt !== null) countdown.textContent = words.changesIn.replace("{time}", codeCountdown(expiresAt, clock.now()));
+  };
+  /** The countdown under an unseen code, ticking every second; none once the wallet read it or nothing is shown. */
+  const count = (until: number | null) => {
+    expiresAt = until;
+    countdown.hidden = until === null;
+    if (until !== null) {
+      tick();
+      if (ticker === null) ticker = clock.setInterval(tick, 1000);
+    } else if (ticker !== null) {
+      clock.clearInterval(ticker);
+      ticker = null;
+    }
+  };
   const say = (text: string | null) => {
     status.textContent = text ?? "";
     status.hidden = text === null;
   };
   const show = (offer: OfferView) => {
-    code.replaceChildren(qrElement(doc, offer, words.qr));
+    if (offer.text !== shown) {
+      shown = offer.text;
+      refusal = null;
+      code.replaceChildren(qrElement(doc, offer, words.qr));
+    }
     open.setAttribute("href", offer.app);
     open.hidden = !phone;
-    renew.textContent = words.newCode;
+    actions.hidden = true;
+    count(offer.expiresAt);
   };
 
   return new Promise<Connection | null>((resolve) => {
@@ -121,23 +178,34 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
       if (done) return;
       done = true;
       for (const f of off) f();
+      count(null);
       if (result === null) connect.cancel();
       if (typeof dialog.close === "function" && dialog.open) dialog.close();
       dialog.remove();
       resolve(result);
     };
     const failed = () => {
+      count(null);
       say(words.failed);
-      renew.textContent = words.retry;
+      actions.hidden = false;
     };
     const on = <E extends keyof ConnectEvents>(event: E, f: (data: ConnectEvents[E]) => void) => off.push(connect.on(event, f));
     on("offer", (offer) => {
       show(offer);
-      say(null);
+      say(refusal);
     });
-    on("seen", () => say(words.seen));
-    on("checking", () => say(words.checking));
-    on("refused", ({ reason }) => say(reason === "unchecked" ? words.unchecked : words.refused.replace("{reason}", reason)));
+    on("seen", () => {
+      count(null);
+      say(refusal ?? words.seen);
+    });
+    on("checking", () => {
+      refusal = null;
+      say(words.checking);
+    });
+    on("refused", ({ reason }) => {
+      refusal = reason === "unchecked" ? words.unchecked : words.refused.replace("{reason}", reason);
+      say(refusal);
+    });
     on("failed", failed);
     on("connected", (c) => finish(c));
     close.addEventListener("click", () => finish(null));
@@ -146,14 +214,21 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
       finish(null);
     });
     open.addEventListener("click", () => connect.handOff());
-    renew.addEventListener("click", () => {
+    retry.addEventListener("click", () => {
       say(null);
+      actions.hidden = true;
       connect.renew().catch(() => {});
     });
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
-    connect.offer().then(show, (e: unknown) => {
-      if (!(e instanceof ConnectFailed) || e.reason !== "cancelled") failed();
-    });
+    // Closed before the session answered: nothing is drawn, and no countdown starts ticking for a dialog that is gone.
+    connect.offer().then(
+      (offer) => {
+        if (!done) show(offer);
+      },
+      (e: unknown) => {
+        if (!done && (!(e instanceof ConnectFailed) || e.reason !== "cancelled")) failed();
+      },
+    );
   });
 }
