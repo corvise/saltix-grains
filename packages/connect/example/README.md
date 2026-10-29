@@ -10,7 +10,7 @@ SALTIX_GENESIS=<the network's genesis hash> SALTIX_RELAYS=/saltix/r/1/,/saltix/r
 ```
 
 - **The server** (`createServerConnect({ node, network, genesis, origin, name })`) makes the keys of every offer and
-  keeps `Q`'s secret for 30 minutes; `POST /connect/offer` hands the page the public parts. `POST /connect/login`
+  keeps `Q`'s secret for 5 minutes; `POST /connect/offer` hands the page the public parts. `POST /connect/login`
   takes each payload the page's slot received, sealed as it came, and answers the server's word on it: the wallet's
   notice, its reply, a refusal with its reason, or the session opened — after every check (the offer live, the login
   this offer's and in time, the signature, the signer the account's by its key event log from `SALTIX_NODE`, the

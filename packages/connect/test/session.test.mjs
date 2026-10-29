@@ -4,8 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MS, SLOT_LIFE_MS, b64url, checkConfirm, decodeConfirm, encodeGrant, encodeReply,
-  encodeSeen, fromB64url, loginMessage, offerText, openLinkPayload, parseOffer, sealLinkPayload,
+  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MAX_MS, QR_LIFE_MIN_MS, QR_LIFE_MS, SERVER_QR_LIFE_MAX_MS, SLOT_LIFE_MS, b64url,
+  checkConfirm, decodeConfirm, encodeGrant, encodeReply, encodeSeen, fromB64url, loginMessage, offerText, openLinkPayload, parseOffer, qrLifeOf,
+  sealLinkPayload,
 } from "../dist/index.js";
 import { x25519 } from "@noble/curves/ed25519";
 import { toHex } from "@saltix/grain-server/web";
@@ -61,6 +62,7 @@ function harness(opts = {}) {
     // The relays in their order.
     random: () => 0.999,
     visible: () => h.visible.value,
+    qrLifeMs: opts.qrLifeMs,
   });
   return h;
 }
@@ -173,6 +175,96 @@ test("an unseen offer is replaced after two minutes, only while the page is in f
   assert.equal(h.links[0].closed, true);
   assert.ok(named(h, "connect_offer_expired"));
   h.session.stop();
+});
+
+test("a code of the page's own life is replaced at it, never once the wallet read it, and waits while the page is hidden", async () => {
+  const h = harness({ qrLifeMs: 60_000 });
+  await started(h);
+  const first = offerOf(h).sid;
+  assert.equal(last(h).expiresAt, h.clock.now + 60_000, "the page is told when the code changes");
+  await h.clock.advance(60_000 - 1);
+  assert.equal(offerOf(h).sid, first, "not before its minute");
+  await h.clock.advance(1);
+  const second = offerOf(h).sid;
+  assert.notEqual(second, first, "a new slot and new keys at its minute, with nothing asked");
+  assert.equal(h.keyCount, 2);
+  assert.equal(h.links[0].closed, true, "the old slot goes with its connection");
+  assert.equal(last(h).expiresAt, h.clock.now + 60_000);
+  // Hidden, the code waits past its life (it may be on its way to Saltix on this phone)...
+  h.visible.value = false;
+  await h.clock.advance(60_000 * 3 + 10);
+  assert.equal(offerOf(h).sid, second);
+  assert.equal(h.keyCount, 2);
+  // ...and in front again it is replaced at once, not at the next look a minute later.
+  h.visible.value = true;
+  h.session.wake();
+  await h.clock.advance(0);
+  const third = offerOf(h);
+  assert.notEqual(third.sid, second);
+  assert.equal(h.keyCount, 3);
+  // A wake within the code's life changes nothing.
+  h.session.wake();
+  await h.clock.advance(60_000 - 1);
+  assert.equal(offerOf(h).sid, third.sid);
+  // Once the wallet read it, the code stays while the person signs, however long, and a wake does not take it.
+  h.links[2].deliver(sealLinkPayload(third.offer.boxKey, third.offer.sid, third.offer.page, encodeSeen(1n)), third.sid);
+  await h.clock.advance(0);
+  assert.equal(last(h).kind, "seen");
+  await h.clock.advance(60_000 * 5);
+  h.session.wake();
+  await h.clock.advance(0);
+  assert.equal(offerOf(h).sid, third.sid);
+  assert.equal(h.keyCount, 3);
+  // Taken to Saltix on this phone, a code stays too: back in front past its life, its dropped slot is opened again —
+  // the same one, where the wallet delivers — and nothing is replaced.
+  const held = harness({ qrLifeMs: 60_000 });
+  await started(held);
+  const heldSid = offerOf(held).sid;
+  held.session.handOff();
+  held.visible.value = false;
+  held.links[0].drop();
+  await held.clock.advance(60_000 * 3);
+  assert.equal(held.links.length, 1, "nothing dialed while hidden");
+  held.visible.value = true;
+  held.session.wake();
+  await held.clock.advance(0);
+  assert.equal(offerOf(held).sid, heldSid, "the same code");
+  assert.equal(held.keyCount, 1, "no new keys");
+  assert.equal(held.links.length, 2, "its slot opened again at once, on a new connection");
+  assert.deepEqual(held.links[1].sent[0], { type: "link_open", sid: heldSid }, "the same slot");
+  assert.deepEqual(held.reconnecting, [true, false]);
+  held.session.stop();
+  h.session.stop();
+  assert.equal(h.clock.timers.size, 0);
+});
+
+test("a code lives 30 seconds to 10 minutes, to 3 in the server-held mode; anything else is refused", async () => {
+  assert.equal(QR_LIFE_MS, 2 * 60_000);
+  assert.equal(QR_LIFE_MIN_MS, 30_000);
+  assert.equal(QR_LIFE_MAX_MS, 10 * 60_000);
+  assert.equal(SERVER_QR_LIFE_MAX_MS, 3 * 60_000);
+  assert.equal(qrLifeOf(undefined, false), QR_LIFE_MS);
+  assert.equal(qrLifeOf(undefined, true), QR_LIFE_MS, "the default fits in a server's offer");
+  for (const ms of [30_000, 60_000, 600_000]) assert.equal(qrLifeOf(ms, false), ms);
+  for (const ms of [30_000, 60_000, 180_000]) assert.equal(qrLifeOf(ms, true), ms);
+  for (const ms of [29_999, 600_001, 60_000.5, Number.NaN, Number.POSITIVE_INFINITY, -60_000, 0, "60000", null]) {
+    assert.throws(() => qrLifeOf(ms, false), TypeError, `${ms} refused`);
+  }
+  assert.throws(() => qrLifeOf(180_001, true), /server-held mode, whose server keeps an offer 5 minutes/);
+  assert.throws(() => qrLifeOf(29_999, true), TypeError);
+  // The session refuses one before it opens anything.
+  assert.throws(() => harness({ qrLifeMs: 600_001 }), /qrLifeMs/);
+  // At both bounds the code is replaced exactly at its life.
+  for (const life of [30_000, 600_000]) {
+    const h = harness({ qrLifeMs: life });
+    await started(h);
+    const first = offerOf(h).sid;
+    await h.clock.advance(life - 1);
+    assert.equal(offerOf(h).sid, first, `${life}: not before`);
+    await h.clock.advance(1);
+    assert.notEqual(offerOf(h).sid, first, `${life}: at its life`);
+    h.session.stop();
+  }
 });
 
 test("an offer refused after its two minutes is replaced at once, not left for the slot's thirty", async () => {

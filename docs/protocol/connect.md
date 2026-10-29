@@ -5,7 +5,8 @@
 > vocabulary (the miners' ratings on the sheet) as of corvise/saltix `e6448704` (2026-10-22); the profile's format 2, a
 > support address with its holder's consent (protocol version 9, 2026-10-28), as of corvise/saltix `6671fabb`
 > (2026-10-28); a server's login (§15, 2026-10-29) as of corvise/saltix `78618ec4` (2026-10-29), the amendment that
-> wrote it. Section numbers are the specification's.
+> wrote it, and its offer's 5 minutes (§15.4, §10) as corvise/saltix #498, the amendment of the same day, sets them.
+> Section numbers are the specification's.
 
 A web page learns which account its visitor holds, proven by that account's key on the visitor's phone, and shows what
 concerns the account. Nothing secret leaves the phone, and connecting grants the page nothing: everything it then shows
@@ -174,7 +175,7 @@ console and not built for other sites yet.
 | `CONNECT_LIFE` | 30 days | how long a page keeps a grant |
 | `MAX_ORIGIN` | 128 bytes | an offer's origin |
 | `MAX_NAME` | 40 bytes | an offer's name |
-| QR life | 2 minutes | the page shows a new offer after it (policy) |
+| QR life | 2 minutes | the page shows a new offer after it, by itself (policy: a page may choose 30 seconds to 10 minutes, and at most 3 for a server's offer, §15.4) |
 | `MAX_PROFILE_BYTES` | 8 192 bytes | a Connect profile's Borsh form |
 | Profile texts | tagline 1–80, about 0–600, highlights 0–4 of 1–60, privacy 0–300 characters; 1–8 languages | §11.1 |
 | `MAX_LINK` | 256 bytes | a profile's website, support or terms |
@@ -557,7 +558,8 @@ the page just closes its slot and the wallet ends in *Login sent*, as before.
 
 | What | Value | Rule |
 |---|---|---|
-| An offer at the server | `SLOT_LIFE`, 30 minutes | from its making; then dropped with its keys, whether or not its slot was ever opened |
+| An offer at the server | `OFFER_LIFE`, 5 minutes | from its making; then dropped with its keys, whether or not its slot was ever opened. A code shown for a minute, then the scan, the sheet and the PIN fit in it; a code relayed or photographed off a screen dies with it, long before the slot's 30 minutes (amended 2026-10-29: it was `SLOT_LIFE`) |
+| A code a page shows of it | at most 3 minutes unseen | then a fresh offer from the server, by itself, with no button to press: the page's policy (`qrLifeMs`, 2 minutes by default); never while the wallet's notice holds it or the visitor took it to Saltix on this phone (§14.1). The scan, the sheet and the PIN fit in what is left of `OFFER_LIFE` |
 | A login's `at` | `CONNECT_SKEW`, 10 minutes | by the server's clock (§5 rule 3) |
 | Grants per offer | one | `sid` spent with the grant taken (§15.2 step 7) |
 | The confirmation's delivery | 5 seconds | the page's wait for `link_delivered` (§14.2) |

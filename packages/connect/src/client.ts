@@ -11,7 +11,7 @@ import { type Offer, nameOk } from "./offer.js";
 import { type NodeLike, type NodeStatus, nodeCall } from "./node.js";
 import { type QrCode, qrCode } from "./qr.js";
 import { type Dial, dialWebSocket } from "./relay.js";
-import { ConnectSession, type KeptSlotStore, type Phase, type SessionKeys, type SessionOptions, makeKeys } from "./session.js";
+import { ConnectSession, type KeptSlotStore, type Phase, type SessionKeys, type SessionOptions, makeKeys, qrLifeOf } from "./session.js";
 import { type Connection, type KeptStorage, defaultStorage, forgetConnection, loadConnection, saveConnection, STORAGE_KEY } from "./store.js";
 import { CONNECT_LIFE_MS } from "./grant.js";
 import { verifyGrant } from "./verify.js";
@@ -50,6 +50,14 @@ export interface ConnectOptions {
   userAgent?: string;
   /** Where the slot is kept across a reload: `sessionStorage` by default, null for nowhere (tests). */
   keep?: KeptSlotStore | null;
+  /**
+   * How long a code is shown before a new one replaces it by itself, in ms: 2 minutes by default; from 30 seconds to 10
+   * minutes, and to 3 in the server-held mode (its server keeps an offer 5 minutes, and the scan, the sheet and the
+   * PIN need the rest: 19-connect §15.4); anything else is refused. A code is replaced only while nobody scanned it and
+   * the page is in front: once the wallet read it, or the visitor took it to Saltix on this phone (`handOff`), it
+   * stays. A short life leaves a photographed or relayed code less time; `offer.expiresAt` says when the next comes.
+   */
+  qrLifeMs?: number;
   /**
    * The server-held mode (19-connect §15): the site's server makes the offer's keys, takes every payload the slot
    * receives and opens the session; this page is its courier and holds no secret. The server's two paths on this
@@ -147,6 +155,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
   if (o.genesis !== undefined && !/^[0-9a-f]{64}$/.test(o.genesis)) throw new TypeError("Saltix Connect: genesis is 64 lowercase hex digits");
   if (!o.server && !o.node) throw new TypeError("Saltix Connect: the page's own mode needs a node to check the login with (or `server` for the server-held mode)");
   if (!o.server && o.name === undefined) throw new TypeError("Saltix Connect: the page's own mode names the page (`name`)");
+  const qrLifeMs = qrLifeOf(o.qrLifeMs, !!o.server);
   // The server-held mode: the server's offer, every payload forwarded, nothing kept here.
   const courier: Courier<Connection> | null = o.server ? (isPaths(o.server) ? httpCourier(o.server, { origin, name: o.name }) : o.server) : null;
   const storage = courier ? null : o.storage === undefined ? defaultStorage() : o.storage;
@@ -247,6 +256,7 @@ export function createConnect(o: ConnectOptions): SaltixConnect {
       dial: o.dial ?? dialWebSocket,
       userAgent: o.userAgent,
       keep: o.keep,
+      qrLifeMs,
     };
     const mode: Partial<SessionOptions<Connection>> = courier
       ? { courier }

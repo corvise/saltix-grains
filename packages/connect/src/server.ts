@@ -5,7 +5,7 @@
  * every check of §15.2 — the offer live, the payload opened with `Q`'s secret, the login this offer's and in time, the
  * signature, the signer the account's by its key event log from a node (the page's own check, `verifyGrant`), the
  * site's own rule — with `sid` spent in the same step, once. The confirmation the wallet waits for is sealed here, to
- * the reply the wallet delivered, and handed to the page to deliver (§15.3). Offers live 30 minutes, bounded in number,
+ * the reply the wallet delivered, and handed to the page to deliver (§15.3). Offers live 5 minutes, bounded in number,
  * the oldest dropped first (§15.4).
  *
  * Any site runs it beside its own sessions (a cookie or a token it mints after `take` says `connected`, never derived
@@ -20,12 +20,14 @@ import { CONFIRM_VERSION, ConnectError, type ConnectReply, decodePayload, encode
 import type { NodeLike } from "./node.js";
 import { nameOk } from "./offer.js";
 import { boxPublic, openLinkPayload, randomSecret, sealLinkPayload } from "./seal.js";
-import { SLOT_LIFE_MS } from "./session.js";
+import { SERVER_OFFER_LIFE_MS } from "./session.js";
 import type { Connection } from "./store.js";
 import { UncheckedError, verifyGrant } from "./verify.js";
 
-/** An offer lives this long at the server, from its making, with its keys (§15.4): the slot's own life. */
-export const OFFER_LIFE_MS = SLOT_LIFE_MS;
+/** An offer lives this long at the server, from its making, with its keys (§15.4): 5 minutes, so that a code shown for
+ *  a minute or two still leaves the scan, the sheet and the PIN their time, and a relayed or photographed one dies
+ *  sooner than the slot's 30. */
+export const OFFER_LIFE_MS = SERVER_OFFER_LIFE_MS;
 /** Offers kept at most, unless told otherwise: the oldest is dropped first. */
 export const MAX_OFFERS = 10_000;
 /** A link payload is at most this long (09-relay §10.3): a longer one was never a wallet's. */
@@ -78,7 +80,7 @@ export interface ServerConnectOptions {
 export type Admit = (connection: Connection) => Promise<string | null> | string | null;
 
 export interface ServerConnect {
-  /** Fresh keys for one offer, kept here for 30 minutes; what the page shows and needs, nothing secret. */
+  /** Fresh keys for one offer, kept here for 5 minutes; what the page shows and needs, nothing secret. */
   offer(): Promise<ServerOffer>;
   /** A payload the page forwarded (§15.1 step 4): the server's word on it, which the page is answered with as it is.
    *  `connected` carries the account's public facts, never the grant's bytes, and the confirmation the page delivers. */
