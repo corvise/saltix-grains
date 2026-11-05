@@ -1,17 +1,19 @@
 // Where a sealed manifest says its bundle may also be fetched (Saltix 12-grains §2, §8; 32-images §6.2, §10): its
 // `sources`. The network keeps the bundle and wallets ask their own relay first, so sources are fallbacks. Before
 // protocol version 2 a sealed manifest must name 1 to 8 of them, so `grain publish` names copies the network itself
-// serves: `https://<relay>/_blob/grain_bundle/<hash>` at up to 3 relays of the network's current relay list (`relay_list`),
-// those that keep bundles first. Never a third party's host, never one the developer has to run. From version 2 a
-// sealed manifest names none.
-import { type NodeLike, NETWORK_BUNDLES, derive, fromHex, nodeCall, originOf, toHex } from "@saltix/grain-server";
+// serves: `https://<relay>/_blob/grain_bundle/<hash>` at up to 3 of the relays the node names for this computer
+// (`relay_tickets`, 41-transport §18.4), those that keep bundles first. Never a third party's host, never one the
+// developer has to run. From version 2 a sealed manifest names none (and no relay's address is published).
+import {
+  type NodeLike, NETWORK_BUNDLES, TICKETS, TicketRefused, derive, fromHex, nodeCall, originOf, readTicket, toHex,
+} from "@saltix/grain-server";
 
 /** How many relays' copies a manifest names on a network before protocol version 2. */
 export const RELAY_SOURCES = 3;
 /** The path a relay serves a bundle at (32-images §8.1). */
 export const BLOB_PATH = "/_blob/grain_bundle/";
 
-/** A relay as `relay_list` names it: its node key, its endpoints and the space it offers (GiB), as far as known. */
+/** A relay as its ticket names it: its node key, its endpoints and the space it offers (GiB), as far as known. */
 export interface ListedRelay {
   key?: string;
   endpoints: Array<{ url: string; cert_sha256: string | null }>;
@@ -84,14 +86,33 @@ export function relaySources(relays: readonly ListedRelay[], hash: string, size:
 }
 
 /**
+ * The relays the node names for this computer (`relay_tickets`: its choice and its own), each ticket read here as every
+ * reader reads it — at most `TICKETS` and its own, a refused one left out. A source is a fallback a wallet checks against
+ * the bundle's hash, never a relay anything is sent through, so no second relay is asked about it.
+ */
+export async function ticketedRelays(node: NodeLike, now = Date.now()): Promise<ListedRelay[]> {
+  const answer = await nodeCall<{ self?: unknown; tickets?: unknown }>(node, "relay_tickets", {});
+  const texts = [answer?.self, ...(Array.isArray(answer?.tickets) ? answer.tickets.slice(0, TICKETS) : [])];
+  return texts.flatMap((text) => {
+    if (typeof text !== "string") return [];
+    try {
+      const ticket = readTicket(text, { now });
+      return [{ key: ticket.nodeKey, endpoints: ticket.endpoints, store_gib: ticket.store }];
+    } catch (e) {
+      if (e instanceof TicketRefused) return [];
+      throw e;
+    }
+  });
+}
+
+/**
  * The sources a sealed manifest names on a network of `protocol`, given those it names now: the developer's own hosts
- * stay (fallbacks they chose); relays' copies are named afresh from the network's relay list before `NETWORK_BUNDLES`
+ * stay (fallbacks they chose); relays' copies are named afresh from the relays the node names before `NETWORK_BUNDLES`
  * when the developer named none, and dropped from it on.
  */
 export async function sourcesFor(node: NodeLike, protocol: number, hash: string, size: number, current: readonly string[]): Promise<{ sources: string[]; from: "own" | "relays" | "network" }> {
   const own = current.filter((s) => !isRelaySource(s));
   if (own.length > 0) return { sources: own.slice(0, 8), from: "own" };
   if (protocol >= NETWORK_BUNDLES) return { sources: [], from: "network" };
-  const { relays } = await nodeCall<{ relays: ListedRelay[] }>(node, "relay_list");
-  return { sources: relaySources(relays ?? [], hash, size), from: "relays" };
+  return { sources: relaySources(await ticketedRelays(node), hash, size), from: "relays" };
 }

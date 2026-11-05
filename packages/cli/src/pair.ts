@@ -10,7 +10,7 @@
 //    naming the key already, it finishes.
 // 3. A key (the one an earlier offer made, if it was never paired) and an offer of it with the key's proof for the app
 //    and the owner: a QR code in the terminal, the link, `.grain/pair.html` and the offer's code.
-// 4. It watches the registry (`grain_get` through the network's public relays' wallet interface, polled with a short
+// 4. It watches the registry (`grain_get` through the network's relays' wallet interface, polled with a short
 //    backoff: no relay session, no mailbox, no message from the phone) until the record names the key, renewing the
 //    offer when it expires with nobody having scanned it, then writes `app.key` and `app.json`.
 import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";

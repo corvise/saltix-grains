@@ -1,5 +1,5 @@
 // `grain publish`, `grain retire` and `grain show`: the owner's registry calls through the network's wallet interface
-// (Saltix 12-grains §3, 08-node §6: the public relays' gateways, or your own node), signed with the owner's key file; and
+// (Saltix 12-grains §3, 08-node §6: the relays' gateways, or your own node), signed with the owner's key file; and
 // what every signed registry call shares.
 import {
   type Manifest, type SignedManifest, type GrainCall, type NodeLike, nodeCall, grainGet, grainQuote, signGrainTx, minimumFee, callAmount, accountId, toHex,

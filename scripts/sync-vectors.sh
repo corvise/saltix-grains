@@ -1,27 +1,48 @@
 #!/bin/sh
-# Copy grains-v1.json, crypto-v1.json (addresses), relay-v1.json (relay records), access-v1.json (sponsors),
-# grain-chats-v1.json (chats and the file reference), handles-v1.json (usernames bound to apps), connect-v1.json (Saltix
-# Connect's offers, grants and logs, for @saltix/connect), connect-profiles-v1.json (Connect profiles),
-# server-pairing-v2.json (pairing a server by QR code, grain pair: the command, the offers, the proof, the slug verdicts) and images-v1.json (named blobs: the image and bundle
-# checks, a bundle's upload into the network, for grain publish and grain icon) and accounts-v1.json (managed accounts'
-# key event logs, and the quorums of protocol version 2, for the offline log check) from a Saltix checkout, and record its
-# commit and each file's git blob id there in vectors/SOURCE. CI holds the copies to those ids byte for byte
-# (scripts/check-vectors.mjs), so a vector edited here by hand fails.
+# In the public mirror of this SDK (corvise/saltix-grains): copy the golden vectors its tests read from a checkout of
+# corvise/saltix into vectors/, and record that checkout's commit and each file's git blob id in vectors/SOURCE. CI holds
+# the copies to those ids byte for byte (scripts/check-vectors.mjs), so a vector edited here by hand fails. The files are
+# the ones the tests name (`vectors/<name>.json` in packages/*/test and scripts/); a copy no test names any more goes.
+#
+#   scripts/sync-vectors.sh <path to a checkout of corvise/saltix>
+#
+# In corvise/saltix itself the tests read ../../../vectors/, the repository's own: nothing to sync there.
 set -eu
-src=${1:?usage: scripts/sync-vectors.sh <path to a Saltix checkout>}
+src=${1:?usage: scripts/sync-vectors.sh <path to a checkout of corvise/saltix>}
 here=$(cd "$(dirname "$0")/.." && pwd)
-files="grains-v1.json crypto-v1.json relay-v1.json access-v1.json grain-chats-v1.json handles-v1.json connect-v1.json connect-profiles-v1.json server-pairing-v2.json images-v1.json accounts-v1.json"
+if [ ! -d "$src/vectors" ] || ! git -C "$src" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "sync-vectors: $src is not a checkout of corvise/saltix (no vectors/, or no git)" >&2
+  exit 1
+fi
 # The ids come from the commit, so its vectors must be the commit's own.
 if [ -n "$(git -C "$src" status --porcelain -- vectors)" ]; then
-  echo "the checkout's vectors/ has changes not committed: commit them, or sync from a clean checkout" >&2
+  echo "sync-vectors: the checkout's vectors/ has changes not committed: commit them, or sync from a clean checkout" >&2
+  exit 1
+fi
+files=$(grep -rhoE 'vectors/[a-z0-9-]+\.json' "$here"/packages/*/test "$here"/scripts 2>/dev/null | sed 's#^vectors/##' | sort -u)
+if [ -z "$files" ]; then
+  echo "sync-vectors: no test names a vector (vectors/<name>.json): nothing to sync" >&2
   exit 1
 fi
 commit=$(git -C "$src" rev-parse HEAD)
+mkdir -p "$here/vectors"
+for old in "$here"/vectors/*.json; do
+  [ -f "$old" ] || continue
+  name=$(basename "$old")
+  if ! printf '%s\n' "$files" | grep -qx "$name"; then
+    rm -f "$old"
+    echo "sync-vectors: $name removed: no test reads it"
+  fi
+done
 {
   printf 'corvise/saltix %s\n' "$commit"
   for f in $files; do
-    cp "$src/vectors/$f" "$here/vectors/"
+    if [ ! -f "$src/vectors/$f" ]; then
+      echo "sync-vectors: $src/vectors/$f: a test names it and the checkout has no such vector" >&2
+      exit 1
+    fi
+    cp "$src/vectors/$f" "$here/vectors/$f"
     printf '%s %s\n' "$f" "$(git -C "$src" rev-parse "$commit:vectors/$f")"
   done
 } > "$here/vectors/SOURCE"
-echo "vectors synced from $commit"
+echo "sync-vectors: $(printf '%s\n' "$files" | wc -l | tr -d ' ') vectors from corvise/saltix $(printf %.12s "$commit") in vectors/SOURCE"

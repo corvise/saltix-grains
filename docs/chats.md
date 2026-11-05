@@ -47,10 +47,16 @@ const chat = await ChatServer.start({ appKey: appKeyFromEnvironment(), spec, sto
 does not name (`keyPairedHere`): one made elsewhere and carried here.
 
 `ChatServer.start` reads the key strictly (`AppKey.parse`: the exact form, lower-case hex, a known network, a valid
-slug), finds the network's public relays (`PUBLIC_RELAYS`, each pinned by its certificate; the rest from `relay_list`),
-reads the node's wallet interface through their gateways, refuses a key of another network (a reset one, say), and
-starts only if the registry names the key for the slug (`ChatKeyNotRegistered` otherwise). An unsigned `spec` is
-signed with the key at start. Pass `node` (your own node's wallet interface) for a network with no public relays.
+slug), finds the network's relays by itself (Saltix 41-transport §18: `relays` given or `SALTIX_RELAYS` — one that
+cannot be a relay refuses the start, `chat_relay_refused`, 78 —, the cache of relays that answered — `relayCache`, by
+default `.grain/relays.json` in the app's project —, the release's entry points, then the relay tickets they hand out,
+each used once another relay confirms its license; each pinned by its certificate; found again every hour), reads the
+node's wallet interface through their gateways,
+refuses a key of another network (a reset one, say), and starts only if the registry names the key for the slug
+(`ChatKeyNotRegistered` otherwise). No relay answering is the network's state, not the setup's: the error names every
+relay tried and why, and a supervisor may start it again. An unsigned `spec` is signed with the key at start. Pass
+`node` (your own node's wallet interface, whose `relay_tickets` names the relays) for a network with no relays to find,
+or `endpoints` for relays of your own, used alone.
 
 Every few minutes (`checkEveryMs`, 5 by default), and at each new beacon block a request comes in, it asks the registry
 again. Once the key is replaced or revoked, or the grain retired, it **stops**: it leaves the relays, answers nothing
@@ -145,7 +151,7 @@ readable by others), `chat_wrong_network` (a key of another network: the test ne
 contradicts the node), `chat_key_not_registered` (`ChatKeyNotRegistered`: replaced, revoked, retired, not registered),
 `chat_spec_changed_under_version` and `chat_spec_version_lowered` (`ChatSpecVersionError`), `chat_spec_version_starter`
 (a registered key's spec of version 1: Saltix made the app with a starting spec of version 1, which wallets keep until a
-higher one comes, so serve 2 or more), `chat_no_relays` (a network with no public relays and no node given). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
+higher one comes, so serve 2 or more), `chat_no_relays` (a network with no relay to find, none given and no node). `setupCannotWork(e)` is true for these and for an `AppKeyError` (not a
 key in `app.key`'s form): exit with `EXIT_CONFIG` (78) then, which a supervisor should not restart on; anything else (a network
 that is down) exits with 1 and may pass on a restart. A store without
 `served` and `setServed` (your own `ChatStore`) checks nothing across restarts; `fileChatStore` keeps it.
@@ -181,7 +187,7 @@ const certified = await ChatServer.start({
   cert,                                 // cert.json
   chain: { genesis, network: "devnet" }, // Saltix's test network is of the devnet kind (dsalt1…)
   ownerKey: manifest.owner_key,         // optional: checks the spec and certificate as a wallet does, at start
-  node: "http://127.0.0.1:30334",       // relays from its relay_list, pinned by their certificates; and the registry
+  node: "http://127.0.0.1:30334",       // the registry, and the relays its relay_tickets names, pinned by their certificates
   store: fileChatStore("chat.store.json"),
 });
 

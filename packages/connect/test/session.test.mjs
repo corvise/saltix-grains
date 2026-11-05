@@ -4,9 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, QR_LIFE_MAX_MS, QR_LIFE_MIN_MS, QR_LIFE_MS, SEEN_WAIT_MS, SERVER_QR_LIFE_MAX_MS, SLOT_LIFE_MS, b64url,
-  checkConfirm, decodeConfirm, encodeGrant, encodeReply, encodeSeen, fromB64url, loginMessage, offerText, openLinkPayload, parseOffer, qrLifeOf,
-  sealLinkPayload,
+  CONFIRM_DELIVERED_MS, ConnectError, ConnectSession, KEEP_MS, KEPT_SLOT_KEY, QR_LIFE_MAX_MS, QR_LIFE_MIN_MS, QR_LIFE_MS, RefusalReason, SEEN_WAIT_MS,
+  SERVER_QR_LIFE_MAX_MS, SLOT_LIFE_MS, b64url, checkAnswer, checkConfirm, decodeAnswer, decodeConfirm, encodeGrant, encodeReply, encodeSeen, fromB64url,
+  loginMessage, offerText, openLinkPayload, parseOffer, qrLifeOf, refusalReasonOf, sealLinkPayload,
 } from "../dist/index.js";
 import { x25519 } from "@noble/curves/ed25519";
 import { toHex } from "@saltix/grain-server/web";
@@ -142,24 +142,59 @@ test("the phone's notice shows once, what does not open is ignored, and a good g
   assert.equal(h.clock.timers.size, 0);
 });
 
-test("a refused grant says why and the offer stays; a node that could not check is no refusal of the grant", async () => {
-  const h = harness({ verify: async () => { throw new ConnectError("not_a_device"); } });
+test("a refused grant says why and ends its code: the wallet told on its slot, the slot closed and forgotten, a fresh code at once", async () => {
+  const store = new MemoryStorage();
+  const delivering = (_base, f) => (f.type === "link_deliver" ? { type: "link_delivered", sid: f.sid, delivered: true } : opened(f));
+  const h = harness({ keep: store, verify: async () => { throw new ConnectError("not_a_device"); }, answer: delivering });
   await started(h);
   const { offer, sid } = offerOf(h);
-  h.links[0].deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grantFor(offer, h.clock.now))), sid);
+  assert.ok(store.getItem(KEPT_SLOT_KEY), "the slot is kept for a reload while it lives");
+  const grant = grantFor(offer, h.clock.now);
+  // The wallet names its reply slot, then delivers its grant.
+  h.links[0].deliver(replyFor(offer, grant), sid);
+  h.links[0].deliver(sealLinkPayload(offer.boxKey, offer.sid, offer.page, encodeGrant(grant)), sid);
   await h.clock.advance(0);
   assert.deepEqual(h.refused, ["not_a_device"]);
-  assert.deepEqual(kinds(h), ["opening", "offer", "checking", "offer"]);
+  assert.deepEqual(kinds(h), ["opening", "offer", "checking", "opening", "offer"], "a fresh code at once, never the wallet's notice of the refused one");
   assert.deepEqual(h.connected, []);
+  assert.equal(h.keyCount, 2, "a new slot and new keys");
+  assert.notEqual(offerOf(h).sid, sid);
+  // The refusal went to the wallet's reply slot on the refused code's own connection, which then closed.
+  const told = h.links[0].sent.filter((f) => f.type === "link_deliver");
+  assert.equal(told.length, 1);
+  assert.deepEqual([told[0].relay, told[0].sid], [b64url(REPLY_RELAY), b64url(REPLY_SID)]);
+  const answer = decodeAnswer(openLinkPayload(REPLY_SECRET, REPLY_SID, offer.page, fromB64url(told[0].payload)));
+  assert.equal(answer.kind, "refusal");
+  checkAnswer(answer, loginMessage(grant.login), h.clock.now);
+  assert.equal(refusalReasonOf(answer.refusal), RefusalReason.OTHER, "a reason of the protocol's is told as a plain refusal");
+  assert.equal(h.links[0].closed, true);
+  assert.ok(h.events.some((e) => e.event === "connect_refusal" && e.meta.outcome === "delivered"));
+  // What a reload would open is the fresh code's slot, never the refused one's.
+  assert.equal(JSON.parse(store.getItem(KEPT_SLOT_KEY)).sid, offerOf(h).sid);
   assert.ok(named(h, "connect_refused"));
   h.session.stop();
-  const busy = harness({ verify: async () => { throw new Error("busy"); } });
+  // A node that could not check: the code ends the same way, the wallet told to try again in a minute.
+  const busy = harness({ verify: async () => { throw new Error("busy"); }, answer: delivering });
   await started(busy);
   const o = offerOf(busy);
-  busy.links[0].deliver(sealLinkPayload(o.offer.boxKey, o.offer.sid, o.offer.page, encodeGrant(grantFor(o.offer, busy.clock.now))), o.sid);
+  const g = grantFor(o.offer, busy.clock.now);
+  busy.links[0].deliver(replyFor(o.offer, g), o.sid);
+  busy.links[0].deliver(sealLinkPayload(o.offer.boxKey, o.offer.sid, o.offer.page, encodeGrant(g)), o.sid);
   await busy.clock.advance(0);
   assert.deepEqual(busy.refused, ["unchecked"]);
+  assert.equal(busy.keyCount, 2);
+  const again = busy.links[0].sent.filter((f) => f.type === "link_deliver");
+  assert.equal(refusalReasonOf(decodeAnswer(openLinkPayload(REPLY_SECRET, REPLY_SID, o.offer.page, fromB64url(again[0].payload))).refusal), RefusalReason.AGAIN);
   busy.session.stop();
+  // Without the wallet's reply nothing is told: the slot just closes.
+  const quiet = harness({ verify: async () => { throw new ConnectError("time"); } });
+  await started(quiet);
+  const q = offerOf(quiet);
+  quiet.links[0].deliver(sealLinkPayload(q.offer.boxKey, q.offer.sid, q.offer.page, encodeGrant(grantFor(q.offer, quiet.clock.now))), q.sid);
+  await quiet.clock.advance(0);
+  assert.equal(quiet.links[0].sent.filter((f) => f.type === "link_deliver").length, 0);
+  assert.equal(quiet.links[0].closed, true);
+  quiet.session.stop();
 });
 
 test("an unseen offer is replaced after two minutes, only while the page is in front", async () => {
@@ -268,8 +303,8 @@ test("a code lives 30 seconds to 10 minutes, to 3 in the server-held mode; anyth
   }
 });
 
-test("an offer refused after its two minutes is replaced at once, not left for the slot's thirty", async () => {
-  // The grant comes just before the mark and its check ends after it: the expiry that passed meanwhile is not lost.
+test("a refused grant's code is replaced at once, whatever was left of its two minutes, and the fresh one has its own", async () => {
+  // The grant comes just before the mark and its check ends after it; or well within the two minutes: the same.
   const pending = [];
   const refuse = () => pending.shift()(new ConnectError("not_a_device"));
   const h = harness({ verify: () => new Promise((_, fail) => pending.push(fail)) });
@@ -285,30 +320,17 @@ test("an offer refused after its two minutes is replaced at once, not left for t
   assert.notEqual(offerOf(h).sid, sid, "a new slot and new keys");
   assert.equal(h.keyCount, 2);
   assert.equal(h.links[0].closed, true);
-  assert.ok(named(h, "connect_offer_expired"));
-
-  // In the background the refused offer stays until the page is in front again, then goes.
   const second = offerOf(h);
-  await h.clock.advance(QR_LIFE_MS - 1_000);
   h.links[1].deliver(sealLinkPayload(second.offer.boxKey, second.offer.sid, second.offer.page, encodeGrant(grantFor(second.offer, h.clock.now))), second.sid);
-  await h.clock.advance(2_000);
-  h.visible.value = false;
-  refuse();
-  await h.clock.advance(KEEP_MS * 2);
-  assert.equal(offerOf(h).sid, second.sid);
-  h.visible.value = true;
-  await h.clock.advance(KEEP_MS + 10);
-  assert.notEqual(offerOf(h).sid, second.sid);
-  assert.equal(h.keyCount, 3);
-
-  // A grant refused well within the two minutes leaves the offer to its own time.
-  const third = offerOf(h);
-  h.links[2].deliver(sealLinkPayload(third.offer.boxKey, third.offer.sid, third.offer.page, encodeGrant(grantFor(third.offer, h.clock.now))), third.sid);
   await h.clock.advance(1_000);
   refuse();
   await h.clock.advance(0);
-  assert.equal(offerOf(h).sid, third.sid);
-  await h.clock.advance(QR_LIFE_MS);
+  const third = offerOf(h);
+  assert.notEqual(third.sid, second.sid, "well within its two minutes, replaced all the same");
+  assert.equal(h.keyCount, 3);
+  await h.clock.advance(QR_LIFE_MS - 1);
+  assert.equal(offerOf(h).sid, third.sid, "the fresh code lives its own two minutes");
+  await h.clock.advance(1);
   assert.notEqual(offerOf(h).sid, third.sid);
   assert.equal(h.keyCount, 4);
   h.session.stop();
@@ -334,17 +356,25 @@ test("a code the wallet read waits three minutes for its login, then a new one c
   await h.clock.advance(KEEP_MS * 2);
   assert.equal(last(h).kind, "checking");
   assert.equal(h.keyCount, 1);
-  // Refused: back to the read code with the reason, waited for afresh from the refusal.
+  // Refused: the read code ends, and a fresh one comes at once — the wallet that was refused sends nothing more.
   pending.shift()(new ConnectError("not_a_device"));
+  await h.clock.advance(0);
+  assert.equal(last(h).kind, "offer");
+  const second = offerOf(h);
+  assert.notEqual(second.sid, first.sid);
+  assert.equal(h.keyCount, 2);
+  assert.equal(h.links[0].closed, true);
+  // The fresh code read, and no login for three minutes: a new code by itself, with nothing to press.
+  h.links[1].deliver(sealLinkPayload(second.offer.boxKey, second.offer.sid, second.offer.page, encodeSeen(2n)), second.sid);
   await h.clock.advance(0);
   assert.equal(last(h).kind, "seen");
   await h.clock.advance(SEEN_WAIT_MS - 1);
-  assert.equal(offerOf(h).sid, first.sid, "the reason is read before a new code comes");
+  assert.equal(offerOf(h).sid, second.sid, "not before its three minutes");
   await h.clock.advance(1);
   assert.equal(last(h).kind, "offer");
-  assert.notEqual(offerOf(h).sid, first.sid, "a new code by itself, with nothing to press");
-  assert.equal(h.keyCount, 2);
-  assert.equal(h.links[0].closed, true);
+  assert.notEqual(offerOf(h).sid, second.sid, "a new code by itself, with nothing to press");
+  assert.equal(h.keyCount, 3);
+  assert.equal(h.links[1].closed, true);
   assert.ok(named(h, "connect_seen_expired"));
   h.session.stop();
   assert.equal(h.clock.timers.size, 0);

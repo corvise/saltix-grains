@@ -134,8 +134,8 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
   doc.body.append(dialog);
 
   const clock = o.clock ?? PAGE_CLOCK;
-  /** The code on screen, and why the last grant for it was refused: the reason stays while that code does (the session
-   *  shows the same code again right after a refusal), and goes with it. */
+  /** The code on screen, and why the last grant was refused: a refusal ends its code and a fresh one follows at once
+   *  (19-connect §14.1), so the reason stays under that code, and every code after it, until a wallet reads one again. */
   let shown: string | null = null;
   let refusal: string | null = null;
   let expiresAt: number | null = null;
@@ -162,7 +162,6 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
   const show = (offer: OfferView) => {
     if (offer.text !== shown) {
       shown = offer.text;
-      refusal = null;
       code.replaceChildren(qrElement(doc, offer, words.qr));
     }
     open.setAttribute("href", offer.app);
@@ -195,8 +194,10 @@ export function openConnectDialog(connect: SaltixConnect, o: DialogOptions = {})
       say(refusal);
     });
     on("seen", () => {
+      // A wallet read the code: a new attempt, whatever the last one's reason was.
+      refusal = null;
       count(null);
-      say(refusal ?? words.seen);
+      say(words.seen);
     });
     on("checking", () => {
       refusal = null;

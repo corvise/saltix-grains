@@ -36,7 +36,7 @@ you**: the app's page in Saltix shows the whole pairing command, and Saltix's br
    registry does not hold is a new app: Saltix registers it when the owner confirms. When a field is missing, say which
    and where it is (the app's page in Saltix); never guess an address.
 3. **It waits for the registry**: no relay session, no message from the phone; it reads the app's record through the
-   network's public relays, with a short backoff, until the record names the key, renewing the offer when it expires
+   network's relays, with a short backoff, until the record names the key, renewing the offer when it expires
    with nobody having scanned it (a line says so: no second command). Then it writes `app.key` (owner-only) and
    `app.json` (the app, its owner, the network, the key's public half; nothing secret), and adds `app.key`, `*.key` and
    `.grain/` to `.gitignore`. A command you cannot leave running while you talk to the user: `npx grain pair --no-wait`
@@ -78,7 +78,7 @@ key's Ed25519 secret. Whoever holds it speaks for the app until the owner replac
 - Never put it on a command line (shells keep their history), in a log, a test, a commit, an issue, a chat or an error
   report. `.gitignore` keeps every `*.key` out of git; check `git status` before committing anyway.
 - `npx grain app-key --file app.key` prints its public parts (network, genesis, slug, public key, address) and whether
-  the registry names it, through the network's public relays. It never prints the secret.
+  the registry names it, through the network's relays. It never prints the secret.
 
 ## Set up
 
@@ -114,8 +114,13 @@ Every command takes `--help` and runs nothing then: `npx grain <command> --help`
 
 **No node needed.** Every registry command (`grain show`, `publish`, `retire`, `profile`, `configure`, `access`, `bind`,
 `rate`, `sponsor`, `app-key`) and `grain faucet` (test SALT for `owner.key`'s account, once every 5 minutes) reach the
-test network through its public relays, each pinned by its certificate's hash. `--node URL` is for a node of your own
-and `--relay wss://…#<sha256>` for a relay you name, always with its pin.
+test network through its relays, which the SDK finds when it runs (nothing to configure; Saltix 41-transport §18), each
+pinned by its certificate's hash. When none answers, `grain doctor` names each relay it tried and why: then
+`--relay SALTIX-RELAY:…`, a relay ticket someone whose Saltix works gave you (`SALTIX_RELAYS` for the server: one that
+cannot be a relay stops it with 78; one past its life is left out with a warning). `--node URL` is for a node of your
+own and `--relay wss://…#<sha256>` for a relay you name, always with its pin. Never write a relay's address into the
+app's code, docs or configuration: the SDK carries no list of relays and finds them by tickets, and Saltix's public list
+is being retired.
 
 ## The chat spec: `chat.json`
 
@@ -524,4 +529,8 @@ Saltix lays an app's page inside the safe area; full screen only with viewport-f
 | `…: the grain is retired` | A retired slug is never used again: the owner makes a new app in Saltix; `npx grain pair --new --app <new slug> …` with its command |
 | `chat.json changed but keeps version N` / `…below version N this server already served` | Raise `version` in `chat.json` above N and start again |
 | `wallets write to the first server key the registry names` (a warning) | Requests go to the first key's server: run that one |
-| `no public relays are known for mainnet` | Pass `NODE_RPC`, your own node's wallet interface |
+| `no relay is known for mainnet` | Pass `NODE_RPC`, your own node's wallet interface |
+| `no relay of devnet answered (… tried …)` with each relay and why | The network is out of reach from here: `npx grain doctor` says the same; set `SALTIX_RELAYS` to two relay tickets (`SALTIX-RELAY:…`) of two different relays someone whose Saltix works gave you — a server signs only under the genesis two relays agree on —, or `NODE_RPC` |
+| `the relays that answered (1) did not agree on devnet's genesis: …` | One relay alone answered: give a second (another relay's ticket in `SALTIX_RELAYS`) or `NODE_RPC` |
+| `relays (SALTIX_RELAYS): relay N given: …` (`chat_relay_refused`, exit 78) | That value cannot be a relay (cut short, another network's, not `wss://host:port/#<pin>`): fix `SALTIX_RELAYS` or remove it |
+| `the ticket given for relay key:… is left out: … past its life` (a warning) | Ask whoever gave the ticket for a new one; the cache and the entry points still serve meanwhile |

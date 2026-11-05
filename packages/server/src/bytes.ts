@@ -25,6 +25,46 @@ export function concat(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/** RFC 4648's base32 in upper case, without padding (the node's `base32`: 47-computers' offers, relay tickets). */
+export function toBase32(bytes: Uint8Array): string {
+  let out = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = ((buffer << 8) | byte) & 0x1fff;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += BASE32[(buffer >> bits) & 31];
+    }
+  }
+  if (bits > 0) out += BASE32[(buffer << (5 - bits)) & 31];
+  return out;
+}
+
+/** `toBase32`'s form read exactly, as the node reads it: its alphabet in upper case, no padding, a length an encoding
+ *  makes, the last character's unused bits zero; null otherwise. */
+export function fromBase32(text: string): Uint8Array | null {
+  if ([1, 3, 6].includes(text.length % 8)) return null;
+  const out: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const c of text) {
+    const value = BASE32.indexOf(c);
+    if (value < 0) return null;
+    buffer = (buffer << 5) | value;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((buffer >> bits) & 0xff);
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  return buffer === 0 ? Uint8Array.from(out) : null;
+}
+
 /** Saltix's domain-separated hash: BLAKE3 derive_key with `context` over the parts (01-foundation). */
 export function derive(context: string, ...parts: Uint8Array[]): Uint8Array {
   return blake3(concat(...parts), { context: new TextEncoder().encode(context) });

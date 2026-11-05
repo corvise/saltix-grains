@@ -63,8 +63,9 @@ export class DevLog {
     if (NETWORKS.has(network)) this.network = network;
   }
 
-  /** Append a step: `step` and `reason` are codes; anything that is not one is written as `other`. */
-  step(step: string, outcome: Outcome, reason?: string): void {
+  /** Append a step: `step` and `reason` are codes; anything that is not one is written as `other`. `numbers`: counts and
+   *  times under codes (relays tried and answered, say), whole numbers only — never an address or a key. */
+  step(step: string, outcome: Outcome, reason?: string, numbers: Record<string, unknown> = {}): void {
     if (!this.enabled || this.dir === null || !isProject(this.dir)) return;
     const line = {
       at: new Date().toISOString(),
@@ -74,6 +75,7 @@ export class DevLog {
       step: code(step),
       outcome,
       ...(reason !== undefined ? { reason: code(reason) } : {}),
+      ...Object.fromEntries(Object.entries(numbers).filter(([k, v]) => CODE.test(k) && !["ms", "at", "run"].includes(k) && Number.isSafeInteger(v))),
       ms: Date.now() - this.started,
       ...(this.network ? { network: this.network } : {}),
     };
@@ -128,7 +130,10 @@ export function reasonOf(error: unknown): string {
   if (e?.name === "IconError" && e.reason) return `icon_${e.reason}`;
   if (e?.name === "SupportError" && e.reason) return `support_${e.reason}`;
   if (e?.name === "SupportKeyError") return "support_key";
+  if (e?.name === "GivenRelayRefused" && e.reason) return `relay_given_${e.reason}`;
   if (e?.name === "RpcError") return "node_refused";
+  // The first look found no relay at all: now the usual way an unreachable network shows (its message lists each try).
+  if (e?.name === "NoRelayAnswered") return "network_unreachable";
   if (typeof e?.message === "string" && /no relay answered|no relay took|ECONNREFUSED|ENOTFOUND|fetch failed/.test(e.message)) return "network_unreachable";
   if (typeof e?.code === "string" && /^E[A-Z]+$/.test(e.code)) return `fs_${e.code.toLowerCase()}`;
   return "error";

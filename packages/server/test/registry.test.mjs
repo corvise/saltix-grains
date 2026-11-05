@@ -15,7 +15,7 @@ const v = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", imp
 const handles = JSON.parse(readFileSync(new URL("../../../vectors/handles-v1.json", import.meta.url), "utf8"));
 const access = JSON.parse(readFileSync(new URL("../../../vectors/access-v1.json", import.meta.url), "utf8"));
 const secret = fromHex(v.owner_secret, 32);
-/** The rater of the vectors: `RATER` of crates/saltix-types/src/grain/vectors.rs (its public key is checked below). */
+/** The rater of the vectors: `RATER` of chain/crates/saltix-types/src/grain/vectors.rs (its public key is checked below). */
 const RATER = fromHex("65".repeat(32), 32);
 const callOf = (c) => {
   switch (c.call) {
@@ -81,7 +81,7 @@ test("the deposit follows the slug's length, and a registration sends the node's
 });
 
 test("a username bound to a grain is the node's", () => {
-  // The signer of every handle transaction: the payer key of access-v1.json (`SIGNER` of crates/saltix-types/src/vectors.rs).
+  // The signer of every handle transaction: the payer key of access-v1.json (`SIGNER` of chain/crates/saltix-types/src/vectors.rs).
   const signer = fromHex(access.keys.payer_private_hex, 32);
   assert.equal(toHex(accountId(ed25519.getPublicKey(signer))), handles.commit.sender_hex);
   for (const name of ["bind-handle", "unbind-handle"]) {

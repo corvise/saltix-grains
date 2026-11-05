@@ -9,7 +9,9 @@
  * its app by a QR code (`pairing.ts`, `grain pair`: the owner scans, compares the code and confirms; no secret travels)
  * and finds it with `appKeyFromEnvironment`; a sealed app's bundle and
  * icon go into the network itself (`named.ts`: the checks, `bundle-upload.ts`: the server key's statement, `blobs.ts`:
- * `putBundle`, `putIcon`, `getBlob`). `@saltix/grain-server/web` holds the parts that run in a web page too.
+ * `putBundle`, `putIcon`, `getBlob`). It finds the network's relays when it runs, never from a list it carries (41-transport
+ * §18: `RelayFinder`, relay tickets, vectors/relay-tickets-v1.json). `@saltix/grain-server/web` holds the parts that run
+ * in a web page too.
  */
 export * from "./bytes.js";
 export * from "./address.js";
@@ -47,6 +49,9 @@ export * from "./report.js";
 export * from "./app-key.js";
 export * from "./key-file.js";
 export * from "./pairing.js";
+export * from "./tickets.js";
+export * from "./entry.js";
+export * from "./discovery.js";
 export * from "./network.js";
 export * from "./chat-server.js";
 export * from "./sign-in.js";

@@ -46,9 +46,9 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
   ([grain chats](protocol/grain-chats.md), [docs/chats.md](chats.md)).
 - **The program** (if the app needs one) is a Node.js process built on
   [`@saltix/grain-server`](../packages/server): `ChatServer` answers the chat with cards it signs, signs invoices and
-  notifications, keeps state, and reads the registry. It **connects out** to the network's public relays over a
-  WebSocket, pinned by each relay's certificate hash, so it needs **no domain, no open port and no certificate**: it
-  runs on a laptop behind a home router as well as on a small server. While it is off, requests wait in its mailbox (a
+  notifications, keeps state, and reads the registry. It **connects out** to the network's relays over a WebSocket, which
+  it finds by itself when it starts (no list to keep up to date), pinned by each relay's certificate hash, so it needs
+  **no domain, no open port and no certificate**: it runs on a laptop behind a home router as well as on a small server. While it is off, requests wait in its mailbox (a
   command waits up to 7 days) and are answered when it comes back.
 - **The program's key** is one of the server keys the registry names, kept in the project's `app.key` with the network
   and the slug (`saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`): the program's whole configuration. **It is made on the
@@ -212,7 +212,8 @@ This is the one account of it; the other pages link here (Saltix 32-images [§6]
   `protocol.version`):
   - **version 2 and later**: none; the network is the bundle's source.
   - **version 1** (the test network today): a sealed manifest must name 1 to 8 sources, so `grain publish` names the
-    network's own copy at up to 3 relays of its relay list, those offering space first
+    network's own copy at up to 3 of the relays the node names by their tickets (`relay_tickets`), those offering space
+    first
     (`https://<relay>/_blob/grain_bundle/<hash>`). They are addresses where the network serves the copy its keepers
     hold, not uploads of their own, and never a host of yours.
 - **Wallets** ask their own relay first and turn to the sources only when it has none; whichever way the bytes come,
@@ -231,7 +232,10 @@ the owner's phone signs.
    SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more), the fees of the two transactions (millionths of a SALT), and
    what `owner.key`'s account holds; and whether `connect.json` is ready (it is checked here until the registry can hold
    it).
-2. `npx grain faucet --wait`: test SALT for `owner.key`'s account (once every 5 minutes; about 20 seconds).
+2. `npx grain faucet --wait`: test SALT for `owner.key`'s account — the grants its first publish takes (the faucet
+   pays 10 SALT a grant, one every 5 minutes: a deposit of 10 SALT and the fees are two grants, 30 SALT four; it says
+   how many, waits the 5 minutes between them, and ends with the next step). A deposit of 100 SALT (a slug of 3–5
+   characters) would take an hour of grants: it says so instead, and a longer slug or the owner's Saltix pays.
 3. `npx grain publish --key owner.key`: it says which account will own the app, sends `RegisterGrain` and, right behind
    it with the next nonce, `SetGrainAccess` private (as an app made in Saltix starts), waits for both to land, then puts
    the bundle and the icon into the network. Later versions are signed by `owner.key` without `--key`: **a key file

@@ -10,7 +10,7 @@
 //   SUPPORT_MODEL        the model, claude-opus-5-5 by default
 //   SUPPORT_MODEL_DAILY  the questions a day the model answers for all users together (500 by default): past it, a person
 //   SUPPORT_FAQ          the app's notes (faq.json next to this file by default)
-//   SALTIX_APP_KEY, SALTIX_APP_KEY_FILE, CHAT_SPEC, CHAT_STORE, NODE_RPC: as examples/hello-grain/server.mjs reads them
+//   SALTIX_APP_KEY, SALTIX_APP_KEY_FILE, CHAT_SPEC, CHAT_STORE, SALTIX_RELAYS, NODE_RPC: as examples/hello-grain/server.mjs reads them
 //
 // Keys come from the environment (or grain pair's app.key, owner-only), never from a file in a repository, and none of
 // them reaches the log. The app's profile names it as the app's support with a username bound to the app:
@@ -18,7 +18,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ChatServer, EXIT_CONFIG, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, setupCannotWork } from "../../packages/server/dist/index.js";
+import { ChatServer, EXIT_CONFIG, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, relaysFromEnvironment, setupCannotWork } from "../../packages/server/dist/index.js";
 import { DEFAULT_MODEL, claudeAnswerer, createSupportAgent, readFaq } from "./support.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -75,7 +75,7 @@ try {
 console.log(`starting ${key}`);
 try {
   const chat = await ChatServer.start({
-    appKey: key, spec, node: process.env.NODE_RPC, store: fileChatStore(process.env.CHAT_STORE ?? join(process.env.STATE_DIRECTORY || ".", "support.store.json")),
+    appKey: key, spec, node: process.env.NODE_RPC, relays: relaysFromEnvironment(), store: fileChatStore(process.env.CHAT_STORE ?? join(process.env.STATE_DIRECTORY || ".", "support.store.json")),
     log, onStop: () => process.exit(EXIT_CONFIG),
   });
   chat.text(agent.text);

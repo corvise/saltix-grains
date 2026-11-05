@@ -54,25 +54,31 @@ export const pagePackageJson = (slug: string, cli: string) => JSON.stringify({
 /** A chat-only grain's server: the key in `app.key` is its whole configuration (Saltix 24-app-studio §3a). */
 export const chatServer = (slug: string) => `// The chat of ${slug}, run by its server key (Saltix 24-app-studio §3a): \`grain pair\` made it on this computer and
 // wrote app.key once the registry named it; the key names the app, its network and the server key the registry trusts.
-// The server finds the network's public relays and answers chat.json's commands.
+// The server finds the network's relays by itself when it starts (nothing to configure) and answers chat.json's commands.
 //
 //   npm start             the key from SALTIX_APP_KEY, the file SALTIX_APP_KEY_FILE names (a systemd credential), or
 //                         app.key beside this file (owner-only); with none, it refuses to start (78) and says to run
 //                         grain pair
-//   NODE_RPC              your own node's wallet interface, for a network with no public relays
-//   STATE_DIRECTORY       where chat.store.json is kept (systemd sets it with StateDirectory=; else here): it also
+//   SALTIX_RELAYS         relay tickets (SALTIX-RELAY:…, space-separated) someone whose Saltix works gave you, tried
+//                         first: only where the relays the server finds do not answer (grain doctor says so). A server
+//                         signs only under the genesis two relays agree on: give two tickets of two different relays
+//                         (one alone never starts it), or NODE_RPC. One that cannot be a relay refuses to start (78);
+//                         one past its life is left out with a warning, and the rest still serve
+//   NODE_RPC              your own node's wallet interface, instead of the relays
+//   STATE_DIRECTORY       where chat.store.json and relays.json (the relays that answered, for the next start) are
+//                         kept (systemd sets it with StateDirectory=; else here and .grain/): chat.store.json also
 //                         remembers the spec served, so chat.json changed without raising "version" is refused (78)
 //
 // The log is one JSON line per event, and never holds a key or what users wrote.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ChatServer, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, setupCannotWork } from "@saltix/grain-server";
+import { ChatServer, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, relaysFromEnvironment, setupCannotWork } from "@saltix/grain-server";
 import { handlers } from "./chat.mjs";
 
 /** The exit code when the setup cannot work as it stands (EX_CONFIG, the SDK's EXIT_CONFIG): no key (not paired yet: run
- *  grain pair), the key is not one or the registry does not name it, or chat.json changed under a version this server
- *  served. Restarting would not help. */
+ *  grain pair), the key is not one or the registry does not name it, chat.json changed under a version this server
+ *  served, or SALTIX_RELAYS holds what cannot be a relay. Restarting would not help. */
 const DEAD_KEY = 78;
 
 const log = (level, event, meta = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), level, event, ...meta }));
@@ -89,6 +95,8 @@ try {
     store: fileChatStore(join(process.env.STATE_DIRECTORY || ".", "chat.store.json")),
     version: JSON.parse(readFileSync(beside("package.json"), "utf8")).version,
     node: process.env.NODE_RPC,
+    relays: relaysFromEnvironment(),
+    relayCache: process.env.STATE_DIRECTORY ? join(process.env.STATE_DIRECTORY, "relays.json") : undefined,
     log,
     onStop: () => process.exit(DEAD_KEY),
   });

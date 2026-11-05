@@ -16,7 +16,7 @@ import {
   signMailboxAck, toBase64Url, fromBase64Url,
   messagingPublic, sealFrame, openFrame, serverMessagingSecret,
   encodeNotification, notificationMessage, signNotification, decodeNotification, notificationProblem,
-  RelayClient, usableEndpoint,
+  RelayClient, usableEndpoint, relaysOfNode, signRelayTicket, readTicket, TICKETS,
 } from "../dist/index.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
@@ -251,12 +251,58 @@ test("a relay of another network, or one that is not the pinned one, is not used
   assert.match((await refused({ endpoints: [{ url: "ws://192.0.2.1:30335", cert_sha256: null }], secret: new Uint8Array(32).fill(1), network: "devnet", timeoutMs: 300 })).message, /in time/);
 });
 
+test("a server's own node names its relays by relay_tickets, each ticket read here: never relay_list", async () => {
+  const { createServer: httpServer } = await import("node:http");
+  const genesis = "5a".repeat(32);
+  const now = 1_800_000_000_000;
+  const ticket = (n, options = {}) => signRelayTicket({
+    secret: new Uint8Array(32).fill(n), genesis, issuedAt: options.issuedAt ?? now - 60_000,
+    endpoints: [{ url: `wss://192.0.2.${n}:30335/`, cert_sha256: n.toString(16).padStart(2, "0").repeat(32) }],
+  });
+  const asked = [];
+  const node = httpServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const { method } = JSON.parse(body);
+      asked.push(method);
+      const tickets = [ticket(2), ticket(3, { issuedAt: now - 31 * 86_400_000 }), ...[4, 5, 6, 7, 8, 9].map((n) => ticket(n))];
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { period: 1, self: ticket(1), tickets } }));
+    });
+  });
+  await new Promise((r) => node.listen(0, "127.0.0.1", r));
+  try {
+    const found = await relaysOfNode(`http://127.0.0.1:${node.address().port}/`, now);
+    assert.deepEqual(asked, ["relay_tickets"]);
+    // Its own, and the first TICKETS of the rest less the one past its life; each with its node key.
+    assert.equal(TICKETS, 5);
+    assert.deepEqual(found.map((e) => e.url.split(".")[3].split(":")[0]), ["1", "2", "4", "5", "6"]);
+    assert.equal(found[0].key, readTicket(ticket(1), { now }).nodeKey);
+  } finally {
+    node.close();
+  }
+});
+
+test("a relay is named in the log by its pin's or key's fingerprint, and one URL under two pins is tried under both", async () => {
+  const log = [];
+  const dead = (pin) => ({ url: "wss://127.0.0.1:1/", cert_sha256: pin.repeat(32) });
+  const error = await RelayClient.connect({
+    endpoints: [dead("ab")], discover: async () => [dead("cd"), dead("ab")], secret: new Uint8Array(32).fill(7), network: "devnet",
+    timeoutMs: 600, log: (level, event, meta) => log.push({ event, ...meta }),
+  }).then((c) => { c.close(); return null; }, (e) => e);
+  assert.match(error.message, /in time/);
+  const failed = log.filter((l) => l.event === "relay_failed");
+  assert.deepEqual([...new Set(failed.map((l) => l.relay))].sort(), ["cert:abababab", "cert:cdcdcdcd"]);
+  assert.ok(failed.every((l) => l.reason === "refused the connection"), JSON.stringify(failed));
+  assert.ok(!JSON.stringify(log).includes("127.0.0.1"), "no relay's address in the log");
+});
+
 test("only wss, or plain ws on loopback, is dialed", () => {
   const ok = (url, cert_sha256 = null) => usableEndpoint({ url, cert_sha256 });
-  assert.ok(ok("wss://85.192.42.65:30335", "ab".repeat(32)));
+  assert.ok(ok("wss://203.0.113.5:30335", "ab".repeat(32)));
   assert.ok(ok("wss://relay.example"), "a CA's certificate");
   assert.ok(ok("ws://127.0.0.1:30335") && ok("ws://localhost:1") && ok("ws://[::1]:2"));
-  assert.ok(!ok("ws://85.192.42.65:30335"), "plain ws to another host");
+  assert.ok(!ok("ws://203.0.113.5:30335"), "plain ws to another host");
   assert.ok(!ok("http://127.0.0.1:30335") && !ok("not a url") && !ok(""));
   assert.ok(!ok("wss://relay.example", "zz"), "a malformed pin");
 });

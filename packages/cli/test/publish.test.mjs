@@ -34,10 +34,10 @@ const SERVER_KEY = toHex(ed25519.getPublicKey(SERVER));
 const ICON = vectors.images.find((i) => i.kind === "grain_icon" && i.width === 512);
 const SLUG = "space-game";
 
-/** Relays of the network's list: four, on four networks, two offering space. */
+/** The relays the development node names by their tickets: four, on four networks, two offering space. */
 const RELAYS = [1, 2, 3, 4].map((n) => ({
-  key: toHex(ed25519.getPublicKey(fromHex(String(n).padStart(2, "0").repeat(32), 32))), store_gib: n % 2 === 0 ? 8 : null,
-  endpoints: [{ url: `wss://10.${n}.0.1:30335/`, cert_sha256: "cd".repeat(32) }],
+  key: toHex(ed25519.getPublicKey(fromHex(String(n).padStart(2, "0").repeat(32), 32))), secret: String(n).padStart(2, "0").repeat(32),
+  store_gib: n % 2 === 0 ? 8 : null, endpoints: [{ url: `wss://10.${n}.0.1:30335/`, cert_sha256: "cd".repeat(32) }],
 }));
 
 /** A project as `grain init` makes one, with a game's page in public/ and the standard icon. */
@@ -126,7 +126,7 @@ test("a page goes into the network before the owner signs, on the paired key's w
   assert.ok(registry.blobs.get(hash), "the network holds the bundle");
   assert.ok(registry.blobs.get(hash).pendingUntil > Date.now());
   assert.equal(m.version, 2, "above the version the app made in Saltix holds");
-  assert.equal(m.entry.sealed.sources.length, 3, "protocol version 1: copies at 3 relays of the network's own list");
+  assert.equal(m.entry.sealed.sources.length, 3, "protocol version 1: copies at 3 of the relays the node names");
   assert.ok(m.entry.sealed.sources.every((s) => isRelaySource(s) && s.endsWith(hash)));
   assert.ok(m.entry.sealed.sources.every((s) => RELAYS.some((r) => s.startsWith(r.endpoints[0].url.replace("wss:", "https:").replace(/\/$/, "")))));
   assert.match(lines.join("\n"), /the network holds the bundle, pending until/);
@@ -526,7 +526,7 @@ test("--key owner.key on a test network: the owner said, signed and sent here, m
   keyed(dir2);
   const broke = ledgerOf(node({ registered: false }), dir2, OWNER_FILE, "0");
   await assert.rejects(run(dir2, broke, { signing: { node: broke, validFor: 600 }, keyNamed: true }).done,
-    (e) => e instanceof PublishError && e.reason === "no_salt" && /grain faucet --wait gives the key file's account test SALT; or, without --key, the owner's Saltix signs and pays/.test(e.message));
+    (e) => e instanceof PublishError && e.reason === "no_salt" && /grain faucet --wait grants the key file's account test SALT until it can pay this \(as many grants as the deposit takes, five minutes apart: it says how many\); or, without --key, the owner's Saltix signs and pays/.test(e.message));
 });
 
 test("an app made in Saltix is its owner's phone's: owner.key here never signs for it, and --key naming it is refused", async () => {
@@ -658,6 +658,14 @@ test("doctor before a page's first publish: the deposit, the owner's Saltix, and
   const keyless = (await doctor(dir, free)).findings.find((f) => f.what === "registry");
   assert.doesNotMatch(keyless.detail, /holds/);
   assert.match(keyless.next, /grain faucet --wait, then grain publish --key owner\.key/);
+  // The faucet's terms known (node_status.faucet): the grants the deposit and the fees take are said before any is
+  // asked for — two of 10 SALT for a deposit of 10, the faucet's five minutes apart.
+  const terms = (await doctor(dir, node({ registered: false, faucet: { amount: "10000000000", every: 300 } }))).findings.find((f) => f.what === "registry");
+  assert.equal(terms.next, "grain publish: a QR code, and the owner's Saltix registers the app and pays the deposit; without a phone, on the test network: " +
+    "grain faucet --wait (2 grants of 10 SALT, 5 minutes apart), then grain publish --key owner.key (the app is then owner.key's account's)");
+  // A faucet whose grants would take an hour (a grant of 1 SALT here) is no way: the truth and the way out instead.
+  const slow = (await doctor(dir, node({ registered: false, faucet: { amount: "1000000000", every: 300 } }))).findings.find((f) => f.what === "registry");
+  assert.match(slow.next, /without a phone, on the test network: the faucet's 11 grants of 1 SALT, 5 minutes apart would take 50 minutes: a slug of 8 characters or more keeps 10 SALT, one of 6–7 keeps 30 \(the app is then owner\.key's account's\)$/);
 });
 
 /**

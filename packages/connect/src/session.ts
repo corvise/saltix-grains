@@ -2,12 +2,15 @@
  * One Saltix Connect attempt of the page (Saltix 19-connect §2–§5, §14, §15), a port of the explorer's
  * `explorer/src/connect/session.ts`: a slot at a relay, the offer for the QR code and the link, the wallet's notice that
  * it saw the offer, and the grant, checked before the page takes it — then the page's confirmation to the wallet's
- * reply slot (§14.2), sent before the slot closes, so the wallet shows "connected" on the page's word.
+ * reply slot (§14.2), sent before the slot closes, so the wallet shows "connected" on the page's word; or, refused, the
+ * page's refusal there, so the wallet says why, and a fresh code at once (§14.1, 2026-11-04).
  *
  *   opening ──► offer ──► seen ──► checking ──► connected (the page shows it at once; the confirmation goes out behind)
- *      │          │  ▲       │          │
- *      ▼          ▼  │       ▼          └─► a refused grant: back to offer or seen, with the reason
- *    failed    (the code's life unseen, 2 minutes unless the page says; read and no login for 3: a new slot and keys)
+ *      │   ▲      │          │          │
+ *      ▼   │      ▼          ▼          └─► a refused grant: the wallet told why, the slot closed and forgotten,
+ *    failed │  (the code's life unseen, 2 minutes unless the page says;     the reason to the page
+ *           │   read and no login for 3: a new slot and keys)                       │
+ *           └───────────────────────────── a fresh code ◄───────────────────────────┘
  *
  * Two modes. In the page's own (§2–§5) the keys are made here, and the grant is opened and checked here. In the
  * server-held mode (§15) the site's server makes the keys and keeps `Q`'s secret; the page holds no secret, forwards
@@ -21,10 +24,10 @@
  */
 import { ed25519 } from "@noble/curves/ed25519";
 import { b64url, equal, fromB64Loose } from "./codec.js";
-import type { Courier, CourierAnswer } from "./courier.js";
+import type { Courier, CourierAnswer, Delivery } from "./courier.js";
 import {
   CONFIRM_DELIVERED_MS, CONFIRM_VERSION, ConnectError, type ConnectGrant, type ConnectReply, type Session, decodePayload, encodeConfirm,
-  loginMessage, signerKind,
+  encodeRefusal, loginMessage, makeRefusal, refusalFor, signerKind,
 } from "./grant.js";
 import { type Offer, offerAppLink, offerLink, offerText } from "./offer.js";
 import type { Dial, Frame, RelayLink } from "./relay.js";
@@ -44,9 +47,9 @@ export const SERVER_OFFER_LIFE_MS = 5 * 60_000;
  *  the sheet and the PIN (§15.4). */
 export const SERVER_QR_LIFE_MAX_MS = SERVER_OFFER_LIFE_MS - 2 * 60_000;
 /** How long a code the wallet read waits for its login before a new code replaces it by itself: the person cancelled in
- *  Saltix or put the phone down, and no page shows a button for a new code. Counted again from a refused grant; only
- *  while the page is in front with its slot connected and no grant being checked, so that a login the relay parked for
- *  a page in the background is taken first. */
+ *  Saltix or put the phone down, and no page shows a button for a new code. Only while the page is in front with its
+ *  slot connected and no grant being checked, so that a login the relay parked for a page in the background is taken
+ *  first. */
 export const SEEN_WAIT_MS = 3 * 60_000;
 /** The slot is opened again this often, so it never goes idle (5 minutes, 09-relay §10.3). */
 export const KEEP_MS = 60_000;
@@ -110,7 +113,7 @@ export interface Refused {
 
 export interface SessionEvents {
   phase(p: Phase): void;
-  /** A grant came that the page cannot take; the offer stays. */
+  /** A grant came that the page cannot take: the wallet is told why, and a fresh code follows at once (§14.1). */
   refused(r: Refused): void;
   /** The connection to the relay dropped and is being opened again (true) or is back (false). */
   reconnecting(on: boolean): void;
@@ -647,23 +650,40 @@ export class ConnectSession<T> {
     void this.start({ fresh: true });
   }
 
-  /** The phase a refused grant goes back to: the offer, or the wallet's notice. */
+  /** The phase a payload that was nothing new goes back to while the page thought it was being checked: the offer, or
+   *  the wallet's notice. */
   private backPhase(slot: Slot): Phase {
     return this.seen
       ? { kind: "seen", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app }
       : { kind: "offer", offer: slot.offer, text: slot.text, link: slot.link, app: slot.app, expiresAt: slot.opened + this.qrLife };
   }
 
-  /** A refused grant, or one that could not be checked: the reason to the page, the offer back, and the code's life,
-   *  which may have passed while the grant was checked (its expiry found it `checking` and let it be). */
-  private refused(slot: Slot, reason: string, meta: Record<string, string | number | boolean>): void {
-    const back = this.backPhase(slot);
-    this.o.events.telemetry("connect_refused", { reason, ...meta });
+  /**
+   * A refused grant, or one that could not be checked, ends its code (§14.1): the wallet that sent it never sends again
+   * — its sheet has ended — so nothing more is waited for on this slot. The reason goes to the page; the wallet is told
+   * why on the slot's own connection (`tell`, §14.2), which then closes; nothing of the slot stays kept for a reload;
+   * and a fresh code comes at once. Until 2026-11-04 the page went back to the read code and waited three minutes —
+   * across a reload too — for a login that could not come.
+   */
+  private refused(slot: Slot, reason: string, meta: Record<string, string | number | boolean>, tell: Delivery | null): void {
+    this.o.events.telemetry("connect_refused", { reason, told: tell !== null, ...meta });
     this.o.events.refused({ reason, at: this.now() });
-    this.setPhase(back);
-    if (back.kind === "offer" && this.now() >= back.expiresAt) this.expire();
-    // Back to the read code: its login is waited for afresh, so the reason is read before a new code comes.
-    if (back.kind === "seen") this.awaitLogin();
+    const link = slot.link_;
+    slot.link_ = null;
+    if (link && tell) void this.deliver(link, tell.relay, tell.sid, tell.payload, "connect_refusal");
+    else link?.close();
+    void this.start({ fresh: true });
+  }
+
+  /** The page's own refusal for the wallet (§14.2): sealed to the reply that named this grant's login; none without one,
+   *  nor for a reason told to nobody. */
+  private refusalTo(slot: Slot, grant: ConnectGrant, reason: string): Delivery | null {
+    const told = refusalFor(reason);
+    const reply = slot.reply;
+    const login = loginMessage(grant.login);
+    if (!told || !reply || !equal(reply.login, login)) return null;
+    const refusal = encodeRefusal(makeRefusal(login, BigInt(this.now()), told.reason, told.when));
+    return { relay: reply.relay, sid: reply.sid, payload: sealLinkPayload(reply.key, reply.sid, slot.keys.page, refusal) };
   }
 
   /** The grant checks: the page shows the connection now (§14.1); the confirmation goes to the wallet behind it, and
@@ -692,7 +712,7 @@ export class ConnectSession<T> {
       if (this.slot !== slot || this.stopped) return;
       const reason = e instanceof ConnectError ? e.reason : "unchecked";
       const kind = (e as { kind?: unknown } | null)?.kind;
-      this.refused(slot, reason, { signer: signerKind(grant.signer), ...(typeof kind === "string" ? { kind } : {}) });
+      this.refused(slot, reason, { signer: signerKind(grant.signer), ...(typeof kind === "string" ? { kind } : {}) }, this.refusalTo(slot, grant, reason));
     }
   }
 
@@ -742,12 +762,11 @@ export class ConnectSession<T> {
         if (checking) this.setPhase(this.backPhase(slot));
         return;
       case "refused":
-        this.refused(slot, answer.reason, { ms });
-        // The server holds no such offer (past its life, or dropped): a fresh one, as an expired offer's.
-        if (answer.reason === "offer" && this.slot === slot) void this.start({ fresh: true });
+        // The server's refusal, and what it sealed for the wallet; an offer it no longer holds is told to nobody.
+        this.refused(slot, answer.reason, { ms }, answer.confirm ?? null);
         return;
       case "unchecked":
-        this.refused(slot, "unchecked", { kind: answer.detail, ms });
+        this.refused(slot, "unchecked", { kind: answer.detail, ms }, answer.confirm ?? null);
         return;
       case "connected": {
         const link = this.taken(slot, answer.value, { ms_server: ms });
@@ -796,8 +815,9 @@ export class ConnectSession<T> {
   }
 
   /** `link_deliver` on the slot's own connection, which a relay takes from a connection holding a slot (09-relay
-   *  §10.3 step 5), and the relay's word on it; then the connection closes. */
-  private async deliver(link: RelayLink, relay: Uint8Array, replySid: Uint8Array, payload: Uint8Array): Promise<void> {
+   *  §10.3 step 5), and the relay's word on it; then the connection closes. `event` counts it: a confirmation's, or a
+   *  refusal's (§14.2). */
+  private async deliver(link: RelayLink, relay: Uint8Array, replySid: Uint8Array, payload: Uint8Array, event = "connect_confirm"): Promise<void> {
     this.confirming = link;
     const sid = b64url(replySid);
     const delivered = await new Promise<boolean | null>((resolve) => {
@@ -817,7 +837,7 @@ export class ConnectSession<T> {
         resolve(false);
       }
     });
-    this.o.events.telemetry("connect_confirm", { outcome: delivered === null ? "no_answer" : delivered ? "delivered" : "not_delivered" });
+    this.o.events.telemetry(event, { outcome: delivered === null ? "no_answer" : delivered ? "delivered" : "not_delivered" });
     if (this.confirming === link) this.confirming = null;
     link.close();
   }

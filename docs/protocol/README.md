@@ -61,6 +61,6 @@ deployment of Saltix's own. When an app needs one of those, the page says what i
 
 ## Keeping them true
 
-A page states `As of corvise/saltix <commit>`: the protocol commit its text was read at. The vectors' commit is
-`vectors/SOURCE`'s. A protocol change that reaches apps updates the page, its commit line and the SDK in the same pull
+A page states `As of corvise/saltix <commit>`: the protocol commit its text was read at; the vectors are the project's
+own, at the same commit as the SDK. A protocol change that reaches apps updates the page, its commit line and the SDK in the same pull
 request ([docs/agents/sdk.md](../agents/sdk.md#rules-of-the-repository)).

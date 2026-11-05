@@ -7,9 +7,9 @@ import { readFileSync } from "node:fs";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { decodeSignedProfile, encodeAddress, fromHex, policyOf, profileToJson, toHex, verifyByDeviceKey } from "@saltix/grain-server/web";
 import {
-  ConnectError, b64url, checkAccount, checkConfirm, checkGrant, checkSiteProfileDocument, decodeConfirm, decodePayload, encodeConfirm, encodeGrant,
-  encodeLogin, encodeReply, encodeSeen, fromB64url, isAndroid, loginMessage, offerAppLink, offerIntentLink, offerLink, offerText, openLinkPayload, parseOffer,
-  readSiteProfile, sealLinkPayload,
+  ConnectError, RefusalReason, b64url, checkAccount, checkAnswer, checkConfirm, checkGrant, checkSiteProfileDocument, decodeAnswer, decodeConfirm,
+  decodePayload, encodeConfirm, encodeGrant, encodeLogin, encodeRefusal, encodeReply, encodeSeen, fromB64url, isAndroid, loginMessage, makeRefusal,
+  offerAppLink, offerIntentLink, offerLink, offerText, openLinkPayload, parseOffer, readSiteProfile, refusalMoment, refusalReasonOf, sealLinkPayload,
 } from "../dist/index.js";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../../../vectors/${name}`, import.meta.url), "utf8"));
@@ -170,6 +170,41 @@ test("the page's confirmation opens for the wallet's reply slot alone, and the r
       const plain = openLinkPayload(keySecret, reply.sid, session.page, fromB64url(x.payload));
       if (!plain) throw new ConnectError("open");
       checkConfirm(decodeConfirm(plain), reply.login, nowC);
+    });
+    assert.equal(reason, x.reason, x.name);
+  }
+});
+
+test("the page's refusals open for the wallet with their reason and moment, and the refused ones fail for theirs (§14.2)", () => {
+  const r = v.reply;
+  const f = v.refusals;
+  const keySecret = fromHex(r.key_secret_hex, 32);
+  const reply = { sid: fromHex(r.sid_hex, 32), key: fromHex(r.key_public_hex, 32), login: fromHex(r.login_hex, 32) };
+  assert.equal(f.login_hex, r.login_hex);
+  const now = BigInt(f.now);
+  assert.ok(f.cases.length >= 9);
+  for (const x of f.cases) {
+    const plain = openLinkPayload(keySecret, reply.sid, session.page, fromB64url(x.payload));
+    assert.ok(plain, x.name);
+    assert.equal(toHex(plain), x.borsh_hex, x.name);
+    const answer = decodeAnswer(plain);
+    assert.equal(answer.kind, "refusal", x.name);
+    checkAnswer(answer, reply.login, now);
+    assert.equal(refusalReasonOf(answer.refusal), x.reason, x.name);
+    assert.equal(refusalMoment(answer.refusal), x.moment === null ? null : BigInt(x.moment), x.name);
+    // The SDK writes the same bytes, sealed the same way.
+    assert.equal(toHex(encodeRefusal(answer.refusal)), x.borsh_hex, x.name);
+    assert.equal(b64url(sealLinkPayload(reply.key, reply.sid, session.page, plain, fromHex(x.one_time_secret_hex))), x.payload, x.name);
+  }
+  // A refusal made for a reason writes a moment only beside a window's.
+  const made = makeRefusal(reply.login, BigInt(f.at), RefusalReason.NOT_LISTED, 123n);
+  assert.equal(toHex(encodeRefusal(made)), f.cases.find((x) => x.name === "not-listed").borsh_hex);
+  assert.ok(v.refused_refusals.length >= 6);
+  for (const x of [...v.refused_refusals, ...v.refused_confirms.map((c) => ({ ...c, at: v.confirm.now }))]) {
+    const reason = reasonOf(() => {
+      const plain = openLinkPayload(keySecret, reply.sid, session.page, fromB64url(x.payload));
+      if (!plain) throw new ConnectError("open");
+      checkAnswer(decodeAnswer(plain), reply.login, x.at !== undefined ? BigInt(x.at) : now);
     });
     assert.equal(reason, x.reason, x.name);
   }

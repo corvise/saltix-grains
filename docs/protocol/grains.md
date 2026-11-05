@@ -578,8 +578,8 @@ into the network itself (`blob_put` in pieces at a relay's gateway) with a state
 server key (`grain pair`; or a developer key), so the phone signs a manifest whose bundle the network already holds and
 the developer's computer need not stay on; without a server key yet (a first version), it uploads the bundle after
 step 4, once the registry names it. The icon goes up after step 4. No server of the developer's is needed: before
-protocol version 2 the manifest names, as its required sources, copies the network itself serves at a few relays of its
-relay list; from version 2 it names none.
+protocol version 2 the manifest names, as its required sources, copies the network itself serves at a few of the relays
+the node names by their tickets; from version 2 it names none.
 
 **From the app's console.** An app's program may propose its update in its chat instead: a card with a `Publish`
 action carries the same `<manifest>`, and only the grain's team's wallets show it; the owner's **Review and approve**

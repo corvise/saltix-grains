@@ -11,13 +11,14 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type Manifest, type NetworkName, type NodeLike, type RegisteredGrain, NO_ICON, UNOWNED, blobHeld, decodeOffer, encodeManifest, fromHex,
-  grainGet, grainQuote, iconHash, judgeSlug, keyFingerprint, keyPairedHere, minimumFee, nodeCall, registeredKeyStatus, slugRecordOf, targetOwner, toHex,
+  AppKey, APP_KEY_FILE, type Manifest, type NetworkName, type NodeLike, type RegisteredGrain, type RelayReport, NO_ICON, NoRelayAnswered, RelayGateways, UNOWNED,
+  blobHeld, decodeOffer, encodeManifest, fromHex, grainGet, grainQuote, iconHash, judgeSlug, keyFingerprint, keyPairedHere, minimumFee, nodeCall,
+  registeredKeyStatus, slugRecordOf, targetOwner, toHex,
 } from "@saltix/grain-server";
 import { type Bundle, makeBundle } from "./bundle.js";
 import { CONNECT_FILE, TEMPLATE_NEXT, lintConnect, readConnectFile, stillTemplate, templateTexts } from "./connect.js";
 import { EXIT_WAITING, GRAIN_DIR } from "./devlog.js";
-import { saltOf } from "./faucet.js";
+import { FEES_MARGIN, GRANTS_MAX, grantsNeeded, grantsWords, saltOf, spanWords } from "./faucet.js";
 import { ICON_FILES, checkIcon } from "./icon.js";
 import { accountOf, addressOf } from "./owner.js";
 import { PAIR_KEY_FILE, gitignoreOk, pendingKey, readManifestSlug, readPairState } from "./pair.js";
@@ -204,6 +205,53 @@ export interface Finding {
   waiting?: boolean;
 }
 
+const SOURCE_LABEL = { given: "given", cache: "cache", entry: "entry points" } as const;
+
+/**
+ * Where a command's relays came from and which answered, how fast (Saltix 41-transport §18.5), in doctor's words: the
+ * sources (given, the project's cache, the release's entry points), the tickets taken and those refused by reason, and
+ * the times; when none answered, each relay tried — by its key's or its certificate's fingerprint, never its address —
+ * and why, and the way out; a ticket given and left out (past its life) as a warning.
+ */
+export function relaysFinding(r: RelayReport, flags = ""): Finding {
+  const answered = r.tried.filter((t) => t.ok).map((t) => t.ms!).sort((a, b) => a - b);
+  const from = (Object.keys(SOURCE_LABEL) as Array<keyof typeof SOURCE_LABEL>)
+    .filter((s) => r.sources[s] > 0).map((s) => `${SOURCE_LABEL[s]} ${r.sources[s]}`).join(", ") || "nothing to start from";
+  const refused = Object.entries(r.tickets.refused).map(([reason, n]) => `${n} ${reason}`).join(", ");
+  const found = (r.discovery === "tickets" ? `; tickets: ${r.tickets.taken} taken, ${r.sources.discovered} new relays` : "") +
+    (refused ? `; tickets refused: ${refused}` : "");
+  const kept = r.cache === null ? "" : `; kept ${r.kept} in ${r.cache}${r.kept === 0 ? " (entry points never are)" : ""}`;
+  const warning = r.warnings.length > 0 ? { warning: r.warnings.join("; ") } : {};
+  if (answered.length === 0) {
+    const tried = r.tried.slice(0, 4).map((t) => `relay ${t.relay} ${t.error}`).join("; ") + (r.tried.length > 4 ? `; … ${r.tried.length - 4} more` : "");
+    return {
+      ok: false, what: "relays", detail: `none of ${r.tried.length} answered (${from}${found}): ${tried || "nothing to try"}`,
+      next: `a relay ticket from someone whose Saltix works: grain doctor${flags} --relay SALTIX-RELAY:… (or --node URL, a node of your own)`,
+      ...warning,
+    };
+  }
+  const span = answered.length > 1 ? `, ${answered[0]} to ${answered.at(-1)} ms` : `, ${answered[0]} ms`;
+  // Commands work through one relay; a chat server signs only under the genesis two relays agree on.
+  const alone = answered.length === 1
+    ? ["only one relay answered: enough for these commands, not for a server, which signs only under the genesis two relays agree on — give a second relay (another ticket) or NODE_RPC before npm start"]
+    : [];
+  const warnings = [...r.warnings, ...alone];
+  return { ok: true, what: "relays", detail: `${answered.length} of ${r.tried.length} answered${span} (${from}${found})${kept}`, ...(warnings.length > 0 ? { warning: warnings.join("; ") } : {}) };
+}
+
+/** The relays a command reaches the network through, looked for now when no call has yet: their finding and report, or
+ *  null for a node of one's own. */
+export async function relaysOfReach(node: NodeLike, flags = ""): Promise<{ finding: Finding; report: RelayReport } | null> {
+  if (!(node instanceof RelayGateways)) return null;
+  try {
+    await node.ready();
+  } catch (e) {
+    if (!(e instanceof NoRelayAnswered)) throw e;
+  }
+  const report = node.report;
+  return report === null ? null : { finding: relaysFinding(report, flags), report };
+}
+
 /** Where the project stands as a whole: nothing left to do, only waiting for the network, or something to do. */
 export type DoctorOutcome = "done" | "waiting" | "fix";
 
@@ -225,9 +273,6 @@ export function outcomeOf(findings: readonly Finding[]): DoctorOutcome {
  *  network holds its bundle). */
 export type PublishStatus = "not_uploaded" | "pending" | "waiting_for_owner" | "pending_expired" | "published";
 
-/** What a test network's key file needs beyond a slug's deposit: two registry calls' fees (registering, then making it
- *  private), with room to spare: 0.001 SALT. */
-const FEES_MARGIN = 1_000_000n;
 
 /** The fees of a first publish signed with a key file, in base units of SALT: `RegisterGrain` with `manifest` as
  *  `grain publish` sends it (`sealedAsSent`: its bundle and the sources the network's protocol asks for), and
@@ -260,23 +305,33 @@ async function asSent(node: NodeLike, manifest: unknown, built: Bundle | null): 
  */
 async function firstPublish(dir: string, node: NodeLike, slug: string, flags: string, manifest: unknown): Promise<Finding> {
   const { deposit } = await grainQuote(node, slug);
-  const { network } = await nodeCall<{ network: string }>(node, "node_status");
+  const { network, faucet } = await nodeCall<{ network: string; faucet?: { amount?: unknown; every?: unknown } | null }>(node, "node_status");
   const fees = firstPublishFees(manifest, deposit);
   let detail = `${slug} is free: its first grain publish registers it, keeping a deposit of ${salt(deposit)} SALT until it retires` +
     (fees === null ? "" : `, and fees of about ${salt(fees)} SALT (registering, then making it private)`);
   let next = `grain publish${flags}: a QR code, and the owner's Saltix registers the app and pays the deposit`;
   if (network !== "mainnet") {
-    let noPhone = `grain faucet --wait${flags}, then grain publish --key ${KEY_FILE}${flags}`;
+    // The faucet's way, measured as grain faucet --wait measures it: the grants the deposit and the fees take at the
+    // terms node_status tells, so that the next step says what it costs in time before it is taken.
+    const terms = typeof faucet?.amount === "string" && /^\d{1,30}$/.test(faucet.amount) && BigInt(faucet.amount) > 0n
+      ? { amount: BigInt(faucet.amount), every: typeof faucet.every === "number" && faucet.every >= 0 ? Math.floor(faucet.every) : 300 }
+      : null;
+    let held = 0n;
     if (existsSync(join(dir, KEY_FILE))) {
       try {
         const account = accountOf(readKey(join(dir, KEY_FILE)));
-        const held = await saltOf(node, addressOf(network, account));
+        held = await saltOf(node, addressOf(network, account));
         detail += `; ${KEY_FILE}'s account holds ${salt(held)} SALT`;
-        if (held >= deposit + FEES_MARGIN) noPhone = `grain publish --key ${KEY_FILE}${flags}`;
       } catch {
         // An unreadable key file is grain publish's to report; the way stays as it is.
       }
     }
+    const grants = terms === null ? null : grantsNeeded(deposit + FEES_MARGIN, held, terms.amount);
+    const noPhone = held >= deposit + FEES_MARGIN
+      ? `grain publish --key ${KEY_FILE}${flags}`
+      : grants !== null && grants > GRANTS_MAX
+        ? `the faucet's ${grantsWords(grants, terms!)} would take ${spanWords(terms!.every * (grants - 1))}: a slug of 8 characters or more keeps 10 SALT, one of 6–7 keeps 30`
+        : `grain faucet --wait${flags}${grants === null ? "" : ` (${grantsWords(grants, terms!)})`}, then grain publish --key ${KEY_FILE}${flags}`;
     next += `; without a phone, on the test network: ${noPhone} (the app is then ${KEY_FILE}'s account's)`;
   }
   return { ok: false, what: "registry", detail, next };
@@ -440,9 +495,12 @@ function sameAsRegistry(registered: Manifest, ours: unknown): boolean {
 /** Every check of `grain doctor`, in the order of the path to an app that runs; the next step, or what to say when
  *  there is none; and the outcome its exit status tells (`DOCTOR_EXIT`). */
 export async function doctor(dir: string, node: NodeLike, flags = "", now = Date.now()): Promise<{
-  state: KeyState; findings: Finding[]; publish: PublishStatus | null; next: string; outcome: DoctorOutcome;
+  state: KeyState; findings: Finding[]; publish: PublishStatus | null; next: string; outcome: DoctorOutcome; relays: RelayReport | null;
 }> {
   const findings: Finding[] = [];
+  // Every other check reads the network: first, whether its relays answer, from where they came, and how fast.
+  const relays = await relaysOfReach(node, flags);
+  if (relays !== null) findings.push(relays.finding);
   const manifestPath = join(dir, "grain.json");
   const chatPath = join(dir, "chat.json");
   let manifest: { slug?: string; version?: number; icon?: string; entry?: Record<string, { bundle?: string; origins?: string[] }> } | null = null;
@@ -699,5 +757,5 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
       ? "nothing: the page is published and the project is in order (a change to public/ or grain.json: grain publish makes the next version)"
       : "nothing: the project is in order"
     : "nothing: the server is paired and the project is in order (npm start runs it)";
-  return { state, findings, publish, next: first?.next ?? done, outcome };
+  return { state, findings, publish, next: first?.next ?? done, outcome, relays: relays?.report ?? null };
 }

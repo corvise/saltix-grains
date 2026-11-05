@@ -1,32 +1,21 @@
-// How a grain's server reaches its network with nothing but a developer key (Saltix 24-app-studio §3): the network's
-// public relays, each trusted only with the certificate its relay record pins (09-relay §10.7: every relay serves the
-// node's wallet interface at `POST /rpc` on its client port), the relays they know of (`relay_list`), and a view of the
-// chain the server reads its grain's registry record and its members' keys from, cached per tip.
+// How a grain's server reaches its network with no node of its own (Saltix 24-app-studio §3): through the relays, each
+// trusted only with the certificate its ticket pins (09-relay §10.7: every relay serves the node's wallet interface at
+// `POST /rpc` on its client port), found when the SDK runs and never from a list it carries (41-transport §18:
+// `RelayFinder`), and a view of the chain the server reads its grain's registry record and its members' keys from,
+// cached per tip.
 import type { NetworkName } from "./address.js";
+import { type RelayCache, type RelayReport, RelayFinder } from "./discovery.js";
+import { entryPoints } from "./entry.js";
 import type { Controller } from "./member.js";
 import { RpcError, nodeOnly, rpc } from "./node.js";
 import type { RegisteredGrain } from "./registry.js";
-import { type RelayEndpoint, usableEndpoint } from "./relay.js";
+import { type RelayEndpoint, relayFailure, relayId, relayName, usableEndpoint, withoutAddresses } from "./relay.js";
 import { relayRequest } from "./upload.js";
 
-/**
- * The public relays a server starts from on each kind of network, before it asks them for the rest (`relay_list`):
- * their client endpoints and the SHA-256 of the self-signed certificate each relay's record publishes. Saltix's test
- * network is of the devnet kind (`dsalt1…`). A network that starts over sets its relays' old data aside, certificate
- * included, so each relay makes a new one: these pins follow every launch of the test network (Saltix's
- * `scripts/set-network.py` says when they are stale), else every call fails on them, as from 2026-10-26 to the threat
- * audit of 2026-10-28, which found them stale. They are the trust anchors: a relay's own `relay_list` never moves them
- * (`RelayGateways`). No public mainnet or testnet runs yet. A server on another network passes `node` or `endpoints`.
- */
-export const PUBLIC_RELAYS: Readonly<Record<NetworkName, readonly RelayEndpoint[]>> = {
-  mainnet: [],
-  testnet: [],
-  devnet: [
-    { url: "wss://138.124.52.41:30335/", cert_sha256: "d8856d012e51e4f782b554eb754694468d1b3475bc7ed2daeb67788fa568c617" },
-    { url: "wss://45.141.177.244:30335/", cert_sha256: "3bd162ee78f3df1530caf274a5ba022a7315b383131c3ce7c341d991f29c8787" },
-    { url: "wss://85.192.42.65:30335/", cert_sha256: "f0627aadef682012fd673462be795ed4ed672c3f952054697661abe32c78ba21" },
-  ],
-};
+/** How long a call waits for one relay — to connect, and between the bytes of its answer — before it asks the next. */
+export const CALL_TIMEOUT_MS = 8_000;
+/** And how long its whole answer may take: a relay that keeps trickling it is given up on, its socket destroyed. */
+export const CALL_DEADLINE_MS = 30_000;
 
 /** A node's wallet interface (08-node §6), however it is reached. */
 export interface WalletInterface {
@@ -43,29 +32,43 @@ type Request = typeof relayRequest;
 /** How `RelayGateways` finds relays besides those it starts from. */
 export interface GatewayOptions {
   /**
-   * Ask `relay_list` once when the relays known cannot answer a call (none answers, or none's node follows the
-   * account's shard or runs a faucet), then try the relays it names: each pinned by its record's certificate, which
-   * replaces an older pin for the same endpoint. Off by default.
+   * The relays found when the first call is made, fastest first, and found again (at most once a minute) when every one
+   * of them stops answering, and in the background every hour: what `publicGateways` gives.
    */
-  discover?: boolean;
+  finder?: RelayFinder;
+}
+
+/** One relay a call could not use, named by its fingerprint (`relayName`), and why. */
+interface Failure {
+  relay: string;
+  why: string;
+}
+
+/** Failures in a person's words, at most four named: never a relay's address. */
+function described(failures: readonly Failure[]): string {
+  const shown = failures.slice(0, 4).map((f) => `relay ${f.relay}: ${f.why}`);
+  if (failures.length > 4) shown.push(`${failures.length - 4} more`);
+  return shown.join("; ");
 }
 
 /**
- * The wallet interface through the relays' gateways (09-relay §10.7), over each relay's pinned certificate: a call goes
- * to the relay that answered last, then to the others in turn. A node's answer is final, except where it is that node's
- * alone (it does not follow the account's shard, it runs no faucet: another relay's node may); a relay that does not
- * answer, shows another certificate than its pin (nothing is sent to it), or answers with an HTTP error (`429`, say), is
- * passed over.
+ * The wallet interface through the relays' gateways (09-relay §10.7), over each relay's pinned certificate (or a public
+ * CA's): a call goes to the relay that answered last, then to the others in turn, each given `CALL_TIMEOUT_MS`. A node's
+ * answer is final, except where it is that node's alone (it does not follow the account's shard, it runs no faucet:
+ * another relay's node may); a relay that does not answer, shows another certificate than its pin (nothing is sent to
+ * it), or answers with an HTTP error (`429`, say), is passed over. A call goes over the relays as they were when it
+ * began: finding them again meanwhile never moves it.
  */
 export class RelayGateways implements WalletInterface {
   private list: RelayEndpoint[] = [];
-  private good = 0;
-  private discovered = false;
-  /** The endpoints it started from, by URL: their pins are the trust anchors, which no relay's answer replaces. */
-  private readonly anchors = new Set<string>();
+  /** The relay that answered last, by its URL and pin (`relayId`): a call starts there. */
+  private good: string | null = null;
+  private readonly finder: RelayFinder | null;
+  private found = false;
 
-  constructor(endpoints: readonly RelayEndpoint[], private readonly request: Request = relayRequest, private readonly options: GatewayOptions = {}) {
-    for (const e of this.add(endpoints)) this.anchors.add(e.url);
+  constructor(endpoints: readonly RelayEndpoint[], private readonly request: Request = relayRequest, options: GatewayOptions = {}) {
+    this.add(endpoints);
+    this.finder = options.finder ?? null;
   }
 
   /** The relays it calls. */
@@ -73,91 +76,161 @@ export class RelayGateways implements WalletInterface {
     return [...this.list];
   }
 
-  /** Relays to call besides: `wss://` ones pinned by their record's certificate, each once (`repin`: a new pin for a
-   *  known endpoint replaces its old one, never an anchor's: the relays it started from are trusted on their own pins,
-   *  and one relay's `relay_list` must not move another's). The endpoints that were new. */
-  add(endpoints: readonly RelayEndpoint[], repin = false): RelayEndpoint[] {
+  /** What its finder did last (where the relays came from, which answered and how fast), or null. */
+  get report(): RelayReport | null {
+    return this.finder?.report ?? null;
+  }
+
+  /** The network's genesis as its finder settled it (two relays agreeing, one of them an anchor), or null: never one
+   *  relay's word. */
+  get genesis(): string | null {
+    return this.finder?.genesis ?? null;
+  }
+
+  /** The relays found now, fastest first (`NoRelayAnswered`, naming everything tried, when none answers); the endpoints
+   *  it was given when it has no finder. */
+  async ready(): Promise<RelayEndpoint[]> {
+    if (this.finder && !this.found) {
+      this.replace(await this.finder.find());
+      this.found = true;
+    }
+    return this.endpoints;
+  }
+
+  /** Whether it finds its relays by itself (a finder). */
+  get finds(): boolean {
+    return this.finder !== null;
+  }
+
+  /** The relays its finder knows now, found again when the last look is over a minute old: what a relay connection
+   *  tries in its next round, and what a server's hourly look refreshes. */
+  async refreshed(): Promise<RelayEndpoint[]> {
+    if (!this.finder) return this.endpoints;
+    try {
+      this.replace(await this.finder.refresh());
+    } catch {
+      // None answers now: the connection tries those it knows, and asks again in its next round.
+    }
+    return this.endpoints;
+  }
+
+  private replace(endpoints: readonly RelayEndpoint[]): void {
+    this.list = [];
+    this.add(endpoints);
+  }
+
+  /** Relays to call besides: `wss://` ones, pinned or behind a CA's certificate, each URL and pin once — a second pin
+   *  for a known URL is a relay of its own, tried beside it, and never replaces the first. The endpoints that were new. */
+  add(endpoints: readonly RelayEndpoint[]): RelayEndpoint[] {
     const added: RelayEndpoint[] = [];
     for (const e of endpoints) {
-      if (!e.url.startsWith("wss://") || e.cert_sha256 === null || !usableEndpoint(e)) continue;
-      const pinned = { url: e.url, cert_sha256: e.cert_sha256.toLowerCase() };
-      const known = this.list.findIndex((x) => x.url === e.url);
-      if (known < 0) {
-        this.list.push(pinned);
-        added.push(pinned);
-      } else if (repin && !this.anchors.has(e.url) && this.list[known]!.cert_sha256 !== pinned.cert_sha256) {
-        this.list[known] = pinned;
-        added.push(pinned);
-      }
+      if (!e.url.startsWith("wss://") || !usableEndpoint(e)) continue;
+      const one: RelayEndpoint = { url: e.url, cert_sha256: e.cert_sha256?.toLowerCase() ?? null, ...(e.key ? { key: e.key } : {}) };
+      if (this.list.some((x) => relayId(x) === relayId(one))) continue;
+      this.list.push(one);
+      added.push(one);
     }
     return added;
   }
 
-  async call<T>(method: string, params: object = {}): Promise<T> {
-    if (this.list.length === 0) throw new Error(`${method}: no relay to ask`);
-    const failures: string[] = [];
-    const answer = await this.ask<T>(method, params, this.list.map((_, i) => (this.good + i) % this.list.length), failures);
-    if (answer.ok) return answer.value;
-    if (this.options.discover && !this.discovered) {
-      this.discovered = true;
-      let found: RelayEndpoint[] = [];
-      try {
-        found = await relaysOf(this);
-      } catch (e) {
-        failures.push(`relay_list: ${(e as Error).message}`);
-      }
-      const fresh = this.add(found, true).map((e) => this.list.findIndex((x) => x.url === e.url));
-      const again = await this.ask<T>(method, params, fresh, failures);
-      if (again.ok) return again.value;
-    }
-    throw new Error(`${method}: no relay answered (${failures.join("; ")})`);
+  /** The relays as they are now, the one that answered last first. */
+  private inTurn(): RelayEndpoint[] {
+    const at = Math.max(0, this.list.findIndex((e) => relayId(e) === this.good));
+    return [...this.list.slice(at), ...this.list.slice(0, at)];
   }
 
-  /** `method` at the relays `order` names (indexes into the list), in turn: the first final answer, or none. */
-  private async ask<T>(method: string, params: object, order: number[], failures: string[]): Promise<{ ok: true; value: T } | { ok: false }> {
-    const body = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
-    for (const at of order) {
-      const endpoint = this.list[at]!;
-      let answer;
+  async call<T>(method: string, params: object = {}): Promise<T> {
+    await this.ready();
+    if (this.finder?.stale) void this.finder.refresh().then((found) => this.replace(found), () => {});
+    const relays = this.inTurn();
+    if (relays.length === 0) throw new Error(`${method}: no relay to ask`);
+    const failures: Failure[] = [];
+    const answer = await this.ask<T>(method, params, relays, failures);
+    if (answer.ok) return answer.value;
+    if (this.finder) {
+      // Every relay it found stopped answering: find again (at most once a minute), then try those it has not.
+      let found: RelayEndpoint[] = [];
       try {
-        answer = await this.request(endpoint, "POST", "/rpc", { "content-type": "application/json" }, body);
+        found = await this.finder.refresh();
+      } catch {
+        failures.push({ relay: "found again", why: `none of ${this.finder.report?.tried.length ?? 0} answered` });
+      }
+      const fresh = found.filter((e) => !relays.some((x) => relayId(x) === relayId(e)));
+      if (fresh.length > 0) {
+        this.replace(found);
+        const again = await this.ask<T>(method, params, fresh, failures);
+        if (again.ok) return again.value;
+      }
+    }
+    throw new Error(`${method}: no relay answered (${described(failures)})`);
+  }
+
+  /** `method` at `relays`, in turn: the first final answer, or none. */
+  private async ask<T>(method: string, params: object, relays: readonly RelayEndpoint[], failures: Failure[]): Promise<{ ok: true; value: T } | { ok: false }> {
+    const body = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
+    for (const endpoint of relays) {
+      const relay = relayName(endpoint);
+      let answer;
+      const deadline = new AbortController();
+      const timer = setTimeout(() => deadline.abort(Object.assign(new Error("the relay did not answer in time"), { code: "ETIMEDOUT" })), CALL_DEADLINE_MS);
+      timer.unref?.();
+      try {
+        answer = await this.request(endpoint, "POST", "/rpc", { "content-type": "application/json" }, body, { timeoutMs: CALL_TIMEOUT_MS, signal: deadline.signal });
       } catch (e) {
-        failures.push(`${endpoint.url}: ${(e as Error).message}`);
+        failures.push({ relay, why: relayFailure(e, CALL_TIMEOUT_MS) });
         continue;
+      } finally {
+        clearTimeout(timer);
       }
       if (answer.status !== 200) {
-        failures.push(`${endpoint.url}: HTTP ${answer.status}`);
+        failures.push({ relay, why: `HTTP ${answer.status}` });
         continue;
       }
       let reply: { result?: T; error?: { code: number; message: string; data?: unknown } };
       try {
         reply = JSON.parse(new TextDecoder().decode(answer.body)) as typeof reply;
       } catch {
-        failures.push(`${endpoint.url}: not JSON`);
+        failures.push({ relay, why: "not JSON" });
         continue;
       }
       if (reply.error) {
         if (nodeOnly(reply.error.code, reply.error.message)) {
-          failures.push(`${endpoint.url}: ${reply.error.message}`);
+          failures.push({ relay, why: withoutAddresses(String(reply.error.message)) });
           continue;
         }
         throw new RpcError(method, reply.error.code, reply.error.message, reply.error.data ?? null);
       }
-      this.good = at;
+      this.good = relayId(endpoint);
       return { ok: true, value: reply.result as T };
     }
     return { ok: false };
   }
 }
 
+/** Where `publicGateways` starts from besides the release's entry points. */
+export interface PublicOptions {
+  /** Tickets or endpoints the developer gave (`--relay`): tried first. */
+  given?: readonly string[];
+  /** The relays that answered in earlier runs (`projectRelayCache`). */
+  cache?: RelayCache | null;
+  /** The network's genesis hash or its first 16 hex digits, when known. */
+  genesis?: string | null;
+  log?: ConstructorParameters<typeof RelayFinder>[0]["log"];
+  now?: () => number;
+}
+
 /**
- * The wallet interface of `network` through its public relays (`PUBLIC_RELAYS`), and the relays they name when those
- * cannot answer: what a tool needs with no node of its own. Throws for a network with no public relays known.
+ * The wallet interface of `network` with no node of its own: the relays found when the first call is made (41-transport
+ * §18.5) — what was given, the cache, then the release's entry points, probed at once; then the tickets the fastest hand
+ * out, each confirmed by a second relay. Throws for a network with nothing to start from.
  */
-export function publicGateways(network: NetworkName, request: Request = relayRequest): RelayGateways {
-  const gateways = new RelayGateways(PUBLIC_RELAYS[network], request, { discover: true });
-  if (gateways.endpoints.length === 0) throw new Error(`no public relays are known for ${network}: pass your own node's wallet interface`);
-  return gateways;
+export function publicGateways(network: NetworkName, request: Request = relayRequest, options: PublicOptions = {}): RelayGateways {
+  const finder = new RelayFinder({
+    network, request, given: options.given ?? [], cache: options.cache ?? null, entry: entryPoints(network),
+    genesis: options.genesis ?? null, log: options.log, now: options.now,
+  });
+  if (!finder.hasCandidates) throw new Error(`no relay is known for ${network}: pass a relay ticket or your own node's wallet interface`);
+  return new RelayGateways([], request, { finder });
 }
 
 /** What `node_status` says, as far as a grain's server reads it. */
@@ -167,12 +240,6 @@ export interface NodeStatus {
   slot: number;
   beacon: { height: number; hash: string };
   shards?: Array<{ shard: string; hash: string }>;
-}
-
-/** The relays a node knows (`relay_list`): their usable endpoints. */
-export async function relaysOf(node: WalletInterface): Promise<RelayEndpoint[]> {
-  const { relays } = await node.call<{ relays: Array<{ endpoints: RelayEndpoint[] }> }>("relay_list");
-  return relays.flatMap((r) => r.endpoints).filter(usableEndpoint);
 }
 
 const STATUS_MS = 2_000;

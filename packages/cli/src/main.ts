@@ -4,8 +4,8 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from
 import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AppKey, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText, supportKind, type GrainCall,
-  type Manifest, type NetworkName,
+  AppKey, EXIT_CONFIG, GivenRelayRefused, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText,
+  supportKind, type GrainCall, type Manifest, type NetworkName,
 } from "@saltix/grain-server";
 import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
@@ -18,8 +18,11 @@ import {
   serverKeyArgOf, unchanged, unchangedWords, waitForRegistry, writeAppKey,
 } from "./studio.js";
 import { type VersionStatus, networkVersion } from "./versions.js";
-import { type Reach, reachOf } from "./network.js";
-import { grantAddress, granted, requestGrant, saltOf, waitForSalt } from "./faucet.js";
+import { type Reach, reachOf, relaysLog } from "./network.js";
+import {
+  FaucetRefusal, type FaucetTerms, GRANTS_MAX, type PublishGoal, faucetTerms, grantAddress, granted, grantsNeeded, grantsWords, publishGoal, requestGrant, saltOf,
+  spanWords, waitForSalt,
+} from "./faucet.js";
 import { DEV_HOST, serve, linkFor, simulatorFor } from "./dev.js";
 import { runCheck } from "./check.js";
 import { lintPages } from "./pages.js";
@@ -218,8 +221,10 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
                                            until it is in the account (--timeout seconds, 120)
 
   --manifest F   the manifest (grain.json); --key F   a key file (owner.key): the owner's calls only when named
-  --network N    whose public relays a registry command goes through: devnet, Saltix's test network (the default)
-  --relay URL#H  or a relay you name, pinned by its certificate's SHA-256 H (wss://host:30335/#…; repeat it)
+  --network N    whose relays a registry command finds and goes through: devnet, Saltix's test network (the default)
+  --relay R      or a relay ticket someone gave you (SALTIX-RELAY:…), or a relay you name, pinned by its certificate's
+                 SHA-256 H (wss://host:30335/#H); repeat it. One that cannot be a relay exits with 78; a ticket past
+                 its life is left out with a warning
   --node URL     or your own node's wallet interface (plain HTTP: a local node or a tunnel)
   --genesis H    refuse a node of another network; --fee N   base units of SALT; --valid-for N   slots (600)
   A flag's value is the word after it, or comes after = in the same word; a flag a command does not take is refused.
@@ -391,8 +396,8 @@ async function stdinText(): Promise<string | undefined> {
 async function main(argv: string[], log: DevLog): Promise<number> {
   const { command, topic, positional, flags, all } = parse(argv);
   const manifestPath = text(flags, "manifest", MANIFEST_FILE);
-  /** Where the command reaches the network: the public relays by default, --relay, or --node. */
-  const reach = () => reachOf(flags, all);
+  /** Where the command reaches the network: the relays it finds by default, --relay, or --node. */
+  const reach = () => reachOf(flags, all, undefined, undefined, undefined, relaysLog(log));
   const keyPath = text(flags, "key", KEY_FILE);
   switch (command) {
     case "init": {
@@ -779,8 +784,8 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       }
       const file = typeof flags.get("file") === "string" ? (flags.get("file") as string) : undefined;
       const key = readAppKey(file, process.env, file === undefined && !process.env.SALTIX_APP_KEY ? await stdinText() : undefined);
-      // The key's own network unless told: its public relays, --relay or --node.
-      const described = await describeAppKey(key, flags.get("offline") === true ? null : reachOf(flags, all, key.network).node);
+      // The key's own network unless told: its relays, --relay or --node.
+      const described = await describeAppKey(key, flags.get("offline") === true ? null : reachOf(flags, all, key.network, undefined, undefined, relaysLog(log)).node);
       console.log(JSON.stringify(described, null, 2));
       return described.registered === false ? 1 : 0;
     }
@@ -824,14 +829,14 @@ async function main(argv: string[], log: DevLog): Promise<number> {
     }
     case "doctor": {
       const r = reach();
-      const { state, findings, publish, next, outcome } = await doctor(process.cwd(), r.node, r.flags);
+      const { state, findings, publish, next, outcome, relays } = await doctor(process.cwd(), r.node, r.flags);
       // The first thing to do, else the first thing waited for: the log's reason, as the exit status tells the outcome.
       const first = findings.find((f) => !f.ok && !f.waiting) ?? findings.find((f) => !f.ok);
       log.step("doctor", outcome === "fix" ? "refused" : outcome === "waiting" ? "waiting" : "ok", first ? first.what.replace(/ /g, "_") : "done");
       if (publish !== null) log.step("doctor_publish", publish === "published" ? "ok" : "waiting", publish);
       if (flags.get("json") === true) {
         // `next` as the text's last line says it, "nothing: …" included: one answer for a person and a program.
-        console.log(JSON.stringify({ status: state.status, publish, outcome, exit: DOCTOR_EXIT[outcome], findings, next }, null, 2));
+        console.log(JSON.stringify({ status: state.status, publish, outcome, exit: DOCTOR_EXIT[outcome], findings, next, relays }, null, 2));
       } else {
         for (const f of findings) {
           const tag = f.ok ? "ok  " : f.waiting ? "wait" : "fix ";
@@ -1003,24 +1008,89 @@ async function main(argv: string[], log: DevLog): Promise<number> {
     case "faucet": {
       const r = reach();
       const given = flags.get("address");
+      const wait = flags.get("wait") === true;
       log.onNetwork((await nodeCall<{ network: string }>(r.node, "node_status")).network);
       const address = await grantAddress(r.node, typeof given === "string" ? { address: given } : { secret: readKey(keyPath) });
-      const before = flags.get("wait") === true ? await saltOf(r.node, address).catch(() => 0n) : 0n;
-      let grant: Awaited<ReturnType<typeof requestGrant>>;
-      try {
-        grant = await requestGrant(r.node, address);
-      } catch (e) {
-        log.step("grant", "refused", reasonOf(e));
-        throw e;
+      // In a project whose slug is still free, --wait grants until the key file's account can pay the first publish
+      // (the deposit and the fees, as the doctor measures it): as many grants as it takes, the faucet's interval
+      // apart, up to GRANTS_MAX — a deposit the faucet's grants would take an hour to gather is said, never waited for.
+      const slug = (() => {
+        if (!wait || typeof given === "string" || !existsSync(manifestPath)) return null;
+        try {
+          return readManifest(manifestPath).manifest.slug;
+        } catch {
+          return null; // A manifest that does not read is grain doctor's and grain publish's to report: a plain grant.
+        }
+      })();
+      const goal = slug === null ? null : await publishGoal(r.node, slug);
+      const timeoutMs = Number(text(flags, "timeout", "120")) * 1000;
+      let held = wait ? await saltOf(r.node, address).catch(() => 0n) : 0n;
+      const enough = (g: PublishGoal) =>
+        `${KEY_FILE}'s account holds ${salt(held)} SALT: enough for ${g.slug}'s first publish (a deposit of ${salt(g.deposit)} SALT and the fees) → grain publish --key ${keyPath}${r.flags}`;
+      if (goal !== null && held >= goal.need) {
+        log.step("grant", "ok", "enough_already");
+        console.log(enough(goal));
+        return 0;
       }
-      log.step("grant", "ok", "sent");
-      console.log(`the faucet sent ${granted(grant)}, through ${r.where}`);
-      if (flags.get("wait") !== true) return 0;
-      console.log("Waiting for it in the account…");
-      const landed = await waitForSalt(r.node, address, before + grant.salt.amount, Number(text(flags, "timeout", "120")) * 1000);
-      log.step("wait", landed ? "ok" : "timeout", landed ? "landed" : "not_landed");
-      console.log(landed ? "it is in the account" : `not in the account yet: its shard's next blocks bring it (grain faucet again in 5 minutes if not)`);
-      return landed ? 0 : 1;
+      let grants = 1;
+      let terms: FaucetTerms | null = null;
+      if (goal !== null) {
+        terms = await faucetTerms(r.node);
+        if (terms !== null) {
+          grants = grantsNeeded(goal.need, held, terms.amount);
+          const more = `${goal.slug}'s first publish needs ${salt(goal.need - held)} SALT more (a deposit of ${salt(goal.deposit)} SALT for a slug of ${goal.slug.length} characters, and the fees)`;
+          if (grants > GRANTS_MAX) {
+            log.step("grant", "refused", "too_many");
+            throw new Error(`${more}: ${grantsWords(grants, terms)}, ${spanWords(terms.every * (grants - 1))} of waiting — ` +
+              "a slug of 8 characters or more keeps a deposit of 10 SALT, one of 6–7 keeps 30; or grain publish without --key: the owner's Saltix pays the deposit from its QR code");
+          }
+          if (grants > 1) console.log(`${more}: ${grantsWords(grants, terms)}`);
+        }
+      }
+      for (let k = 1; ; k++) {
+        let grant: Awaited<ReturnType<typeof requestGrant>>;
+        try {
+          grant = await requestGrant(r.node, address).catch(async (e: unknown) => {
+            // A grant too soon after the last by the faucet's clock, not this tool's: once, its wait and again.
+            if (!(k > 1 && e instanceof FaucetRefusal && e.reason === "too_soon" && e.retryAfter !== null && e.retryAfter <= 600)) throw e;
+            const retryAfter = e.retryAfter;
+            log.step("interval", "ok", "faucet_clock", { seconds: retryAfter });
+            console.log(`${e.message}: waiting`);
+            await new Promise((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));
+            return requestGrant(r.node, address);
+          });
+        } catch (e) {
+          log.step("grant", "refused", reasonOf(e));
+          throw e;
+        }
+        log.step("grant", "ok", "sent");
+        console.log(`${grants > 1 ? `grant ${k} of ${grants}: ` : ""}the faucet sent ${granted(grant)}, through ${r.where}`);
+        if (!wait) return 0;
+        console.log("Waiting for it in the account…");
+        const landed = await waitForSalt(r.node, address, held + grant.salt.amount, timeoutMs);
+        log.step("wait", landed ? "ok" : "timeout", landed ? "landed" : "not_landed");
+        if (!landed) {
+          console.log("not in the account yet: its shard's next blocks bring it (grain faucet --wait again in 5 minutes if not)");
+          return 1;
+        }
+        held = await saltOf(r.node, address).catch(() => held + grant.salt.amount);
+        console.log("it is in the account");
+        if (goal === null) return 0;
+        if (held >= goal.need) {
+          console.log(enough(goal));
+          return 0;
+        }
+        const every = terms?.every ?? 300;
+        if (k >= grants) {
+          // The faucet or the deposit changed under this run: the truth, and the way on.
+          log.step("grant", "failed", "still_short");
+          console.log(`${KEY_FILE}'s account holds ${salt(held)} SALT, ${goal.slug}'s first publish needs ${salt(goal.need)}: grain faucet --wait${r.flags} again in ${spanWords(every)}`);
+          return 1;
+        }
+        log.step("interval", "ok", "faucet_window", { seconds: every, grant: k + 1, grants });
+        console.log(`the faucet pays an address once every ${spanWords(every)}: the next grant (${k + 1} of ${grants}) in ${every} s`);
+        await new Promise((resolve) => setTimeout(resolve, (every + 1) * 1000));
+      }
     }
     case "help": {
       if (topic === undefined) {
@@ -1069,7 +1139,8 @@ main(argv, log).then((code) => {
   log.end(code);
   if (code !== 0) process.exitCode = code;
 }, (e) => {
-  const exit = e instanceof UsageError ? 2 : 1;
+  // A relay given that cannot be one is a configuration to fix, as a server's setup is (EX_CONFIG): never retried.
+  const exit = e instanceof UsageError ? 2 : e instanceof GivenRelayRefused ? EXIT_CONFIG : 1;
   log.end(exit, reasonOf(e));
   console.error(`error: ${(e as Error).message}`);
   process.exitCode = exit;

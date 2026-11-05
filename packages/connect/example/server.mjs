@@ -9,8 +9,9 @@
 //   SALTIX_GENESIS   the network's genesis hash, hex: what `node_status` of your node answers as `genesis`
 //   SALTIX_NODE      a node's wallet interface this server reads key event logs from (http://127.0.0.1:30334 by default,
 //                    a node of your own on this machine; or a relay's gateway through a pinned proxy, docs/connect.md §3)
-//   SALTIX_RELAYS    where the page opens its slot, comma-separated: paths of this site that a proxy passes to one relay
-//                    each, pinned (docs/connect.md §3), or wss:// URLs (/saltix/r/1/ by default)
+//   SITE_RELAY_PATHS where the page opens its slot, comma-separated: paths of this site that a proxy passes to one relay
+//                    each, pinned (docs/connect.md §3), or wss:// URLs (/saltix/r/1/ by default); not SALTIX_RELAYS,
+//                    which a chat server reads as relay tickets
 //   SITE_ORIGIN      this site's origin as a browser serializes it (http://localhost:8091 by default; https in production)
 //   SITE_NAME        what the offer calls this site (Example site)
 //   SITE_ALLOW       optional: the addresses allowed in, comma-separated; everyone when unset (19-connect §15.2 step 6)
@@ -194,7 +195,7 @@ export function main() {
     process.exit(2);
   }
   const origin = process.env.SITE_ORIGIN ?? "http://localhost:8091";
-  const relays = (process.env.SALTIX_RELAYS ?? "/saltix/r/1/").split(",").map((r) => r.trim()).filter(Boolean);
+  const relays = (process.env.SITE_RELAY_PATHS ?? "/saltix/r/1/").split(",").map((r) => r.trim()).filter(Boolean);
   const log = (event, meta) => console.log(JSON.stringify({ ts: new Date().toISOString(), event, ...meta }));
   const connect = createServerConnect({
     node: process.env.SALTIX_NODE ?? "http://127.0.0.1:30334",

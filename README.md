@@ -90,9 +90,8 @@ Connect profiles, their link and `SetGrainProfile`, and support addresses with t
 `vectors/connect-profiles-v1.json`, the pairing command, offers, proof and slug
 verdicts of `vectors/server-pairing-v2.json` and the named blobs of `vectors/images-v1.json` (the image and bundle
 checks, a bundle as `grain bundle` writes it, the server key's statement for an upload, the frames) byte for byte,
-refusals included. The vectors are the protocol's golden bytes, copied unchanged ([vectors/README.md](vectors/README.md)):
-`vectors/SOURCE` names the protocol commit and each file's blob id, which CI holds them to
-(`node scripts/check-vectors.mjs`).
+refusals included. The vectors are the protocol's golden bytes ([vectors/README.md](vectors/README.md)), the
+project's own `vectors/`, where the blockchain's crates write them.
 
 ## Quick start
 
@@ -128,13 +127,26 @@ with one confirmation; and an epoch is 1 600 certified beacon heights, which run
 epoch begins from `node_status.epochs_ahead` and `pace`, never from `genesis_time + epoch · epoch_slots`
 ([the wallet interface](docs/protocol/wallet-interface.md#epochs-and-their-times)).
 
-- **The chat server and every command** reach the test network through its public relays: each relay serves the
-  wallet interface at `POST /rpc` on its client port (Saltix [09-relay §10.7](docs/protocol/relays.md#the-wallet-interface-at-a-relay)) behind a self-signed certificate, which
-  the SDK pins by the hash its relay record publishes (`PUBLIC_RELAYS`, `publicGateways`); a call goes on to the next
-  relay when one fails, and to the relays `relay_list` names when none of these can answer. `--network devnet` is the
-  default; no other network has public relays yet.
-- **`--relay wss://host:30335/#<sha256>`** (repeatable) names relays of your own instead, each pinned by its
-  certificate's SHA-256 as its relay record names it.
+- **The chat server and every command** reach the test network through its relays, found when they run and never from
+  a list the SDK carries (Saltix [41-transport §18](docs/protocol/relays.md#finding-relays-relay-tickets)): what you
+  gave, the project's cache of relays that answered (`.grain/relays.json`), then the release's entry points, probed 16
+  at a time within 5 seconds, then the relay tickets two of them hand out — five relays' own signed records, each
+  checked here and used only once an anchor (a relay you gave, or an entry point) confirms its license; the network's
+  genesis adopted only where two relays agree, one of them an anchor.
+  Each relay serves the wallet interface at `POST /rpc` on its client port (Saltix [09-relay §10.7](docs/protocol/relays.md#the-wallet-interface-at-a-relay))
+  behind a self-signed certificate, which the SDK pins by the hash its relay record names (`publicGateways`,
+  `RelayFinder`); a call gives a relay 8 seconds and goes on to the next when one fails, and the relays are found again
+  when none answers and every hour. Nothing to configure. `grain doctor` says where they came from, which answered and
+  how fast, and when none did, each one — by its key's or its certificate's fingerprint, never its address — and why.
+  `--network devnet` is the default; no other network has relays to find yet.
+- **`--relay SALTIX-RELAY:…`** (a relay ticket someone whose Saltix works gave you) or **`--relay
+  wss://host:30335/#<sha256>`** (a relay of your own, pinned by its certificate's SHA-256 as its relay record names it),
+  repeatable: a ticket goes first, with the project's cache and the entry points still tried; relays of your own named
+  by `wss://…#<pin>` are used alone by a command (a private network's). A server takes them in `SALTIX_RELAYS`
+  (`relaysFromEnvironment`) with its cache and the entry points, and signs only under the genesis two relays agree on:
+  give it two relays of two operators, or `NODE_RPC`. One that cannot be a relay is refused at once (exit 78); a ticket past its life is left out
+  with a warning. Never write a relay's address into an app: the SDK carries no list of relays and
+  finds them by tickets, and Saltix's public list is being retired.
 - **`--node URL`** is your own node's wallet interface over plain HTTP instead: a test-network node
   (`https://download.saltix.io/node/install.sh` on Linux x86-64 or macOS, `install.ps1` on Windows; it listens on
   `http://127.0.0.1:30334`), or one reached
@@ -174,7 +186,8 @@ npx grain publish --no-wait               # the same, returning once the QR code
 npx grain bundle --connect https://api.dice.example   # seal public/ yourself, and name the origins it may reach
 npx grain sign                            # signed.json, for a page at your own origin (/.well-known/saltix-grain)
 npx grain publish --hosted                # that page, hosted by you, instead of the network
-npx grain faucet --wait                   # test SALT for owner.key's account, from the test network's faucet
+npx grain faucet --wait                   # test SALT for owner.key's account: the grants its first publish takes
+                                          # (10 SALT a grant, one every 5 minutes; it says how many and waits)
 npx grain publish --key owner.key        # or sign with a key file (test networks, no phone): the app owner.key's
                                           # account's and private; it waits for the chain (about 2-4 minutes, up to 6)
 npx grain profile                         # the Connect profile (connect.json): a QR code for the owner's Saltix, or
@@ -275,7 +288,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
 - `grain publish` puts an app's page straight into the network (Saltix [12-grains §10](docs/protocol/grains.md#10-for-developers),
   [32-images §7](docs/protocol/images.md#7-uploading)): it seals `public/` (the bundle check every node runs, run here
   first), names the bundle's sources by the network's protocol (none from version 2; before it, the network's own copies
-  at up to 3 relays of its relay list: [where the bundle goes](docs/how-it-works.md#where-the-bundle-goes)), and with a server key the registry names for the app (`grain pair`'s `app.key`,
+  at up to 3 of the relays the node names by their tickets: [where the bundle goes](docs/how-it-works.md#where-the-bundle-goes)), and with a server key the registry names for the app (`grain pair`'s `app.key`,
   `--app-key`, or `SALTIX_APP_KEY`) uploads the bundle at once on that key's statement, in pieces, resuming where the
   node stands after a break and waiting out a busy one: the network holds it pending for a day, so the owner signs
   whenever they like and your computer need not stay on. Without one (a first version), it uploads the bundle once the
@@ -300,7 +313,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   it asks the registry for the slug — unregistered → `RegisterGrain` with the deposit and, right behind it with the next
   nonce, `SetGrainAccess` private (a new app starts private, as one made in Saltix does, and is never public in between);
   the owner's with a lower version → `UpdateGrain`; another account's → refused (an app made in Saltix is its owner's
-  phone's) — checks the balance, signs and submits through the network's wallet interface (its public relays, `--relay`
+  phone's) — checks the balance, signs and submits through the network's wallet interface (its relays, `--relay`
   or `--node`). What it sent goes to `.grain/publish.json`, so a run cut short (or `--no-wait`) is finished by the next,
   which waits for it rather than sending it again. Once published it says who can open the app: anyone; its owner and
   members in Saltix; or, for a private app `owner.key` owns, nobody until a member is named, and how to name one.
@@ -375,7 +388,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   elsewhere, drawn for a dark background), `.grain/pair.html`, the link `salt:grain-pair?o=…` and a 6-digit code that
   Saltix shows too. Nothing in the offer is secret, and nothing is signed but the proof. The owner's Saltix scans it,
   checks it by itself (its network, the clock, the owner is this account, the proof, the slug its own or free) and
-  names the key; this computer watches the registry (`grain_get` through the public relays, polled with a short backoff:
+  names the key; this computer watches the registry (`grain_get` through the network's relays, polled with a short backoff:
   no relay session, no mailbox) until the record names its key, renewing the offer when it expires with nobody having
   scanned it, then writes `app.key` (owner-only) and `app.json` (the app, its owner, the network, the key's public
   half), and keeps `app.key`, `*.key` and `.grain/` out of git. It waits until then (`--timeout S` stops it after S
@@ -406,7 +419,7 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   `SALTIX_GRAIN_LOG=off` turns it off.
 - `grain app-key` reads a developer key from `SALTIX_APP_KEY`, `--file` or stdin, never from the command line (shells
   keep their history), and prints its network, genesis, slug, public key and address, and whether the registry names it
-  (through the network's public relays, or `--node`).
+  (through the network's relays, or `--node`).
 - `grain bundle` seals `public/` (Saltix [12-grains §8](docs/protocol/grains.md#8-sealed-bundles)): one ZIP of its files — sorted, no times, every file stored as
   it is (never deflated), so the same files make the same bytes on any computer and any Node — in the form the network
   keeps (the bundle check), and `grain.json` names its hash, size, `start` and the `connect` origins the grain may
@@ -548,7 +561,7 @@ relay.on("frame", ({ from, payload, kept }) => handle(from, payload));
 
 **A chat** (Saltix [22-grain-chats](docs/protocol/grain-chats.md), [24-app-studio](docs/protocol/app-studio.md), [docs/chats.md](docs/chats.md)): users send typed actions your chat
 spec declares, your server answers with cards it signs with the server key. The developer key Saltix gives for the app
-is the server's whole configuration: it finds the network's public relays, checks that the registry names the key, signs
+is the server's whole configuration: it finds the network's relays by itself, checks that the registry names the key, signs
 the spec, and stops once the owner replaces or revokes the key. Requests are checked and answered once; a private app
 takes its owner's and members' only (member proofs, checked against the registry and the accounts' keys); files go next
 to the relay; unasked messages are at most 10 a day per user; the numbers it reports are signed hourly. Each request
@@ -622,5 +635,11 @@ command line does: `RegisterGrain` (with the deposit `grainDeposit(slug)` or a n
 ```sh
 npm test               # builds, then runs every package's tests (node --test)
 ```
+
+The tests hold the SDK to the protocol's golden vectors byte for byte. In this repository they are a copy in `vectors/`
+of the ones Saltix's own repository keeps, made by `scripts/sync-vectors.sh <checkout of corvise/saltix>`, which records
+that checkout's commit and each file's git blob id in `vectors/SOURCE`; CI checks the copies against it
+(`scripts/check-vectors.mjs`), so a vector edited here by hand fails. This repository is published from Saltix's by its
+`scripts/publish-grains-mirror.sh`, one commit for each sync.
 
 MIT licensed.

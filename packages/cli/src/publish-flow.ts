@@ -4,7 +4,8 @@
 // A page (a sealed app, the default for an app with a page):
 //   1. build    `public/` sealed into one ZIP (`grain bundle`'s bytes), checked as every node checks it (32-images §2a);
 //   2. sources  none on a network that runs protocol version 2; before it, copies the network itself serves at up to 3
-//               relays of its relay list (`sources.ts`); the developer's own hosts stay when grain.json names them;
+//               of the relays the node names (`relay_tickets`, `sources.ts`); the developer's own hosts stay when
+//               grain.json names them;
 //   3. upload   with a server key the registry names for the app (`grain pair`'s `app.key`, or a developer key), the
 //               bundle goes into the network now, in pieces, on that key's statement: held pending for a day, so the
 //               owner signs whenever they like and this computer need not stay on; without one, once the registry
@@ -493,7 +494,7 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     }
     if (sources.length === 0 && protocol < 2) {
       throw new PublishError("sources", "no_relays",
-        "the network runs protocol version 1, where a sealed manifest names a source, and its relay list names no relay one can name: pass --relay, or name your own (grain bundle --sources URL)");
+        "the network runs protocol version 1, where a sealed manifest names a source, and the relays the node names give none one can name: pass --relay, or name your own (grain bundle --sources URL)");
     }
     o.log.step("sources", "ok", from);
     print(from === "network" ? `sources: none: the network keeps the bundle (protocol version ${protocol})`
@@ -899,7 +900,7 @@ async function signWithKey(o: PublishOptions, print: (line: string) => void, man
     }));
   } catch (e) {
     if (/base units of SALT; this needs/.test((e as Error).message)) {
-      throw new PublishError("sign", "no_salt", `${(e as Error).message}: grain faucet --wait${keyFlag(o.keyPath, o.dir)}${o.flags} gives the key file's account test SALT; or, without --key, the owner's Saltix signs and pays (a QR code)`);
+      throw new PublishError("sign", "no_salt", `${(e as Error).message}: grain faucet --wait${keyFlag(o.keyPath, o.dir)}${o.flags} grants the key file's account test SALT until it can pay this (as many grants as the deposit takes, five minutes apart: it says how many); or, without --key, the owner's Saltix signs and pays (a QR code)`);
     }
     throw e;
   }

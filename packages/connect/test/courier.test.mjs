@@ -8,9 +8,9 @@ import assert from "node:assert/strict";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server/web";
 import {
-  ConnectFailed, ConnectSession, CourierError, DIALOG_CLASSES, KEPT_SLOT_KEY, SEEN_WAIT_MS, SERVER_OFFER_LIFE_MS, SERVER_QR_LIFE_MAX_MS, b64url, createConnect,
-  decodeConfirm, decodePayload, encodeGrant, encodeReply, encodeSeen, fromB64url, httpCourier, loginMessage, openConnectDialog, openLinkPayload,
-  parseOffer, sealLinkPayload,
+  ConnectFailed, ConnectSession, CourierError, DIALOG_CLASSES, KEPT_SLOT_KEY, RefusalReason, SEEN_WAIT_MS, SERVER_OFFER_LIFE_MS, SERVER_QR_LIFE_MAX_MS,
+  b64url, checkAnswer, createConnect, decodeAnswer, decodeConfirm, decodePayload, encodeGrant, encodeReply, encodeSeen, fromB64url, httpCourier,
+  loginMessage, openConnectDialog, openLinkPayload, parseOffer, refusalMoment, refusalReasonOf, sealLinkPayload,
 } from "../dist/index.js";
 import { OFFER_LIFE_MS, createServerConnect } from "../dist/server.js";
 import { Clock, FakeDocument, FakeLink, MemoryStorage, RELAY_KEY, flush, opened } from "./helpers.mjs";
@@ -56,7 +56,7 @@ function siteFetch(server, over = {}) {
     let answer;
     if (path === "/connect/offer") answer = over.offer ? over.offer(await server.offer()) : await server.offer();
     else if (path === "/connect/login") {
-      const taken = await server.take(body);
+      const taken = await server.take(body, over.admit);
       answer = taken.outcome === "connected" ? { ...taken, next: "/me" } : taken;
       if (over.answer) answer = over.answer(answer);
     } else return new Response("not found", { status: 404 });
@@ -67,7 +67,7 @@ function siteFetch(server, over = {}) {
 
 function setup(over = {}) {
   const server = createServerConnect({ node: stubNode(), network: "devnet", genesis: GENESIS, origin: ORIGIN, name: "Example shop", retryMs: [0, 0], ...over.server });
-  const site = siteFetch(server, over.fetch);
+  const site = siteFetch(server, { ...over.fetch, admit: over.admit });
   const links = [];
   const events = [];
   const seen = [];
@@ -147,7 +147,7 @@ test("the page shows the server's offer, forwards what its slot receives sealed 
   assert.ok(!t.seen.some(([e]) => e === "disconnected"), "a server's session ends at the server, not here");
 });
 
-test("a grant the server refuses leaves the offer and says why; one it cannot check is unchecked; a copy is spent", async () => {
+test("a grant the server refuses ends its code: why, its slot closed, a fresh offer from the server, the old one unspent", async () => {
   const t = setup();
   const parsed = parseOffer((await t.connect.offer()).text);
   const link = t.links[0];
@@ -155,13 +155,22 @@ test("a grant the server refuses leaves the offer and says why; one it cannot ch
   await flush();
   link.deliver(sealedTo(parsed, grantFor(parsed, Date.now(), { origin: "https://evil.example" })), b64url(parsed.sid));
   await flush();
-  link.deliver(sealedTo(parsed, grantFor(parsed, Date.now() - 11 * 60_000)), b64url(parsed.sid));
+  assert.deepEqual(t.seen.filter(([e]) => e === "refused").map(([, d]) => d.reason), ["origin"]);
+  assert.equal(link.closed, true, "the refused code's slot is closed: no login can come to it any more");
+  assert.equal(t.connect.phase, "offer", "a fresh code at once, never the wallet's notice of the refused one");
+  const fresh = parseOffer((await t.connect.offer()).text);
+  assert.notEqual(b64url(fresh.sid), b64url(parsed.sid), "a fresh slot and keys");
+  assert.equal(t.site.requests.filter((r) => r.path === "/connect/offer").length, 2, "a fresh offer from the server");
+  assert.equal(t.server.size, 2, "the refused grant spent nothing: the old offer stays until its time");
+  // An older page that kept the old code still signs its person in with it.
+  const old = await t.server.take({ sid: b64url(parsed.sid), payload: b64url(sealedTo(parsed, grantFor(parsed, Date.now()))) });
+  assert.equal(old.outcome, "connected");
+  // The fresh code takes the next grant, out of time: refused, and a third code.
+  t.links.at(-1).deliver(sealedTo(fresh, grantFor(fresh, Date.now() - 11 * 60_000)), b64url(fresh.sid));
   await flush();
   assert.deepEqual(t.seen.filter(([e]) => e === "refused").map(([, d]) => d.reason), ["origin", "time"]);
-  assert.equal(t.connect.phase, "seen", "the offer stays, at the wallet's notice");
-  assert.equal(parseOffer((await t.connect.offer()).text).sid.toString(), parsed.sid.toString(), "the same offer");
-  // The site's server down for one payload: unchecked, not refused.
-  t.site.fetcher.down = true;
+  assert.equal(t.seen.filter(([e]) => e === "offer").length, 3, "each refusal a fresh code");
+  // The site's server down for one payload: unchecked, which ends the code as well.
   const broken = setup({ fetch: { status: (path, n) => (path === "/connect/login" && n === 2 ? 500 : 0) } });
   const p2 = parseOffer((await broken.connect.offer()).text);
   broken.links[0].deliver(sealedTo(p2, grantFor(p2, Date.now())), b64url(p2.sid));
@@ -169,11 +178,49 @@ test("a grant the server refuses leaves the offer and says why; one it cannot ch
   assert.deepEqual(broken.seen.filter(([e]) => e === "refused").map(([, d]) => d.reason), ["unchecked"]);
   assert.equal(broken.events.find((e) => e.event === "connect_refused").meta.kind, "http");
   assert.equal(broken.connect.phase, "offer");
-  // The server back: the grant delivered again connects (the offer was never spent).
-  broken.links[0].deliver(sealedTo(p2, grantFor(p2, Date.now())), b64url(p2.sid));
+  // The server back: the grant on the fresh code connects.
+  const p3 = parseOffer((await broken.connect.offer()).text);
+  assert.notEqual(b64url(p3.sid), b64url(p2.sid));
+  broken.links.at(-1).deliver(sealedTo(p3, grantFor(p3, Date.now())), b64url(p3.sid));
   await flush();
   assert.equal(broken.seen.at(-1)[0], "connected");
   t.connect.cancel();
+});
+
+test("the server's refusal reaches the wallet's reply slot on the refused code's own connection, with its reason", async () => {
+  const t = setup({ admit: () => "not_listed" });
+  const parsed = parseOffer((await t.connect.offer()).text);
+  const link = t.links[0];
+  const grant = grantFor(parsed, Date.now());
+  link.deliver(sealedTo(parsed, replyFor(grant)), b64url(parsed.sid));
+  await flush();
+  link.deliver(sealedTo(parsed, grant), b64url(parsed.sid));
+  await flush();
+  assert.deepEqual(t.seen.filter(([e]) => e === "refused").map(([, d]) => d.reason), ["not_listed"]);
+  const sent = link.sent.filter((f) => f.type === "link_deliver");
+  assert.equal(sent.length, 1, "one answer to the wallet");
+  assert.deepEqual([sent[0].relay, sent[0].sid], [b64url(REPLY_RELAY), b64url(REPLY_SID)]);
+  const plain = openLinkPayload(REPLY_SECRET, REPLY_SID, parsed.page, fromB64url(sent[0].payload));
+  assert.ok(plain, "sealed to the reply's key, for the reply slot and the refused offer's P");
+  const answer = decodeAnswer(plain);
+  assert.equal(answer.kind, "refusal");
+  checkAnswer(answer, loginMessage(decodePayload(grant).grant.login), Date.now());
+  assert.equal(refusalReasonOf(answer.refusal), RefusalReason.NOT_LISTED);
+  assert.equal(refusalMoment(answer.refusal), null);
+  assert.equal(link.closed, true, "then the slot closes");
+  assert.equal(t.events.find((e) => e.event === "connect_refusal").meta.outcome, "delivered");
+  assert.equal(t.events.find((e) => e.event === "connect_refused").meta.told, true);
+  assert.equal(t.connect.phase, "offer", "and a fresh code");
+  // Without the wallet's reply nothing is told, and the slot just closes.
+  const quiet = setup({ admit: () => "not_listed" });
+  const q = parseOffer((await quiet.connect.offer()).text);
+  quiet.links[0].deliver(sealedTo(q, grantFor(q, Date.now())), b64url(q.sid));
+  await flush();
+  assert.equal(quiet.links[0].sent.filter((f) => f.type === "link_deliver").length, 0);
+  assert.equal(quiet.links[0].closed, true);
+  assert.equal(quiet.events.find((e) => e.event === "connect_refused").meta.told, false);
+  t.connect.cancel();
+  quiet.connect.cancel();
 });
 
 test("an offer for another origin, or under another name than the page's, fails the session; what createConnect refuses", async () => {
@@ -270,23 +317,35 @@ async function started(h) {
 }
 const CONNECTED = { kind: "connected", value: { address: ADDRESS }, confirm: null };
 
-test("the server's word drives the phases: checking only for the grant, a refusal back to the notice, unchecked, then connected", async () => {
-  const answers = [{ kind: "seen" }, { kind: "reply" }, { kind: "refused", reason: "not_listed" }, { kind: "unchecked", detail: "busy" }, { kind: "ignored" }, { kind: "seen" }, CONNECTED];
+test("the server's word drives the phases: checking only for the grant, each refusal a fresh code with the wallet told, then connected", async () => {
+  const told = { relay: REPLY_RELAY, sid: REPLY_SID, payload: new Uint8Array([7, 7, 7]) };
+  const answers = [
+    { kind: "seen" }, { kind: "reply" }, { kind: "refused", reason: "not_listed", confirm: told },
+    { kind: "unchecked", detail: "busy", confirm: null },
+    { kind: "ignored" }, { kind: "seen" }, CONNECTED,
+  ];
   const h = harness({ take: (n) => answers[n - 1] });
   await started(h);
-  const sid = sidOf(h);
-  const link = h.links[0];
   for (let i = 0; i < answers.length; i++) {
-    link.deliver(new Uint8Array(60).fill(i + 1), sid);
+    // Each payload to the slot the page holds now: a refusal ends its code, and the next comes to the fresh one.
+    h.links.at(-1).deliver(new Uint8Array(60).fill(i + 1), sidOf(h));
     await h.clock.advance(0);
   }
-  assert.deepEqual(kinds(h), ["opening", "offer", "seen", "checking", "seen", "checking", "seen", "checking", "seen", "checking", "seen", "checking", "connected"]);
+  assert.deepEqual(kinds(h), ["opening", "offer", "seen", "checking", "opening", "offer", "opening", "offer", "seen", "connected"]);
   assert.deepEqual(h.refused, ["not_listed", "unchecked"]);
   assert.deepEqual(h.connected, [{ address: ADDRESS }]);
+  assert.equal(h.offers, 3, "a fresh offer from the server after each refusal");
   assert.equal(h.takes.length, answers.length, "every payload went to the server, in order");
   assert.deepEqual(h.takes[0].payload, new Uint8Array(60).fill(1), "as it came");
-  assert.ok(h.events.some((e) => e.event === "connect_refused" && e.meta.reason === "unchecked" && e.meta.kind === "busy"));
-  assert.equal(link.closed, true);
+  // The first refusal went to the wallet on the refused code's own connection, which then closed; the second had
+  // nothing to tell, and its slot just closed.
+  const tell = h.links[0].sent.filter((f) => f.type === "link_deliver");
+  assert.deepEqual(tell, [{ type: "link_deliver", relay: b64url(REPLY_RELAY), sid: b64url(REPLY_SID), payload: b64url(told.payload) }]);
+  assert.equal(h.links[0].closed, true);
+  assert.equal(h.links[1].sent.filter((f) => f.type === "link_deliver").length, 0);
+  assert.equal(h.links[1].closed, true);
+  assert.ok(h.events.some((e) => e.event === "connect_refused" && e.meta.reason === "unchecked" && e.meta.kind === "busy" && e.meta.told === false));
+  assert.equal(h.links[2].closed, true);
   assert.equal(h.clock.timers.size, 0, "nothing runs after");
 });
 
@@ -307,7 +366,8 @@ test("a server that holds no such offer makes the page ask for a fresh one; one 
   await down.clock.advance(0);
   assert.deepEqual(down.refused, ["unchecked"]);
   assert.equal(down.events.find((e) => e.event === "connect_refused").meta.kind, "timeout");
-  assert.equal(kinds(down).at(-1), "offer", "the offer stays: the person may be approved again");
+  assert.equal(kinds(down).at(-1), "offer", "a fresh code: the person scans again");
+  assert.equal(down.offers, 2);
   down.session.stop();
   const none = harness({ offerFails: "http", take: () => CONNECTED });
   await started(none);
@@ -428,8 +488,14 @@ test("httpCourier speaks the site's JSON with the page's cookies, and an answer 
   assert.ok(!("answer" in plain.value), "nothing beside the account: no answer field");
   assert.deepEqual(plain.confirm, { relay: REPLY_RELAY, sid: REPLY_SID, payload: new Uint8Array([7, 7, 7]) });
   for (const simple of ["ignored", "seen", "reply"]) assert.deepEqual(await courier(answer({ outcome: simple })).take(new Uint8Array(32), new Uint8Array(1)), { kind: simple });
-  assert.deepEqual(await courier(answer({ outcome: "refused", reason: "spent" })).take(new Uint8Array(32), new Uint8Array(1)), { kind: "refused", reason: "spent" });
-  assert.deepEqual(await courier(answer({ outcome: "unchecked", kind: "busy" })).take(new Uint8Array(32), new Uint8Array(1)), { kind: "unchecked", detail: "busy" });
+  assert.deepEqual(await courier(answer({ outcome: "refused", reason: "spent" })).take(new Uint8Array(32), new Uint8Array(1)), { kind: "refused", reason: "spent", confirm: null });
+  assert.deepEqual(await courier(answer({ outcome: "unchecked", kind: "busy" })).take(new Uint8Array(32), new Uint8Array(1)), { kind: "unchecked", detail: "busy", confirm: null });
+  // A refusal with what the server sealed for the wallet (§14.2): the page delivers it as it delivers a confirmation.
+  const toTell = { relay: b64url(REPLY_RELAY), sid: b64url(REPLY_SID), payload: "BwcH" };
+  assert.deepEqual(await courier(answer({ outcome: "refused", reason: "not_listed", confirm: toTell })).take(new Uint8Array(32), new Uint8Array(1)), {
+    kind: "refused", reason: "not_listed", confirm: { relay: REPLY_RELAY, sid: REPLY_SID, payload: new Uint8Array([7, 7, 7]) },
+  });
+  assert.deepEqual((await courier(answer({ outcome: "unchecked", kind: "busy", confirm: toTell })).take(new Uint8Array(32), new Uint8Array(1))).confirm.payload, new Uint8Array([7, 7, 7]));
   const kindOf = async (p) => {
     try {
       await p;
@@ -450,6 +516,7 @@ test("httpCourier speaks the site's JSON with the page's cookies, and an answer 
   assert.equal(await kindOf(courier(answer({ outcome: "refused" })).take(new Uint8Array(32), new Uint8Array(1))), "bad_answer");
   assert.equal(await kindOf(courier(answer({ outcome: "connected", connection: { address: ADDRESS }, confirm: null })).take(new Uint8Array(32), new Uint8Array(1))), "bad_answer");
   assert.equal(await kindOf(courier(answer({ outcome: "connected", connection: taken.value, confirm: { relay: "AA", sid: "AA", payload: "AA" } })).take(new Uint8Array(32), new Uint8Array(1))), "bad_answer");
+  assert.equal(await kindOf(courier(answer({ outcome: "refused", reason: "not_listed", confirm: { relay: "AA" } })).take(new Uint8Array(32), new Uint8Array(1))), "bad_answer");
 });
 
 test("the dialog over the server-held mode: the code, the notice, and the session the server opened", async () => {
@@ -465,13 +532,17 @@ test("the dialog over the server-held mode: the code, the notice, and the sessio
   await flush();
   assert.match(dialog.find(DIALOG_CLASSES.status).textContent, /Continue in Saltix/);
   assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, true, "a code the wallet read: no countdown");
-  // A grant the server refuses: the reason stays under the code the session shows again, until the next check.
+  // A grant the server refuses ends its code: the reason stays under the fresh code the session shows at once.
   link.deliver(sealedTo(parsed, grantFor(parsed, Date.now() - 11 * 60_000)), b64url(parsed.sid));
   await flush();
   assert.match(dialog.find(DIALOG_CLASSES.status).textContent, /\(time\)/);
-  const grant = grantFor(parsed, Date.now());
-  link.deliver(sealedTo(parsed, replyFor(grant)), b64url(parsed.sid));
-  link.deliver(sealedTo(parsed, grant), b64url(parsed.sid));
+  const fresh = parseOffer((await t.connect.offer()).text);
+  assert.notEqual(b64url(fresh.sid), b64url(parsed.sid), "a fresh code");
+  assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, false, "the fresh code counts down");
+  const grant = grantFor(fresh, Date.now());
+  const next = t.links.at(-1);
+  next.deliver(sealedTo(fresh, replyFor(grant)), b64url(fresh.sid));
+  next.deliver(sealedTo(fresh, grant), b64url(fresh.sid));
   await flush();
   const connection = await result;
   assert.equal(connection.address, ADDRESS);

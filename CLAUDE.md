@@ -7,7 +7,8 @@ before changing a format, a check or what a page or a server relies on, and hold
 [vectors/](vectors/README.md). Who answers an app's users (the four forms of its support contact, `grain support`, the
 consent of a support address, the support agent and what a user sees) is AGENTS.md's *Support for your app* and
 [docs/support.md](docs/support.md); donations, the owner's switch in Saltix that the SDK reads and never sends, are its
-*Donations to your app*. On Consensus 2, the test network's, a block the node shows is final and an epoch's time comes
+*Donations to your app*. Relays are found when the SDK runs, never listed: [docs/protocol/relays.md](docs/protocol/relays.md#finding-relays-relay-tickets)
+(no relay's address in any code, doc or template: AGENTS.md's *Working on this repository*). On Consensus 2, the test network's, a block the node shows is final and an epoch's time comes
 from `node_status.pace` and `epochs_ahead`: [the wallet interface](docs/protocol/wallet-interface.md#confirmations).
 
 @AGENTS.md

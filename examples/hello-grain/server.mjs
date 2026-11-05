@@ -4,18 +4,21 @@
 //
 //   npx grain pair --app <slug> --owner <address> --genesis <16 hex> && npm run example      or   SALTIX_APP_KEY_FILE=app.key npm run example
 //
-// The key names the app, its network and its server key. The server finds the network's public relays, checks that
-// the registry names the key, signs `chat.json` with it (its slug set to your app's) and answers in your app's chat.
+// The key names the app, its network and its server key. The server finds the network's relays by itself (relay
+// tickets: the SDK carries no list), checks that the registry names the key, signs `chat.json` with it (its slug set to
+// your app's) and answers in your app's chat.
 //
 //   SALTIX_APP_KEY       the key's text itself (a developer key made before: keep it out of your shell's history: an .env file, or a secret store)
 //   SALTIX_APP_KEY_FILE  or a file holding it, readable by you alone (app.key in the checkout by default: grain pair writes it)
 //   CHAT_SPEC            the chat spec in its JSON form (chat.json next to this file by default)
 //   CHAT_STORE           where the server remembers answered requests and its numbers (chat.store.json)
-//   NODE_RPC             your own node's wallet interface, for a network with no public relays (a local devnet)
+//   SALTIX_RELAYS        a relay ticket (SALTIX-RELAY:…) someone gave you, tried first where the relays the server finds
+//                        by itself do not answer
+//   NODE_RPC             your own node's wallet interface, instead of the relays (a local devnet)
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EXIT_CONFIG, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, setupCannotWork } from "../../packages/server/dist/index.js";
+import { EXIT_CONFIG, appKeyFromEnvironment, chatSpecFromJson, fileChatStore, relaysFromEnvironment, setupCannotWork } from "../../packages/server/dist/index.js";
 import { startChat } from "./chat.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -39,7 +42,7 @@ const log = (level, event, meta) => console.log(`${new Date().toISOString()} ${l
 console.log(`starting ${key}`);
 try {
   const chat = await startChat({
-    appKey: key, spec, node: process.env.NODE_RPC, store: fileChatStore(process.env.CHAT_STORE ?? "chat.store.json"), log,
+    appKey: key, spec, node: process.env.NODE_RPC, relays: relaysFromEnvironment(), store: fileChatStore(process.env.CHAT_STORE ?? "chat.store.json"), log,
     onStop: () => process.exit(EXIT_CONFIG),
   });
   console.log(`the chat of ${chat.slug} answers at ${chat.address} on ${chat.chain.network} (spec v${chat.spec.version})`);

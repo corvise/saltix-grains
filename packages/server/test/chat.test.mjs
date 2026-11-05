@@ -43,7 +43,7 @@ const serverAddress = address(SERVER);
 const hex = (bytes) => toHex(bytes);
 const repeat = (byte, n) => byte.repeat(n);
 
-// What the protocol's generator builds (crates/saltix-types/src/grain_chat_vectors.rs), in this SDK's form.
+// What the protocol's generator builds (chain/crates/saltix-types/src/grain_chat_vectors.rs), in this SDK's form.
 const en = (text) => ({ en: text });
 const site = (value, title) => ({ value, title: en(title) });
 function spec() {
@@ -94,7 +94,7 @@ const memberProof = () => ({
 });
 const stats = () => ({ slug: "access", at: NOW, users_1d: 7, users_30d: 23, requests_30d: 312 });
 const reportFile = () => ({
-  relay: `wss://85.192.42.65:30335/#${repeat("5d", 32)}`, id: "q3Vb1Hk9xQ2mN0pL7rT4sw", key: repeat("44", 32), iv: repeat("55", 12),
+  relay: `wss://203.0.113.65:30335/#${repeat("5d", 32)}`, id: "q3Vb1Hk9xQ2mN0pL7rT4sw", key: repeat("44", 32), iv: repeat("55", 12),
   hash: repeat("66", 32), size: 18_432, name: "digest-2027-01-15.csv", mime: "text/csv",
 });
 const answer = () => ({
@@ -478,7 +478,7 @@ test("what the file says is refused is refused", () => {
   assert.equal(shown({ now: NOW + STATS_MAX_AGE_MS }), null, "2 days exactly");
 });
 
-// The reference's own unit tests (crates/saltix-types/src/grain/chat/tests.rs), the negative cases included.
+// The reference's own unit tests (chain/crates/saltix-types/src/grain/chat/tests.rs), the negative cases included.
 function smallSpec() {
   return {
     slug: "access", version: 1, intro: en("Access keys for the closed sites."),
@@ -834,10 +834,10 @@ test("files seal and open under their reference, and a reference names its relay
   assert.notEqual((await sealFile(plain)).key, sealed.key, "a fresh key per file");
 
   const pin = repeat("ab", 32);
-  assert.equal(relayOfEndpoint({ url: "wss://85.192.42.65:30335/", cert_sha256: pin.toUpperCase() }), `wss://85.192.42.65:30335/#${pin}`);
+  assert.equal(relayOfEndpoint({ url: "wss://203.0.113.65:30335/", cert_sha256: pin.toUpperCase() }), `wss://203.0.113.65:30335/#${pin}`);
   assert.equal(relayOfEndpoint({ url: "wss://relay.example/", cert_sha256: null }), "wss://relay.example/");
   assert.equal(relayOfEndpoint({ url: "ws://127.0.0.1:8090/relay", cert_sha256: null }), null, "a developer's relay: the reader's own");
-  assert.deepEqual(fileRefEndpoint(reportFile()), { url: "wss://85.192.42.65:30335/", cert_sha256: repeat("5d", 32) });
+  assert.deepEqual(fileRefEndpoint(reportFile()), { url: "wss://203.0.113.65:30335/", cert_sha256: repeat("5d", 32) });
 });
 
 test("a file reference out of bounds is refused", () => {

@@ -219,8 +219,8 @@ One rule is consensus, in protocol version 2 (`NETWORK_BUNDLES`): **a sealed man
 being its bundle's source, and such a manifest names a bundle of at most 16 MiB. Before version 2 a sealed manifest names
 1–8 sources. Until a network runs version 2 the network still keeps every named bundle of at most 16 MiB and wallets ask
 it first, so `grain publish` names, as the fallbacks the rule asks for, copies the network itself serves:
-`https://<relay>/_blob/grain_bundle/<hash>` at up to 3 relays of the network's relay list (`relay_list`), those offering
-space first. `node_status`'s `protocol.version` says which rule a network runs; the test network runs version 1.
+`https://<relay>/_blob/grain_bundle/<hash>` at up to 3 of the relays the node names by their tickets (`relay_tickets`),
+those offering space first. `node_status`'s `protocol.version` says which rule a network runs; the test network runs version 1.
 
 Nothing else here is consensus: the manifest's `icon` and `bundle` are 12-grains' as before, and the statement, the
 requests and the blob store are off chain.

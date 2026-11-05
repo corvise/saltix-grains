@@ -1,15 +1,19 @@
 // What `grain init` makes: a slug a registry takes, keys that never reach git, and for a chat-only grain a server that
-// starts from a developer key alone and answers its chat — run here against a development relay and a node's registry.
+// starts from a developer key alone and answers its chat — run here against a development relay behind its own
+// certificate and a node's registry, which names the relay by its ticket.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
-  AppKey, RelayClient, chatMessageProblem, chatSpecFromJson, decodeChatFrame, derive, encodeChatFrame, newChatId, signChatRequest, toHex,
+  AppKey, RelayClient, chatMessageProblem, chatSpecFromJson, decodeChatFrame, derive, encodeChatFrame, newChatId, signChatRequest, signRelayTicket,
+  toHex,
 } from "@saltix/grain-server";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { CHAT_SPEC_FIRST_VERSION, chatJson } from "../dist/template.js";
@@ -71,8 +75,35 @@ test("a chat project's spec starts above every spec Saltix or the SDK's example 
   assert.equal(JSON.parse(chatJson("coach", "Coach")).version, CHAT_SPEC_FIRST_VERSION);
 });
 
-/** A node's wallet interface over HTTP: the grain's record names `servers()`, and its relays are `relay`. */
-async function fakeNode(relay, slug, servers) {
+function hasOpenssl() {
+  try {
+    execFileSync("openssl", ["version"], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A development relay behind a self-signed certificate, as a relay's client port is: its pinned `wss://` endpoint. */
+async function pinnedDevRelay() {
+  const dir = scratch("grain-relay-tls-");
+  execFileSync("openssl", ["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1", "-subj", "/CN=relay",
+    "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stdio: "pipe" });
+  const pin = createHash("sha256").update(execFileSync("openssl", ["x509", "-in", join(dir, "cert.pem"), "-outform", "DER"])).digest("hex");
+  let relay;
+  const https = createHttpsServer({ key: readFileSync(join(dir, "key.pem")), cert: readFileSync(join(dir, "cert.pem")) }, (req, res) => {
+    if (!relay.handle(req, res)) res.writeHead(404).end();
+  });
+  relay = createDevRelay({ server: https, path: "/relay" });
+  await new Promise((r) => https.listen(0, "127.0.0.1", r));
+  const endpoint = { url: `wss://127.0.0.1:${https.address().port}/relay`, cert_sha256: pin };
+  return { relay, endpoint, close: async () => { await relay.close(); https.close(); } };
+}
+
+/** A node's wallet interface over HTTP: the grain's record names `servers()`, and its own relay is `endpoint`, which its
+ *  relay_tickets names by a ticket signed now (never relay_list). */
+async function fakeNode(endpoint, slug, servers) {
+  const relaySecret = new Uint8Array(32).fill(0x6e);
   const http = createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -89,7 +120,7 @@ async function fakeNode(relay, slug, servers) {
           deposit: "0",
         },
         account_get: { account: params.address, shard: "", controller: null },
-        relay_list: { relays: [{ endpoints: [relay.endpoint()] }] },
+        relay_tickets: { period: 1, self: signRelayTicket({ secret: relaySecret, genesis: GENESIS, endpoints: [endpoint], issuedAt: Date.now() }), tickets: [] },
       }[method];
       res.end(JSON.stringify(result === undefined
         ? { jsonrpc: "2.0", id: 1, error: { code: -32601, message: method } }
@@ -131,7 +162,7 @@ function start(dir, env, cwd = dir) {
   };
 }
 
-test("a chat-only grain's server starts from its developer key alone and answers its chat", async (t) => {
+test("a chat-only grain's server starts from its developer key alone and answers its chat", { skip: !hasOpenssl() && "no openssl" }, async (t) => {
   const dir = join(scratch("grain-chat-"), "coach");
   const made = grain(["init", dir, "--chat", "--name", "Coach"], tmpdir());
   assert.equal(made.status, 0, made.stderr);
@@ -174,12 +205,12 @@ test("a chat-only grain's server starts from its developer key alone and answers
   assert.match(unstandard.stdout, /status-first/);
   writeFileSync(join(dir, "chat.mjs"), handlers);
 
-  const relay = await createDevRelay();
+  const pinned = await pinnedDevRelay();
   const secret = new Uint8Array(32).fill(0x5e);
   const key = AppKey.of("devnet", GENESIS, "coach", secret);
   let servers = [key.publicKey];
-  const node = await fakeNode(relay, "coach", () => servers);
-  t.after(async () => { node.close(); await relay.close(); });
+  const node = await fakeNode(pinned.endpoint, "coach", () => servers);
+  t.after(async () => { node.close(); await pinned.close(); });
 
   // No key at all (not paired), or one readable by others: it says so and stops with 78, which a supervisor does not
   // restart on.
@@ -211,7 +242,7 @@ test("a chat-only grain's server starts from its developer key alone and answers
   // A wallet: the user's grain key in the app, a request for hello, the signed card it gets.
   const user = new Uint8Array(32).fill(7);
   const wallet = await RelayClient.connect({
-    endpoints: [relay.endpoint()], secret: user, messagingSecret: derive("Saltix grain messaging key v1", user, new TextEncoder().encode("coach")),
+    endpoints: [pinned.endpoint], secret: user, messagingSecret: derive("Saltix grain messaging key v1", user, new TextEncoder().encode("coach")),
     network: "devnet", log: () => {},
   });
   t.after(() => wallet.close());

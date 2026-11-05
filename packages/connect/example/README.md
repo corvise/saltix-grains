@@ -6,7 +6,7 @@ A whole site that signs its visitors in with Saltix in the **server-held mode** 
 site or DApp that keeps accounts, a shop, an admin page — anything with a session.
 
 ```sh
-SALTIX_GENESIS=<the network's genesis hash> SALTIX_RELAYS=/saltix/r/1/,/saltix/r/2/ npm run example:connect
+SALTIX_GENESIS=<the network's genesis hash> SITE_RELAY_PATHS=/saltix/r/1/,/saltix/r/2/ npm run example:connect
 ```
 
 - **The server** (`createServerConnect({ node, network, genesis, origin, name })`) makes the keys of every offer and

@@ -7,7 +7,7 @@
 //   `GET /_file/<id>`) and an app's numbers (`grain_stats`, the newest of each grain). Plain `ws://` and `http://`:
 //   loopback only.
 // - `createDevRegistry`: what a node's wallet interface says of one grain (`node_status`, `grain_get`, `account_get`,
-//   `relay_list`): its owner, server keys, access and team, changed in place, each change a new beacon block; and a node's
+//   `relay_tickets`): its owner, server keys, access and team, changed in place, each change a new beacon block; and a node's
 //   named blobs (`blob_put`, `blob_get`, 32-images §7–§8) as the node takes them: an icon the registry names, a bundle in
 //   pieces, named or held pending on a registered server key's statement, refused with the node's reasons; and a blob
 //   the registry names that nobody brought yet answered as a node answers it, `{blob: null, fetching: true}` (it knows
@@ -33,6 +33,7 @@ import { decodeAddressRecord, fromBase64Url, recordProblem, toBase64Url } from "
 import type { RegisteredGrain } from "./registry.js";
 import type { RelayEndpoint } from "./relay.js";
 import { type SignedGrainStats, decodeSignedGrainStats, encodeSignedGrainStats } from "./stats.js";
+import { signRelayTicket } from "./tickets.js";
 
 const MAX_FILE = 50 * 1024 * 1024 + 16;
 const MAX_PIECE = 1024 * 1024;
@@ -300,7 +301,8 @@ export interface DevRegistryOptions {
   /** Public (the default) or private. */
   public?: boolean;
   members?: DevMember[];
-  /** The relays `relay_list` names: endpoints of one relay, or relays with their node keys and the space they offer. */
+  /** The relays `relay_tickets` names (its `wss://` endpoints): endpoints of one relay, or relays with their keys and
+   *  the space they offer. */
   relays?: RelayEndpoint[] | DevRelayEntry[];
   /** The manifest's name (`{ en }`), the slug by default. */
   name?: string;
@@ -312,6 +314,9 @@ export interface DevRegistryOptions {
   registered?: boolean;
   /** The clock statements are checked against (Unix ms). */
   now?: () => number;
+  /** What `node_status.faucet` says (Saltix 08-node §6): a test network's faucet — a grant in base units of SALT and
+   *  the seconds an address waits between grants — or null, a node that runs none (the default). */
+  faucet?: { amount: string; every: number } | null;
 }
 
 /**
@@ -334,9 +339,13 @@ export type DevClock =
  *  network's (1.6 to 2.1 s a height in October 2026). */
 export const DEV_PACE_MS = 2_000;
 
-/** A relay as `relay_list` names it. */
+/** A relay the development node's `relay_tickets` names. */
 export interface DevRelayEntry {
+  /** Its node key, hex: the key of `secret` when one is given. */
   key: string;
+  /** Its node key's secret, hex (a development key), which signs its ticket; without one the registry signs it with a
+   *  development key of its own. */
+  secret?: string;
   endpoints: RelayEndpoint[];
   /** The space it offers for bundles and fragments, GiB (relay record v3), or null. */
   store_gib: number | null;
@@ -352,7 +361,7 @@ export interface DevBlob {
 
 export interface DevRegistry {
   /** The wallet interface a `ChatServer` (or the command line, `NodeLike`) reads: `node_status`, `grain_get`,
-   *  `account_get`, `relay_list`. */
+   *  `account_get`, `relay_tickets`. */
   call<T>(method: string, params?: object): Promise<T>;
   readonly genesis: string;
   readonly network: NetworkName;
@@ -439,12 +448,25 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
       beacon: { height, hash: height.toString(16).padStart(64, "0") },
       shards: [{ shard: "", hash: (height + 0x8000).toString(16).padStart(64, "0") }],
       protocol: { version: o.protocol ?? 1, supported: [1, 2], next: null, outdated: null },
+      faucet: o.faucet ?? null,
     };
   };
-  const relayList = (): DevRelayEntry[] => {
+  /** `relay_tickets` as a node's own interface answers it (41-transport §18.4): a ticket of each relay with a `wss://`
+   *  endpoint, signed now by its development key. */
+  const ownRelaySecret = randomBytes(32);
+  const relayTickets = () => {
     const given = o.relays ?? [];
-    if (given.length > 0 && "endpoints" in given[0]!) return given as DevRelayEntry[];
-    return [{ key: "00".repeat(32), endpoints: given as RelayEndpoint[], store_gib: null }];
+    const entries: DevRelayEntry[] = given.length > 0 && "endpoints" in given[0]!
+      ? given as DevRelayEntry[]
+      : [{ key: toHex(ed25519.getPublicKey(ownRelaySecret)), endpoints: given as RelayEndpoint[], store_gib: null }];
+    const at = now();
+    const tickets = entries.flatMap((e) => {
+      const endpoints = e.endpoints.filter((x) => x.url.startsWith("wss://"));
+      if (endpoints.length === 0) return [];
+      const secret = e.secret ? fromHex(e.secret, 32) : ownRelaySecret;
+      return [signRelayTicket({ secret, genesis, endpoints, issuedAt: at, ...(e.store_gib === null ? {} : { store: e.store_gib }) })];
+    });
+    return { period: Math.floor(at / (7 * 86_400_000)), self: null, tickets };
   };
   /** What the canonical registry names: the live grain's icon and sealed bundle. */
   const live = () => (registered && grain.retired === null ? grain.manifest?.manifest ?? null : null);
@@ -568,8 +590,8 @@ export function createDevRegistry(o: DevRegistryOptions): DevRegistry {
           const account = String(params.address);
           return { account, shard: "", nonce: 0, salt: "0", work: "0", channels: [], controller: controllers.get(account) ?? null } as T;
         }
-        case "relay_list":
-          return { relays: relayList() } as T;
+        case "relay_tickets":
+          return relayTickets() as T;
         case "blob_put":
           return blobPut(params) as T;
         case "blob_get":

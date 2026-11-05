@@ -1,10 +1,11 @@
 // A sealed manifest's sources (Saltix 12-grains §2, 32-images §10): none on a network that runs protocol version 2; before
-// it, copies the network itself serves, at up to 3 relays of its own relay list (those offering room first, ranked by
-// the bundle's placement, one per network first), never a host the developer must run; the developer's own hosts kept.
+// it, copies the network itself serves, at up to 3 of the relays the node names by their tickets (those offering room
+// first, ranked by the bundle's placement, one per network first), never a host the developer must run; the developer's
+// own hosts kept.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { manifestProblem, derive, fromHex, toHex } from "@saltix/grain-server";
-import { RELAY_SOURCES, isRelaySource, protocolOf, relayBlobUrl, relaySources, sourcesFor } from "../dist/sources.js";
+import { manifestProblem, derive, fromHex, signRelayTicket, toHex } from "@saltix/grain-server";
+import { RELAY_SOURCES, isRelaySource, protocolOf, relayBlobUrl, relaySources, sourcesFor, ticketedRelays } from "../dist/sources.js";
 
 const HASH = "78c43e9e707e58579fefaaa88c3c3c6ac5295576a0a23f55c39a51386342a0e3";
 const relay = (n, over = {}) => ({
@@ -49,8 +50,26 @@ const base = {
   icon: "00".repeat(32), entry: { sealed: { bundle: HASH, size: 483, sources: [], start: "index.html", connect: [] } }, permissions: 0, sponsor: null, min_host: 1,
 };
 
+/** Relay n's ticket, signed now by its key; `store` GiB makes it a version 3 record. */
+const ticketOf = (n, options = {}) => signRelayTicket({
+  secret: new Uint8Array(32).fill(n), genesis: "5a".repeat(32), endpoints: relay(n).endpoints, issuedAt: options.issuedAt ?? Date.now(),
+  ...(options.store === undefined ? {} : { store: options.store }),
+});
+/** A node whose relay_tickets names relays 1 to 4 (and never answers relay_list). */
+const ticketing = (extra = []) => ({
+  call: async (m) => (m === "relay_tickets" ? { period: 1, self: ticketOf(1), tickets: [ticketOf(2), ticketOf(3, { store: 8 }), ticketOf(4), ...extra] } : null),
+});
+
+test("the relays a node names by their tickets: each read here, its key and the space it offers; at most five and its own", async () => {
+  const listed = await ticketedRelays(ticketing([ticketOf(5, { issuedAt: Date.now() - 31 * 86_400_000 }), ticketOf(6), ticketOf(7)]));
+  assert.deepEqual(listed.map((r) => r.endpoints[0].url), [1, 2, 3, 4, 6].map((n) => relay(n).endpoints[0].url), "one past its life left out, the seventh past the bound");
+  assert.equal(listed[2].store_gib, 8);
+  assert.equal(listed[0].store_gib, null, "a version 2 record offers none");
+  assert.match(listed[0].key, /^[0-9a-f]{64}$/);
+});
+
 test("sources by the network's protocol: relays' copies on version 1, none from version 2, the developer's own kept", async () => {
-  const node = { call: async (m) => (m === "relay_list" ? { relays: [relay(1), relay(2), relay(3), relay(4)] } : null) };
+  const node = ticketing();
   const v1 = await sourcesFor(node, 1, HASH, 483, []);
   assert.equal(v1.from, "relays");
   assert.equal(v1.sources.length, 3);

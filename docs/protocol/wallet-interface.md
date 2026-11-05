@@ -23,7 +23,8 @@ A node's JSON-RPC interface: what wallets, the SDK and the `grain` command line 
   its own (`publicGateways`, `--relay`): a call goes on to the next relay when one fails. A relay answers the methods
   below (and the explorer's reads) from its own node; any other method is `-32601` ("not served here"). Per client (an
   IPv4 address or an IPv6 /64): 4 requests at once, 20 a second with a burst of 60, HTTP `429` past them. Heavy reads
-  (`account_history`, `grain_list`, `grain_history`, `grain_stats_list`, `handle_search`, …) share one budget among all
+  (`account_history`, `grain_list`, `grain_history`, `grain_stats_list`, `handle_search`, `license_list`, a
+  `relay_tickets` that makes a bucket's choice, …) share one budget among all
   of a relay's clients: 5 a second after a burst of 20, at most 2 under way, error `6` past it.
 
 **Values.** SALT and WORK amounts are **decimal strings of base units** (a JSON number above 2⁵³ loses precision).
@@ -42,7 +43,8 @@ or an account id in hex. A transaction is the hex of its signed Borsh.
 | `transaction_get` | `id` | `status`: `pending`, `included` or `unknown`; for `included` also `shard`, `block`, `height`, `confirmations`, `linked`, `linked_depth`, `final`; `transaction` when the node has it |
 | `faucet_request` | `address` | a test network's faucet (below): `id` of the transfer, `amount`, `work` (`{id, amount}` or `null`) |
 | `exchange_list` | — | `exchanges`: `pool` (its id, hex), `pool_key`, `fee_bp`, `bond`, `payout`, `closed`, `reachable` (a sponsor opens its channel with one) |
-| `relay_list` | — | `relays`: `key`, `peer`, `endpoints [{url, cert_sha256}]` (empty: not reachable), `issued_at`, `version`, `store_gib`, `country` |
+| `relay_list` | — | `relays`: `key`, `peer`, `endpoints [{url, cert_sha256}]` (empty: not reachable), `issued_at`, `version`, `store_gib`, `country`; at relays' gateways only until Saltix for Android moves to tickets, then gone from them; the SDK never calls it ([relays](relays.md#finding-relays-relay-tickets)) |
+| `relay_tickets` | `key` (optional: a one-time X25519 public key, hex) | `period` (the week; the one before until the week's first beacon block is final), `self` (this relay's own ticket or `null`), `tickets` (at most 5, of relays naming a public endpoint, chosen for the requester's network bucket for the week); with `key`, `sealed` instead: all of it sealed to the key. A heavy read at a relay only when it makes the bucket's choice ([relays](relays.md#finding-relays-relay-tickets)) |
 | `grain_get` | `slug` | `grain` (or `null`): `slug`, `owner` (account id), `version`, `id` (the manifest id), `registered`, `updated`, `retired` (slots; `retired` `null` while live), `deposit` (SALT held), `manifest` (its signed JSON form, `null` once retired), `servers` (hex), `category`, `public`, `members` (`[{account, roles}]`), `handles` (as displayed), `ratings {count, sum, miners_count, miners_sum}`, `returns`, `profile` (the signed Connect profile's JSON form, or `null`), `profile_revision`, `donations` (whether the owner takes donations: *Support the developer* on the app's card, a transfer to `owner`; absent from a node before protocol version 9); and, beside `grain`, `deposit`: what `RegisterGrain` of this slug needs, also for a free slug |
 | `grain_list` | `query` (≤ 64 bytes), `sort` (`slug`, `newest`, `rating`, `miners`), `after`, `limit` (20, at most 100), `retired` (`false`), `category`, `owner` or `member` (an address) | `grains` in `grain_get`'s form, public ones only unless `owner` or `member` asks; `next` |
 | `grain_ratings` | `slug`, `after`, `limit` (20, at most 100) | `ratings` newest first: `account`, `score`, `review` (as a reader may show it), `slot`, `miner` (whether the account held an active mining license when it rated); `next` |
@@ -127,4 +129,4 @@ node knows the transactions and accounts of only the shards it follows, so throu
 
 On test networks only. A node with a faucet signs a transfer of test SALT, and of WORK while its purse holds some, to
 the address that asks, and pools it like any other. An address gets one grant every 5 minutes (`faucet.every` in
-`node_status`); a refusal says when to come back. `grain faucet` asks for it, through the public relays.
+`node_status`); a refusal says when to come back. `grain faucet` asks for it, through the network's relays.

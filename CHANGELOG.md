@@ -2,7 +2,85 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- cli: **`grain faucet --wait` grants until the key file's account can pay the first publish** (the owner's run of
+  2026-11-05 on the test network: one grant of 10 SALT left the account 5 640 base units short of a deposit of 10 SALT
+  and the fees, `grain publish --key` refused, and the next grant was refused for five minutes — the path the doctor
+  itself gave). In a project whose slug is free it reads the faucet's terms from `node_status.faucet`, says the grants
+  the deposit and the fees take (`2 grants of 10 SALT, 5 minutes apart`), waits the faucet's interval between them (a
+  grant too soon by the faucet's clock is waited out once), and ends with the next step; an account that holds enough is
+  granted nothing; a deposit of 100 SALT, eleven grants and an hour, is said up front with the way out (a longer slug, or
+  the owner's Saltix pays). `grain doctor` says the grants before they are asked for, `grain publish --key`'s refusal
+  says what the faucet does now. Mutation-checked: the grants' count forced to one fails the test.
+- server, cli: **the third review of relay tickets** (2026-11-04) — a ticket naming an endpoint that is no URL stopped
+  every look with a bare "Invalid URL" (a server restarted in a loop, `--relay` gave 1 for 78): such a ticket is refused
+  (`endpoint`) given, cached or handed out, and no relay's text throws past the reader; a relay's name is looked up
+  within a probe's deadline; one ticket alone never starts a chat server (it signs only under the genesis two relays
+  agree on) — its error and `grain doctor` say so, and the template, AGENTS.md, README and guides ask for two tickets of
+  two relays or `NODE_RPC`; a relay given and left out is said on stderr by every command; the log ends
+  `network_unreachable` when no relay answered at all, and its new steps are documented.
+
+### Changed
+
+- **Relays found when the SDK runs, never from a list it carries** (`@saltix/grain-server`, the `grain` command line;
+  Saltix 41-transport §18, the owner's rule of 2026-11-04): a developer whose SDK named the previous network's relays met
+  `timeout` for every one, a minute each. Now the chat server and every command start from what was given (`--relay`,
+  `SALTIX_RELAYS`, `relays`), the project's cache of relays that answered (`.grain/relays.json`, fastest first), then the
+  release's entry points (obfuscated in `entry.ts`, written by Saltix's `scripts/set-network.py`, always tried), probe
+  them 16 at a time within 5 s, go on once three answered, ask the two fastest for relay tickets (`relay_tickets`: five
+  relays' own signed records and the relay's own, sealed to a one-time key, each checked here: `readTicket`,
+  `ticketProblem`, `openTicketsAnswer`), keep those naming a public address (`publicHost`), use a ticket only once a
+  relay other than the one that handed it out confirms its license (`license_list {node_key}`), and find them again when
+  every relay stops answering and every hour (the chat server's timer). Relays are told apart by URL and pin (`relayId`),
+  so no ticket replaces a given relay's or an entry point's pin. Nothing to configure. When none answers, the error
+  (`NoRelayAnswered`) names every relay tried and why — by its key's or its certificate's fingerprint (`relayName`),
+  never by address — and the way out. `grain doctor` says where the relays came from, which answered and how fast
+  (`--json`: `relays`). `--relay` and `SALTIX_RELAYS` take a ticket (`SALTIX-RELAY:…`) as well as `wss://host:port/#<pin>`
+  or a name behind a CA's certificate; one that cannot be a relay is refused at once (`GivenRelayRefused`: exit 78, the
+  chat server's `chat_relay_refused`), one past its life left out with a warning. A call gives a relay 8 s
+  (`CALL_TIMEOUT_MS`) over the relays as they were when it began; `relayRequest` takes a timeout. A server's own node
+  names relays by its `relay_tickets` (`relaysOfNode`). Golden vectors: `vectors/relay-tickets-v1.json`, the reader's
+  text as Rust's (ASCII's case, Rust's whitespace: `ſ`, `ı`, U+FEFF refused). Mutation-checked: a reader that skips the
+  signature, the record's domain, the network, the life or the endpoint check each fails the tests (5 of 5 killed); the
+  review's pins, license confirmation, bounds, given relays, hourly look and addresses (19 of 19).
+
+- **Relays, the second review** (`@saltix/grain-server`, the `grain` command line; Saltix 41-transport §18.5): a relay
+  counts once whatever its names — its ticket's node key, else its host and port — among the first that answered, the
+  genesis's voters, the relays asked for tickets and the confirmers, a relay already known takes a ticket's form only
+  from its own ticket or a newer one of its key (never another key's naming its URL and pin), and a ticket naming one
+  host and port twice is refused (`repeated`); only anchors (relays given, entry points) confirm a license, so with none answering nothing
+  handed out is used; the genesis is adopted only where two relays agree, one an anchor (`RelayFinder.genesis`,
+  `RelayGateways.genesis`), and the chat server signs under it and does not start without it; `relayRequest` takes a
+  `signal` that destroys the request and arms its idle timer on the pinned socket too, probes and checks give up at 5 s,
+  a call at 8 s of silence or 30 s in all (`CALL_DEADLINE_MS`), abandoned probes are given up and none starts after a
+  look; a look that found nothing is not repeated within the minute; a ticket's names are found before they are dialed
+  (`FinderOptions.lookup`, `RelayEndpoint.address`) and cached tickets the person did not give are held to the public
+  rule; the chat server's connection is fed by the finder's latest look (and by a wallet of relays' gateways), never the
+  first look's relays kept; `--relay` with a ticket keeps the cache and the entry points; `RelayReport.answered` (doctor's
+  `--json`) gives the tickets of the relays that answered, `kept` how many were cached; the Connect example reads
+  `SITE_RELAY_PATHS`. `MAX_TICKET_BYTES` is 1 152; `publicHost` reads the vectors' `public_hosts` as the node does.
+
+### Removed
+
+- **`PUBLIC_RELAYS`** (BREAKING): the SDK carries no list of relays; `entryPoints(network)` gives the release's last
+  resort, and `publicGateways(network)` finds the rest when its first call is made. A test (`no-relay-list.test.mjs`)
+  fails on any public address in the SDK's code, docs, templates, examples or tests, and every project's `AGENTS.md` says
+  never to write one into an app.
+- **`relay_list` in the SDK** (BREAKING): `relaysOf`, `GatewayOptions.discover`, `RelayGateways.add`'s re-pinning and the
+  fallback for relays of an older release are gone; `RelayClient`'s `node` takes the relays its `relay_tickets` names;
+  the development registry answers `relay_tickets` (`DevRelayEntry.secret` signs a relay's ticket). `RelayTry` names a
+  relay (`relay`) instead of its URL; `RelayReport.discovery` is `tickets` or `none`, with `warnings`. The relay client's
+  log events name a relay (`relay`), never its `url`.
+
 ### Added
+
+- connect: **a refused grant is told to the wallet and ends its code** (Saltix 19-connect §14.1–§14.2, 2026-11-04) —
+  `ConnectRefusal` (`encodeRefusal`, `decodeAnswer`, `checkAnswer`, `refusalFor`, `RefusalReason`): the session delivers
+  the page's refusal (its own, or the one the server sealed: `confirm` beside `refused`/`unchecked`) on the refused
+  code's connection, forgets the slot it kept for a reload and shows a fresh code at once; the dialog keeps the reason
+  under every code until a wallet reads one; `@saltix/connect/server` seals refusals for its `admit` reasons. Vectors
+  `refusals` and `refused_refusals`.
 
 - **The dialog's code changes by itself, with a countdown and no *New code*** (`@saltix/connect`; the owner's rule of
   2026-10-29 for every place Connect shows a code): `openConnectDialog` shows under the code "The code changes in 1:48"

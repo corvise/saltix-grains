@@ -15,7 +15,7 @@ export const SWITCHES: ReadonlySet<string> = new Set([
   "chat", "sign-in", "wallet", "wait", "no-wait", "revoke-all", "public", "private", "clear", "offline", "new", "json", "hosted", "fix", "check", "tap",
 ]);
 
-/** Where a command reaches the network: its public relays (`--network`), relays named (`--relay`), or your node. */
+/** Where a command reaches the network: the relays it finds (`--network`), relays named (`--relay`), or your node. */
 const NET = ["network", "relay", "node"];
 /** A transaction signed with a key file: where it goes and how it is signed. */
 const SIGNED = [...NET, "key", "genesis", "fee", "valid-for"];

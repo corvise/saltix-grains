@@ -34,7 +34,8 @@ import {
   type GrainAccess, type MemberProblem, type Rights, type SignedMemberProof, TEAM_ROLES, admits, holdsButSigner,
   introductionProblem, memberProofProblem, memberProofTimely, needsController, needsTeamController, onTeam, rightsOf, rolesOf, teamMemberOf,
 } from "./member.js";
-import { ChainView, PUBLIC_RELAYS, RelayGateways, type WalletInterface, nodeInterface, relaysOf } from "./network.js";
+import { GivenRelayRefused, REFRESH_MS, type RelayCache, RelayFinder, checkGivenRelay, fileRelayCache, projectRelayCache } from "./discovery.js";
+import { ChainView, RelayGateways, type WalletInterface, nodeInterface } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
 import { readPublishText, publishTextOf } from "./publish.js";
 import { publishText } from "./publish-link.js";
@@ -73,8 +74,8 @@ export interface ChatServerOptions {
    * The server's key as `grain pair` wrote it to `app.key` once the registry named it (`appKeyFromEnvironment`;
    * 24-app-studio §3a) — or a developer key made in Saltix before pairing (§3, retired), in the same form
    * (`saltix-app:1:…`): its whole configuration. The server reads the slug, the network and the server key from it,
-   * finds the network's public relays and its node through them, and checks that the registry names the key. Keep it
-   * out of code and logs: an owner-only file, or an environment variable.
+   * finds the network's relays by itself (41-transport §18.5: no list) and its node through them, and checks that the
+   * registry names the key. Keep it out of code and logs: an owner-only file, or an environment variable.
    */
   appKey?: string | AppKey;
   /** The chat spec: signed by the owner key (`grain chat-spec`; the object, or the hex of its Borsh), or unsigned, which
@@ -92,10 +93,20 @@ export interface ChatServerOptions {
   /** The manifest's `owner_key`: the spec's signature and a certificate are checked with it as a wallet checks them.
    *  Read from the registry when there is one. */
   ownerKey?: DeviceKey;
-  /** Your node's wallet interface (plain HTTP): the registry and relays come from it. */
+  /** Your node's wallet interface (plain HTTP): the registry comes from it, and the relays its `relay_tickets` names. */
   node?: string;
-  /** The relays' endpoints to start from: with a developer key, instead of the network's public relays. */
+  /** The relays' endpoints to use, yours alone: with a developer key, instead of the relays it finds by itself. */
   endpoints?: RelayEndpoint[];
+  /**
+   * Relay tickets (`SALTIX-RELAY:…`) or endpoints (`wss://host:port/#<pin>`) to try first, before the cache and the
+   * release's entry points, when the server finds its relays by itself (41-transport §18.5): a ticket someone whose
+   * Saltix works gave you, where the entry points are blocked. One that cannot be a relay refuses the start
+   * (`chat_relay_refused`, 78); a ticket past its life is left out with a warning, and the rest still serve.
+   */
+  relays?: string[];
+  /** Where the relays that answered are kept between runs — a file's path, or a cache of your own: by default
+   *  `.grain/relays.json` when the working directory holds `.grain/` (the app's project), else memory; null keeps none. */
+  relayCache?: RelayCache | string | null;
   /** Or a connection made with `ackKept: "by_handler"` under the same key (`ChatServer` takes its frames). */
   relay?: RelayClient;
   /** Or the node's wallet interface however it is reached (tests, a gateway of your own). */
@@ -168,11 +179,11 @@ export const EXIT_CONFIG = 78;
  *  (`chat_unpaired`), its key file is readable by others (`chat_key_exposed`), the key is another network's
  *  (`chat_wrong_network`: the network was reset, or another answers), the registry does not name it
  *  (`chat_key_not_registered`), the spec changed under the version served or went below it, a developer key's spec is of
- *  the starting spec's version (`chat_spec_version_starter`), or no relay is known for the key's network
- *  (`chat_no_relays`). */
+ *  the starting spec's version (`chat_spec_version_starter`), no relay is known for the key's network
+ *  (`chat_no_relays`), or a relay given (`relays`, `SALTIX_RELAYS`) cannot be one (`chat_relay_refused`). */
 export type ChatSetupCode =
   | "chat_unpaired" | "chat_key_exposed" | "chat_wrong_network" | "chat_key_not_registered" | "chat_spec_changed_under_version"
-  | "chat_spec_version_lowered" | "chat_spec_version_starter" | "chat_no_relays";
+  | "chat_spec_version_lowered" | "chat_spec_version_starter" | "chat_no_relays" | "chat_relay_refused";
 
 /** The version of the spec Saltix signs when it makes an app (24-app-studio §5): a developer key's server serves a
  *  higher one, since a wallet replaces the spec it holds only with a higher version (22-grain-chats §2). */
@@ -621,18 +632,48 @@ export class ChatServer {
     if (!slug) throw new Error("slug: the grain's (or a developer key, which names it)");
     const key = toHex(ed25519.getPublicKey(secret));
     const cert = options.cert ?? null;
+    // The relays given are checked first, whatever reaches the network: one that cannot be a relay is the setup's to
+    // fix (78), never a supervisor's restart loop.
+    (options.relays ?? []).forEach((text, i) => {
+      try {
+        checkGivenRelay(text, appKey?.genesis ?? null, i);
+      } catch (e) {
+        if (!(e instanceof GivenRelayRefused)) throw e;
+        log("error", "chat_relay_refused", { reason: e.reason, position: e.position + 1 });
+        throw new ChatSetupError("chat_relay_refused", `relays (SALTIX_RELAYS): ${e.message}`);
+      }
+    });
 
     // The node's wallet interface: given, your node, or the network's relays (a developer key's network, or the
     // pinned wss:// endpoints given). A certified key with only a development relay reads no registry.
     let wallet: WalletInterface | null = options.wallet ?? (options.node ? nodeInterface(options.node) : null);
     let gateways: RelayGateways | null = null;
     if (!wallet) {
-      gateways = new RelayGateways([...(options.endpoints ?? []), ...(appKey && !options.endpoints ? PUBLIC_RELAYS[appKey.network] : [])]);
-      if (gateways.endpoints.length > 0) wallet = gateways;
-      else if (appKey) {
-        throw new ChatSetupError("chat_no_relays", `no public relays are known for ${appKey.network}: pass node (your node's wallet interface) or endpoints`);
+      if (options.endpoints !== undefined || !appKey) {
+        gateways = new RelayGateways(options.endpoints ?? []);
+      } else {
+        // No list carried: the relays given (checked above), the cache, then the release's entry points, probed at
+        // once, then the tickets the fastest hand out, each confirmed by a second relay (41-transport §18.5). None
+        // answering is the network's state, not the setup's: the error names every relay tried, and a supervisor may
+        // start the server again.
+        const finder = new RelayFinder({
+          network: appKey.network, genesis: appKey.genesis, given: options.relays ?? [],
+          cache: options.relayCache === undefined ? projectRelayCache(process.cwd(), appKey.network)
+            : typeof options.relayCache === "string" ? fileRelayCache(options.relayCache, appKey.network) : options.relayCache,
+          log: (level, event, meta) => log(level, event, meta),
+        });
+        if (!finder.hasCandidates) {
+          throw new ChatSetupError("chat_no_relays", `no relay is known for ${appKey.network}: pass relays (a relay ticket) or node (your node's wallet interface)`);
+        }
+        gateways = new RelayGateways([], undefined, { finder });
+        await gateways.ready();
       }
+      if (gateways.endpoints.length > 0) wallet = gateways;
+      else if (appKey) throw new ChatSetupError("chat_no_relays", "endpoints: empty; pass your relays, or leave endpoints out so the server finds them");
     }
+    // What feeds the chat connection's rounds: the relays a wallet of relays' gateways knows now (its finder's latest
+    // look), else the endpoints given, else your node's tickets.
+    const relaysOfWallet = !gateways && wallet instanceof RelayGateways ? wallet : null;
     if (!cert && !wallet) throw new Error("a server key without a certificate must be one the registry names: pass a developer key, or node");
     const view = wallet ? new ChainView(wallet, options.now) : null;
 
@@ -640,14 +681,30 @@ export class ChatServer {
     let grain: RegisteredGrain | null = null;
     if (view) {
       const status = await view.nodeStatus(true);
-      if (appKey && !appKey.isFor(status.network, status.genesis)) {
+      // Relays found by the finder: the genesis two of them agreed on, one of them an anchor — never the word of the one
+      // that answered first, whose genesis may only begin as the key's does. Your own node's is its own.
+      const finder = gateways?.finds ? gateways : relaysOfWallet?.finds ? relaysOfWallet : null;
+      const genesis = finder ? finder.genesis ?? chain?.genesis ?? null : status.genesis;
+      if (genesis === null) {
+        // A server signs only under the genesis two relays say, one of them given or an entry point: one relay alone —
+        // a single ticket where nothing else answers — never starts it (the review of 2026-11-04).
+        const answered = (finder as { report?: { tried: Array<{ ok: boolean }> } | null } | null)?.report?.tried.filter((t) => t.ok).length ?? 0;
+        throw new Error(`the relays that answered (${answered}) did not agree on ${status.network}'s genesis: a server signs only under the genesis two relays say, one of them given or an entry point; ` +
+          (answered < 2
+            ? "give a second relay — two tickets of two different relays in SALTIX_RELAYS — or NODE_RPC, your own node"
+            : "grain doctor says which answered; start again once more of them agree, or give NODE_RPC"));
+      }
+      if (genesis !== status.genesis) {
+        throw new Error(`the relay answering is on another ${status.network} (genesis ${status.genesis.slice(0, 16)}…, not ${genesis.slice(0, 16)}…)`);
+      }
+      if (appKey && !appKey.isFor(status.network, genesis)) {
         throw new ChatSetupError("chat_wrong_network", `the developer key is for ${appKey.network} ${appKey.genesis}…, but the network answering is ${status.network} ` +
-          `${status.genesis.slice(0, 16)}…: was the network reset? Pair a new key (grain pair --new), or pass node for your own network`);
+          `${genesis.slice(0, 16)}…: was the network reset? Pair a new key (grain pair --new), or pass node for your own network`);
       }
-      if (chain && (chain.genesis !== status.genesis || chain.network !== status.network)) {
-        throw new ChatSetupError("chat_wrong_network", `chain: the node is on ${status.network} ${status.genesis}, not ${chain.network} ${chain.genesis}`);
+      if (chain && (chain.genesis !== genesis || chain.network !== status.network)) {
+        throw new ChatSetupError("chat_wrong_network", `chain: the node is on ${status.network} ${genesis}, not ${chain.network} ${chain.genesis}`);
       }
-      chain = { genesis: status.genesis, network: status.network as ChainParams["network"] };
+      chain = { genesis, network: status.network as ChainParams["network"] };
       grain = await view.grain(slug, true);
       if (!cert) {
         const refused = registeredKeyStatus(grain, key);
@@ -679,15 +736,19 @@ export class ChatServer {
     if (options.relay && options.relay.address !== encodeAddress(chain.network, accountId(fromHex(key, 32)))) {
       throw new Error("relay: a connection under another key");
     }
+    if (!options.relay && !gateways && !relaysOfWallet && !options.node && (options.endpoints ?? []).length === 0) {
+      throw new ChatSetupError("chat_no_relays", "no relay to register at: with wallet, pass endpoints (relays of your own) or relay (a connection), or a wallet of relays' gateways");
+    }
     const store = options.store ?? memoryChatStore();
     const served = await ChatServer.serve(store, signed.spec, log);
+    const finding = options.endpoints !== undefined ? null : gateways?.finds ? gateways : relaysOfWallet;
     const relay = options.relay ?? await RelayClient.connect({
-      endpoints: options.endpoints ?? (gateways ? gateways.endpoints : []),
-      discover: wallet ? async () => {
-        const found = await relaysOf(wallet!);
-        gateways?.add(found);
-        return found;
-      } : undefined,
+      // Before each round of relays, what the finder knows now (found again when every relay stopped answering, at most
+      // once a minute, and every hour): never the relays of the first look kept for good, so a relay a later look
+      // dropped is dialed no more. Endpoints given are used alone; your node names relays by its relay_tickets.
+      endpoints: options.endpoints,
+      node: options.node,
+      discover: finding ? () => finding.refreshed() : undefined,
       secret, network: chain.network, ackKept: "by_handler",
       log: (level, event, meta) => log(level, event, meta),
     });
@@ -758,6 +819,9 @@ export class ChatServer {
     if (this.view) {
       const every = this.options.checkEveryMs ?? REGISTRY_CHECK_MS;
       this.timers.push(setInterval(() => void this.checkRegistry(), every));
+      // The relays found again every hour while it runs (41-transport §18.5), not only when every one stops answering.
+      const node = this.view.node;
+      if (node instanceof RelayGateways && node.finds) this.timers.push(setInterval(() => void node.refreshed(), REFRESH_MS));
     }
     this.judgeAccess();
     if (!this.certificate) void this.publishStats().catch((e: Error) => this.log("warn", "chat_stats_failed", { reason: e.message }));

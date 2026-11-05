@@ -23,8 +23,8 @@ export interface Forwarded {
   payload: string;
 }
 
-/** The page's confirmation to the wallet (§15.3), sealed by the server for the page to deliver: the wallet's relay and
- *  reply slot, and the sealed `ConnectConfirm`, base64url. */
+/** The page's answer to the wallet (§15.3), sealed by the server for the page to deliver: the wallet's relay and reply
+ *  slot, and the sealed `ConnectConfirm` — or, beside a refusal, the sealed `ConnectRefusal` —, base64url. */
 export interface Confirmation {
   relay: string;
   sid: string;
@@ -35,15 +35,16 @@ export interface Confirmation {
  * The server's word on a forwarded payload (§15.1 step 4, §15.2): nobody's (`ignored`), the wallet's notice (`seen`),
  * its reply kept (`reply`), a grant refused for its reason (a grant's reasons of §5, `offer` for an offer the server
  * does not hold or holds no more, `spent` for one whose grant was taken, or the site's own), one the node could not
- * check (`unchecked`), or the session opened (`connected`: the account's public facts and the confirmation for the
+ * check (`unchecked`) — each with the refusal for the page to deliver to the wallet (§14.2, `confirm`, when a reply
+ * named the login) —, or the session opened (`connected`: the account's public facts and the confirmation for the
  * page to deliver, with whatever the site's server answers beside — where to go, a name).
  */
 export type Taken =
   | { outcome: "ignored" }
   | { outcome: "seen" }
   | { outcome: "reply" }
-  | { outcome: "refused"; reason: string }
-  | { outcome: "unchecked"; kind: string }
+  | { outcome: "refused"; reason: string; confirm?: Confirmation | null }
+  | { outcome: "unchecked"; kind: string; confirm?: Confirmation | null }
   | { outcome: "connected"; connection: Connection; confirm: Confirmation | null };
 
 /** An offer as a session holds it: the keys decoded, nothing secret among them. */
@@ -55,12 +56,20 @@ export interface CourierOffer {
   name: string;
 }
 
-/** The server's word, decoded for the session; `value` is what the page is told of the sign-in. */
+/** What the page delivers to the wallet's reply slot for the server: its relay, the slot, and the sealed answer. */
+export interface Delivery {
+  relay: Uint8Array;
+  sid: Uint8Array;
+  payload: Uint8Array;
+}
+
+/** The server's word, decoded for the session; `value` is what the page is told of the sign-in, `confirm` what it
+ *  delivers to the wallet — the confirmation of a session opened, the refusal of a grant refused (§14.2). */
 export type CourierAnswer<T> =
   | { kind: "ignored" | "seen" | "reply" }
-  | { kind: "refused"; reason: string }
-  | { kind: "unchecked"; detail: string }
-  | { kind: "connected"; value: T; confirm: { relay: Uint8Array; sid: Uint8Array; payload: Uint8Array } | null };
+  | { kind: "refused"; reason: string; confirm?: Delivery | null }
+  | { kind: "unchecked"; detail: string; confirm?: Delivery | null }
+  | { kind: "connected"; value: T; confirm: Delivery | null };
 
 /** What a session drives in the server-held mode: the server's offer, and its word on each payload the slot received. */
 export interface Courier<T> {
@@ -97,6 +106,18 @@ const HEX64 = /^[0-9a-f]{64}$/;
 function key32(v: unknown): Uint8Array | null {
   const bytes = typeof v === "string" ? fromB64Loose(v) : null;
   return bytes && bytes.length === 32 ? bytes : null;
+}
+
+/** What the server handed the page to deliver (`confirm`): none, or the wallet's relay and reply slot with the sealed
+ *  bytes; anything else is no answer. */
+export function deliveryOf(v: unknown): Delivery | null {
+  if (v === null || v === undefined) return null;
+  const c = v as Partial<Confirmation>;
+  const relay = key32(c.relay);
+  const sid = key32(c.sid);
+  const payload = typeof c.payload === "string" ? fromB64Loose(c.payload) : null;
+  if (!relay || !sid || !payload || payload.length === 0) throw new CourierError("bad_answer", "not a confirmation");
+  return { relay, sid, payload };
 }
 
 /** The connection as the server told it: the account's public facts, never the grant's bytes. */
@@ -168,21 +189,13 @@ export function httpCourier(paths: ServerPaths, expect: { origin: string; name?:
           return { kind: a.outcome };
         case "refused":
           if (typeof a.reason !== "string" || a.reason.length === 0 || a.reason.length > 64) throw new CourierError("bad_answer", "a refusal without a reason");
-          return { kind: "refused", reason: a.reason };
+          return { kind: "refused", reason: a.reason, confirm: deliveryOf(a.confirm) };
         case "unchecked":
-          return { kind: "unchecked", detail: typeof a.kind === "string" ? a.kind : "server" };
+          return { kind: "unchecked", detail: typeof a.kind === "string" ? a.kind : "server", confirm: deliveryOf(a.confirm) };
         case "connected": {
           const connection = connectionOf(a.connection);
           if (!connection) throw new CourierError("bad_answer", "not a connection");
-          let confirm: { relay: Uint8Array; sid: Uint8Array; payload: Uint8Array } | null = null;
-          if (a.confirm !== null && a.confirm !== undefined) {
-            const c = a.confirm as Partial<Confirmation>;
-            const relay = key32(c.relay);
-            const replySid = key32(c.sid);
-            const bytes = typeof c.payload === "string" ? fromB64Loose(c.payload) : null;
-            if (!relay || !replySid || !bytes || bytes.length === 0) throw new CourierError("bad_answer", "not a confirmation");
-            confirm = { relay, sid: replySid, payload: bytes };
-          }
+          const confirm = deliveryOf(a.confirm);
           // What the site's server answered beside the account (where to go, a name) goes with the connection.
           const { outcome: _o, connection: _c, confirm: _f, ...answer } = a;
           return { kind: "connected", value: Object.keys(answer).length > 0 ? { ...connection, answer } : connection, confirm };

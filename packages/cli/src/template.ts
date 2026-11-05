@@ -305,7 +305,10 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   publish" and sends nothing; a change makes the next version. Never set up hosting, a domain or \`--sources\` for it.
   A key file signs only when \`--key\` names it, or by itself for an app its account owns: the way without a phone is
   [No phone, test network](${HOW_IT_WORKS}#no-phone-test-network). Registry commands reach the test network through
-  its public relays, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+  relays the SDK finds by itself, each pinned by its certificate: no node, nothing to configure. \`--node URL\` is for a
+  node of your own. When none answers, \`npx grain doctor\` names each relay tried and why: a relay ticket someone
+  whose Saltix works gave you goes in \`--relay SALTIX-RELAY:…\` (a value that cannot be a relay exits 78). Never write a
+  relay's address into the app: the SDK carries no list of relays and finds them by tickets.
 - **A command that waits for the chain** (\`grain publish\`, \`profile\`, \`access\` signed with a key file) takes about
   1.5 to 2.5 minutes a transaction, up to about 6 for a first publish: run it in the background or with a timeout of 10
   minutes or more, or with \`--no-wait\` and then \`npx grain doctor\` until it says it landed. \`grain doctor\` exits
@@ -329,8 +332,13 @@ const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the 
   \`connect.json\` is written for this app (\`grain init\`'s describes its hello chat, and \`grain profile\` refuses that).
 - \`npx grain chat-spec\`: lints \`chat.json\` against \`grain.json\` (the server signs the spec with its own key at start).
 - \`npx grain show --slug <slug>\`, \`npx grain app-key --file app.key\`: what the registry holds, whether it names the key.
-  Every registry command and \`npx grain faucet\` (test SALT) reach the test network through its public relays, each
-  pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.`;
+  Every registry command and \`npx grain faucet\` (test SALT) reach the test network through relays the SDK finds by
+  itself, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
+- **Relays are found, never listed.** When none answers, \`npx grain doctor\` names each relay tried and why; then pass a
+  relay ticket someone whose Saltix works gave you (\`--relay SALTIX-RELAY:…\`); the server takes tickets in
+  \`SALTIX_RELAYS\` and needs two of two different relays (it signs only under the genesis two relays agree on), or
+  \`NODE_RPC\`: one that cannot be a relay stops it with 78, one past its life is left out with a warning. Never write a relay's address
+  into this app's code, docs or configuration: the SDK carries no list of relays and finds them by tickets.`;
 
 /**
  * The rules every app follows besides the full-screen ones, as the SDK's docs/agents/app.md and the server `grain init
@@ -646,9 +654,10 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
   (\`npm test\`), and raise \`version\` with every change: a wallet takes only a version above the one it holds, and an
   app made in Saltix starts at 1.
 - Make the app in Saltix (My apps → New app, whose last step shows the pairing command), or \`grain pair\` makes it from its QR code. Without a phone, on the test
-  network: \`grain faucet --wait\` gives \`owner.key\`'s account test SALT, then \`grain publish --key owner.key\`
-  registers the slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days
-  after \`grain retire\`), private, through the test network's public relays.
+  network: \`grain faucet --wait\` gives \`owner.key\`'s account test SALT — the grants the first publish takes, 10 SALT
+  a grant once every 5 minutes, said and waited for —, then \`grain publish --key owner.key\` registers the slug (a
+  deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain
+  retire\`), private, through the test network's relays.
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key\` names it in the registry;
   \`grain app-key make --slug ${slug}\` writes \`app.key\` for it, the file the server runs with. Each takes \`--node
   <url>\` for a node of your own.

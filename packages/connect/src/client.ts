@@ -96,8 +96,9 @@ export interface ConnectEvents {
   checking: Record<string, never>;
   /** Signed in: the account the page now shows first, checked — by this page, or by the site's server. */
   connected: Connection;
-  /** A grant was refused (`time`, `not_a_device`, the server's `spent`…) or could not be checked (`unchecked`); the
-   *  offer stays. */
+  /** A grant was refused (`time`, `not_a_device`, the server's `not_listed`…) or could not be checked (`unchecked`): the
+   *  wallet is told why (19-connect §14.2) and a fresh code follows at once, as an `offer` (§14.1). A page shows the
+   *  reason under that code, and under every code after it, until a wallet reads a code again (`seen`). */
   refused: { reason: string };
   failed: { reason: FailReason };
   /** The connection to the relay dropped (true) or is back (false). */

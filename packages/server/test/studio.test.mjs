@@ -1,10 +1,17 @@
 // The chat server from a developer key (Saltix 24-app-studio): the registry names the key, or the server does not
 // start; once the owner revokes or replaces it, the server stops; a private grain takes its owner's and members'
 // requests only, judged against the registry and the accounts' keys per tip; the numbers it reports are signed hourly.
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import { createServer as createHttpsServer } from "node:https";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
+import { scratch } from "../../../scripts/scratch.mjs";
 import {
+  RelayFinder, RelayGateways, REFRESH_MS, REFIND_MIN_MS,
   ChatServer, ChatKeyNotRegistered, ChatSetupError, EXIT_CONFIG, setupCannotWork, AppKey, AppKeyError, card, toHex, fromHex, accountId, decodeChatDocument, grainStatsProblem,
   signedChatSpecProblem, signMemberProof, signChatSpecAsServer, registeredKeyStatus, memoryChatStore, ROLES, STATS_EVERY_MS,
   decodeNotification, notificationProblem, decodeSignedGrainStats, fromBase64Url, MEMBER_PROOF_AHEAD_MS,
@@ -143,15 +150,158 @@ test("a server starts only while the registry names its key, on the key's networ
     const s2 = await start(second, { log: (level, event) => events.push(event) });
     assert.ok(events.includes("chat_not_first_key"));
     s2.close();
-    // No public relays for a network that has none, and no node given.
-    await assert.rejects(ChatServer.start({ appKey: AppKey.of("mainnet", chain.genesis, "access", SERVER), spec: spec(), log: quiet }),
-      setup("chat_no_relays", /no public relays/));
+    // No relay known for a network the release has no entry point of, and none given or cached, nor a node.
+    await assert.rejects(ChatServer.start({ appKey: AppKey.of("mainnet", chain.genesis, "access", SERVER), spec: spec(), relayCache: null, log: quiet }),
+      setup("chat_no_relays", /no relay is known for mainnet/));
+    // A relay given that cannot be one (SALTIX_RELAYS): the setup's to fix, said at once, never a restart loop. Its
+    // address is not repeated.
+    const said = [];
+    await assert.rejects(ChatServer.start({
+      appKey: AppKey.of("mainnet", chain.genesis, "access", SERVER), spec: spec(), relays: ["wss://192.0.2.1:30335/#abc"], relayCache: null,
+      log: (level, event, meta) => said.push({ level, event, meta }),
+    }), setup("chat_relay_refused", /^relays \(SALTIX_RELAYS\): relay 1 given: neither a relay ticket/));
+    assert.deepEqual(said.find((e) => e.event === "chat_relay_refused"), { level: "error", event: "chat_relay_refused", meta: { reason: "form", position: 1 } });
+    assert.ok(!JSON.stringify(said).includes("192.0.2"));
+    // Checked whatever reaches the network: with a node of one's own too, where the relays given go unused.
+    await assert.rejects(start(fakeChain(), { node: "http://127.0.0.1:1", wallet: undefined, relays: ["SALTIX-RELAY:not base32!"] }),
+      setup("chat_relay_refused", /relay 1 given: relay ticket refused: not base32/));
     // Without a developer key, a chain given that the node contradicts.
     await assert.rejects(ChatServer.start({ slug: "access", secret: SERVER, spec: spec(), wallet: fakeChain().wallet, chain: { ...chain, genesis: "6d".repeat(32) }, log: quiet }),
       setup("chat_wrong_network", /chain: the node is on devnet/));
     assert.equal(registeredKeyStatus(second.state.grain, serverKey), null);
   } finally {
     await relay.close();
+  }
+});
+
+test("a server that finds its relays looks again every hour while it runs, not only when they stop answering", async () => {
+  const fake = fakeChain();
+  const relay = await createDevRelay();
+  // One relay's gateway, which answers the wallet interface from the fake chain.
+  const pin = "a1".repeat(32);
+  const request = async (endpoint, verb, path, headers, body) => {
+    const { method, params } = JSON.parse(Buffer.from(body).toString());
+    const result = method === "relay_tickets" ? null : await fake.wallet.call(method, params);
+    const reply = result === null ? { error: { code: -32601, message: "not served here" } } : { result };
+    return { status: 200, body: Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: 1, ...reply })) };
+  };
+  let now = Date.now();
+  let looks = 0;
+  // Two entry relays that agree on the genesis: the finder settles it, and the server signs under it.
+  const finder = new RelayFinder({
+    network: "devnet", request, now: () => now, probeMs: 500, entry: [`wss://192.0.2.1:30335/#${pin}`, `wss://192.0.2.2:30335/#${pin}`],
+    log: (level, event) => { if (event === "relays_found") looks++; },
+  });
+  mock.timers.enable({ apis: ["setInterval"] });
+  let server;
+  try {
+    server = await ChatServer.start({
+      appKey: appKey(), spec: spec(), wallet: new RelayGateways([], request, { finder }), endpoints: [relay.endpoint()], log: quiet,
+      checkEveryMs: 100 * REFRESH_MS,
+    });
+    assert.equal(looks, 1, "found when the first call was made");
+    now += REFRESH_MS;
+    mock.timers.tick(REFRESH_MS);
+    await waitFor(() => looks === 2);
+  } finally {
+    server?.close();
+    mock.timers.reset();
+    await relay.close();
+  }
+});
+
+function hasOpenssl() {
+  try {
+    execFileSync("openssl", ["version"], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A relay as a server meets it: behind a self-signed certificate, the wallet interface at `POST /rpc` answered from
+ * `fake`'s chain (`answering` false: HTTP 503, so a look drops it), a development relay at `/relay`. Its entry text, and
+ * how many connections its relay took.
+ */
+async function liveRelay(fake) {
+  const dir = scratch("live-relay-");
+  execFileSync("openssl", ["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1", "-subj", "/CN=relay",
+    "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stdio: "pipe" });
+  const pin = createHash("sha256").update(execFileSync("openssl", ["x509", "-in", join(dir, "cert.pem"), "-outform", "DER"])).digest("hex");
+  const state = { answering: true, upgrades: 0 };
+  let relay;
+  const https = createHttpsServer({ key: readFileSync(join(dir, "key.pem")), cert: readFileSync(join(dir, "cert.pem")) }, (req, res) => {
+    if (req.url !== "/rpc") {
+      if (!relay.handle(req, res)) res.writeHead(404).end();
+      return;
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      if (!state.answering) return res.writeHead(503).end();
+      const { method, params } = JSON.parse(body);
+      const reply = method === "relay_tickets" ? { error: { code: -32601, message: "not served here" } }
+        : method === "license_list" ? { result: { licenses: [{ node_key: params.node_key, status: "active" }] } }
+          : { result: await fake.wallet.call(method, params) };
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, ...reply }));
+    });
+  });
+  https.on("upgrade", () => state.upgrades++);
+  relay = createDevRelay({ server: https, path: "/relay" });
+  await new Promise((r) => https.listen(0, "127.0.0.1", r));
+  return {
+    relay, state, pin, text: `wss://127.0.0.1:${https.address().port}/relay#${pin}`,
+    close: async () => { await relay.close(); https.closeAllConnections?.(); await new Promise((r) => https.close(r)); },
+  };
+}
+
+test("a server whose wallet finds its relays signs under the genesis two agreed on, and dials only what the latest look found", { skip: !hasOpenssl() && "no openssl" }, async () => {
+  const fake = fakeChain();
+  const a = await liveRelay(fake);
+  const b = await liveRelay(fake);
+  let now = Date.now();
+  let looks = 0;
+  const finder = new RelayFinder({
+    network: "devnet", genesis: chain.genesis.slice(0, 16), now: () => now, probeMs: 2_000, entry: [a.text, b.text],
+    log: (level, event) => { if (event === "relays_found") looks++; },
+  });
+  const log = [];
+  // A wallet of relays' gateways and no endpoints: its finder feeds the chat connection.
+  const server = await ChatServer.start({
+    appKey: appKey(), spec: spec(), wallet: new RelayGateways([], undefined, { finder }), checkEveryMs: 100 * REFRESH_MS,
+    log: (level, event, meta) => log.push({ event, ...meta }),
+  });
+  try {
+    // With one of them alone, no genesis is agreed: the server does not start on one relay's word.
+    const lone = new RelayFinder({ network: "devnet", genesis: chain.genesis.slice(0, 16), probeMs: 2_000, entry: [a.text] });
+    await assert.rejects(ChatServer.start({ appKey: appKey(), spec: spec(), wallet: new RelayGateways([], undefined, { finder: lone }), log: quiet }),
+      (e) => !(e instanceof ChatSetupError) && /did not agree on devnet's genesis/.test(e.message));
+    assert.equal(finder.genesis, chain.genesis, "two entry relays agreed");
+    assert.equal(server.chain.genesis, chain.genesis, "the server signs under the agreed genesis");
+    await server.relay.ready();
+    // A drops out: a later look finds B alone, and the connection dials A no more.
+    a.state.answering = false;
+    await a.close();
+    now += REFIND_MIN_MS + 1;
+    const nameOfA = `cert:${a.pin.slice(0, 8)}`;
+    for (let i = 0; i < 20 && looks < 2; i++) {
+      b.relay.kick(server.address);
+      await sleep(250);
+    }
+    assert.ok(looks >= 2, "the round after a lost connection looked again");
+    await server.relay.ready();
+    const from = log.length;
+    for (let i = 0; i < 3; i++) {
+      b.relay.kick(server.address);
+      await sleep(100);
+      await server.relay.ready();
+    }
+    assert.ok(!log.slice(from).some((l) => l.event === "relay_failed" && l.relay === nameOfA), "A, which the latest look dropped, is not dialed");
+    assert.ok(log.slice(from).some((l) => l.event === "relay_registered"), "B takes the connection again");
+  } finally {
+    server.close();
+    await b.close();
   }
 });
 

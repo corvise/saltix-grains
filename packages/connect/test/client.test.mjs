@@ -105,15 +105,22 @@ test("an offer, the wallet's notice and a grant: connected, kept, restored, disc
   assert.ok(!again.events.some((e) => /[0-9a-f]{16}/.test(e)), "telemetry names no account");
 });
 
-test("a grant for another origin or out of time is refused and the offer stays", async () => {
+test("a grant for another origin or out of time is refused, and each refusal ends its code: a fresh one at once", async () => {
   const t = setup();
   t.lastOffer = await t.connect.offer();
-  const parsed = parseOffer(t.lastOffer.text);
-  deliver(t, grant(parsed, { origin: "https://evil.example" }));
+  const first = parseOffer(t.lastOffer.text);
+  deliver(t, grant(first, { origin: "https://evil.example" }));
   await flush();
-  deliver(t, grant(parsed, { at: BigInt(Date.now() - 11 * 60_000) }));
+  assert.deepEqual(t.seen.filter(([e]) => e === "refused").map(([, d]) => d.reason), ["origin"]);
+  assert.equal(t.links[0].closed, true, "the refused code's slot is closed");
+  assert.equal(t.connect.phase, "offer");
+  t.lastOffer = await t.connect.offer();
+  const second = parseOffer(t.lastOffer.text);
+  assert.notEqual(second.sid.toString(), first.sid.toString(), "a fresh code");
+  deliver(t, grant(second, { at: BigInt(Date.now() - 11 * 60_000) }));
   await flush();
   assert.deepEqual(t.seen.filter(([e]) => e === "refused").map(([, d]) => d.reason), ["origin", "time"]);
+  assert.equal(t.seen.filter(([e]) => e === "offer").length, 3, "each refusal a fresh code");
   assert.equal(t.connect.phase, "offer");
   assert.equal(t.connect.connection, null);
   t.connect.cancel();

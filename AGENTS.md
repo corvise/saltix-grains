@@ -209,8 +209,18 @@ header h1 { min-height: max(48px, var(--saltix-controls-height)); display: flex;
 main { padding-bottom: calc(16px + var(--saltix-safe-bottom)); }
 ```
 
-The `grain` command line needs no node: registry commands and `grain faucet` (test SALT) go through the test network's
-public relays, each pinned by its certificate; `--node URL` is for a node of your own.
+The `grain` command line needs no node and nothing configured: registry commands and `grain faucet` (test SALT) go
+through the network's relays, which the SDK finds when it runs — the project's cache of relays that answered, the
+release's entry points, then the relay tickets those hand out, each used once an anchor (a relay you gave, or an entry
+point) confirms its license (Saltix [41-transport §18](docs/protocol/relays.md#finding-relays-relay-tickets)) — each
+pinned by its certificate. When
+none answers, `grain doctor` names each relay it tried and why, by its key's or its certificate's fingerprint; then pass
+a relay ticket someone whose Saltix works gave you (`--relay SALTIX-RELAY:…`; a server takes two of two different relays
+in `SALTIX_RELAYS`, since it signs only under the genesis two relays agree on), or a relay or node of your own (`--relay
+wss://host:port/#<sha256>`, `--node URL`). A value that cannot be a relay is refused at
+once (exit 78); a ticket past its life is left out with a warning. **Never write a relay's address into an app's code,
+docs or configuration**: the SDK carries no list of relays and finds them by tickets (a list lets a censor block them
+all); Saltix's public list (`relay_list`) is being retired, and the SDK never reads it.
 
 **Every app ships a complete Connect profile, and asks only for what it uses.** The first time someone opens an app,
 Saltix shows its Connect sheet (Saltix 19-connect [§12](docs/protocol/connect.md#12-the-connect-sheet)): "Saltix
@@ -423,13 +433,22 @@ The SDK reads the switch (`grainGet(…).donations`, `grain_get`'s `donations`) 
 - **The protocol is Saltix's, not this repository's.** Its specifications live in the protocol's repository, which is
   not public before the main network launches; [docs/protocol/](docs/protocol/README.md) is this repository's account
   of everything an app needs from them, each page naming the specification and commit it reflects. Its golden vectors
-  are copied here unchanged by `scripts/sync-vectors.sh <a protocol checkout>` (`vectors/SOURCE` names the commit and
-  each file's blob id, which CI holds them to: `node scripts/check-vectors.mjs`). The SDKs reproduce them byte for
+  are the project's own `vectors/` (beside this directory), where the blockchain's crates write them. The SDKs reproduce them byte for
   byte, refusals included; a format changes in the protocol first, never here, and its page in `docs/protocol/` moves
   with it.
-- **`npm ci --ignore-scripts && npm test`** is what CI runs (after `node scripts/check-vectors.mjs`): no dependency's
+- **`npm ci --ignore-scripts && npm test`** is what CI runs: no dependency's
   install script runs (esbuild's binary comes from its platform package); the build makes every package and the
   simulator, then each package's tests run. CI's actions are pinned by commit.
+- **No list of relays** (Saltix 41-transport §18, the owner's rule of 2026-11-04): the SDK finds relays when it runs
+  (`RelayFinder`), never from a list in its code or docs, and never calls `relay_list` (which leaves the public gateway
+  once Saltix reads tickets). A ticket a relay hands out is used only once an anchor (a given relay or an entry point,
+  never a cached or found one) other than its hander confirms its license; a relay counts once whatever its names (its
+  key, its host and port); the network's genesis is adopted only where two relays agree, one an anchor; every request
+  to a relay is given up at its deadline; relays are told apart by URL and pin, so no ticket moves a given relay's pin;
+  logs and errors name a relay by fingerprint (`relayName`), never by address. The release's entry points are obfuscated in `packages/server/src/entry.ts`, written
+  by Saltix's `scripts/set-network.py` from the apps' pins and held to them by its `--check`, never by hand;
+  `no-relay-list.test.mjs` fails on a public address anywhere in the SDK's code, docs, templates, examples or tests
+  (they use 192.0.2.x, 198.51.100.x or 203.0.113.x).
 - **One Ed25519 check:** `verifyEd25519` (`packages/server/src/keys.ts`), the node's own `verify_strict` (no key or `R`
   of small order, `s` reduced, `R` exactly `[s]B − [k]A`); never a library's `verify`, which takes signatures the node
   refuses (`ed25519.test.mjs` holds every module to it). `@saltix/connect`'s check of a grant (`verifyGrant`) is the

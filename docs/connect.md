@@ -206,8 +206,12 @@ location = /saltix/r/1/ {
 }
 ```
 
-- Take the relays and their pins from the network's wallet interface (`relay_list`: each endpoint with its
-  `cert_sha256`), fetch each certificate once (`openssl s_client -connect <host>:30335 </dev/null | openssl x509 >
+- Take two or three of the relays the SDK finds: `npx grain doctor --json` gives, as `relays.answered`, the tickets of
+  the relays that answered — an entry relay's own among them once it handed it out —, and `node -e
+  'import("@saltix/grain-server").then(({ readTicket }) => console.log(readTicket(process.argv[1]).endpoints))'
+  SALTIX-RELAY:…` prints a ticket's `url` and `cert_sha256` (the SDK carries no list of relays, and its logs name relays
+  by fingerprint, never by address; `.grain/relays.json` keeps no entry point). Fetch each
+  certificate once (`openssl s_client -connect <host>:30335 </dev/null | openssl x509 >
   relay-1.crt`) and keep it only if `openssl x509 -in relay-1.crt -outform der | sha256sum` is the pin. Give the page two
   or three relays: it tries them in random order and takes the next when one fails.
 - An exact location (`location =`) passes the WebSocket alone: neither the relay's wallet interface (`/rpc`) nor its
@@ -310,6 +314,11 @@ itself, within the login's 10 minutes, and spends `sid` in the same step that op
 3. **The confirmation** stays the page's duty: the server, which held the wallet's reply and `Q`, seals
    `ConnectConfirm` to the reply's key and hands the page the bytes with the session; the page delivers them on its
    own slot connection and closes the slot, so Saltix says **Connected** on the server's word, carried by the page.
+   **A refusal is told the same way** (2026-11-04): `take` answers `refused` (or `unchecked`) with `confirm`, the
+   sealed `ConnectRefusal` — its reason from the site's own word to `admit` (`not_listed`, `window_closed`,
+   `window_not_yet`, `no_files`; any other as a plain refusal) —, the page delivers it, and Saltix says why instead of
+   *Login sent*. The page then shows a fresh code at once with the reason under it: a refused grant ends its code, and
+   nothing of it stays for a reload.
 
 **The reference server.** `packages/connect/example` ([its README](../packages/connect/example/README.md), `npm run
 example:connect`) is a whole site on Node's own `http` module: the two routes, a session cookie minted after the

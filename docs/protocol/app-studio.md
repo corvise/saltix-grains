@@ -298,7 +298,7 @@ What the protocol needs of `grain pair`; the rest is the SDK's ([docs/first-app.
   register;
 - it shows the offer, and shows a new one — the same key, a new nonce — when the offer expires with nobody having
   scanned it, saying so, so that an agent left waiting needs no second command;
-- it watches the registry — the record's `servers` — through the network's public relays' wallet interface (a read,
+- it watches the registry — the record's `servers` — through the network's relays' wallet interface (a read,
   which no gate holds), and takes itself as paired once the record names its key; the program it runs refuses to start
   until then, saying to run `grain pair` (`chat_unpaired`). It needs no relay session of its own, no key registered
   anywhere and no message from the phone: the registry's word is the answer;
@@ -330,7 +330,7 @@ Version 1 checked with the computer before anything was signed: the phone sent a
 the offer key's address, the computer answered with a `PairAnswer` carrying the proof, and only then the phone signed.
 On protocol version 6 it cannot pair: the messenger's gate drops both frames, and no rule a relay could check tells
 them from anyone's. Version 2 sends no frame; the `SGP1` frames, `judgePair`, `answerPair`, `checkPairAnswer`,
-`PAIR_ANSWER_WAIT` and `grain pair --accept` went with version 1, and `vectors/server-pairing-v1.json` with them. An
+`PAIR_ANSWER_WAIT` and `grain pair --accept` went with version 1, and the first version's vectors with them. An
 SDK of this version never sends them; a wallet of this version reads an offer of version 1 only to say to update the
 SDK; a wallet from before version 2 refuses an offer of version 2 as of an unknown version, saying to update Saltix.
 

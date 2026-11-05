@@ -67,7 +67,7 @@ export const manifest = () => signManifest({
 }, OWNER);
 
 /**
- * A chain as a node's wallet interface shows it (`node_status`, `grain_get`, `account_get`, `relay_list`), for a server
+ * A chain as a node's wallet interface shows it (`node_status`, `grain_get`, `account_get`), for a server
  * that reads it: the access grain's record (`grain`, changed in place by the tests), accounts' controllers, and blocks
  * that `block()` (the beacon chain) and `shardBlock()` make. `calls` counts what was asked.
  */
@@ -83,7 +83,7 @@ export function fakeChain(over = {}) {
     down: false,
     ...over,
   };
-  const calls = { node_status: 0, grain_get: 0, account_get: 0, relay_list: 0 };
+  const calls = { node_status: 0, grain_get: 0, account_get: 0 };
   let n = 1;
   const wallet = {
     async call(method, params = {}) {
@@ -93,7 +93,6 @@ export function fakeChain(over = {}) {
         case "node_status": return structuredClone(state.status);
         case "grain_get": return { grain: params.slug === "access" ? structuredClone(state.grain) : null, deposit: "30000000000" };
         case "account_get": return { account: params.address, shard: "", controller: state.controllers.get(params.address) ?? null };
-        case "relay_list": return { relays: [] };
         default: throw new Error(`the fake chain does not answer ${method}`);
       }
     },

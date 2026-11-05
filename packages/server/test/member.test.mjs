@@ -1,5 +1,5 @@
 // Private grains, the numbers an app reports and the developer key (Saltix 24-app-studio §2a, §3, §6a): the reference's
-// own cases (crates/saltix-types/src/grain/chat/tests.rs, app_key.rs), the negative ones included, and the window the
+// own cases (chain/crates/saltix-types/src/grain/chat/tests.rs, app_key.rs), the negative ones included, and the window the
 // numbers are counted in.
 import test from "node:test";
 import assert from "node:assert/strict";

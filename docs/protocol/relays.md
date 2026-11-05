@@ -3,7 +3,9 @@
 > Reflects Saltix 09-relay §1.1–§1.3, §2, §3, §5, §6, §10.1, §10.3, §10.5, §10.5.2 and §10.7 (version 2, with the
 > changes of 2026-10-15 to 2026-10-19), 10-storage §4 and 11-access §2–§5 (approved 2026-10-05), as of corvise/saltix
 > `7d3744c5` (2026-10-19); the pool vocabulary (a channel with a pool's exchange) as of corvise/saltix `e6448704`
-> (2026-10-22). Only the client side an app's server or a Connect page uses.
+> (2026-10-22); finding relays without a public list from 41-transport §18 (the owner's rule of 2026-11-04, as two
+> reviews of the same day revised it; its vectors `vectors/relay-tickets-v1.json`). Only the client side an app's server
+> or a Connect page uses.
 
 Relays carry messages between clients: Saltix wallets, grains' servers, Connect pages. Clients encrypt the content themselves; a relay cannot read it. Any relay is an entry point: a client connects to one,
 and relays pass frames to each other and keep mailboxes for addresses that are offline.
@@ -12,13 +14,70 @@ The SDK: `RelayClient` (`@saltix/grain-server`) is a server's whole connection (
 numbers, reconnecting to another relay), `ChatServer` uses it, and `@saltix/connect` opens link slots. The vectors:
 `vectors/relay-v1.json` (records, bindings, acks, the link code and payload).
 
+## Finding relays: relay tickets
+
+The SDK carries no list of relays — none in its code, docs or templates — and finds the relays it can use when it runs,
+by relay tickets (41-transport §18): a list anyone can read lets a censor block every relay. Saltix's public list
+(`relay_list`) is being retired: it stays at the relays' gateways while Saltix for Android reads it, and the SDK never
+calls it. A client:
+
+1. **Starts from what it has**, each endpoint once by its URL and pin (one URL under two pins is two relays, neither pin
+   replacing the other): tickets or endpoints given by a person (`--relay`, `SALTIX_RELAYS`, checked when given — one
+   that cannot be a relay stops the start, exit 78; a ticket past its life is left out with a warning), its cache of
+   relays that answered (`.grain/relays.json`, at most 16, fastest first), then the release's entry points (the SDK
+   carries a few, obfuscated: the last resort, never a list in the clear, always tried). The command line's `--relay`
+   with a ticket keeps the cache and the entry points; `--relay wss://…#<pin>` alone names relays of one's own.
+2. **Probes them**, 16 at a time: `node_status` through each one's `POST /rpc` under its pin (or a public CA's
+   certificate), each request given up — its socket destroyed — at 5 seconds; keeps those that answer for the client's
+   network with a genesis of 64 lower-case hex digits that begins as the app key's does, fastest first; goes on once three
+   relays answered, never waiting for the slowest, and gives up the probes still under way when it is done. **A relay is
+   one relay whatever its names**: its ticket's node key, or its host and port, count it once.
+3. **Asks two relays that are not one** `relay_tickets {key}` (when an anchor answered too: a relay the person gave, or
+   an entry point), with a fresh one-time X25519 key: the answer is `{sealed}`, its plaintext `{period, self, tickets}` —
+   at most five relays chosen for the requester's network bucket (its IPv4 /16, or IPv6 /32; an IPv6 address carrying
+   an IPv4 one counts as that address) and the week, under a key that takes the hash of the week's first final beacon
+   block, the same five from every relay, changed within the week only where a chosen relay departs, so asking more
+   relays, or again, from one place learns nothing more. Sealed: X25519 with the answer's one-time key `E` (its first 32
+   bytes), `BLAKE3 derive_key("Saltix relay tickets seal v1", S ‖ E ‖ R)`, XChaCha20-Poly1305 with 24 zero bytes of nonce
+   and the genesis that relay answered as associated data. It reads the relay's own ticket and five more, no further.
+4. **Checks every ticket** (below) and refuses one naming a host and port twice, keeps the endpoints that name a public
+   address (none on a private, loopback, link-local, shared, documentation or multicast address; a name only where every
+   address it is found at is public, dialed at the first of them), and **uses a ticket only once an anchor other than the
+   one relay that handed it out confirms its license**: `license_list {node_key}` at a relay the person gave or an entry
+   point says the key holds an active license — never a cached or found relay. A ticket no anchor could check, or
+   without a license, is dropped; with no anchor answering, nothing handed out is used. A relay it already has takes a
+   ticket's form only from its own ticket (handed out as `self` over its own pinned connection) or a newer one of its
+   key, never from another key's ticket naming its URL and pin. Then it probes the new relays, keeps what answers and
+   caches it. Again when every relay used stops answering (at most once a minute; a look that found
+   none is not repeated within the minute) and every hour.
+5. **Adopts the network's genesis** only where two relays that are not one agree on it, one of them an anchor: a server
+   signs under it, never under the first relay's `node_status`, and does not start without it.
+
+**A ticket** is a relay's own signed record with the network it serves: `SALTIX-RELAY:` and RFC 4648 base32 (upper case,
+no padding) of `version (1) ‖ the network's genesis hash's first 8 bytes ‖ the record's version (2 or 3) ‖ the record as
+nodes gossip it` (its Borsh body — `node_key`, `peer_id`, `endpoints [{url, cert_sha256?}]`, `issued_at`, and version
+3's `store` and `country` — then the node key's 64-byte signature over `derive("Saltix relay record v2"/"v3", body)`).
+It lives 30 days from `issued_at`. A reader trims Rust's whitespace (not U+FEFF) and compares ASCII letters only (`ſ` is
+no S, `ı` no I), then refuses, in this order, the first that fails: `prefix`, `encoding` (not base32, over 1 152 bytes),
+`version`, `network` (another genesis, when known), `record` (not the version named, or bytes left over), `bounds` (a
+peer id of 1–64 bytes, at most 4 endpoints each `wss://` and at most 200 bytes, a country of two capitals),
+`signature`, `future` (more than 10 minutes ahead: check the computer's clock), `expired`, `unreachable` (no endpoint).
+The relay that hands a ticket out chooses which, and cannot forge or change another relay's; but it can sign records of
+keys it holds without a license, which is why a second relay confirms each ticket's license. The SDK: `readTicket`,
+`ticketProblem`, `openTicketsAnswer`, `RelayFinder` (`@saltix/grain-server`).
+
+**When none answers**, the SDK's error names every relay tried — by its key's or its certificate's fingerprint, never by
+its address — and why (no answer within 5 s, refused, another certificate, another network), what was left out (a given
+ticket past its life), and the way out: a relay ticket from someone whose Saltix works (`--relay SALTIX-RELAY:…`), or a
+relay or node of one's own. Never put a relay's address in an app.
+
 ## Relay records and certificate pinning
 
-- **Where relays are.** `relay_list` ([wallet interface](wallet-interface.md#methods)) gives the relays a node checked
-  (each with a valid, signed record): `key` (the relay's node key, hex), `peer`, `endpoints` (`[{url,
-  cert_sha256}]`), `issued_at`, `version`. A relay with no endpoints is not reachable from outside; skip it. A client
-  that knows no relay yet starts from a few it is built with (the SDK's `PUBLIC_RELAYS` for the test network), then
-  keeps the list `relay_list` returns.
+- **Where relays are.** A client finds a few when it runs, as relay tickets ([Finding
+  relays](#finding-relays-relay-tickets)). `relay_list` ([wallet interface](wallet-interface.md#methods)) still gives
+  every relay a node checked (`key`, `peer`, `endpoints` `[{url, cert_sha256}]`, `issued_at`, `version`; no endpoints:
+  not reachable) at the relays' gateways until Saltix for Android moves to tickets, then leaves them; the SDK never asks
+  it.
 - **Choosing.** Connect to the fastest of a random sample of up to five; when the connection drops, register at the
   next within seconds. Nothing is lost by switching: an address's mailbox does not live on the relay it came in by.
 - **TLS without a domain.** An endpoint is `wss://host:port/` with `cert_sha256`, the SHA-256 of the relay's

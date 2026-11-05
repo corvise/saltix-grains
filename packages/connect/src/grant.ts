@@ -1,9 +1,9 @@
 // The wallet's answer to a Connect offer (Saltix 19-connect §4–§5): `ConnectSeen`, then a `ConnectReply` naming where
 // the page confirms (§14.2), then a `ConnectGrant` — a `ConnectLogin` naming this page's network, origin, slot and
 // session key, signed by a key of the account. The page takes a grant only when every rule of §5 holds, and then
-// answers the reply with a `ConnectConfirm`, which a wallet takes only for the login it sent; `saltix-types` `connect`
-// has the same checks, and vectors/connect-v1.json pins both to the same bytes and reasons. A port of the explorer's
-// own.
+// answers the reply with a `ConnectConfirm` — or, refusing it, with a `ConnectRefusal` that says why (2026-11-04) —,
+// which a wallet takes only for the login it sent; `saltix-types` `connect` has the same checks, and
+// vectors/connect-v1.json pins both to the same bytes and reasons. A port of the explorer's own.
 import {
   type AccountPolicy, type CheckedLog, type DeviceKey, Reader, Writer, derive, keySpeaksFor, readDeviceKey, verifyByDeviceKey, toHex,
   writeDeviceKey,
@@ -17,6 +17,26 @@ export const SEEN_TAG = 0;
 export const REPLY_TAG = 2;
 /** A `ConnectConfirm`'s first byte. */
 export const CONFIRM_VERSION = 1;
+/** A `ConnectRefusal`'s first byte: the page's other answer at the reply slot (§14.2). */
+export const REFUSAL_VERSION = 2;
+
+/** Why the page did not take a login, as it tells the wallet (§14.2's table): what the person does next. A number this
+ *  table does not name — a later page's — reads as `OTHER`. */
+export const RefusalReason = {
+  /** Any other: the protocol's reasons, a site's rule without a number here. */
+  OTHER: 0,
+  /** Not on the site's list: the person sends the address to the site's owner. */
+  NOT_LISTED: 1,
+  /** Its time on the list ended at `when`. */
+  ENDED: 2,
+  /** Its time on the list begins at `when`. */
+  NOT_YET: 3,
+  /** The site lets it in, not its files. */
+  NO_FILES: 4,
+  /** The site could not check the login now: try again in a minute. */
+  AGAIN: 5,
+} as const;
+export type RefusalReasonNumber = (typeof RefusalReason)[keyof typeof RefusalReason];
 /** How long a wallet tries to deliver a grant in all (§14.3). */
 export const CONNECT_DELIVERY_MS = 30_000;
 /** How long a wallet waits for the page's confirmation once the grant was delivered (§14.3). */
@@ -71,6 +91,22 @@ export interface ConnectConfirm {
   /** Unix ms. */
   at: bigint;
 }
+
+/** "The page did not take the login" (§14.2, 2026-11-04): its answer at the reply slot in place of a confirmation. */
+export interface ConnectRefusal {
+  version: number;
+  /** `loginMessage` of the login the page refused. */
+  login: Uint8Array;
+  /** Unix ms. */
+  at: bigint;
+  /** `RefusalReason`; a byte the table does not name reads as `OTHER` (`refusalReasonOf`). */
+  reason: number;
+  /** The moment of `ENDED` and `NOT_YET`, Unix ms; 0 for any other. */
+  when: bigint;
+}
+
+/** What the page answered at the reply slot, told apart by the first byte. */
+export type ConnectAnswer = { kind: "confirm"; confirm: ConnectConfirm } | { kind: "refusal"; refusal: ConnectRefusal };
 
 export type ConnectPayload =
   | { kind: "seen"; at: bigint }
@@ -130,6 +166,85 @@ export const encodeReply = (r: ConnectReply): Uint8Array =>
   new Writer().u8(REPLY_TAG).fixed(r.relay, 32).fixed(r.sid, 32).fixed(r.key, 32).fixed(r.login, 32).done();
 
 export const encodeConfirm = (c: ConnectConfirm): Uint8Array => new Writer().u8(c.version).fixed(c.login, 32).u64(c.at).done();
+
+/** Whether a reason has a moment (`when`). */
+const timed = (reason: number): boolean => reason === RefusalReason.ENDED || reason === RefusalReason.NOT_YET;
+
+/** A refusal of `login` at `at` for `reason`, with its moment only where the reason has one. */
+export function makeRefusal(login: Uint8Array, at: bigint, reason: RefusalReasonNumber, when: bigint = 0n): ConnectRefusal {
+  return { version: REFUSAL_VERSION, login, at, reason, when: timed(reason) ? when : 0n };
+}
+
+export const encodeRefusal = (r: ConnectRefusal): Uint8Array =>
+  new Writer().u8(r.version).fixed(r.login, 32).u64(r.at).u8(r.reason).u64(r.when).done();
+
+/** A refusal's reason as the table names it: a byte it does not name is `OTHER`. */
+export const refusalReasonOf = (r: ConnectRefusal): RefusalReasonNumber =>
+  (r.reason >= RefusalReason.OTHER && r.reason <= RefusalReason.AGAIN ? r.reason : RefusalReason.OTHER) as RefusalReasonNumber;
+
+/** The moment a refusal tells, for a reason that has one; null otherwise. */
+export const refusalMoment = (r: ConnectRefusal): bigint | null => (timed(refusalReasonOf(r)) && r.when !== 0n ? r.when : null);
+
+/**
+ * What the page tells the wallet of a refusal it answers (§14.2's table), from its own reason: the site's list
+ * (`not_listed`), a window that ended or is still to open with its moment (`window_closed`, `window_not_yet`), no files
+ * (`no_files`), a check that could not be made now (`unchecked`, `rate_limited`, `storage`), and any other reason — the
+ * protocol's, a site's own word — as `OTHER`. Null for what is told to nobody: an offer gone (`offer`, `spent`) or a
+ * request of another browser's (`not_this_browser`).
+ */
+export function refusalFor(reason: string, when: number | null = null): { reason: RefusalReasonNumber; when: bigint } | null {
+  const moment = when !== null && Number.isSafeInteger(when) && when > 0 ? BigInt(when) : 0n;
+  switch (reason) {
+    case "offer":
+    case "spent":
+    case "not_this_browser":
+      return null;
+    case "not_listed":
+      return { reason: RefusalReason.NOT_LISTED, when: 0n };
+    case "window_closed":
+      return { reason: RefusalReason.ENDED, when: moment };
+    case "window_not_yet":
+      return { reason: RefusalReason.NOT_YET, when: moment };
+    case "no_files":
+      return { reason: RefusalReason.NO_FILES, when: 0n };
+    case "unchecked":
+    case "rate_limited":
+    case "storage":
+      return { reason: RefusalReason.AGAIN, when: 0n };
+    default:
+      return { reason: RefusalReason.OTHER, when: 0n };
+  }
+}
+
+/** The page's answer at the reply slot (§14.2 step 4): one Borsh value and nothing after it, a confirmation by its first
+ *  byte 1, a refusal by 2. */
+export function decodeAnswer(bytes: Uint8Array): ConnectAnswer {
+  if (bytes.length === 0) throw new ConnectError("encoding", "empty");
+  if (bytes[0] === CONFIRM_VERSION) return { kind: "confirm", confirm: decodeConfirm(bytes) };
+  if (bytes[0] !== REFUSAL_VERSION) throw new ConnectError("version", String(bytes[0]));
+  const r = new Reader(bytes);
+  try {
+    const version = r.u8();
+    const login = r.fixed(32);
+    const at = r.u64();
+    const reason = r.u8();
+    const when = r.u64();
+    r.end();
+    return { kind: "refusal", refusal: { version, login, at, reason, when } };
+  } catch (e) {
+    throw new ConnectError("encoding", e instanceof Error ? e.message : String(e));
+  }
+}
+
+/** What a wallet checks of the page's answer (§14.2 step 4), a refusal as a confirmation: the login it sent, `at`
+ *  within the skew. */
+export function checkAnswer(a: ConnectAnswer, login: Uint8Array, nowMs: number | bigint): void {
+  if (a.kind === "confirm") return checkConfirm(a.confirm, login, nowMs);
+  if (!equal(a.refusal.login, login)) throw new ConnectError("login");
+  const now = BigInt(nowMs);
+  const skew = a.refusal.at > now ? a.refusal.at - now : now - a.refusal.at;
+  if (skew > BigInt(CONNECT_SKEW_MS)) throw new ConnectError("time");
+}
 
 /** One Borsh value of version 1 and nothing after it. */
 export function decodeConfirm(bytes: Uint8Array): ConnectConfirm {

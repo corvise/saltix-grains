@@ -119,5 +119,6 @@ test("the protocol's pages each name the protocol commit they reflect, and the i
     assert.ok(index.includes(`](${page})`), `the index lists ${page}`);
   }
   assert.ok(index.includes("](../../vectors/README.md)"), "the index leads to the vectors");
-  assert.match(readFileSync(join(root, "vectors", "README.md"), "utf8"), /the protocol's own bytes/i);
+  // The vectors' README: the repository's own here, the copy beside the packages in the public mirror (one level less).
+  assert.match(readFileSync(new URL("../../../vectors/README.md", import.meta.url), "utf8"), /the protocol's own bytes/i);
 });

@@ -120,7 +120,7 @@ test("how-it-works.md: the pieces, whether an app needs a server, and the lifecy
   }
   const flat = page.replace(/\s+/g, " ");
   // The program talks only outbound, and the owner's phone signs what the registry holds.
-  assert.ok(flat.includes("**connects out** to the network's public relays"));
+  assert.ok(flat.includes("**connects out** to the network's relays over a WebSocket, which it finds by itself"));
   assert.ok(flat.includes("**no domain, no open port and no certificate**"));
   assert.ok(flat.includes("**The owner's phone signs everything the registry holds of the app.**"));
   // The table: what needs no program, what needs one.

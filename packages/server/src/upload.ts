@@ -40,12 +40,27 @@ interface Answer {
   body: Buffer;
 }
 
+/** Why a request to a relay was given up on: its `signal`'s reason when it gave one, else no answer in time (an abort
+ *  with no reason of its own is a deadline). */
+function abortReason(signal: AbortSignal | undefined): Error {
+  const reason = signal?.reason as unknown;
+  return reason instanceof Error && reason.name !== "AbortError"
+    ? reason : Object.assign(new Error("the relay did not answer in time"), { code: "ETIMEDOUT" });
+}
+
 /**
  * One HTTP request to a relay's client port (the host and port of its WebSocket endpoint): over TLS that shows exactly
  * the certificate `cert_sha256` pins (checked before a byte of the request is sent), or one a CA vouches for without a
- * pin; plain HTTP only for a developer's `ws://` relay on loopback.
+ * pin; plain HTTP only for a developer's `ws://` relay on loopback. An endpoint whose name was found at a checked
+ * address (`address`) is dialed there, its name the TLS server name. `timeoutMs` bounds the connection and every silence
+ * of the answer on the socket in use (a minute by default; a probe of many relays at once gives a few seconds);
+ * `signal` gives the request up whenever it fires, the socket destroyed.
  */
-export async function relayRequest(endpoint: RelayEndpoint, method: string, path: string, headers: Record<string, string> = {}, body?: Uint8Array): Promise<Answer> {
+export async function relayRequest(endpoint: RelayEndpoint, method: string, path: string, headers: Record<string, string> = {}, body?: Uint8Array,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<Answer> {
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const signal = options.signal;
+  if (signal?.aborted) throw abortReason(signal);
   const url = new URL(endpoint.url);
   const secure = url.protocol === "wss:";
   if (!secure && url.protocol !== "ws:") throw new Error("a relay endpoint is wss:// (or ws:// on loopback)");
@@ -54,15 +69,24 @@ export async function relayRequest(endpoint: RelayEndpoint, method: string, path
   let socket: Socket | undefined;
   if (secure) {
     const pin = endpoint.cert_sha256?.toLowerCase() ?? null;
-    const tls = connect({ host, port, servername: isIP(host) ? undefined : host, rejectUnauthorized: pin === null, ALPNProtocols: ["http/1.1"] });
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("the relay did not answer in time")), REQUEST_TIMEOUT_MS);
-      tls.once("secureConnect", () => { clearTimeout(timer); resolve(); });
-      tls.once("error", (e) => { clearTimeout(timer); reject(e); });
-    }).catch((e) => {
+    const tls = connect({
+      host: endpoint.address ?? host, port, servername: isIP(host) ? undefined : host, rejectUnauthorized: pin === null, ALPNProtocols: ["http/1.1"],
+    });
+    const abort = () => tls.destroy(abortReason(signal));
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(Object.assign(new Error("the relay did not answer in time"), { code: "ETIMEDOUT" })), timeoutMs);
+        timer.unref?.();
+        tls.once("secureConnect", () => { clearTimeout(timer); resolve(); });
+        tls.once("error", (e) => { clearTimeout(timer); reject(e); });
+      });
+    } catch (e) {
       tls.destroy();
       throw e;
-    });
+    } finally {
+      signal?.removeEventListener("abort", abort);
+    }
     const raw = tls.getPeerCertificate()?.raw;
     if (pin !== null && (!raw || createHash("sha256").update(raw).digest("hex") !== pin)) {
       tls.destroy();
@@ -72,7 +96,7 @@ export async function relayRequest(endpoint: RelayEndpoint, method: string, path
   }
   return new Promise<Answer>((resolve, reject) => {
     const req = request({
-      host, port, method, path, timeout: REQUEST_TIMEOUT_MS,
+      host, port, method, path,
       headers: { ...headers, ...(body ? { "content-length": String(body.length) } : {}) },
       ...(socket ? { createConnection: () => socket! } : {}),
     }, (res) => {
@@ -87,11 +111,18 @@ export async function relayRequest(endpoint: RelayEndpoint, method: string, path
         }
         chunks.push(c);
       });
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) }));
-      res.on("error", reject);
+      res.on("end", () => settle(() => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) })));
+      res.on("error", (e) => settle(() => reject(e)));
     });
-    req.on("timeout", () => req.destroy(new Error("the relay did not answer in time")));
-    req.on("error", reject);
+    const abort = () => req.destroy(abortReason(signal));
+    const settle = (then: () => void) => {
+      signal?.removeEventListener("abort", abort);
+      then();
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    // On the socket in use, the pinned one handed over included: the request's own option arms only a socket it makes.
+    req.setTimeout(timeoutMs, () => req.destroy(Object.assign(new Error("the relay did not answer in time"), { code: "ETIMEDOUT" })));
+    req.on("error", (e) => settle(() => reject(e)));
     req.end(body ? Buffer.from(body.buffer, body.byteOffset, body.length) : undefined);
   });
 }

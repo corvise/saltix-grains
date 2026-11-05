@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { createHash, randomBytes } from "node:crypto";
 import type { IncomingMessage } from "node:http";
+import { type LookupFunction, isIP } from "node:net";
 import type { TLSSocket } from "node:tls";
 import WebSocket from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
@@ -12,19 +13,72 @@ import {
 } from "./records.js";
 import { messagingPublic, openFrame, sealFrame, serverMessagingSecret } from "./seal.js";
 import { type SignedGrainStats, encodeSignedGrainStats } from "./stats.js";
+import { TICKETS, TicketRefused, readTicket } from "./tickets.js";
 
-/** A relay's client endpoint as `relay_list` gives it: `cert_sha256` pins a self-signed certificate. */
+/** A relay's client endpoint: `cert_sha256` pins a self-signed certificate (null: a public CA's certificate, which the
+ *  CAs Node trusts verify). */
 export interface RelayEndpoint {
   url: string;
   cert_sha256: string | null;
+  /** The relay's node key, hex, when its ticket named it: what logs and errors name the relay by. */
+  key?: string | null;
+  /** The address a name was found at and checked public (a ticket handed out): where a connection goes, the name its
+   *  TLS server name, so that the name is never found again elsewhere. */
+  address?: string | null;
+}
+
+/** An endpoint's identity, by which relays are told apart: its URL and its pin. One URL under two pins is two relays to
+ *  try — the one whose certificate it shows answers — and neither pin replaces the other. */
+export const relayId = (e: RelayEndpoint): string => `${e.url}#${e.cert_sha256?.toLowerCase() ?? "ca"}`;
+
+/**
+ * How logs and errors name a relay, never by its address (Saltix 41-transport §18): `key:` and its node key's first 8 hex
+ * digits when a ticket named it, else `cert:` and its certificate pin's, else `ca` for one a public CA vouches for, or
+ * `local` for a developer's plain relay on loopback.
+ */
+export function relayName(e: RelayEndpoint): string {
+  if (e.key) return `key:${e.key.slice(0, 8).toLowerCase()}`;
+  if (e.cert_sha256) return `cert:${e.cert_sha256.slice(0, 8).toLowerCase()}`;
+  return e.url.startsWith("ws://") ? "local" : "ca";
+}
+
+const seconds = (ms: number) => (ms % 1000 === 0 ? `${ms / 1000} s` : `${ms} ms`);
+
+/** `text` with every URL, IP address (and its port) taken out: what an error from the network says, told without a
+ *  relay's address. */
+export function withoutAddresses(text: string): string {
+  return text
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>]+/gi, "<relay>")
+    .replace(/\[[0-9a-f:.]+\](:\d+)?/gi, "<relay>")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}(:\d+)?\b/g, "<relay>")
+    .replace(/(?<![\w:])(?=[0-9a-f:]*::|(?:[0-9a-f]{1,4}:){4})[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}(?::\d+)?(?![\w:])/gi, "<relay>");
+}
+
+/** Why a request to a relay failed, in a person's words and never with its address: the system's codes in words, what
+ *  else it says with addresses taken out. */
+export function relayFailure(e: unknown, timeoutMs: number): string {
+  const message = e instanceof Error ? e.message : String(e);
+  const code = (e as { code?: unknown } | null)?.code;
+  if (/certificate does not match/.test(message)) return "showed another certificate than its pin (not this relay, or it was replaced)";
+  if (code === "ECONNREFUSED") return "refused the connection";
+  if (code === "ECONNRESET" || code === "EPIPE") return "closed the connection";
+  if (code === "EHOSTUNREACH" || code === "ENETUNREACH") return "unreachable from here";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "its name does not resolve";
+  if (code === "ETIMEDOUT" || /in time|timed? ?out/i.test(message)) return `no answer within ${seconds(timeoutMs)}`;
+  if (code === "ERR_TLS_CERT_ALTNAME_INVALID") return "its certificate is for another name";
+  if (typeof code === "string" && /^(CERT_|UNABLE_TO_|SELF_SIGNED|DEPTH_ZERO)/.test(code)) {
+    return "its certificate is not one a public CA vouches for (a relay's own is pinned: wss://host:port/#<its SHA-256>)";
+  }
+  return withoutAddresses(message);
 }
 
 export interface RelayOptions {
-  /** Your node's wallet interface (plain HTTP: your own node or a tunnel): relays come from its `relay_list`. */
+  /** Your node's wallet interface (plain HTTP: your own node or a tunnel): relays come from its `relay_tickets` — its
+   *  choice of the network's relays and its own, each ticket checked here (Saltix 41-transport §18.3). */
   node?: string;
   /** Or the endpoints to use, tried in random order. */
   endpoints?: RelayEndpoint[];
-  /** More endpoints, asked before each round of relays (`ChatServer` asks the network's relays for the rest). */
+  /** More endpoints, asked before each round of relays (`ChatServer` asks the relays its finder found). */
   discover?: () => Promise<RelayEndpoint[]>;
   /** The Ed25519 secret of the address you write from — your grain's server key. It never leaves the process. */
   secret: Uint8Array;
@@ -81,6 +135,8 @@ const KEY_TTL_MS = 10 * 60_000;
 /** An address without a record may register any moment: ask again soon. */
 const NO_KEY_TTL_MS = 30_000;
 const KEY_TIMEOUT_MS = 10_000;
+/** How long a relay's TLS and WebSocket handshake may take. */
+const HANDSHAKE_MS = 10_000;
 const PING_MS = 30_000;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -94,6 +150,38 @@ export function usableEndpoint(endpoint: RelayEndpoint): boolean {
   }
   if (endpoint.cert_sha256 != null && !/^[0-9a-fA-F]{64}$/.test(endpoint.cert_sha256)) return false;
   return url.protocol === "wss:" || (url.protocol === "ws:" && LOOPBACK.has(url.hostname));
+}
+
+/** How a connection reaches a name found at a checked address: that address, whatever the name resolves to now. */
+function dialedAt(address: string | null | undefined): { lookup?: LookupFunction } {
+  if (!address) return {};
+  const family = isIP(address);
+  const lookup = ((_host: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) => {
+    if (options?.all) callback(null, [{ address, family }]);
+    else callback(null, address, family);
+  }) as unknown as LookupFunction;
+  return { lookup };
+}
+
+/**
+ * The relays your own node names (`relay_tickets` on its own interface, Saltix 41-transport §18.4: its choice of the
+ * network's relays and its own relay), each ticket read here as every reader reads it — at most `TICKETS` and its own, a
+ * refused one left out. Your node is yours to trust: what it names needs no second relay's word.
+ */
+export async function relaysOfNode(node: string, now: number = Date.now()): Promise<RelayEndpoint[]> {
+  const answer = await rpc<{ self?: unknown; tickets?: unknown }>(node, "relay_tickets", {});
+  const texts = [answer.self, ...(Array.isArray(answer.tickets) ? answer.tickets.slice(0, TICKETS) : [])];
+  const found: RelayEndpoint[] = [];
+  for (const text of texts) {
+    if (typeof text !== "string") continue;
+    try {
+      const ticket = readTicket(text, { now });
+      for (const e of ticket.endpoints) if (usableEndpoint(e)) found.push({ ...e, key: ticket.nodeKey });
+    } catch (e) {
+      if (!(e instanceof TicketRefused)) throw e;
+    }
+  }
+  return found;
 }
 
 /**
@@ -299,23 +387,23 @@ export class RelayClient extends EventEmitter {
     let list = this.options.endpoints ?? [];
     if (this.options.node) {
       try {
-        const { relays } = await rpc<{ relays: Array<{ endpoints: RelayEndpoint[] }> }>(this.options.node, "relay_list");
-        list = [...list, ...relays.flatMap((r) => r.endpoints)];
+        list = [...list, ...(await relaysOfNode(this.options.node))];
       } catch (e) {
-        this.log("warn", "relay_list_failed", { reason: (e as Error).message });
+        this.log("warn", "relay_tickets_failed", { reason: relayFailure(e, KEY_TIMEOUT_MS) });
       }
     }
     if (this.options.discover) {
       try {
         list = [...list, ...(await this.options.discover())];
       } catch (e) {
-        this.log("warn", "relay_list_failed", { reason: (e as Error).message });
+        this.log("warn", "relay_discover_failed", { reason: relayFailure(e, KEY_TIMEOUT_MS) });
       }
     }
-    // One entry an endpoint, the latest source's pin winning: a relay record is fresher than a list given at start.
-    const byUrl = new Map<string, RelayEndpoint>();
-    for (const e of list.filter(usableEndpoint)) byUrl.set(e.url, e);
-    return [...byUrl.values()].sort(() => Math.random() - 0.5);
+    // One entry an endpoint and pin, the first source's: a later one never replaces a pin given before it (one URL under
+    // two pins is tried under both, and only the certificate it shows passes).
+    const byId = new Map<string, RelayEndpoint>();
+    for (const e of list.filter(usableEndpoint)) if (!byId.has(relayId(e))) byId.set(relayId(e), e);
+    return [...byId.values()].sort(() => Math.random() - 0.5);
   }
 
   private async run(): Promise<void> {
@@ -324,7 +412,7 @@ export class RelayClient extends EventEmitter {
       for (const endpoint of await this.endpoints()) {
         if (this.closed) return;
         const registered = await this.session(endpoint).catch((e: Error) => {
-          this.log("warn", "relay_failed", { url: endpoint.url, reason: e.message });
+          this.log("warn", "relay_failed", { relay: relayName(endpoint), reason: relayFailure(e, HANDSHAKE_MS) });
           return false;
         });
         if (registered) failures = 0;
@@ -346,7 +434,9 @@ export class RelayClient extends EventEmitter {
   private session(endpoint: RelayEndpoint): Promise<boolean> {
     return new Promise((resolve, reject) => {
       const pinned = endpoint.cert_sha256?.toLowerCase() ?? null;
-      const ws = new WebSocket(endpoint.url, { rejectUnauthorized: pinned === null, handshakeTimeout: 10_000, maxPayload: 512 * 1024 });
+      const ws = new WebSocket(endpoint.url, {
+        rejectUnauthorized: pinned === null, handshakeTimeout: HANDSHAKE_MS, maxPayload: 512 * 1024, ...dialedAt(endpoint.address),
+      });
       this.dialing = ws;
       let trusted = !endpoint.url.startsWith("wss:") || pinned === null;
       let registered = false;
@@ -375,7 +465,7 @@ export class RelayClient extends EventEmitter {
           this.ws = ws;
           this.current = endpoint;
           ping = setInterval(() => ws.ping(), PING_MS);
-          this.log("info", "relay_registered", { url: endpoint.url, address: this.address });
+          this.log("info", "relay_registered", { relay: relayName(endpoint), address: this.address });
           if (this.stats) this.sendStats(ws, this.stats);
           const waiters = this.waiters;
           this.waiters = [];
@@ -394,7 +484,7 @@ export class RelayClient extends EventEmitter {
         if (this.ws === ws) {
           this.ws = null;
           this.current = null;
-          this.log("warn", "relay_lost", { url: endpoint.url });
+          this.log("warn", "relay_lost", { relay: relayName(endpoint) });
           for (const address of [...this.asked.keys()]) this.answerKey(address, null, false);
           // A reservation is the connection's: one whose answer did not come is not coming.
           for (const ref of [...this.slots.keys()]) this.answerSlot(ref, new Error("the relay connection was lost"));
@@ -423,14 +513,14 @@ export class RelayClient extends EventEmitter {
           // The relays know a later binding of ours (another relay's clock was ahead): sign one after it.
           this.bindingAfter = Math.max(Number(f.keyIssuedAt ?? 0), Number(f.issuedAt ?? 0), this.binding.issuedAt) + 1;
           this.binding = null;
-          this.log("info", "relay_stale", { url: endpoint.url });
+          this.log("info", "relay_stale", { relay: relayName(endpoint) });
           return new Error("stale registration: signing a later binding");
         }
         if ((f.message === "file_refused" || f.message === "payment_required") && typeof f.ref === "string" && this.slots.has(f.ref)) {
           this.answerSlot(f.ref, new FileRefused(f.message === "file_refused" ? String(f.detail) : "payment_required"));
           return;
         }
-        this.log("warn", "relay_error", { url: endpoint.url, message: f.message, detail: f.detail });
+        this.log("warn", "relay_error", { relay: relayName(endpoint), message: f.message, detail: f.detail });
         if (f.message === "auth_failed") return new Error(`registration refused: ${String(f.detail)}`);
         this.emit("relayError", { message: f.message, detail: f.detail });
         return;
@@ -453,13 +543,13 @@ export class RelayClient extends EventEmitter {
         return;
       case "grain_stats_taken": {
         const outcome: StatsOutcome = { taken: true, slug: String(f.slug), at: Number(f.at) };
-        this.log("info", "relay_stats_taken", { url: endpoint.url, slug: outcome.slug, at: outcome.at });
+        this.log("info", "relay_stats_taken", { relay: relayName(endpoint), slug: outcome.slug, at: outcome.at });
         this.emit("stats", outcome);
         return;
       }
       case "grain_stats_refused": {
         const outcome: StatsOutcome = { taken: false, reason: String(f.reason) };
-        this.log("warn", "relay_stats_refused", { url: endpoint.url, reason: outcome.reason });
+        this.log("warn", "relay_stats_refused", { relay: relayName(endpoint), reason: outcome.reason });
         this.emit("stats", outcome);
         return;
       }

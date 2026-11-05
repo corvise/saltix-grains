@@ -87,7 +87,7 @@ npm start
 {"at":"…","level":"info","event":"ready","slug":"your-app","address":"dsalt1q…","network":"devnet","spec":4}
 ```
 
-`server.mjs` reads `app.key` (or `SALTIX_APP_KEY`), finds the network's public relays, checks that the registry names
+`server.mjs` reads `app.key` (or `SALTIX_APP_KEY`), finds the network's relays by itself, checks that the registry names
 the key for your app, signs `chat.json` with it and answers. The key never appears in its output. Without a key it
 refuses to start and says to run `grain pair` (exit 78, which a supervisor should not restart on); it exits with 78 too
 when the key cannot work (replaced, revoked, the app retired, another network's) or `chat.json` changed without raising
@@ -188,12 +188,14 @@ and it never learns who its users are: each user is a key of their own in your a
 The same from the command line in the checkout (`npx grain …`): each says first which account owns what it changes, and
 for an app made in Saltix the tool says what to do there and waits for the registry. A key file signs only for an app it
 registered, or when `--key` names it (the test network without a phone). Every command reaches the test network through
-its public relays, pinned by their certificates; `--node URL` is a node of your own instead
+relays it finds when it runs, pinned by their certificates; `--node URL` is a node of your own instead
 ([README](../README.md#networks-no-node-of-your-own-needed)). `grain faucet --wait` gives `owner.key`'s account test
-SALT for the fees and deposits:
+SALT for the fees and deposits — in a project whose slug is still free, as many grants as its first publish takes (the
+faucet pays 10 SALT a grant, once every 5 minutes: two for a deposit of 10 SALT; it says how many, and waits between
+them):
 
 ```sh
-grain faucet --wait                                                # test SALT for owner.key's account
+grain faucet --wait                                                # test SALT for owner.key's account: the grants a first publish takes
 grain access --slug your-app --private --member dsalt1q…:user      # members, while private
 grain access --slug your-app --public                              # anyone
 grain bind --handle @your_app --slug your-app                      # a username you hold opens its chat
@@ -251,8 +253,8 @@ What happens, step by step:
    and checked as every node checks it; `grain.json` names it and `bundle.zip` is written. A bundle the network keeps is
    at most 16 MiB.
 2. **The sources.** A network that runs protocol version 2 needs none. Before it (the test network runs version 1), a
-   sealed manifest must name one, so the tool names where the network itself serves its copy, at up to 3 relays of its
-   own relay list; you never host anything. The bundle goes to the network's keepers either way:
+   sealed manifest must name one, so the tool names where the network itself serves its copy, at up to 3 of the relays
+   the node names by their tickets; you never host anything. The bundle goes to the network's keepers either way:
    [where the bundle goes](how-it-works.md#where-the-bundle-goes).
 3. **The upload.** With a server key the registry names for the app (`grain pair`'s `app.key`; or `SALTIX_APP_KEY`,
    `--app-key`), the bundle goes up now, in pieces of 256 KiB, on that key's signed statement: the network holds it
@@ -465,5 +467,6 @@ coding agent follows them too.
 | `…: the registry has no such grain` | Just made? Wait until Saltix shows the app live in My apps, then start again |
 | `the developer key is for devnet 7e70a4e3…, but the network answering is …: was the network reset?` | The test network was reset: `npx grain pair --new` |
 | `not a developer key` / `a malformed developer key` (`app.key` is not a key file the server reads) | `npx grain pair --new` |
-| `no public relays are known for mainnet` | Pass `node` (your own node's wallet interface) to `ChatServer.start`, or `NODE_RPC` to the example |
+| `no relay is known for mainnet` | Pass `node` (your own node's wallet interface) to `ChatServer.start`, or `NODE_RPC` to the example |
+| `no relay of devnet answered (… tried …)` | Each relay is named with why: `npx grain doctor`; two relay tickets of two different relays someone whose Saltix works gave you in `SALTIX_RELAYS` (a server signs only under the genesis two relays agree on; `--relay SALTIX-RELAY:…` for a command needs one) |
 | `wallets write to the first server key the registry names` (a warning) | Requests reach the first key's server: run that one, or make yours first in Saltix |

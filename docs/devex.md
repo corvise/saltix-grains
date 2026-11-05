@@ -29,7 +29,7 @@ What a newcomer hit, in the order of the journey (fixed ones link their pull req
 | Local loop | your own chat cannot run locally: the development relay and registry only serve `hello-grain` | roadmap 1 |
 | Tests | testing one command end to end took 50 lines, imports by path into the checkout and wire details (the messaging key's domain, arguments typed and sorted) | fixed, #32 (`testChat`) |
 | SDK | not on npm, the repository private; Saltix's own apps' program vendors `dist/` | roadmap 3 |
-| `--node` | every registry command needs a node's plain-HTTP interface; the node is published for Linux x86-64 only; the test network's nodes are not reachable that way | fixed, #31 (the public relays, `grain faucet`) |
+| `--node` | every registry command needs a node's plain-HTTP interface; the node is published for Linux x86-64 only; the test network's nodes are not reachable that way | fixed, #31 (the network's relays, `grain faucet`) |
 | Spec changes | a `chat.json` changed under the same version starts fine and reaches nobody | fixed, #28 (78, `ChatSpecVersionError`) |
 | Bundles | a sealed screen needs an https host of your own; `grain bundle`'s bytes depend on Node's zlib | fixed: `grain publish` puts the bundle into the network itself (6); the bytes fixed, #27 |
 | Icons | an icon had to be a 256 × 256 PNG made by hand; nothing said how wallets draw it | fixed: `grain icon` makes one to Saltix's standard from any picture, with a preview ([icons.md](icons.md)) |
@@ -132,15 +132,17 @@ and the program that runs Saltix's own apps vendors the built `dist/` with a syn
 published for Linux x86-64 only, and the test network's nodes are not reachable that way, so a developer on a Mac needs a
 Linux server and an SSH tunnel. Yet every relay serves the wallet interface at `POST /rpc` (Saltix 09-relay §10.7),
 `transaction_submit`, `faucet_request`, `grain_get` and `handle_get` included, and `ChatServer` and `grain app-key`
-already use the network's public relays (`RelayGateways`, pinned by their certificates).
+already use the network's relays (`RelayGateways`, pinned by their certificates; found when they run since 2026-11-04,
+  41-transport §18).
 
 - Every command takes the network instead (`--network devnet`, the default while the test network is the only one with
-  public relays, or the developer key's), and `--node` stays for your own node.
+  relays, or the developer key's), and `--node` stays for your own node.
 - `grain faucet --key owner.key`: test SALT for a key file's account (`faucet_request`).
 - **Effort** M (`registry.ts`, `studio.ts`, `sponsor.ts` take a `WalletInterface` instead of a URL).
 - **Built** (2026-10-16): every command reaches the network through `--network` (devnet by default), `--relay
-  URL#sha256` or `--node`; the SDK's reads take a node's URL or any wallet interface (`NodeLike`); `RelayGateways` asks
-  `relay_list` when the relays it knows cannot answer and passes over a node with no faucet; `grain faucet [--wait]`.
+  URL#sha256` or `--node`; the SDK's reads take a node's URL or any wallet interface (`NodeLike`); `RelayGateways` asked
+  `relay_list` when the relays it knew could not answer (since 2026-11-04 it finds relays by tickets and never asks
+  `relay_list`) and passes over a node with no faucet; `grain faucet [--wait]`.
   Checked live: `grain show` and `grain faucet --wait` for a throwaway key on the test network.
 
 ### 5. A spec changed under its version is refused
@@ -225,7 +227,7 @@ network, a registry that does not name it, a key that is not the first one named
 spec version not above what wallets hold, a server not registered at any relay, numbers not reported, a bundle whose
 hash does not match its sources, a certificate about to end.
 
-- `grain doctor` (the developer key from `SALTIX_APP_KEY` or `--file`): checks each, through the public relays, and says
+- `grain doctor` (the developer key from `SALTIX_APP_KEY` or `--file`): checks each, through the network's relays, and says
   what to do for each failure, in the order a newcomer meets them. A JSON form for agents.
 - **Started** (2026-10-19): `grain doctor [--json]` checks the project, `.gitignore`, the key (`grain status`'s states),
   the key file's mode, `chat.json`'s version, `npm install`, the bundle's hash, what the registry holds and the Connect
@@ -323,6 +325,9 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 
 | Step | Reasons |
 |---|---|
+| `relays` | `ok` with how more relays were found (`tickets`, `none`) and the counts and the look's time as `took_ms`; `failed` with `none_answered` (no relay answered: the command ends `network_unreachable`) |
+| `relay_ticket` | `refused` with why a ticket handed out was not used: a reader's reason (`expired`, `signature`, …) or `extra`, `private`, `repeated`, `endpoint`, `unlicensed`, `unconfirmed` |
+| `relay_given` | `refused` with why a relay given was left out when the command ran (`expired`, `future`): the command says it on stderr too, once a run |
 | `init` | `chat`, `page`, `page_sign_in`: the project made |
 | `rotate` | `asked` (`--new`), or why `app.key` stopped working: `revoked`, `replaced`, `retired`, `unregistered`, `other_network` |
 | `paired_already` | `app.key` is named: nothing to do; `refused` with `server_key_taken` when `--app` names another app than the key serves (the registry names a key for one live app only: `--new`) |
@@ -334,7 +339,7 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 | `registry` | `waiting` with `network_unreachable` (the network did not answer; the watch goes on); `refused` with `another_account` or `retired` (the record turned against the offer); `timeout` with `not_named` (`--timeout` passed: the registry has not named the key, a managed owner's delay, a cancelled PIN) |
 | `paired` | `app.key` and `app.json` written |
 | `status` | the state: `paired`, `not_needed` (a page alone), `waiting`, `unpaired`, `revoked`, `replaced`, `retired`, `unregistered`, `other_network`, `invalid`, `unknown` |
-| `doctor` | `done` (`ok`) when nothing is left (exit 0); `refused` with the first thing to do (exit 1): `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `registry` (a page's slug free: the deposit, the fees, the way to it; grain.json changed since the registry's version; a key file's transaction that can land no more), `bundle` (`public/` changed since), `upload` (not in the network: never a relay's `fetching` alone), `published`, `access` (public, but should be private), `icon`, `connect_profile`; `waiting` with the first thing waited for when nothing is to do but wait for the network (exit 75): `registry`, `upload`, `access`, `connect_profile` (a transaction a key file here sent, on its way) |
+| `doctor` | `done` (`ok`) when nothing is left (exit 0); `refused` with the first thing to do (exit 1): `relays` (none answered), `project`, `git`, `key`, `key_file`, `app`, `chat_spec`, `dependencies`, `registry` (a page's slug free: the deposit, the fees, the way to it; grain.json changed since the registry's version; a key file's transaction that can land no more), `bundle` (`public/` changed since), `upload` (not in the network: never a relay's `fetching` alone), `published`, `access` (public, but should be private), `icon`, `connect_profile`; `waiting` with the first thing waited for when nothing is to do but wait for the network (exit 75): `registry`, `upload`, `access`, `connect_profile` (a transaction a key file here sent, on its way) |
 | `serve` | `grain dev` serves: `sealed` (a new project's form), `page` (an older `grain init`'s placeholder origin), `hosted` |
 | `check` | `grain dev --check`: `clean`, `warnings`, or the first error's kind (`controls`, `page_error`, `open`, `connect_sheet`, `layout`, `tap`: with `--tap`, a tap after which the page threw or asked for what Saltix refuses); `refused` with `no_browser`; `waiting` with `no_sandbox`; `failed` with `browser` |
 | `lint` | `clean`, `warnings`, `errors` |
@@ -356,7 +361,7 @@ report about the tools. `SALTIX_GRAIN_LOG=off` turns it off; past 1 MiB it moves
 | `profile` | `refused` before anything is signed: `connect_template` (`connect.json` still holds `grain init`'s words), `placeholder_link` |
 | `icon` | `uploaded`, `held`, `none` (the manifest names no icon); `refused` with `file_missing` or the node's reason |
 | `published` | the publish is done: `sealed`, `hosted` or `chat`; `unchanged` when nothing was signed, sent or uploaded |
-| `end` | the exit: `ok` (with `sigint`, `sigterm` or `sighup` for `grain dev` stopped while it served: Ctrl-C, a supervisor, a closed terminal, however it was launched, `npx grain dev` included), `waiting` with `exit_75` (`grain doctor` while it only waits for the network), or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `<step>_<reason>` of a publish that stopped (`upload_busy`, `form_hosted_entry`, `sign_no_salt`, `key_key_file_mode`, …), `icon_<reason>`, `node_refused`, `network_unreachable`, `fs_<code>`, `sigint`, `sigterm` or `sighup` (a run cut short: Ctrl-C, a tool's timeout, a closed terminal), `exit_<n>` or `error`; only `kill -9` leaves a run with no `end` |
+| `end` | the exit: `ok` (with `sigint`, `sigterm` or `sighup` for `grain dev` stopped while it served: Ctrl-C, a supervisor, a closed terminal, however it was launched, `npx grain dev` included), `waiting` with `exit_75` (`grain doctor` while it only waits for the network), or `failed` with `usage`, `app_key_<problem>` (`not_app_key`, `unknown_network`, `malformed`, `bad_slug`), `pairing_<problem>`, a server setup code (`chat_unpaired`, `chat_key_exposed`, …), `<step>_<reason>` of a publish that stopped (`upload_busy`, `form_hosted_entry`, `sign_no_salt`, `key_key_file_mode`, …), `icon_<reason>`, `node_refused`, `network_unreachable` (with the first look finding no relay at all: `NoRelayAnswered`), `relay_given_<reason>` (a relay given that cannot be one: exit 78, its reason the reader's, `form`, `repeated` or `endpoint`), `fs_<code>`, `sigint`, `sigterm` or `sighup` (a run cut short: Ctrl-C, a tool's timeout, a closed terminal), `exit_<n>` or `error`; only `kill -9` leaves a run with no `end` |
 
 ## For the owner: what needs the protocol or Saltix
 

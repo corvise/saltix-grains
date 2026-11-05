@@ -454,10 +454,18 @@ ConnectReply {                       delivered to the page's slot right before t
   key:    [u8; 32]  K: an X25519 key of this request, the confirmation is sealed to
   login:  [u8; 32]  the message of the login that follows (§5)
 }
-ConnectConfirm {                     the page's answer at the reply slot
+ConnectConfirm {                     the page's answer at the reply slot: it took the login
   version: u8       1
   login:   [u8; 32] the message of the login the page took
   at:      u64      Unix ms
+}
+ConnectRefusal {                     the page's answer at the reply slot: it did not take the login (2026-11-04)
+  version: u8       2
+  login:   [u8; 32] the message of the login the page refused
+  at:      u64      Unix ms
+  reason:  u8       0 other, 1 not on the site's list, 2 its time on the list ended, 3 its time begins later,
+                    4 no files, 5 try again in a minute; a number above 5 reads as 0
+  when:    u64      for 2 and 3 the moment, Unix ms; 0 for every other
 }
 ```
 
@@ -470,19 +478,25 @@ ConnectConfirm {                     the page's answer at the reply slot
    `aad = reply sid ‖ P` and delivered with `link_deliver {relay, sid, payload}` on the page's own slot connection,
    which a relay takes from a connection holding a slot (09-relay §10.3 step 5); the page waits for `link_delivered`
    up to 5 seconds, then closes its slot. It carries no account and no address.
-3. The wallet takes a confirmation that opens for `K`, its reply slot and the offer's `P`, of version 1, naming the
-   login it sent, within 10 minutes of its clock. Then, and only then, "Connected".
+3. The wallet takes an answer that opens for `K`, its reply slot and the offer's `P`, of first byte 1 (a
+   confirmation) or 2 (a refusal), naming the login it sent, within 10 minutes of its clock. Then, and only then,
+   "Connected" — or "Refused", with why.
+4. **A refused grant ends its code** (2026-11-04): the page answers the reply with `ConnectRefusal` on the slot's
+   connection, closes the slot, forgets what it kept of it for a reload, and shows a fresh code at once; the reason
+   stays under that code and every code after it until a wallet reads one again. `@saltix/connect` does it in both
+   modes; `@saltix/connect/server` seals the refusal for the page (`confirm` beside `refused` or `unchecked`).
 
-Vectors: `reply`, `confirm` and `refused_confirms` in `vectors/connect-v1.json`.
+Vectors: `reply`, `confirm`, `refused_confirms`, `refusals` and `refused_refusals` in `vectors/connect-v1.json`.
 
 ### 14.3. The wallet's sheet ends, always
 
-From Continue, within 40 seconds at most: **Connected** (the page's confirmation); **Login sent** (delivered, no
-confirmation within 10 seconds: go back to the site; if it does not show you signed in, reload it and scan its new
-code); **Not delivered** (30 seconds and the relay never found the slot: scan the code the page shows now);
-**Failed** (could not sign, no relay, the relay refused). Delivery is tried again every 2.5 seconds while the relay
-finds no slot, for 30 seconds in all. The wallet records the page in its list of connected sites once the grant was
-delivered, confirmed or not.
+From Continue, within 40 seconds at most: **Connected** (the page's confirmation); **Refused** (the page's refusal:
+why, and for a refusal by its list the address to send its owner); **Login sent** (delivered, no answer within 10
+seconds: go back to the site; if it does not show you signed in, reload it and scan its new code); **Not delivered**
+(30 seconds and the relay never found the slot: scan the code the page shows now); **Failed** (could not sign, no
+relay, the relay refused). Delivery is tried again every 2.5 seconds while the relay finds no slot, for 30 seconds in
+all. The wallet records the page in its list of connected sites when the sheet ends Connected or Login sent, never
+Refused; a refused sheet is done with, so the same code read again opens a new one.
 
 ### 14.4. The profile check has one reading
 
@@ -552,7 +566,9 @@ the reply's `relay` and `sid` to the page with the session; the page delivers th
 (`link_deliver`, which the relay takes from a connection holding a slot), waits for `link_delivered` up to 5 seconds,
 and closes its slot. The wallet then says **Connected**
 (§14.3) on the server's word, carried by the page. Without a kept reply (an older wallet), or one for another login,
-the page just closes its slot and the wallet ends in *Login sent*, as before.
+the page just closes its slot and the wallet ends in *Login sent*, as before. A grant refused after it opened is
+told the same way: `ConnectRefusal` with its reason, sealed to the reply that named its login, handed to the page
+beside the refusal (`confirm`); the page delivers it, closes the slot and shows a fresh code.
 
 ### 15.4. Lifetimes and bounds
 

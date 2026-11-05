@@ -199,7 +199,8 @@ test("grain dev logs that it serves, and what form, to the steps' log", async ()
 test("grain dev stopped by Ctrl-C, SIGTERM or a closed terminal ends its log with the stop; a wait cut short by one says it failed", async () => {
   const { spawn } = await import("node:child_process");
   const { readFileSync, existsSync } = await import("node:fs");
-  const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  // Read while grain dev still writes: only the lines ended by a newline are whole; a torn tail is read next time.
+  const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").split("\n").slice(0, -1).filter((l) => l !== "").map((l) => JSON.parse(l)) : []);
   const until = async (what, check) => {
     const end = Date.now() + 10_000;
     while (!check()) {
@@ -265,7 +266,8 @@ test("Ctrl-C on npx grain ends the log with its line: npm's forwarded SIGINT fin
   const { spawn } = await import("node:child_process");
   const { existsSync, readFileSync, symlinkSync } = await import("node:fs");
   const bin = fileURLToPath(new URL("../bin/grain.js", import.meta.url));
-  const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  // Read while grain dev still writes: only the lines ended by a newline are whole; a torn tail is read next time.
+  const lines = (dir) => (existsSync(join(dir, ".grain", "log.jsonl")) ? readFileSync(join(dir, ".grain", "log.jsonl"), "utf8").split("\n").slice(0, -1).filter((l) => l !== "").map((l) => JSON.parse(l)) : []);
   const until = async (what, check) => {
     const end = Date.now() + 20_000;
     while (!check()) {

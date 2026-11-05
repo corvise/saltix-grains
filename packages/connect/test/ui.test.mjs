@@ -195,7 +195,7 @@ test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix
   assert.equal(clock.running, 0, "nothing ticks after it");
 });
 
-test("a refusal stays under its code — the session shows that code again right after — and goes with it", async () => {
+test("a refusal stays under the fresh code that follows it, and every code after, until a wallet reads one again", async () => {
   const doc = new FakeDocument(false);
   const connect = fakeConnect(OFFER);
   const clock = dialogClock();
@@ -205,19 +205,22 @@ test("a refusal stays under its code — the session shows that code again right
   const status = dialog.find(DIALOG_CLASSES.status);
   connect.fire("checking", {});
   assert.equal(status.textContent, WORDS.en.checking);
+  // A refusal ends its code: the session shows a fresh one at once, the reason under it, its countdown running.
   connect.fire("refused", { reason: "time" });
-  connect.fire("offer", OFFER);
-  assert.match(status.textContent, /\(time\)/, "the same code: the reason stays");
+  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:y" });
+  assert.match(status.textContent, /\(time\)/, "the reason stays under the fresh code");
   assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, false, "and its countdown goes on");
-  // Read again and refused again: the reason, not "continue", until a new check.
-  connect.fire("refused", { reason: "not_a_device" });
+  // That code changes by itself: the reason is still the last attempt's.
+  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:x" });
+  assert.match(status.textContent, /\(time\)/);
+  // A wallet reads the code: a new attempt, whatever the last one's reason was.
   connect.fire("seen", OFFER);
-  assert.match(status.textContent, /\(not_a_device\)/);
+  assert.equal(status.textContent, WORDS.en.seen);
   connect.fire("checking", {});
   assert.equal(status.textContent, WORDS.en.checking);
   connect.fire("refused", { reason: "unchecked" });
   connect.fire("offer", { ...OFFER, text: "saltix-connect:1:z" });
-  assert.equal(status.hidden, true, "a new code: the old one's reason is gone");
+  assert.equal(status.textContent, WORDS.en.unchecked, "a check that could not be made says so under the fresh code");
   dialog.find(DIALOG_CLASSES.close).click();
   assert.equal(clock.running, 0);
 });

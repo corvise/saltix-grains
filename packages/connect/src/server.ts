@@ -5,8 +5,9 @@
  * every check of §15.2 — the offer live, the payload opened with `Q`'s secret, the login this offer's and in time, the
  * signature, the signer the account's by its key event log from a node (the page's own check, `verifyGrant`), the
  * site's own rule — with `sid` spent in the same step, once. The confirmation the wallet waits for is sealed here, to
- * the reply the wallet delivered, and handed to the page to deliver (§15.3). Offers live 5 minutes, bounded in number,
- * the oldest dropped first (§15.4).
+ * the reply the wallet delivered, and handed to the page to deliver (§15.3); so is the refusal of a grant refused after
+ * it opened (§14.2, 2026-11-04), so that the wallet says why and the page shows a fresh code. Offers live 5 minutes,
+ * bounded in number, the oldest dropped first (§15.4).
  *
  * Any site runs it beside its own sessions (a cookie or a token it mints after `take` says `connected`, never derived
  * from anything the page sent); a hosted check is never the only way. `packages/connect/example` is a whole site to
@@ -16,7 +17,9 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { type NetworkName, connectOriginOk, fromHex } from "@saltix/grain-server/web";
 import { b64url, equal, fromB64Loose } from "./codec.js";
 import type { Confirmation, Forwarded, ServerOffer, Taken } from "./courier.js";
-import { CONFIRM_VERSION, ConnectError, type ConnectReply, decodePayload, encodeConfirm, loginMessage } from "./grant.js";
+import {
+  CONFIRM_VERSION, ConnectError, type ConnectReply, decodePayload, encodeConfirm, encodeRefusal, loginMessage, makeRefusal, refusalFor,
+} from "./grant.js";
 import type { NodeLike } from "./node.js";
 import { nameOk } from "./offer.js";
 import { boxPublic, openLinkPayload, randomSecret, sealLinkPayload } from "./seal.js";
@@ -76,7 +79,8 @@ export interface ServerConnectOptions {
 }
 
 /** The site's own rule on a login that passed the protocol's checks (§15.2 step 6): null admits the account, a
- *  reason (`not_listed`, `window`…) refuses it, which spends nothing. */
+ *  reason refuses it, which spends nothing. The wallet is told the reasons §14.2 numbers — `not_listed`, `no_files`,
+ *  `window_closed`, `window_not_yet`, `unchecked`, `rate_limited`, `storage` — and any other as a plain refusal. */
 export type Admit = (connection: Connection) => Promise<string | null> | string | null;
 
 export interface ServerConnect {
@@ -151,9 +155,19 @@ export function createServerConnect(o: ServerConnectOptions): ServerConnect {
     return { relay: b64url(held.reply.relay), sid: b64url(held.reply.sid), payload: b64url(payload) };
   };
 
-  const refused = (reason: string, started: number): Taken => {
-    telemetry("connect_server_take", { outcome: "refused", reason, ms: now() - started });
-    return { outcome: "refused", reason };
+  /** The refusal the wallet is told (§14.2), sealed to the reply that named `login`: none without one, nor for what is
+   *  told to nobody (an offer gone, `spent`). */
+  const sealRefusal = (held: Held, login: Uint8Array, reason: string): Confirmation | null => {
+    const told = refusalFor(reason);
+    if (!told || !held.reply || !equal(held.reply.login, login)) return null;
+    const refusal = encodeRefusal(makeRefusal(login, BigInt(now()), told.reason, told.when));
+    const payload = sealLinkPayload(held.reply.key, held.reply.sid, held.keys.page, refusal);
+    return { relay: b64url(held.reply.relay), sid: b64url(held.reply.sid), payload: b64url(payload) };
+  };
+
+  const refused = (reason: string, started: number, told: Confirmation | null = null): Taken => {
+    telemetry("connect_server_take", { outcome: "refused", reason, told: told !== null, ms: now() - started });
+    return told ? { outcome: "refused", reason, confirm: told } : { outcome: "refused", reason };
   };
 
   return {
@@ -210,14 +224,16 @@ export function createServerConnect(o: ServerConnectOptions): ServerConnect {
       // Steps 3–5: the page's own check of a grant, against this offer's session and the server's network: the login's
       // network, origin, slot and key, its time, the signature, and the signer the account's by the node's log.
       const session = { network: genesis, origin: o.origin, sid, page: held.keys.page };
+      const login = loginMessage(decoded.grant.login);
       let checked: Connection;
       try {
         checked = await verifyGrant(decoded.grant, decoded.bytes, session, { node: o.node, network: o.network, genesis: o.genesis, now, retryMs: o.retryMs });
       } catch (e) {
-        if (e instanceof ConnectError) return refused(e.reason, started);
+        if (e instanceof ConnectError) return refused(e.reason, started, sealRefusal(held, login, e.reason));
         if (e instanceof UncheckedError) {
-          telemetry("connect_server_take", { outcome: "unchecked", kind: e.kind, ms: now() - started });
-          return { outcome: "unchecked", kind: e.kind };
+          const told = sealRefusal(held, login, "unchecked");
+          telemetry("connect_server_take", { outcome: "unchecked", kind: e.kind, told: told !== null, ms: now() - started });
+          return told ? { outcome: "unchecked", kind: e.kind, confirm: told } : { outcome: "unchecked", kind: e.kind };
         }
         throw e;
       }
@@ -226,13 +242,13 @@ export function createServerConnect(o: ServerConnectOptions): ServerConnect {
       // Step 6: the site's own rule.
       if (admit) {
         const why = await admit(connection);
-        if (why) return refused(why, started);
+        if (why) return refused(why, started, sealRefusal(held, login, why));
       }
       // Step 7: spent in the same step that takes the grant. The checks waited on the node: the offer may have gone
       // or been taken by another grant meanwhile.
       if (offers.get(key) !== held) return refused("offer", started);
       if (held.taken) return refused("spent", started);
-      held.taken = loginMessage(decoded.grant.login);
+      held.taken = login;
       const confirm = sealConfirm(held);
       telemetry("connect_server_take", { outcome: "connected", signer: connection.signer, managed: connection.managed, confirm: confirm !== null, ms: now() - started });
       return { outcome: "connected", connection, confirm };
