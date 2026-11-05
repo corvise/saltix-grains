@@ -172,8 +172,8 @@ export class RelayGateways implements WalletInterface {
       const relay = relayName(endpoint);
       let answer;
       const deadline = new AbortController();
+      // Not unref'd: a call in flight ends at its deadline whatever else the process holds.
       const timer = setTimeout(() => deadline.abort(Object.assign(new Error("the relay did not answer in time"), { code: "ETIMEDOUT" })), CALL_DEADLINE_MS);
-      timer.unref?.();
       try {
         answer = await this.request(endpoint, "POST", "/rpc", { "content-type": "application/json" }, body, { timeoutMs: CALL_TIMEOUT_MS, signal: deadline.signal });
       } catch (e) {

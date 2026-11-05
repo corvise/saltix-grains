@@ -77,7 +77,6 @@ export async function relayRequest(endpoint: RelayEndpoint, method: string, path
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(Object.assign(new Error("the relay did not answer in time"), { code: "ETIMEDOUT" })), timeoutMs);
-        timer.unref?.();
         tls.once("secureConnect", () => { clearTimeout(timer); resolve(); });
         tls.once("error", (e) => { clearTimeout(timer); reject(e); });
       });

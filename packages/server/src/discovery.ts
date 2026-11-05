@@ -624,8 +624,9 @@ export class RelayFinder {
   private async post(endpoint: RelayEndpoint, method: string, params: object, cancel?: AbortSignal): Promise<{ status: number; body: Uint8Array }> {
     const body = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }));
     const deadline = new AbortController();
+    // The deadline keeps the process alive until it fires: a request in flight is never left pending because nothing
+    // else is (unref'd, it did not fire where the connection held no handle, and a look never ended).
     const timer = setTimeout(() => deadline.abort(lateError()), this.probeMs);
-    timer.unref?.();
     const stop = () => deadline.abort(lateError());
     cancel?.addEventListener("abort", stop, { once: true });
     if (cancel?.aborted) stop();
