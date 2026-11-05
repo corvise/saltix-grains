@@ -171,6 +171,24 @@ npx grain publish                  # seal, check, upload into the network, then 
 - **With `app.key` paired** (`grain pair`), the bundle goes up before the owner signs, on the paired key's statement,
   and the network holds it for a day: the owner scans the QR code whenever they like. Without it (an app's first
   version), it goes up once the registry names the version, so the command keeps running until the owner signed.
+- **An update reaches the owner in the app itself** (2026-11-05): with `app.key` paired, `grain publish` leaves
+  `.grain/proposal.json` for the app's server running from this project (`npm start`), and the server proposes the
+  update to the team in the app's console — the owner's Saltix shows it under **Awaiting you** with a notification,
+  and the owner taps **Review and approve**; no QR code to scan, so the developer need not stand beside the owner's
+  phone. `grain publish` says what the server answered (proposed to the owner; proposed, but the owner's console has not
+  heard from the app yet — the owner opens the app once, the server tries again every minute; no server runs here) and
+  shows the QR code too, the way that always works. A server started later proposes it by itself.
+- **What the owner set in Saltix stays** (2026-11-05). The icon, the name and the description are the owner's to set
+  in Saltix (My apps → the app → Its icon, Details); the page is yours. `grain publish` keeps them as the registry holds
+  them where your project did not change them since its last publish from here (`signed.json`), writes them into
+  `grain.json` and says so; without that record it keeps an icon the registry holds. You change them by changing
+  `grain.json` (`grain icon` for the icon): then yours win, and the output says whose they replace. Before this, every
+  publish of the page sent `grain.json`'s icon over the one the owner set, and the logo "kept flying off".
+- **The version is the registry's.** `grain publish` sends the registry's version + 1 when it runs; the owner's own
+  change in Saltix (the icon, the details) makes a version too, so the number may move on before the owner approves.
+  The proposal is the content: the server renumbers it, Saltix 0.2.16 and later approve the content as the next version
+  (the sheet says which), and `grain publish` waits for the registry to hold the content, whatever its number, then
+  writes that number into grain.json.
 - **The sources** a manifest names are the SDK's to fill in, by the network's protocol version: [where the bundle
   goes](#where-the-bundle-goes).
 - **`--no-wait`** returns once the QR code is shown (also `.grain/publish.html`); `grain publish` again finishes (the
@@ -186,8 +204,9 @@ npx grain publish                  # seal, check, upload into the network, then 
   (the account that scans the code owns the app). A key file signs only when `--key` names it, or by itself for an app
   the registry already names its account as the owner of; `--wallet` always asks Saltix. `grain publish` prints the
   account that will own the app before anything is signed ([No phone, test network](#no-phone-test-network)). A
-  program can propose the same update in the console instead: `chat.proposeUpdate(next, { bundle })` puts the bundle
-  into the network and sends **Review and approve** to the owner.
+  program can propose any update in the console itself: `chat.proposeUpdate(next, { bundle })` puts the bundle into
+  the network and sends **Review and approve** to the owner (what the template's server does with `grain publish`'s
+  proposal file, `ChatServerOptions.proposals`).
 
 **Hosted, if you want it.** Your HTTPS site serves `public/` and the signed manifest at `/.well-known/saltix-grain`
 ([README](../README.md#the-command-line)), and `grain publish --hosted` registers it; it can change the page at any

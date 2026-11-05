@@ -12,6 +12,7 @@ import {
   fileChatStore, ROLES, CHAT_UNASKED_PER_DAY, CHAT_UNASKED_TEAM_PER_DAY, REPORT_FOLD_MS, scrubSecrets, errorFacts, errorFingerprint,
   reportCard, reportStatus, chatMessageBoundsProblem, encodeChatFrame, signChatMessage, MAX_FRAME_BYTES, onTeam, teamMemberOf,
   needsTeamController, readPublishText, publishLink, teamOnly, UNOWNED, assertCardStandard, lintCard, CARD_LIMITS,
+  readProposal, writeProposal, proposalHash, signManifest,
 } from "../dist/index.js";
 import { createDevRelay } from "../../../scripts/dev-relay.mjs";
 import { createDevRegistry } from "../dist/dev.js";
@@ -343,6 +344,79 @@ test("writing to the team: by role, skipping who cannot be reached, within 100 a
     await assert.rejects(server.notifyTeam(card().text("x"), { roles: ["admin"] }), /roles/);
   } finally {
     for (const w of [owner, viewer, stranger]) w.client.close();
+    await close();
+  }
+});
+
+test("the proposal grain publish leaves for the server is proposed in the owner's console, renumbered when the registry moved on, and seen landed", async () => {
+  // The developer's `grain publish` writes .grain/proposal.json (24-app-studio §4): the running server proposes it to the
+  // team — the owner approves it under Awaiting you, no QR code — and writes back what became of it.
+  const fake = teamChain();
+  const t = Date.now();
+  const path = join(scratch("proposal-"), ".grain", "proposal.json");
+  const { relay, server, events, close } = await studio(fake, { proposals: path });
+  server.command("idle", () => card().text("idle"));
+  const owner = await wallet(relay, 0x78, server.address, [serverKey]);
+  const dev = await wallet(relay, 0x7b, server.address, [serverKey]);
+  const until = async (what, check, ms = 8_000) => {
+    const end = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+      await sleep(100);
+    }
+  };
+  const next = {
+    ...manifest().manifest, version: 2, permissions: 0,
+    entry: { sealed: { bundle: "88".repeat(32), size: 4096, sources: [], start: "index.html", connect: [] } },
+  };
+  try {
+    await ask(owner, proved(owner, OWNER, t));
+    await ask(dev, proved(dev, DEV, t));
+    // No file: nothing is proposed.
+    await sleep(300);
+    assert.equal(unasked(owner).length, 0);
+    // grain publish writes the proposal: within a few seconds the owner's console has the card, and the file says so.
+    writeProposal(path, { slug: "access", version: 2, manifest: next, link: publishLink(next), at: new Date().toISOString(), from: "grain publish" });
+    await until("the owner's card", () => unasked(owner).length === 1);
+    const first = unasked(owner)[0];
+    assert.equal(first.message.actions[0].label, "Review the update");
+    assert.deepEqual(readPublishText(first.message.actions[0].kind.publish.manifest), { ...next, ...UNOWNED });
+    await until("the file written back", () => readProposal(path)?.proposed_at != null);
+    let p = readProposal(path);
+    assert.deepEqual([p.version, p.proposed_version, p.owner, p.sent, p.unreachable, p.error, p.landed_at ?? null], [2, 2, true, 2, 0, null, null]);
+    assert.equal(p.proposed_hash, proposalHash(next));
+    // Touched again with nothing new: the owner is not told twice.
+    writeProposal(path, { ...p, at: new Date().toISOString() });
+    await sleep(2_600);
+    assert.equal(unasked(owner).length, 1, "the same content and version, already with the owner: proposed once");
+    // The registry moved on meanwhile (the owner changed the icon in Saltix: v2 with other content): the proposal is
+    // the content, so it goes again as v3.
+    fake.state.grain.version = 2;
+    fake.state.grain.manifest = signManifest({ ...manifest().manifest, version: 2, icon: "22".repeat(32) }, OWNER);
+    fake.block();
+    writeProposal(path, { ...readProposal(path), at: new Date().toISOString() });
+    await until("the renumbered card", () => unasked(owner).length === 2);
+    assert.deepEqual(readPublishText(unasked(owner)[1].message.actions[0].kind.publish.manifest), { ...next, ...UNOWNED, version: 3 });
+    await until("v3 in the file", () => readProposal(path)?.proposed_version === 3);
+    p = readProposal(path);
+    assert.deepEqual([p.version, p.proposed_version, p.owner], [3, 3, true]);
+    assert.equal(events.filter((e) => e.event === "chat_update_proposed").length, 2);
+    // The owner approved it: the registry holds the content, as whatever version the wallet gave it. Landed.
+    fake.state.grain.version = 3;
+    fake.state.grain.manifest = signManifest({ ...next, version: 3, owner: manifest().manifest.owner, owner_key: ownerKey }, OWNER);
+    fake.block();
+    writeProposal(path, { ...readProposal(path), at: new Date().toISOString() });
+    await until("landed", () => readProposal(path)?.landed_at != null);
+    p = readProposal(path);
+    assert.deepEqual([p.landed_version, p.error, unasked(owner).length], [3, null, 2]);
+    assert.ok(events.some((e) => e.event === "chat_proposal_landed" && e.meta.version === 3));
+    // Landed, the file is nobody's order any more: touched, nothing goes.
+    writeProposal(path, { ...readProposal(path), at: new Date().toISOString() });
+    await sleep(2_600);
+    assert.equal(unasked(owner).length, 2);
+  } finally {
+    owner.client.close();
+    dev.client.close();
     await close();
   }
 });

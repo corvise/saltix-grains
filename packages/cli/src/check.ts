@@ -19,6 +19,9 @@ import { Browser, findBrowser } from "./browser.js";
 import { simulatorFor, serve } from "./dev.js";
 import { type DevLog, GRAIN_DIR } from "./devlog.js";
 
+/** How many looks a page gets to come to rest around a tap (`steady`): 10, about 1.6 s with their spacing. */
+const STEADY_LOOKS = 10;
+
 /** Where the check writes its screenshots and report, in the project. */
 export const CHECK_DIR = join(GRAIN_DIR, "check");
 
@@ -109,6 +112,9 @@ export interface TapSeen {
   blocked: string[];
   /** Whether the screen looks other than before the tap. */
   changed: boolean;
+  /** Whether the page had come to rest before the tap and after it: a page still moving at either look cannot be told
+   *  unchanged (`changed` is then true), and `tap-N-before.png` beside `tap-N.png` shows what moved. */
+  rested?: { before: boolean; after: boolean };
 }
 
 /** The refusal a user's own "no" is: never a fault of the page. */
@@ -439,12 +445,14 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
     const png = Buffer.from(data, "base64");
     return { png, pixels: PNG.sync.read(png).data };
   };
-  // The page as it rests: looked at until two looks agree (a hover's or a tap's effect drawn), at most 5 times; a page
-  // that never rests (an animation) cannot be told unchanged, and is not.
+  // The page as it rests: looked at until two looks agree (a hover's or a tap's effect drawn), the looks spaced wider
+  // each time (80 ms, then up to 240) for about 1.6 s in all — a browser on a busy machine (a CI runner, a test suite
+  // beside it) draws a transition in fits, and an impatient look took a button that changed nothing for one that did
+  // (2026-11-05). A page that never rests (an animation) cannot be told unchanged, and is not.
   const steady = async () => {
     let last = await snap();
-    for (let i = 0; i < 5; i++) {
-      await sleep(80);
+    for (let i = 0; i < STEADY_LOOKS; i++) {
+      await sleep(Math.min(80 + i * 40, 240));
       const next = await snap();
       if (next.pixels.equals(last.pixels)) return { ...next, rests: true };
       last = next;
@@ -480,13 +488,15 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
       await sleep(TAP_SETTLE_MS);
       const asked = await evaluate<TapSeen["asked"]>(`window.saltixSimulator.calls(${mark.calls})`);
       const after = await steady();
-      // What each tap left on the page, for a person to look at.
+      const changed = !look.rests || !after.rests || !after.pixels.equals(look.pixels);
+      // What each tap left on the page, for a person to look at; and what it found, when it changed, to see what moved.
       writeFileSync(join(out, `tap-${seen.length + 1}.png`), after.png);
+      if (changed) writeFileSync(join(out, `tap-${seen.length + 1}-before.png`), look.png);
       seen.push({
         name, ...isLater, state: "tapped",
         thrown: errors.slice(mark.errors).filter((e) => e.where === "page").map((e) => e.text),
         asked, dialogs: dialogs.length - mark.dialogs, blocked: blocked.slice(mark.blocked),
-        changed: !look.rests || !after.rests || !after.pixels.equals(look.pixels),
+        changed, rested: { before: look.rests, after: after.rests },
       });
       // What the tap brought up ("Clear history" once there is one) is tapped in its turn, within the same bounds.
       const brought = await evaluate<{ names: string[]; over: number } | undefined>("window.saltixSimulator.more?.()");

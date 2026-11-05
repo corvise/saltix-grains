@@ -2,8 +2,34 @@
 
 ## [Unreleased]
 
+### Added
+
+- cli, server: **an update reaches the owner in the app, no QR code** (the owner, 2026-11-05: "the developer and the
+  owner are different people; how does the developer scan a code on the owner's phone?") — with `app.key` paired,
+  `grain publish` leaves `.grain/proposal.json` (`PROPOSAL_FILE`) for the app's server running from the project;
+  `ChatServer` started with `proposals` (the template's server passes it) proposes it to the team in the app's console
+  when it starts and whenever the file changes, raises its version to the registry's + 1 where the registry moved on,
+  tries again every minute while the owner's console has not got it, and writes back what became of it; `grain publish`
+  says what the server answered (proposed to the owner; the owner's console not reached yet; no server here) and shows
+  the QR code beside it. The owner approves it in Saltix under **Awaiting you**.
+
 ### Fixed
 
+- cli: **what the owner set in Saltix stays** (the owner, 2026-11-05: "the logo keeps flying off" — every `grain
+  publish` sent grain.json's icon over the one set on the phone; v4 of his app replaced the icon he had set at v3) —
+  the icon, the name and the description the registry holds are kept where the project did not change them since its
+  last publish from here (`signed.json`), written into grain.json and said; without that record an icon the registry
+  holds is kept. A field the project changed wins, and where the owner changed it too the output says whose it replaces
+  (`ownersFieldsKept`). Mutation-checked: keeping removed fails the test.
+- cli: **`grain dev --check --tap` waits for the page to rest with more patience** (about 1.6 s of looks, spaced wider
+  each time, instead of 0.4 s): on a busy machine a browser draws a transition in fits, and a button that changed
+  nothing read as one that did.
+- cli: **a publish is landed by its content, not its number** (the owner, 2026-11-05: approved by QR code, "the registry
+  still shows the old version") — the registry had moved on between `grain publish` making its link (v3) and the owner
+  scanning it: the owner's own icon change in Saltix made v3 meanwhile, the stale link was refused ("another manifest
+  with this version") and the command waited for a v3 that could not come. Now the link proposes the content and the
+  wallet sets the number (12-grains §10): `grain publish` waits for the registry to hold its content at its version or
+  above, says the number the registry gave it and writes it into grain.json. `sameContent` moved into the SDK.
 - cli: **`grain faucet --wait` grants until the key file's account can pay the first publish** (the owner's run of
   2026-11-05 on the test network: one grant of 10 SALT left the account 5 640 base units short of a deposit of 10 SALT
   and the fees, `grain publish --key` refused, and the next grant was refused for five minutes — the path the doctor

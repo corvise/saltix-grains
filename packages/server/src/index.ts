@@ -36,6 +36,7 @@ export * from "./member.js";
 export * from "./stats.js";
 export * from "./publish.js";
 export * from "./publish-link.js";
+export * from "./proposals.js";
 export * from "./chat.js";
 export * from "./upload.js";
 export * from "./named.js";

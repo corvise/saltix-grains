@@ -102,7 +102,9 @@ down), which a restart may fix.
 command names it (`--key owner.key`) or for an app it registered; an app made in Saltix has its owner on the phone and
 never uses it. On the main network a key file signs nothing: `grain publish --key`, `retire`, `rate`, `access`,
 `profile`, `bind`, `configure` and `app-key make` are refused there before anything is sent, and the owner's Saltix
-signs from the QR code (Saltix 12-grains §10).
+signs from the QR code, or from the app's console where the app's server runs from the project (`grain publish` leaves
+`.grain/proposal.json`, the server proposes it, the owner approves it under **Awaiting you**; Saltix 12-grains §10,
+24-app-studio §4).
 
 `grain dev` listens on this computer alone (`127.0.0.1`; the Android emulator reaches it at `10.0.2.2`, the host's
 loopback): it signs with `owner.key` and takes writes to its development registry. `--host 0.0.0.0` on purpose, for a

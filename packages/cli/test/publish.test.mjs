@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519";
-import { AppKey, RpcError, accountId, fromHex, namedHash, readPublishLink, signManifest, toHex } from "@saltix/grain-server";
+import { AppKey, RpcError, accountId, fromHex, namedHash, readProposal, readPublishLink, signManifest, toHex, writeProposal } from "@saltix/grain-server";
 import { createDevRegistry } from "@saltix/grain-server/dev";
 import { DevLog, reasonOf } from "../dist/devlog.js";
 import { BLOB_WORDS, PublishError, accessDecided, formOf, nodeNow, publishApp, readiness, sameContent, sealedAsSent, whoOpens } from "../dist/publish-flow.js";
@@ -89,7 +89,7 @@ function run(dir, registry, over = {}) {
   const done = publishApp({
     dir, manifestPath: join(dir, "grain.json"), node: registry, flags: "", log, hosted: false, wallet: false, keyPath: join(dir, "owner.key"), keyNamed: false,
     wait: true, timeoutMs: 15_000, out: join(dir, "signed.json"), signing: { node: registry, validFor: 600 }, tty: false,
-    print: (l) => lines.push(l), pollMs: 20,
+    print: (l) => lines.push(l), pollMs: 20, proposalPickupMs: 400,
     now: () => (clock = Math.max(clock, Date.now())), pause: async (ms) => { clock = Math.max(clock, Date.now()) + ms; }, ...over,
   });
   return { lines, done };
@@ -149,14 +149,124 @@ test("a page goes into the network before the owner signs, on the paired key's w
   const state = JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8"));
   assert.ok(state.uploaded_at && state.pending_until && state.link_shown_at && state.published_at && state.icon_uploaded_at);
   assert.deepEqual(steps(dir), [
-    "network:ok:protocol_1", "bundle:ok:built", "sources:ok:relays", "version:ok:raised", "signer:ok:wallet_no_key", "upload:ok:pending", "link:waiting:shown",
-    "registry:ok:published", "icon:ok:uploaded", "published:ok:sealed",
+    "network:ok:protocol_1", "bundle:ok:built", "sources:ok:relays", "version:ok:raised", "signer:ok:wallet_no_key", "upload:ok:pending",
+    "proposal:waiting:written", "proposal:waiting:no_server", "link:waiting:shown", "registry:ok:published", "icon:ok:uploaded", "published:ok:sealed",
   ]);
   assertNoSecrets(dir, lines);
   // grain doctor: published, nothing left.
   const d = await doctor(dir, registry);
   assert.equal(d.publish, "published");
   assert.deepEqual(d.findings.filter((f) => !f.ok).map((f) => f.what), ["connect profile"]);
+});
+
+test("an update reaches the owner through the app's running server: the proposal left for it, its answer said; the registry's version taken when the owner's Saltix renumbered it", async () => {
+  // The developer is not the owner (24-app-studio §4, Awaiting you): grain publish leaves .grain/proposal.json, the
+  // server proposes it in the owner's console and writes back what became of it; this is what the owner's phone shows.
+  const registry = node();
+  const dir = project();
+  const path = join(dir, ".grain", "proposal.json");
+  // The app's server, as a running ChatServer with `proposals` would answer: picked up, the owner's console got it.
+  const server = setInterval(() => {
+    const p = readProposal(path);
+    if (p && !p.proposed_at) writeProposal(path, { ...p, proposed_at: new Date().toISOString(), proposed_version: p.version, proposed_hash: "x".repeat(64), owner: true, sent: 2, unreachable: 0, error: null });
+  }, 50);
+  try {
+    const { lines, done } = run(dir, registry, { proposalPickupMs: 3_000 });
+    const link = await linkIn(lines);
+    const m = readPublishLink(link);
+    assert.equal(m.version, 2);
+    const said = await until("the proposal's words", () => lines.find((l) => l.startsWith("Proposed to the owner")));
+    assert.match(said, /^Proposed to the owner in the app's console as v2: Saltix shows it under Awaiting you \(a notification too\); the owner taps Review and approve\. Or the owner scans the QR code below\.$/);
+    assert.ok(lines.indexOf(said) < lines.findIndex((l) => l.startsWith("Publish space-game v2: scan the QR code")), "the console's way first, the QR code after");
+    const left = readProposal(path);
+    assert.deepEqual([left.slug, left.version, left.from, left.owner, left.link], ["space-game", 2, "grain publish", true, link]);
+    assert.deepEqual({ ...left.manifest, owner: m.owner, owner_key: m.owner_key }, m, "the content, the owner's fields aside (the link zeroes them)");
+    // Meanwhile the owner changed the icon in Saltix: the registry moved to v2 with other content. The owner's Saltix then
+    // approves the proposal's content as v3 (12-grains §10: the content is proposed, the wallet sets the number).
+    const owner = toHex(ed25519.getPublicKey(OWNER));
+    const own = (x) => signManifest({ ...x, owner: toHex(accountId(fromHex(owner, 32))), owner_key: { ed25519: owner } }, OWNER);
+    registry.publish(own({ ...registry.grain.manifest.manifest, version: 2, icon: "55".repeat(32) }));
+    await new Promise((r) => setTimeout(r, 200));
+    registry.publish(own({ ...m, version: 3 }));
+    assert.equal(await done, 0, lines.join("\n"));
+    assert.equal(registry.grain.version, 3);
+    assert.match(lines.join("\n"), /^version: the registry took it as v3 \(this command said v2; the registry had moved on\); grain\.json says v3 now$/m);
+    assert.equal(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).version, 3);
+    assert.equal(JSON.parse(readFileSync(join(dir, "signed.json"), "utf8")).manifest.version, 3);
+    assert.equal(JSON.parse(readFileSync(join(dir, ".grain", "publish.json"), "utf8")).version, 3);
+    assert.ok(steps(dir).includes("proposal:ok:owner_console") && steps(dir).includes("version:ok:taken_as_registry"), steps(dir).join(" "));
+    assert.match(lines.at(-2), /space-game v3 is published, its bundle in the network/);
+    assertNoSecrets(dir, lines);
+    // doctor: published as it is (the registry's content is grain.json's, at the registry's version).
+    const d = await doctor(dir, registry);
+    assert.equal(d.publish, "published");
+    // The server had not got it in time: said so, the QR code the way; the owner's console not reached: said so.
+    clearInterval(server);
+    const dir2 = project();
+    writeFileSync(join(dir2, "public", "index.html"), "<!doctype html><title>Space 2</title><script src=\"js/game.js\"></script>");
+    const slow = run(dir2, registry, { proposalPickupMs: 300 });
+    await linkIn(slow.lines);
+    assert.ok(slow.lines.some((l) => /^No server of this app answered here within 0 s \(npm start runs it in this project\): the owner scans the QR code below; a server started later proposes it in the owner's console by itself \(\.grain\/proposal\.json\)\.$/.test(l)), slow.lines.join("\n"));
+    const p2 = readProposal(join(dir2, ".grain", "proposal.json"));
+    assert.equal(p2.version, 4, "left for a server started later");
+    registry.publish(own({ ...readPublishLink(await linkIn(slow.lines)) }));
+    assert.equal(await slow.done, 0);
+  } finally {
+    clearInterval(server);
+  }
+});
+
+test("what the owner set in Saltix stays: the icon the registry holds is kept over grain.json's, the name the owner changed too; a project that changed its own wins", async () => {
+  // The owner set an icon in Saltix (v2 of the app, its blob in the network); the project's grain.json names its own
+  // icon.png and has no record of a publish from here: the owner's icon is kept, said, and written into grain.json (the
+  // owner, 2026-11-05: "the logo keeps flying off" after every publish).
+  const registry = node();
+  const owner = toHex(ed25519.getPublicKey(OWNER));
+  const own = (x) => signManifest({ ...x, owner: toHex(accountId(fromHex(owner, 32))), owner_key: { ed25519: owner } }, OWNER);
+  const theirs = "e1".repeat(32);
+  registry.blobs.set(theirs, { kind: "grain_icon", bytes: new Uint8Array([1, 2, 3]), pendingUntil: null });
+  registry.publish(own({ ...registry.grain.manifest.manifest, version: 2, icon: theirs, name: { en: "Space", ru: "Космос" }, description: { en: "A game" } }));
+  const dir = project();
+  const first = run(dir, registry);
+  const link = await linkIn(first.lines);
+  const m = readPublishLink(link);
+  assert.equal(m.icon, theirs, "the owner's icon, not icon.png's");
+  assert.equal(m.version, 3);
+  assert.match(first.lines.join("\n"), /^icon: the one set in Saltix kept \(e1e1e1e1e1e1…\); grain\.json names it now\. An icon file here is not it: grain icon <picture> --out icon\.png replaces it on purpose$/m);
+  assert.equal(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).icon, theirs, "grain.json says the owner's icon now");
+  wallet(registry, link);
+  assert.equal(await first.done, 0, first.lines.join("\n"));
+  assert.equal(registry.grain.manifest.manifest.icon, theirs);
+  assert.match(first.lines.join("\n"), /^icon: the network holds it$/m);
+  assert.ok(steps(dir).includes("owner_fields:ok:kept_icon"), steps(dir).join(" "));
+  // The owner then renames the app in Saltix (v4); the project, unchanged since its publish (signed.json), publishes a
+  // new page: the owner's name is kept, grain.json says it; the icon stays theirs with nothing said (it is grain.json's now).
+  registry.publish(own({ ...registry.grain.manifest.manifest, version: 4, name: { en: "Space II", ru: "Космос II" } }));
+  writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space II</title><script src=\"js/game.js\"></script>");
+  const second = run(dir, registry);
+  const link2 = await linkIn(second.lines);
+  const m2 = readPublishLink(link2);
+  assert.deepEqual([m2.version, m2.name, m2.icon], [5, { en: "Space II", ru: "Космос II" }, theirs]);
+  assert.match(second.lines.join("\n"), /^name: the one set in Saltix kept \(\{"en":"Space II","ru":"Космос II"\}\); grain\.json says it now\. To change it, change grain\.json and publish again$/m);
+  assert.doesNotMatch(second.lines.join("\n"), /^icon: the one set in Saltix kept/m);
+  wallet(registry, link2);
+  assert.equal(await second.done, 0, second.lines.join("\n"));
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).name, { en: "Space II", ru: "Космос II" });
+  // The project changes its icon on purpose (grain icon: grain.json names icon.png again) while the owner set yet
+  // another in Saltix: the project's wins, and the output says whose it replaces.
+  registry.blobs.set("e2".repeat(32), { kind: "grain_icon", bytes: new Uint8Array([4, 5, 6]), pendingUntil: null });
+  registry.publish(own({ ...registry.grain.manifest.manifest, version: 6, icon: "e2".repeat(32) }));
+  const g = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8"));
+  writeFileSync(join(dir, "grain.json"), JSON.stringify({ ...g, icon: ICON.hash }, null, 2));
+  const third = run(dir, registry);
+  const m3 = readPublishLink(await linkIn(third.lines));
+  assert.deepEqual([m3.version, m3.icon], [7, ICON.hash]);
+  assert.match(third.lines.join("\n"), /^icon: grain\.json's replaces the one set in Saltix since the last publish from here \(both changed\); set it in Saltix again if that one was meant$/m);
+  assert.ok(steps(dir).includes("owner_fields:ok:replaced_icon"));
+  wallet(registry, readPublishLink(await linkIn(third.lines)) && (await linkIn(third.lines)));
+  assert.equal(await third.done, 0, third.lines.join("\n"));
+  assert.equal(registry.grain.manifest.manifest.icon, ICON.hash);
+  assertNoSecrets(dir, third.lines);
 });
 
 test("without a paired key the owner signs first, and the bundle goes up once the registry names it", async () => {

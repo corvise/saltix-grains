@@ -37,7 +37,7 @@ npx grain status                 # not_needed: a page alone has nothing to pair
 npx grain dev --check --tap      # write public/, then this; it exits: the Connect sheet, every screen, both themes, each button tapped
 npx grain icon --monogram <L>    # or grain icon <picture> --out icon.png
 npx grain lint && npx grain doctor   # what is left; before the first publish, what registering the slug takes
-npx grain publish                # says who will own the app; the owner's Saltix signs from a QR code
+npx grain publish                # says who will own the app; the owner approves in Saltix (Awaiting you, or a QR code)
 ```
 
 **`npx grain dev` without `--check` is a server**: it serves the simulator until Ctrl-C, for a person to look at in a
@@ -172,6 +172,15 @@ it as every node does, and uploads it from this computer straight into the netwo
 [§7.3](docs/protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)), says which account will own
 the app, then shows the QR code the owner's Saltix signs the version from, waits for the registry, and uploads the icon.
 With `grain pair`'s `app.key` the bundle goes up before the owner signs (held pending for a day); without one, after.
+**An update reaches the owner in the app** (2026-11-05): with `app.key`, `grain publish` leaves `.grain/proposal.json`
+for the app's server running from this project (`npm start`), which proposes it in the app's console — the owner approves
+it in Saltix under **Awaiting you**, no QR code, so the owner need not be beside you; `grain publish` says what the
+server answered, and the QR code stays the way that always works. The version is the registry's: the owner's own change
+in Saltix (the icon, the details) moves the number on, the proposal is the content, and `grain publish` waits for the
+registry to hold the content, then writes the registry's number into `grain.json` — never raise `version` by hand.
+**The icon, the name and the description are the owner's**, set in Saltix: `grain publish` keeps what the registry holds
+where the project did not change them since its last publish from here, and writes them into `grain.json`; change them
+only on purpose (`grain icon`, or `grain.json`), never put them back from an old copy.
 Never set up hosting, a CDN, a domain or a certificate for a page, and never ask the user for one; never pass
 `--sources` unless the user hosts the bundle on purpose. `grain publish --no-wait` returns once the QR code is shown:
 show it (or `.grain/publish.html`) to the user, then run `grain publish` again after they confirmed; it finishes what is

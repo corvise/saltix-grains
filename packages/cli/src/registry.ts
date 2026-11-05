@@ -3,7 +3,7 @@
 // what every signed registry call shares.
 import {
   type Manifest, type SignedManifest, type GrainCall, type NodeLike, nodeCall, grainGet, grainQuote, signGrainTx, minimumFee, callAmount, accountId, toHex,
-  fromHex, type RegisteredGrain, sameManifest,
+  fromHex, type RegisteredGrain, sameContent, sameManifest,
 } from "@saltix/grain-server";
 import { publishLink } from "./publish.js";
 import { publicKeyOf } from "./project.js";
@@ -156,8 +156,11 @@ export async function walletLink(m: Manifest, node: NodeLike): Promise<string> {
 /** The signed manifest once the registry holds `m` as a wallet published it (any owner key); null after `ms`. */
 export async function waitForPublished(node: NodeLike, m: Manifest, ms: number, every?: number, onWait?: () => void): Promise<SignedManifest | null> {
   let found: SignedManifest | null = null;
+  // The content, whatever version the owner's Saltix gave it (12-grains §10: a publishing link proposes the content, the
+  // wallet sets the number where the registry moved on), never only the number: the registry at or above our version
+  // with other content is somebody else's version, waited past.
   await waitFor(node, m.slug, (g) => {
-    if (g?.manifest && g.retired === null && sameManifest(g.manifest.manifest, m)) found = g.manifest;
+    if (g?.manifest && g.retired === null && g.manifest.manifest.version >= m.version && sameContent(g.manifest.manifest, m)) found = g.manifest;
     return found !== null;
   }, ms, every, onWait);
   return found;

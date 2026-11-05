@@ -306,3 +306,22 @@ export async function grainQuote(node: NodeLike, slug: string): Promise<{ grain:
 export function sameManifest(a: Manifest, b: Manifest): boolean {
   return toHex(encodeManifest({ ...a, ...UNOWNED })) === toHex(encodeManifest({ ...b, ...UNOWNED }));
 }
+
+/**
+ * Whether the registry's manifest says what ours says: the same content but for the owner (a wallet fills in its own),
+ * the version (the registry's number may move on: a wallet's own change of the icon or the details makes a version too,
+ * and a publishing link's version is a proposal) and a sealed one's relays' copies (they follow the relay list).
+ * Compared in the manifest's canonical form (its Borsh bytes, 12-grains §2), never as JSON text: a node answers with its
+ * objects' keys sorted, so the same manifest reads as other JSON than grain.json's.
+ */
+export function sameContent(registered: Manifest, ours: Manifest): boolean {
+  const plain = (m: Manifest): Manifest => ({
+    ...m, ...UNOWNED, version: 1, ...("sealed" in m.entry ? { entry: { sealed: { ...m.entry.sealed, sources: [] } } } : {}),
+  });
+  try {
+    return toHex(encodeManifest(plain(registered))) === toHex(encodeManifest(plain(ours)));
+  } catch {
+    // A manifest that does not encode is not one the registry holds.
+    return false;
+  }
+}

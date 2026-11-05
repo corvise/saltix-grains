@@ -34,7 +34,8 @@ import QRCode from "qrcode";
 import {
   AppKey, AppKeyError, BlobRefused, MAX_NETWORK_BUNDLE_BYTES, NAMED_REASONS, NO_ICON, PENDING_MS, UNOWNED, type GrainCall, type Manifest,
   type NodeLike, type RegisteredGrain, type SignedManifest, accountId, blobHeld, encodeManifest, fromHex, grainGet, grainQuote, iconHash,
-  keyFingerprint, manifestProblem, minimumFee, nodeCall, putBundle, putIcon, registeredKeyStatus, signBundleUpload, signManifest, toHex,
+  keyFingerprint, manifestProblem, minimumFee, nodeCall, putBundle, putIcon, registeredKeyStatus, sameContent, signBundleUpload, signManifest, toHex,
+  PROPOSAL_FILE, type Proposal, readProposal, writeProposal,
 } from "@saltix/grain-server";
 import { makeBundle, sealed, type Bundle } from "./bundle.js";
 import { TEMPLATE_NEXT, stillTemplate } from "./connect.js";
@@ -376,6 +377,8 @@ export interface PublishOptions {
   pause?: (ms: number) => Promise<void>;
   pollMs?: number;
   settleMs?: number;
+  /** How long the app's running server is given to pick the proposal up (`PROPOSAL_PICKUP_MS`). */
+  proposalPickupMs?: number;
 }
 
 /** Where a wait is said: the command's own lines, rewritten in place on a terminal. */
@@ -446,6 +449,58 @@ export async function sealedAsSent(node: NodeLike, protocol: number, given: Mani
 }
 
 /** The whole of `grain publish`: its exit status. Throws a `PublishError` (or another error) for a failure to report. */
+/** What the fields the owner sets in Saltix became at a publish: kept as the registry holds them, or replaced by grain.json's. */
+export interface OwnersFields {
+  manifest: Manifest;
+  /** Fields kept as the registry holds them (the owner's), and written into grain.json. */
+  kept: Array<"icon" | "name" | "description">;
+  /** Fields both the owner (in Saltix) and the project changed: grain.json's won. */
+  replaced: Array<"icon" | "name" | "description">;
+}
+
+/**
+ * The icon, the name and the description are the owner's to set in Saltix (24-app-studio §4: *Its icon*, *Details*),
+ * and the project's page is the developer's: a publish of the page never undoes what the owner set on the phone (the
+ * owner, 2026-11-05: "the logo keeps flying off" — every `grain publish` sent grain.json's icon over the one set in
+ * Saltix). A field the project did not change since its last publish from here (`signed.json`, `last`) is kept as the
+ * registry holds it; without that record, an icon the registry holds is kept where grain.json's differs (an icon
+ * absent from the registry is nobody's choice: the project's goes). A field the project changed wins, and where the
+ * owner changed it too the output says whose it replaces. What is kept is written into grain.json.
+ */
+export function ownersFieldsKept(given: Manifest, registry: Manifest | null, last: Manifest | null): OwnersFields {
+  const out: OwnersFields = { manifest: given, kept: [], replaced: [] };
+  if (!registry) return out;
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const judge = (field: "icon" | "name" | "description", set: boolean) => {
+    const ours = given[field], theirs = registry[field];
+    if (same(ours, theirs) || !set) return;
+    const base = last?.[field];
+    const projectChanged = last !== null && !same(ours, base);
+    const ownerChanged = last === null || !same(theirs, base);
+    if (!projectChanged && (last !== null || field === "icon")) {
+      out.manifest = { ...out.manifest, [field]: theirs };
+      out.kept.push(field);
+    } else if (projectChanged && ownerChanged) {
+      out.replaced.push(field);
+    }
+  };
+  judge("icon", registry.icon !== NO_ICON);
+  judge("name", Object.keys(registry.name).length > 0);
+  judge("description", Object.keys(registry.description).length > 0);
+  return out;
+}
+
+/** The manifest this project published last (`signed.json`), when it is this app's. */
+function lastPublished(path: string, slug: string): Manifest | null {
+  if (!existsSync(path)) return null;
+  try {
+    const m = (JSON.parse(readFileSync(path, "utf8")) as { manifest?: Manifest }).manifest;
+    return m && m.slug === slug && manifestProblem(m) === null ? m : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function publishApp(o: PublishOptions): Promise<number> {
   const print = o.print ?? ((line: string) => console.log(line));
   const now = o.now ?? Date.now;
@@ -473,8 +528,24 @@ export async function publishApp(o: PublishOptions): Promise<number> {
   if (earlier === "waiting") return 1;
   before = earlier;
 
+  // What the owner set in Saltix stays: the icon, the name and the description the registry holds, where this project
+  // did not change them (`ownersFieldsKept`); grain.json says them from now on.
+  const owners = ownersFieldsKept(given, before?.manifest?.manifest ?? null, lastPublished(o.out, slug));
+  for (const field of owners.kept) {
+    o.log.step("owner_fields", "ok", `kept_${field}`);
+    print(field === "icon"
+      ? `icon: the one set in Saltix kept (${owners.manifest.icon.slice(0, 12)}…); grain.json names it now. An icon file here is not it: grain icon <picture> --out icon.png replaces it on purpose`
+      : `${field}: the one set in Saltix kept (${JSON.stringify(owners.manifest[field])}); grain.json says it now. To change it, change grain.json and publish again`);
+  }
+  for (const field of owners.replaced) {
+    o.log.step("owner_fields", "ok", `replaced_${field}`);
+    print(`${field}: grain.json's replaces the one set in Saltix since the last publish from here (both changed); set it in Saltix again if that one was meant`);
+  }
+  const given0 = given;
+  const kept = owners.manifest;
+
   // 1–2. The bundle and its sources.
-  let manifest = given;
+  let manifest = kept;
   let made: Bundle | null = null;
   if (form === "sealed") {
     const publicDir = join(dir, "public");
@@ -486,7 +557,7 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     }
     o.log.step("bundle", "ok", "built");
     print(`bundle: ${made.files.length} files, ${sizeText(made.size)}, ${made.hash}`);
-    const asSent = await sealedAsSent(o.node, protocol, given, made);
+    const asSent = await sealedAsSent(o.node, protocol, kept, made);
     const { sources, from } = asSent;
     if (made.size > MAX_NETWORK_BUNDLE_BYTES && from !== "own") {
       throw new PublishError("bundle", "too_large",
@@ -527,7 +598,7 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     // The registration or update is settled above; the other calls stay recorded until the registry shows them landed.
     sent: carry.sent.filter((t) => !isPublishCall(t) && !landedIn(t, before)), private_pending: carry.private_pending,
   };
-  if (JSON.stringify(manifest) !== JSON.stringify(given)) writeFileSync(o.manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  if (JSON.stringify(manifest) !== JSON.stringify(given0)) writeFileSync(o.manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   if (made) writeFileSync(join(dir, "bundle.zip"), made.zip);
   // What the network takes: the manifest's bounds at its protocol version, and a transaction it fits in.
   const problem = manifestProblem({ ...manifest, ...UNOWNED }, false, protocol);
@@ -617,6 +688,9 @@ export async function publishApp(o: PublishOptions): Promise<number> {
     if (result === "no_wait") return 0;
     if (result === null) return 1;
     signed = result;
+    // The version the registry gave it (the owner's Saltix sets the number where the registry moved on): what the rest
+    // of this run, and grain.json, say.
+    if (signed.manifest.version !== manifest.version) manifest = { ...manifest, version: signed.manifest.version };
     o.log.step("registry", "ok", "published");
     state.published_at = new Date(now()).toISOString();
     writePublishState(dir, state);
@@ -760,23 +834,7 @@ function sameRun(state: PublishState | null, genesis: string, slug: string, vers
   return { uploaded_at, pending_until, link_shown_at, published_at, icon_uploaded_at };
 }
 
-/**
- * Whether the registry's manifest says what ours says: the same content but for the owner (a wallet fills in its own),
- * the version (grain.json's may lag behind the registry's) and a sealed one's relays' copies (they follow the relay
- * list). Compared in the manifest's canonical form (its Borsh bytes, 12-grains §2), never as JSON text: a node answers
- * with its objects' keys sorted, so the same manifest reads as other JSON than grain.json's.
- */
-export function sameContent(registered: Manifest, ours: Manifest): boolean {
-  const plain = (m: Manifest): Manifest => ({
-    ...m, ...UNOWNED, version: 1, ...("sealed" in m.entry ? { entry: { sealed: { ...m.entry.sealed, sources: [] } } } : {}),
-  });
-  try {
-    return toHex(encodeManifest(plain(registered))) === toHex(encodeManifest(plain(ours)));
-  } catch {
-    // A manifest that does not encode is not one the registry holds.
-    return false;
-  }
-}
+export { sameContent };
 
 const VOUCH_WORDS: Record<string, string> = {
   unpaired: "no server key here: grain pair lets the bundle go up before the owner signs",
@@ -1034,12 +1092,61 @@ function ownerKeyFile(o: PublishOptions, print: (line: string) => void, slug: st
   return null;
 }
 
-/** The owner's Saltix signs from a QR code; the command waits for the registry (unless `--no-wait`). */
+/** How long `grain publish` gives the app's running server to pick the proposal up before it shows the QR code alone. */
+export const PROPOSAL_PICKUP_MS = 6_000;
+
+/**
+ * The update proposed to the owner through the app's own server (24-app-studio §4, *Awaiting you*): `grain publish`
+ * leaves `.grain/proposal.json` for the server that serves the app from this project (`ChatServerOptions.proposals`,
+ * the template's server passes it); the server proposes it in the owner's console as a `Publish` card, which Saltix
+ * shows the owner under **Awaiting you** with a notification — the way for a developer who is not the owner, whose
+ * phone is elsewhere. Said as it stands after `PROPOSAL_PICKUP_MS`: what the server answered, or that none runs here.
+ * A proposal an earlier run left for other content is replaced; one for this content stands as it was.
+ */
+async function proposeThroughServer(o: PublishOptions, print: (line: string) => void, manifest: Manifest, link: string): Promise<void> {
+  const path = join(o.dir, PROPOSAL_FILE);
+  const now = o.now ?? Date.now;
+  const before = readProposal(path);
+  const same = before !== null && before.slug === manifest.slug && sameContent(before.manifest, manifest) && !before.landed_at;
+  const proposal: Proposal = same
+    ? { ...before!, version: Math.max(before!.version, manifest.version), link, at: new Date(now()).toISOString() }
+    : { slug: manifest.slug, version: manifest.version, manifest, link, at: new Date(now()).toISOString(), from: "grain publish" };
+  writeProposal(path, proposal);
+  o.log.step("proposal", "waiting", same ? "kept" : "written");
+  const pickup = o.proposalPickupMs ?? PROPOSAL_PICKUP_MS;
+  const end = Date.now() + pickup;
+  let p: Proposal | null = proposal;
+  while (Date.now() < end) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    p = readProposal(path);
+    if (p && p.proposed_at && (!same || p.proposed_at !== before?.proposed_at || p.error !== before?.error)) break;
+  }
+  if (p && p.proposed_at && p.error === null && p.owner === true) {
+    o.log.step("proposal", "ok", "owner_console");
+    print(`Proposed to the owner in the app's console as v${p.version}: Saltix shows it under Awaiting you (a notification too); the owner taps Review and approve. Or the owner scans the QR code below.`);
+  } else if (p && p.proposed_at && p.error === null) {
+    o.log.step("proposal", "waiting", "owner_unreached");
+    print(`The app's server proposed v${p.version} to the team, but the owner's console has not heard from the app yet (the owner opens the app once in Saltix): it proposes again every minute while this command's record stands. Or the owner scans the QR code below.`);
+  } else if (p && p.proposed_at && p.error) {
+    o.log.step("proposal", "failed", "server_refused");
+    print(`The app's server could not propose it in the console: ${p.error}. The owner scans the QR code below.`);
+  } else {
+    o.log.step("proposal", "waiting", "no_server");
+    print(`No server of this app answered here within ${Math.round(pickup / 1000)} s (npm start runs it in this project): the owner scans the QR code below; a server started later proposes it in the owner's console by itself (.grain/proposal.json).`);
+  }
+}
+
+/** The owner's Saltix signs — from the app's console (**Awaiting you**) where the app's server runs here, else from a
+ *  QR code; the command waits for the registry to hold the content, whatever version the owner's Saltix gives it (unless
+ *  `--no-wait`). */
 async function signInWallet(o: PublishOptions, print: (line: string) => void, manifest: Manifest, state: PublishState, fresh: boolean): Promise<SignedManifest | null | "no_wait"> {
   const link = await walletLink(manifest, o.node);
   if (fresh) {
     const { deposit } = await grainQuote(o.node, manifest.slug);
     print(`Registering ${manifest.slug} keeps a deposit of ${salt(deposit)} SALT until it retires (the slug's length sets it).`);
+  } else if (hasServerKey(o)) {
+    // An update of an app whose program runs from this project: the owner approves it where they are.
+    await proposeThroughServer(o, print, manifest, link);
   }
   writeFileSync(join(o.dir, PUBLISH_PAGE_FILE), await publishPage(link, manifest.slug, manifest.version));
   print(await terminalQr(link, o.tty));
@@ -1063,7 +1170,24 @@ async function signInWallet(o: PublishOptions, print: (line: string) => void, ma
     print(`not in the registry yet: once the owner confirms in Saltix, grain publish${o.flags} again finishes it${state.pending_until ? ` (the bundle stays pending until ${state.pending_until})` : ""}`);
     return null;
   }
+  if (signed.manifest.version !== manifest.version) {
+    // The owner's Saltix set the number: the registry had moved on since this command made the link (the owner's own
+    // change, or a proposal renumbered by the server). grain.json says the registry's version from now on.
+    print(`version: the registry took it as v${signed.manifest.version} (this command said v${manifest.version}; the registry had moved on); grain.json says v${signed.manifest.version} now`);
+    o.log.step("version", "ok", "taken_as_registry");
+    const given = JSON.parse(readFileSync(o.manifestPath, "utf8")) as Manifest;
+    writeFileSync(o.manifestPath, JSON.stringify({ ...given, version: signed.manifest.version }, null, 2) + "\n");
+    state.version = signed.manifest.version;
+  }
   return signed;
+}
+
+/** Whether a server key of this app is at hand here: `app.key`, `SALTIX_APP_KEY` or `--app-key` — the project a server
+ *  of the app runs from. */
+function hasServerKey(o: PublishOptions): boolean {
+  if (o.appKeyFile !== undefined) return true;
+  if ((o.env ?? process.env)[APP_KEY_ENV]) return true;
+  return existsSync(join(o.dir, APP_KEY_FILE));
 }
 
 /** The icon the manifest names into the network, unless it holds it: what became of it. */

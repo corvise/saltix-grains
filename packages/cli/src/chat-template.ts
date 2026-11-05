@@ -69,6 +69,10 @@ export const chatServer = (slug: string) => `// The chat of ${slug}, run by its 
 //                         kept (systemd sets it with StateDirectory=; else here and .grain/): chat.store.json also
 //                         remembers the spec served, so chat.json changed without raising "version" is refused (78)
 //
+// Updates reach the owner here: grain publish in this project leaves .grain/proposal.json, and this server proposes it
+// to the team in the app's console — the owner approves it in Saltix under Awaiting you, with no QR code to scan (the
+// owner may be somebody else, with the phone elsewhere) — and tries again every minute until the owner's console has it.
+//
 // The log is one JSON line per event, and never holds a key or what users wrote.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -97,6 +101,8 @@ try {
     node: process.env.NODE_RPC,
     relays: relaysFromEnvironment(),
     relayCache: process.env.STATE_DIRECTORY ? join(process.env.STATE_DIRECTORY, "relays.json") : undefined,
+    // What grain publish leaves here for the owner to approve in the app's console (24-app-studio §4).
+    proposals: fileURLToPath(beside(".grain/proposal.json")),
     log,
     onStop: () => process.exit(DEAD_KEY),
   });

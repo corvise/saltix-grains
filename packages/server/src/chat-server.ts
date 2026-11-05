@@ -7,6 +7,7 @@
 //
 // Its key speaks for the grain in either of two ways: registered (the grain's registry record names it; a developer
 // key carries it, and is the server's whole configuration), or certified by the owner key for at most 31 days.
+import { unwatchFile, watchFile } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
 import { sha256 } from "@noble/hashes/sha256";
@@ -38,8 +39,9 @@ import { GivenRelayRefused, REFRESH_MS, type RelayCache, RelayFinder, checkGiven
 import { ChainView, RelayGateways, type WalletInterface, nodeInterface } from "./network.js";
 import { type GrainNotification, signNotification } from "./notification.js";
 import { readPublishText, publishTextOf } from "./publish.js";
+import { PROPOSAL_RETRY_MS, type Proposal, proposalHash, proposalStands, readProposal, writeProposal } from "./proposals.js";
 import { publishText } from "./publish-link.js";
-import { ROLES, type RegisteredGrain } from "./registry.js";
+import { ROLES, type RegisteredGrain, sameContent } from "./registry.js";
 import { RelayClient, type RelayEndpoint, type RelayFrame } from "./relay.js";
 import { type ErrorFacts, REPORT_FOLD_MS, type ReportContext, errorFacts, errorFingerprint, reportCard, scrubSecrets } from "./report.js";
 import { STATS_EVERY_MS, type SignedGrainStats, signGrainStats } from "./stats.js";
@@ -136,6 +138,15 @@ export interface ChatServerOptions {
   redact?: ReadonlyArray<string | RegExp>;
   /** How many hellos a minute are checked against the registry and the node (default `HELLO_CHECKS_PER_MINUTE`). */
   helloChecksPerMinute?: number;
+  /**
+   * The project's proposal file (`PROPOSAL_FILE`, `.grain/proposal.json` under the project: what `grain publish` leaves
+   * for this server). Given, the server proposes what it finds there to the team in the app's console when it starts
+   * and whenever the file changes — a `Publish` card the owner approves in Saltix under **Awaiting you**, no QR code —,
+   * raises the proposal's version to the registry's + 1 where the registry moved on, tries again every minute while the
+   * owner's console has not got it, and writes back what became of it. It needs the registry (a developer key, or
+   * `node`). Off without it.
+   */
+  proposals?: string;
 }
 
 /** Why a server with a registered key stopped: the registry dropped the key from the grain's record (`revoked`: no key
@@ -826,7 +837,71 @@ export class ChatServer {
     this.judgeAccess();
     if (!this.certificate) void this.publishStats().catch((e: Error) => this.log("warn", "chat_stats_failed", { reason: e.message }));
     this.timers.push(setInterval(() => void this.sweep(), SWEEP_MS));
+    if (this.options.proposals && this.view) {
+      // What grain publish left for this server: proposed now, when the file changes, and again every minute while the
+      // owner's console has not got it (the owner's wallet says hello when the app is opened).
+      const path = this.options.proposals;
+      this.watching = path;
+      watchFile(path, { interval: 2_000, persistent: false }, () => void this.proposeFromFile());
+      this.timers.push(setInterval(() => void this.proposeFromFile(), PROPOSAL_RETRY_MS));
+      void this.proposeFromFile();
+    }
     for (const t of this.timers) t.unref?.();
+  }
+
+  /** The proposal file watched, to unwatch at close. */
+  private watching: string | null = null;
+  /** One look at the proposal file at a time: a change during a proposal is read after it. */
+  private proposing: Promise<void> | null = null;
+
+  /**
+   * The proposal file's order, carried out (`ChatServerOptions.proposals`): landed where the registry holds its content
+   * (whatever version the wallet gave it), else proposed in the console — its version raised to the registry's + 1 where
+   * the registry moved on — unless the same content and version were proposed already and the owner got it, or within
+   * the last minute. What became of it is written back for `grain publish` to read; a failure is written as words and
+   * tried again at the next look.
+   */
+  private proposeFromFile(): Promise<void> {
+    if (this.proposing) return this.proposing;
+    this.proposing = this.proposeFromFileNow().catch((e: Error) => {
+      this.log("warn", "chat_proposal_failed", { reason: scrubSecrets(e.message, this.options.redact ?? []) });
+    }).finally(() => { this.proposing = null; });
+    return this.proposing;
+  }
+
+  private async proposeFromFileNow(): Promise<void> {
+    const path = this.options.proposals;
+    if (!path || !this.view || this.stopReason) return;
+    const p = readProposal(path);
+    const now = this.now();
+    if (!p || p.slug !== this.slug || !proposalStands(p, now)) return;
+    const g = await this.view.grain(this.slug, true);
+    if (!g || g.retired !== null) return;
+    const at = new Date(now).toISOString();
+    if (g.manifest && sameContent(g.manifest.manifest, p.manifest)) {
+      writeProposal(path, { ...p, landed_at: at, landed_version: g.version, error: null });
+      this.log("info", "chat_proposal_landed", { version: g.version, proposed: p.proposed_version ?? null });
+      return;
+    }
+    // The developer's number is a proposal: the registry may have moved on (the owner's own change of the icon or the
+    // details makes a version too). The content is what is proposed.
+    const manifest: Manifest = p.manifest.version > g.version ? p.manifest : { ...p.manifest, version: g.version + 1 };
+    const hash = proposalHash(manifest);
+    const proposedAt = p.proposed_at ? Date.parse(p.proposed_at) : NaN;
+    const sameAsLast = p.proposed_hash === hash && p.proposed_version === manifest.version;
+    if (sameAsLast && (p.owner === true || (Number.isFinite(proposedAt) && now - proposedAt < PROPOSAL_RETRY_MS))) return;
+    let next: Proposal;
+    try {
+      const r = await this.proposeUpdate(manifest);
+      next = {
+        ...p, version: manifest.version, proposed_at: at, proposed_version: manifest.version, proposed_hash: hash,
+        owner: r.owner, sent: r.sent, unreachable: r.unreachable, error: null,
+      };
+    } catch (e) {
+      next = { ...p, version: manifest.version, proposed_at: at, proposed_version: manifest.version, proposed_hash: hash, owner: false, error: scrubSecrets((e as Error).message, this.options.redact ?? []) };
+      this.log("warn", "chat_proposal_failed", { version: manifest.version, reason: next.error });
+    }
+    writeProposal(path, next);
   }
 
   /** The spec users are served now. */
@@ -1058,6 +1133,8 @@ export class ChatServer {
     this.stopReason = reason;
     for (const t of this.timers) clearInterval(t);
     this.timers.length = 0;
+    if (this.watching) unwatchFile(this.watching);
+    this.watching = null;
     this.relay.off("frame", this.onFrameListener);
     if (!this.options.relay) this.relay.close();
     this.log("error", "chat_stopped", {
@@ -1074,6 +1151,8 @@ export class ChatServer {
   close(): void {
     for (const t of this.timers) clearInterval(t);
     this.timers.length = 0;
+    if (this.watching) unwatchFile(this.watching);
+    this.watching = null;
     this.relay.off("frame", this.onFrameListener);
     if (!this.options.relay) this.relay.close();
   }

@@ -237,6 +237,7 @@ upload: into the network now, vouched for by the server key 1476ff04 (app.key)
   …
   uploaded 100% (1.8 MiB of 1.8 MiB)
 the network holds the bundle, pending until 2026-10-20T14:02:11.000Z: the owner signs within that day, and this computer need not stay on
+Proposed to the owner in the app's console as v2: Saltix shows it under Awaiting you (a notification too); the owner taps Review and approve. Or the owner scans the QR code below.
 █▀▀▀▀▀█ … (the QR code)
 Publish space-game v2: scan the QR code with the app owner's Saltix (the phone's camera), check the app and confirm with the PIN.
   page  …/space-game/.grain/publish.html (the QR code for a browser)
@@ -261,7 +262,11 @@ What happens, step by step:
    **pending** for a day. A break is no loss: run `grain publish` again and it goes on where the node stands; a busy node
    is waited out. Without a paired key (an app's first version), it goes up once the registry names it, and the command
    keeps running until then.
-4. **Your signature.** Scan the QR code with your Saltix: it shows the app, the version and what changed, and after the
+4. **Your signature.** From the second version on, with the app's server running from this project (`npm start`),
+   the update is proposed in the app's console: your Saltix shows it under **Awaiting you** (a notification too), and
+   **Review and approve** is the same sheet — the way when the owner is somebody else, whose phone is elsewhere; the
+   command says what the server answered, and tries through it again every minute while the owner's console has not
+   heard from the app. Or scan the QR code with your Saltix: it shows the app, the version and what changed, and after the
    PIN signs the manifest and registers it (a new slug's deposit: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or
    more). A new app is private unless you switch on **Public in the Marketplace** on that sheet (Saltix 0.1.61 and
    later, which then sends the call that makes it private, one more fee; an older Saltix registers it public:
