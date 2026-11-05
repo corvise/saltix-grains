@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "The grain command line: make, serve, check, sign, register and retire grains (Saltix 12-grains, docs/protocol/grains.md)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/corvise/saltix-grains.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/corvise/saltix-grains#readme",
+  "bugs": "https://github.com/corvise/saltix-grains/issues",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "bin": {
     "grain": "bin/grain.js"

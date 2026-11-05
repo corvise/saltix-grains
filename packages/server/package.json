@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "A grain's server side: sign-in checks, invoices, payments on chain, manifests and Connect profiles (Saltix 12-grains and 19-connect, docs/protocol/)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/corvise/saltix-grains.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/corvise/saltix-grains#readme",
+  "bugs": "https://github.com/corvise/saltix-grains/issues",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

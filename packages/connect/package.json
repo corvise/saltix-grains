@@ -3,6 +3,16 @@
   "version": "0.2.0",
   "description": "Sign in with Saltix on a website or DApp: the page's side of Saltix Connect, its button and dialog, and the server's side for a session the server holds (Saltix 19-connect, docs/protocol/connect.md)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/corvise/saltix-grains.git",
+    "directory": "packages/connect"
+  },
+  "homepage": "https://github.com/corvise/saltix-grains#readme",
+  "bugs": "https://github.com/corvise/saltix-grains/issues",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
