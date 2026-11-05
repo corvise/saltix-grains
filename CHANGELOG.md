@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- cli: **one way at a time** — `grain publish` shows no QR code when the owner's console got the proposal (the card is
+  the way; `--qr` shows the code instead), and says why when the code is the way (the owner, 2026-11-05: a card one
+  time, a code the next); the code's words say it is good once.
+- cli: **the faucet's new terms** (3 SALT, once an hour an address; 08-node §6, 2026-11-05): `grain faucet --wait`
+  makes one grant a run and says the clock time to run it again (a shell never sleeps an hour), a refusal says the
+  wait in words, the doctor counts four grants for a deposit of 10 SALT.
+
 ### Added
 
 - cli, server: **an update reaches the owner in the app, no QR code** (the owner, 2026-11-05: "the developer and the

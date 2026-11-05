@@ -115,7 +115,7 @@ owner signs and served by the network to anyone by its hash).
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 
 **No node needed.** Every registry command (`grain show`, `publish`, `retire`, `profile`, `configure`, `access`, `bind`,
-`rate`, `sponsor`, `app-key`) and `grain faucet` (test SALT for `owner.key`'s account, once every 5 minutes) reach the
+`rate`, `sponsor`, `app-key`) and `grain faucet` (test SALT for `owner.key`'s account: 3 SALT, once an hour) reach the
 test network through its relays, which the SDK finds when it runs (nothing to configure; Saltix 41-transport §18), each
 pinned by its certificate's hash. When none answers, `grain doctor` names each relay it tried and why: then
 `--relay SALTIX-RELAY:…`, a relay ticket someone whose Saltix works gave you (`SALTIX_RELAYS` for the server: one that
@@ -408,8 +408,10 @@ All of it, in full: [AGENTS.md](../../AGENTS.md#building-an-app-what-a-page-gets
 ## Publish a page, and its icon
 
 A page needs no server and no hosting (Saltix 32-images [§7.3](../protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)):
-`npx grain publish` seals `public/`, checks it as every node does, puts it from this computer into the network, shows
-the QR code the owner's Saltix signs the version from, waits for the registry and uploads the icon. Never set up a host,
+`npx grain publish` seals `public/`, checks it as every node does, puts it from this computer into the network, has
+the owner's Saltix sign the version — an update of an app whose server runs here goes to the owner's console as a card
+(no QR code then; say so to the user: *approve it in Saltix under Awaiting you*), a first version or an app with no
+server here shows a QR code the owner scans — waits for the registry and uploads the icon. Never set up a host,
 a CDN, a domain or a certificate for it, and never ask the user for one.
 
 1. `npx grain icon <picture> --out icon.png`: a 512 × 512 icon to the standard from any PNG or JPEG ([icons](../icons.md));
@@ -479,7 +481,8 @@ publish --key owner.key`, `grain profile`, `grain access`. What an agent adds to
 - **A new command or text**: change `chat.json`, raise `version`, restart. Each user gets the new spec before their
   next answer.
 - **A new name, icon or screen** is a new manifest, which only the owner's phone signs: `npx grain publish` (above) puts
-  the new bundle into the network and shows the QR code the owner scans; or `await chat.proposeUpdate(next)` sends the
+  the new bundle into the network and proposes it in the owner's console (a QR code only where no server of the app
+  runs here); or `await chat.proposeUpdate(next)` sends the
   manifest to the owner's console as **Review and approve** (`chat.proposeUpdate(next, { bundle })` puts its bundle
   into the network first, on the server key's statement) ([publishing a page](../how-it-works.md#publish-a-page)).
 - **Public**: an app starts private (its owner and members), made in Saltix, registered by a key file, or from a

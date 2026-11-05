@@ -170,12 +170,15 @@ keep it): rebuild it in CI and fail when `grain.json` changes; never edit `entry
 **A page needs no server and no hosting: `grain publish` puts it into the Saltix network.** It seals `public/`, checks
 it as every node does, and uploads it from this computer straight into the network (Saltix 32-images
 [§7.3](docs/protocol/images.md#73-bundles-from-the-developers-machine-into-the-network)), says which account will own
-the app, then shows the QR code the owner's Saltix signs the version from, waits for the registry, and uploads the icon.
+the app, then has the owner's Saltix sign the version (an update of an app whose server runs here: a card in the
+owner's console, no QR code; else the QR code the owner scans), waits for the registry, and uploads the icon.
 With `grain pair`'s `app.key` the bundle goes up before the owner signs (held pending for a day); without one, after.
 **An update reaches the owner in the app** (2026-11-05): with `app.key`, `grain publish` leaves `.grain/proposal.json`
 for the app's server running from this project (`npm start`), which proposes it in the app's console — the owner approves
 it in Saltix under **Awaiting you**, no QR code, so the owner need not be beside you; `grain publish` says what the
-server answered, and the QR code stays the way that always works. The version is the registry's: the owner's own change
+server answered, and shows the QR code only where the console did not get the proposal (one way at a time: tell the
+user which it was; `--qr` asks for the code). A code or a card is approved once: the same content again says the version
+it became. The version is the registry's: the owner's own change
 in Saltix (the icon, the details) moves the number on, the proposal is the content, and `grain publish` waits for the
 registry to hold the content, then writes the registry's number into `grain.json` — never raise `version` by hand.
 **The icon, the name and the description are the owner's**, set in Saltix: `grain publish` keeps what the registry holds

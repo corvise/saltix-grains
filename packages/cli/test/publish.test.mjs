@@ -172,13 +172,17 @@ test("an update reaches the owner through the app's running server: the proposal
   }, 50);
   try {
     const { lines, done } = run(dir, registry, { proposalPickupMs: 3_000 });
-    const link = await linkIn(lines);
+    const said = await until("the proposal's words", () => lines.find((l) => l.startsWith("Proposed to the owner")));
+    assert.match(said, /^Proposed to the owner in the app's console as v2: Saltix shows it under Awaiting you \(a notification too\); the owner taps Review and approve there\. No QR code: the console's card is the one way \(grain publish --qr shows one instead\)\.$/);
+    // One way at a time (the owner, 2026-11-05: "sometimes a button in the chat, sometimes a QR code"): the console got
+    // it, so no QR code, no link, no page — the proposal file carries the link for the server's card.
+    const left = readProposal(path);
+    const link = left.link;
     const m = readPublishLink(link);
     assert.equal(m.version, 2);
-    const said = await until("the proposal's words", () => lines.find((l) => l.startsWith("Proposed to the owner")));
-    assert.match(said, /^Proposed to the owner in the app's console as v2: Saltix shows it under Awaiting you \(a notification too\); the owner taps Review and approve\. Or the owner scans the QR code below\.$/);
-    assert.ok(lines.indexOf(said) < lines.findIndex((l) => l.startsWith("Publish space-game v2: scan the QR code")), "the console's way first, the QR code after");
-    const left = readProposal(path);
+    assert.ok(!lines.some((l) => l.startsWith("Publish space-game v2: scan the QR code") || l.startsWith("  link  ")), lines.join("\n"));
+    assert.ok(!existsSync(join(dir, ".grain", "publish.html")), "no page of a code nobody is to scan");
+    assert.ok(steps(dir).includes("link:ok:console"), steps(dir).join(" "));
     assert.deepEqual([left.slug, left.version, left.from, left.owner, left.link], ["space-game", 2, "grain publish", true, link]);
     assert.deepEqual({ ...left.manifest, owner: m.owner, owner_key: m.owner_key }, m, "the content, the owner's fields aside (the link zeroes them)");
     // Meanwhile the owner changed the icon in Saltix: the registry moved to v2 with other content. The owner's Saltix then
@@ -211,6 +215,28 @@ test("an update reaches the owner through the app's running server: the proposal
     assert.equal(p2.version, 4, "left for a server started later");
     registry.publish(own({ ...readPublishLink(await linkIn(slow.lines)) }));
     assert.equal(await slow.done, 0);
+  } finally {
+    clearInterval(server);
+  }
+});
+
+test("grain publish --qr shows the code even where the app's console got the proposal", async () => {
+  const registry = node();
+  const dir = project();
+  const path = join(dir, ".grain", "proposal.json");
+  const server = setInterval(() => {
+    const p = readProposal(path);
+    if (p && !p.proposed_at) writeProposal(path, { ...p, proposed_at: new Date().toISOString(), proposed_version: p.version, proposed_hash: "x".repeat(64), owner: true, sent: 1, unreachable: 0, error: null });
+  }, 50);
+  try {
+    const { lines, done } = run(dir, registry, { proposalPickupMs: 3_000, qr: true });
+    const link = await linkIn(lines);
+    assert.ok(lines.some((l) => l.startsWith("Proposed to the owner in the app's console")), lines.join("\n"));
+    assert.ok(lines.some((l) => l.startsWith("Publish space-game v2: scan the QR code")), "the code asked for by name");
+    assert.ok(steps(dir).includes("link:waiting:shown"), steps(dir).join(" "));
+    const owner = toHex(ed25519.getPublicKey(OWNER));
+    registry.publish(signManifest({ ...readPublishLink(link), owner: toHex(accountId(fromHex(owner, 32))), owner_key: { ed25519: owner } }, OWNER));
+    assert.equal(await done, 0, lines.join("\n"));
   } finally {
     clearInterval(server);
   }

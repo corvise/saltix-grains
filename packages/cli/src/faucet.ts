@@ -1,6 +1,8 @@
 // `grain faucet`: test SALT, and WORK while its purses hold some, for a key file's account or an address, from a test
 // network's faucet (Saltix 08-node §6, `faucet_request`): a node signs a grant from one of its purses and pools it; an
-// address gets one every 5 minutes. No mainnet node runs one.
+// address gets one every `node_status.faucet.every` seconds — an hour on the test network since 2026-11-05 (3 SALT a
+// grant: the owner's figures, so that a crowd of developers makes few transactions in a moment and nobody piles coins
+// up). No mainnet node runs one.
 import { FAUCET, type NodeLike, RpcError, accountId, decodeAddress, encodeAddress, fromHex, grainQuote, nodeCall, toHex } from "@saltix/grain-server";
 import { publicKeyOf } from "./project.js";
 import { salt } from "./registry.js";
@@ -9,10 +11,15 @@ import { salt } from "./registry.js";
  *  then making it private), with room to spare: 0.001 SALT. The doctor and `grain faucet --wait` measure by it. */
 export const FEES_MARGIN = 1_000_000n;
 
-/** The grants `grain faucet --wait` makes for one first publish at most: the deposits of 10 and 30 SALT at the faucet's
- *  default of 10 SALT a grant, five minutes apart, are 2 and 4 grants; the 100 SALT of a slug of 3–5 characters would be
- *  11, near an hour, which is said up front instead of waited for. */
+/** The grants one first publish may take from the faucet at most: a deposit of 10 SALT at 3 SALT a grant is 4 grants
+ *  (an hour apart: an afternoon, said up front); 30 SALT would be 11 and 100 SALT 34, which is said instead — a slug of
+ *  8 characters or more, or the owner's Saltix paying the deposit from the QR code. */
 export const GRANTS_MAX = 4;
+
+/** `grain faucet --wait` waits for the faucet's next grant inside the command only while the faucet's interval is this
+ *  short (seconds); an hour's interval is said, with when to run the command again — a coding agent's shell never
+ *  sleeps for hours. */
+export const WAIT_INSIDE_S = 10 * 60;
 
 /** A test network's faucet as `node_status.faucet` tells it (Saltix 08-node §6): a grant in base units of SALT, and the
  *  seconds an address waits between grants. */
@@ -26,7 +33,7 @@ export async function faucetTerms(node: NodeLike): Promise<FaucetTerms | null> {
   const { faucet } = await nodeCall<{ faucet?: { amount?: unknown; every?: unknown } | null }>(node, "node_status");
   if (!faucet || typeof faucet.amount !== "string" || !/^\d{1,30}$/.test(faucet.amount)) return null;
   const amount = BigInt(faucet.amount);
-  const every = typeof faucet.every === "number" && Number.isFinite(faucet.every) && faucet.every >= 0 ? Math.floor(faucet.every) : 300;
+  const every = typeof faucet.every === "number" && Number.isFinite(faucet.every) && faucet.every >= 0 ? Math.floor(faucet.every) : 3_600;
   return amount > 0n ? { amount, every } : null;
 }
 
@@ -50,13 +57,20 @@ export function grantsNeeded(goal: bigint, held: bigint, amount: bigint): number
   return Number((goal - held + amount - 1n) / amount);
 }
 
-/** Seconds in a person's words: "5 minutes", "about 50 minutes", "90 s". */
+/** Seconds in a person's words: "5 minutes", "about 50 minutes", "an hour", "3 hours", "90 s". */
 export function spanWords(seconds: number): string {
+  if (seconds >= 3_600 && seconds % 3_600 === 0) return seconds === 3_600 ? "an hour" : `${seconds / 3_600} hours`;
   if (seconds < 120 || seconds % 60 !== 0) return seconds < 120 ? `${seconds} s` : `about ${Math.round(seconds / 60)} minutes`;
   return `${seconds / 60} minutes`;
 }
 
-/** The grants a first publish takes at `terms`, in words: "2 grants of 10 SALT, 5 minutes apart" — one grant without
+/** A clock time `seconds` from now, UTC, for "run it again after …". */
+export function clockAfter(seconds: number, now: () => number = Date.now): string {
+  const at = new Date(now() + seconds * 1_000);
+  return `${String(at.getUTCHours()).padStart(2, "0")}:${String(at.getUTCMinutes()).padStart(2, "0")} UTC`;
+}
+
+/** The grants a first publish takes at `terms`, in words: "4 grants of 3 SALT, an hour apart" — one grant without
  *  the interval. */
 export function grantsWords(grants: number, terms: FaucetTerms): string {
   return grants <= 1 ? `one grant of ${salt(terms.amount)} SALT` : `${grants} grants of ${salt(terms.amount)} SALT, ${spanWords(terms.every)} apart`;
@@ -105,7 +119,7 @@ function refusal(e: RpcError, address: string): FaucetRefusal {
   const words = (() => {
     switch (e.reason) {
       case "too_soon":
-        return `the faucet paid ${address} less than 5 minutes ago` + (retryAfter !== null ? `: try again in ${retryAfter} s` : ": try again later");
+        return `the faucet paid ${address} lately` + (retryAfter !== null ? `: try again in ${spanWords(retryAfter)}` : ": try again later");
       case "daily_limit":
         return "the faucet has made its grants of the day (UTC): try again tomorrow";
       case "empty":

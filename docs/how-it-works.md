@@ -175,9 +175,15 @@ npx grain publish                  # seal, check, upload into the network, then 
   `.grain/proposal.json` for the app's server running from this project (`npm start`), and the server proposes the
   update to the team in the app's console — the owner's Saltix shows it under **Awaiting you** with a notification,
   and the owner taps **Review and approve**; no QR code to scan, so the developer need not stand beside the owner's
-  phone. `grain publish` says what the server answered (proposed to the owner; proposed, but the owner's console has not
-  heard from the app yet — the owner opens the app once, the server tries again every minute; no server runs here) and
-  shows the QR code too, the way that always works. A server started later proposes it by itself.
+  phone. **One way at a time**: when the owner's console got the proposal, `grain publish` shows no QR code — the
+  card is the way (`--qr` shows the code instead); when it did not (the owner's console has not heard from the app yet
+  — the owner opens the app once, the server tries again every minute; no server runs here), it says so and shows the
+  QR code, the way that always works. A server started later proposes it by itself. The owner, 2026-11-05: an update
+  that came as a card one time and as a code the next left the owner guessing which to use.
+- **A code or a card is good once.** Saltix approves the same content one time: a publishing link scanned again after
+  its approval says the version it became (or that its call is on its way), and a Connect profile link whose words the
+  registry holds says its revision — never a second Publish, whatever the registry's lag (the owner, 2026-11-05: a
+  profile link scanned twice sent the profile twice). Changed content comes as a new code or card.
 - **What the owner set in Saltix stays** (2026-11-05). The icon, the name and the description are the owner's to set
   in Saltix (My apps → the app → Its icon, Details); the page is yours. `grain publish` keeps them as the registry holds
   them where your project did not change them since its last publish from here (`signed.json`), writes them into
@@ -251,10 +257,11 @@ the owner's phone signs.
    SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more), the fees of the two transactions (millionths of a SALT), and
    what `owner.key`'s account holds; and whether `connect.json` is ready (it is checked here until the registry can hold
    it).
-2. `npx grain faucet --wait`: test SALT for `owner.key`'s account — the grants its first publish takes (the faucet
-   pays 10 SALT a grant, one every 5 minutes: a deposit of 10 SALT and the fees are two grants, 30 SALT four; it says
-   how many, waits the 5 minutes between them, and ends with the next step). A deposit of 100 SALT (a slug of 3–5
-   characters) would take an hour of grants: it says so instead, and a longer slug or the owner's Saltix pays.
+2. `npx grain faucet --wait`: test SALT for `owner.key`'s account — the grants its first publish takes (the test
+   network's faucet pays 3 SALT a grant, one an hour an address, since 2026-11-05: a deposit of 10 SALT and the fees
+   are four grants; it says how many, makes one, and ends with the clock time to run it again — it never sleeps an
+   hour in your shell). A deposit of 30 or 100 SALT (a slug of 6–7 or 3–5 characters) would take 11 or 34 grants: it
+   says so instead, and a longer slug or the owner's Saltix pays.
 3. `npx grain publish --key owner.key`: it says which account will own the app, sends `RegisterGrain` and, right behind
    it with the next nonce, `SetGrainAccess` private (as an app made in Saltix starts), waits for both to land, then puts
    the bundle and the icon into the network. Later versions are signed by `owner.key` without `--key`: **a key file

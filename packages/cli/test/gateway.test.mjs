@@ -135,11 +135,11 @@ test("grain faucet asks for test SALT for the key file's account, says a refusal
   }
   assert.ok(!logged.includes("dsalt1"), "no address in the log");
   assert.deepEqual(g.asked.find((a) => a.method === "faucet_request").params, { address });
-  // Refused: once every 5 minutes.
-  g.state.answer = (method) => method === "faucet_request" ? { error: { code: 3, message: "too_soon", data: { retry_after: 240 } } } : null;
+  // Refused: an address waits the faucet's interval (an hour on the test network since 2026-11-05); the wait in words.
+  g.state.answer = (method) => method === "faucet_request" ? { error: { code: 3, message: "too_soon", data: { retry_after: 2_400 } } } : null;
   const soon = await grain(["faucet", "--relay", g.relay], dir);
   assert.equal(soon.code, 1);
-  assert.match(soon.stderr, new RegExp(`the faucet paid ${address} less than 5 minutes ago: try again in 240 s`));
+  assert.match(soon.stderr, new RegExp(`the faucet paid ${address} lately: try again in 40 minutes`));
   // An address of another network, and no key file nor address.
   const other = await grain(["faucet", "--address", encodeAddress("testnet", accountId(ed25519.getPublicKey(secret))), "--relay", g.relay], dir);
   assert.equal(other.code, 1);
@@ -154,19 +154,19 @@ test("grain faucet --wait in a project grants until the key file's account can p
   // asks a deposit of 10 SALT for the slug, so the deposit and the fees take two grants (the owner's run of 2026-11-05:
   // one grant left the account 5 640 base units short of its first publish, and the next was refused for five minutes).
   const faucet = (st) => (method) => {
-    if (method === "node_status") return { result: { network: "devnet", genesis: GENESIS, slot: 1000, beacon: { height: 1, hash: "b1" }, faucet: { amount: "10000000000", work: "0", every: st.every } } };
+    if (method === "node_status") return { result: { network: "devnet", genesis: GENESIS, slot: 1000, beacon: { height: 1, hash: "b1" }, faucet: { amount: st.amount, work: "0", every: st.every } } };
     if (method === "grain_get") return { result: { grain: st.grain ?? null, deposit: st.deposit } };
     if (method === "faucet_request") {
       if (st.soon > 0) {
         st.soon -= 1;
         return { error: { code: 3, message: "too_soon", data: { retry_after: 1 } } };
       }
-      st.salt += 10_000_000_000n;
-      return { result: { id: "fa".repeat(32), amount: "10000000000", work: null } };
+      st.salt += BigInt(st.amount);
+      return { result: { id: "fa".repeat(32), amount: st.amount, work: null } };
     }
     return null;
   };
-  const st = { salt: 0n, deposit: "10000000000", every: 1, soon: 0 };
+  const st = { salt: 0n, deposit: "10000000000", every: 1, soon: 0, amount: "10000000000" };
   st.answer = faucet(st);
   const g = await gateway(st);
   t.after(() => g.close());
@@ -206,7 +206,7 @@ test("grain faucet --wait in a project grants until the key file's account can p
   st.answer = soonAfterFirst;
   const waited = await grain(["faucet", "--wait", "--timeout", "10", "--relay", g.relay], dirSoon);
   assert.equal(waited.code, 0, waited.stderr);
-  assert.match(waited.stdout, new RegExp(`^the faucet paid ${address} less than 5 minutes ago: try again in 1 s: waiting$`, "m"));
+  assert.match(waited.stdout, new RegExp(`^the faucet paid ${address} lately: try again in 1 s: waiting$`, "m"));
   assert.match(waited.stdout, /^grant 2 of 2: the faucet sent 10 SALT/m);
   assert.equal(g.asked.filter((a) => a.method === "faucet_request").length, 3, "the refused request, then the grant again");
   st.answer = faucet(st);
@@ -221,6 +221,24 @@ test("grain faucet --wait in a project grants until the key file's account can p
   assert.equal(hour.code, 1);
   assert.match(hour.stderr, /chess's first publish needs 100\.001 SALT more \(a deposit of 100 SALT for a slug of 5 characters, and the fees\): 11 grants of 10 SALT, 5 minutes apart, 50 minutes of waiting — a slug of 8 characters or more keeps a deposit of 10 SALT, one of 6–7 keeps 30; or grain publish without --key: the owner's Saltix pays the deposit from its QR code/);
   assert.equal(g.asked.filter((a) => a.method === "faucet_request").length, 0, "no grant before the truth is told");
+  // The test network's own terms (3 SALT once an hour, 2026-11-05): a deposit of 10 SALT is 4 grants, an afternoon —
+  // said as the grants come, each run ending with the clock time to run it again; the command never sleeps an hour.
+  st.deposit = "10000000000";
+  st.every = 3_600;
+  st.amount = "3000000000";
+  const dirHour = project();
+  writeFileSync(join(dirHour, "grain.json"), JSON.stringify({ slug: "chessboard" }));
+  g.asked.length = 0;
+  const hourly = await grain(["faucet", "--wait", "--timeout", "10", "--relay", g.relay], dirHour);
+  assert.equal(hourly.code, 0, hourly.stderr);
+  assert.match(hourly.stdout, /^chessboard's first publish needs 10\.001 SALT more \(a deposit of 10 SALT for a slug of 10 characters, and the fees\): 4 grants of 3 SALT, an hour apart$/m);
+  assert.match(hourly.stdout, /^grant 1 of 4: the faucet sent 3 SALT/m);
+  assert.match(hourly.stdout, /^the faucet pays an address once every an hour: 3 more grants to go — run grain faucet --wait --relay \S+ again after \d\d:\d\d UTC \(7\.001 SALT still needed\)$/m);
+  assert.equal(g.asked.filter((a) => a.method === "faucet_request").length, 1, "one grant a run");
+  const hourlySteps = readFileSync(join(dirHour, ".grain", "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  assert.ok(hourlySteps.some((l) => l.step === "interval" && l.outcome === "waiting" && l.reason === "come_back"), JSON.stringify(hourlySteps));
+  st.every = 300;
+  st.amount = "10000000000";
   // A slug the registry names already has no first publish to pay for: a plain grant, as without a project.
   st.deposit = "10000000000";
   st.grain = { slug: "chessboard", owner: "00".repeat(32), version: 1, retired: null };

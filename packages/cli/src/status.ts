@@ -314,7 +314,7 @@ async function firstPublish(dir: string, node: NodeLike, slug: string, flags: st
     // The faucet's way, measured as grain faucet --wait measures it: the grants the deposit and the fees take at the
     // terms node_status tells, so that the next step says what it costs in time before it is taken.
     const terms = typeof faucet?.amount === "string" && /^\d{1,30}$/.test(faucet.amount) && BigInt(faucet.amount) > 0n
-      ? { amount: BigInt(faucet.amount), every: typeof faucet.every === "number" && faucet.every >= 0 ? Math.floor(faucet.every) : 300 }
+      ? { amount: BigInt(faucet.amount), every: typeof faucet.every === "number" && faucet.every >= 0 ? Math.floor(faucet.every) : 3_600 }
       : null;
     let held = 0n;
     if (existsSync(join(dir, KEY_FILE))) {

@@ -187,7 +187,7 @@ npx grain bundle --connect https://api.dice.example   # seal public/ yourself, a
 npx grain sign                            # signed.json, for a page at your own origin (/.well-known/saltix-grain)
 npx grain publish --hosted                # that page, hosted by you, instead of the network
 npx grain faucet --wait                   # test SALT for owner.key's account: the grants its first publish takes
-                                          # (10 SALT a grant, one every 5 minutes; it says how many and waits)
+                                          # (3 SALT a grant, one an hour; it says how many and when to run it again)
 npx grain publish --key owner.key        # or sign with a key file (test networks, no phone): the app owner.key's
                                           # account's and private; it waits for the chain (about 2-4 minutes, up to 6)
 npx grain profile                         # the Connect profile (connect.json): a QR code for the owner's Saltix, or
@@ -360,8 +360,8 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   told it asks for `--revision` (`--offline`: the file only): serve it at `/.well-known/saltix-connect` as
   `application/json`, with no redirect ([docs/connect.md](docs/connect.md)).
 - `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
-  owner.key's account or `--address` (`faucet_request`): one every 5 minutes an address; a refusal says when to come
-  back. A relay whose node runs no faucet passes the request to the next.
+  owner.key's account or `--address` (`faucet_request`): 3 SALT, one an hour an address (the node's terms,
+  `node_status.faucet`); a refusal says when to come back. A relay whose node runs no faucet passes the request to the next.
 - `grain show --slug S` says what the registry holds in a few lines (the network, the version, public or private, the
   owner, the form, the server keys, the Connect profile and whether a wallet takes it); `--json` prints the record
   itself and nothing else, `--out signed.json` writes the signed manifest. For a free slug it says the deposit
@@ -638,7 +638,7 @@ npm test               # builds, then runs every package's tests (node --test)
 
 The tests hold the SDK to the protocol's golden vectors byte for byte. In this repository they are a copy in `vectors/`
 of the ones Saltix's own repository keeps, made by `scripts/sync-vectors.sh <checkout of corvise/saltix>`, which records
-that checkout's commit and each file's git blob id in `vectors/SOURCE`; CI checks the copies against it
+that checkout's commit and each file's git blob id in the mirror's `vectors/` (its `SOURCE` file); CI checks the copies against it
 (`scripts/check-vectors.mjs`), so a vector edited here by hand fails. This repository is published from Saltix's by its
 `scripts/publish-grains-mirror.sh`, one commit for each sync.
 

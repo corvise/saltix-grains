@@ -191,8 +191,8 @@ registered, or when `--key` names it (the test network without a phone). Every c
 relays it finds when it runs, pinned by their certificates; `--node URL` is a node of your own instead
 ([README](../README.md#networks-no-node-of-your-own-needed)). `grain faucet --wait` gives `owner.key`'s account test
 SALT for the fees and deposits — in a project whose slug is still free, as many grants as its first publish takes (the
-faucet pays 10 SALT a grant, once every 5 minutes: two for a deposit of 10 SALT; it says how many, and waits between
-them):
+test network's faucet pays 3 SALT a grant, one an hour an address: four for a deposit of 10 SALT; each run makes one
+grant and says when to run it again):
 
 ```sh
 grain faucet --wait                                                # test SALT for owner.key's account: the grants a first publish takes

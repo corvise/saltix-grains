@@ -368,6 +368,8 @@ export interface PublishOptions {
   out: string;
   signing: Signing;
   tty: boolean;
+  /** `--qr`: the QR code even where the app's console got the proposal. */
+  qr?: boolean;
   print?: (line: string) => void;
   /** A line that replaces itself on a terminal (progress). */
   progress?: (line: string) => void;
@@ -1101,9 +1103,12 @@ export const PROPOSAL_PICKUP_MS = 6_000;
  * the template's server passes it); the server proposes it in the owner's console as a `Publish` card, which Saltix
  * shows the owner under **Awaiting you** with a notification — the way for a developer who is not the owner, whose
  * phone is elsewhere. Said as it stands after `PROPOSAL_PICKUP_MS`: what the server answered, or that none runs here.
- * A proposal an earlier run left for other content is replaced; one for this content stands as it was.
+ * A proposal an earlier run left for other content is replaced; one for this content stands as it was. Returns whether
+ * the owner's console got it: then the console's card is the one way to approve it and no QR code is shown — one way
+ * at a time, never both (the owner, 2026-11-05: "sometimes a button in the chat, sometimes a QR code"); else the QR
+ * code is the way, and the words say why.
  */
-async function proposeThroughServer(o: PublishOptions, print: (line: string) => void, manifest: Manifest, link: string): Promise<void> {
+async function proposeThroughServer(o: PublishOptions, print: (line: string) => void, manifest: Manifest, link: string): Promise<boolean> {
   const path = join(o.dir, PROPOSAL_FILE);
   const now = o.now ?? Date.now;
   const before = readProposal(path);
@@ -1123,10 +1128,11 @@ async function proposeThroughServer(o: PublishOptions, print: (line: string) => 
   }
   if (p && p.proposed_at && p.error === null && p.owner === true) {
     o.log.step("proposal", "ok", "owner_console");
-    print(`Proposed to the owner in the app's console as v${p.version}: Saltix shows it under Awaiting you (a notification too); the owner taps Review and approve. Or the owner scans the QR code below.`);
+    print(`Proposed to the owner in the app's console as v${p.version}: Saltix shows it under Awaiting you (a notification too); the owner taps Review and approve there. No QR code: the console's card is the one way (grain publish --qr shows one instead).`);
+    return true;
   } else if (p && p.proposed_at && p.error === null) {
     o.log.step("proposal", "waiting", "owner_unreached");
-    print(`The app's server proposed v${p.version} to the team, but the owner's console has not heard from the app yet (the owner opens the app once in Saltix): it proposes again every minute while this command's record stands. Or the owner scans the QR code below.`);
+    print(`The app's server proposed v${p.version} to the team, but the owner's console has not heard from the app yet (the owner opens the app once in Saltix): it proposes again every minute while this command's record stands. Meanwhile the owner can scan the QR code below.`);
   } else if (p && p.proposed_at && p.error) {
     o.log.step("proposal", "failed", "server_refused");
     print(`The app's server could not propose it in the console: ${p.error}. The owner scans the QR code below.`);
@@ -1134,6 +1140,7 @@ async function proposeThroughServer(o: PublishOptions, print: (line: string) => 
     o.log.step("proposal", "waiting", "no_server");
     print(`No server of this app answered here within ${Math.round(pickup / 1000)} s (npm start runs it in this project): the owner scans the QR code below; a server started later proposes it in the owner's console by itself (.grain/proposal.json).`);
   }
+  return false;
 }
 
 /** The owner's Saltix signs — from the app's console (**Awaiting you**) where the app's server runs here, else from a
@@ -1141,21 +1148,27 @@ async function proposeThroughServer(o: PublishOptions, print: (line: string) => 
  *  `--no-wait`). */
 async function signInWallet(o: PublishOptions, print: (line: string) => void, manifest: Manifest, state: PublishState, fresh: boolean): Promise<SignedManifest | null | "no_wait"> {
   const link = await walletLink(manifest, o.node);
+  let inConsole = false;
   if (fresh) {
     const { deposit } = await grainQuote(o.node, manifest.slug);
     print(`Registering ${manifest.slug} keeps a deposit of ${salt(deposit)} SALT until it retires (the slug's length sets it).`);
   } else if (hasServerKey(o)) {
-    // An update of an app whose program runs from this project: the owner approves it where they are.
-    await proposeThroughServer(o, print, manifest, link);
+    // An update of an app whose program runs from this project: the owner approves it where they are — in the app's
+    // console when it got there, else by the QR code (one way at a time; --qr asks for the code in any case).
+    inConsole = (await proposeThroughServer(o, print, manifest, link)) && !o.qr;
   }
-  writeFileSync(join(o.dir, PUBLISH_PAGE_FILE), await publishPage(link, manifest.slug, manifest.version));
-  print(await terminalQr(link, o.tty));
-  print(`Publish ${manifest.slug} v${manifest.version}: scan the QR code with the app owner's Saltix (the phone's camera), check the app and confirm with the PIN.`);
-  print(`  page  ${join(o.dir, PUBLISH_PAGE_FILE)} (the QR code for a browser)`);
-  print(`  link  ${link}`);
-  state.link_shown_at = new Date((o.now ?? Date.now)()).toISOString();
-  writePublishState(o.dir, state);
-  o.log.step("link", "waiting", "shown");
+  if (inConsole) {
+    o.log.step("link", "ok", "console");
+  } else {
+    writeFileSync(join(o.dir, PUBLISH_PAGE_FILE), await publishPage(link, manifest.slug, manifest.version));
+    print(await terminalQr(link, o.tty));
+    print(`Publish ${manifest.slug} v${manifest.version}: scan the QR code with the app owner's Saltix (the phone's camera), check the app and confirm with the PIN. The code is good once: Saltix approves the same content one time.`);
+    print(`  page  ${join(o.dir, PUBLISH_PAGE_FILE)} (the QR code for a browser)`);
+    print(`  link  ${link}`);
+    state.link_shown_at = new Date((o.now ?? Date.now)()).toISOString();
+    writePublishState(o.dir, state);
+    o.log.step("link", "waiting", "shown");
+  }
   if (!o.wait) {
     print(`Once the owner confirmed, grain publish${o.flags} again finishes it${state.pending_until ? "" : " (it puts the bundle into the network then)"}.`);
     o.log.step("registry", "waiting", "no_wait");

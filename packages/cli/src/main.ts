@@ -20,7 +20,7 @@ import {
 import { type VersionStatus, networkVersion } from "./versions.js";
 import { type Reach, reachOf, relaysLog } from "./network.js";
 import {
-  FaucetRefusal, type FaucetTerms, GRANTS_MAX, type PublishGoal, faucetTerms, grantAddress, granted, grantsNeeded, grantsWords, publishGoal, requestGrant, saltOf,
+  FaucetRefusal, type FaucetTerms, GRANTS_MAX, type PublishGoal, WAIT_INSIDE_S, clockAfter, faucetTerms, grantAddress, granted, grantsNeeded, grantsWords, publishGoal, requestGrant, saltOf,
   spanWords, waitForSalt,
 } from "./faucet.js";
 import { DEV_HOST, serve, linkFor, simulatorFor } from "./dev.js";
@@ -97,12 +97,15 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain bundle [--sources URL[,URL]] [--start index.html] [--connect O[,O]] [--out bundle.zip] [--dir .]
                                            seal public/ into one ZIP; grain.json names its hash and size (grain
                                            publish does this itself; --sources only for hosts of your own)
-  grain publish [--key F | --wallet] [--no-wait] [--app-key F] [--hosted] [--out signed.json]
+  grain publish [--key F | --wallet] [--no-wait] [--app-key F] [--hosted] [--qr] [--out signed.json]
                                            publish the app or a new version straight into the Saltix network, no
                                            hosting: a page's public/ is sealed into a bundle, checked and put
                                            into the network (resumed after a break; with grain pair's app.key
                                            before the owner signs), the account that will own the app said, then
-                                           signed in the owner's Saltix by a QR code; a key file signs only when
+                                           signed in the owner's Saltix: an update of an app whose server runs
+                                           here is proposed in the app's console (Awaiting you), one way and no
+                                           QR code — --qr shows the code instead; a first registration, or no
+                                           server here, shows the QR code; a key file signs only when
                                            --key names it (the test network without a phone: a new app it
                                            registers is made private in the same breath) or by itself for an app
                                            it registered; it waits for the chain (about 2-4 minutes, up to 6;
@@ -578,7 +581,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         dir: projectDir, manifestPath, node: r.node, flags: r.flags, log, hosted: flags.get("hosted") === true,
         wallet: flags.get("wallet") === true, keyPath, keyNamed: flags.has("key"), appKeyFile: typeof appKey === "string" ? appKey : undefined,
         wait: flags.get("no-wait") !== true, timeoutMs: Number(text(flags, "timeout", "600")) * 1000, out: text(flags, "out", "signed.json"),
-        signing: signing(flags, r), tty: process.stdout.isTTY === true,
+        signing: signing(flags, r), tty: process.stdout.isTTY === true, qr: flags.get("qr") === true,
         progress: rewriteLine((line) => process.stdout.write(line)),
       });
     }
@@ -1012,8 +1015,10 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       log.onNetwork((await nodeCall<{ network: string }>(r.node, "node_status")).network);
       const address = await grantAddress(r.node, typeof given === "string" ? { address: given } : { secret: readKey(keyPath) });
       // In a project whose slug is still free, --wait grants until the key file's account can pay the first publish
-      // (the deposit and the fees, as the doctor measures it): as many grants as it takes, the faucet's interval
-      // apart, up to GRANTS_MAX — a deposit the faucet's grants would take an hour to gather is said, never waited for.
+      // (the deposit and the fees, as the doctor measures it): as many grants as it takes, up to GRANTS_MAX, the
+      // faucet's interval apart — waited for inside the command while the interval is minutes (WAIT_INSIDE_S), said
+      // with the clock time to run the command again when it is an hour; more grants than GRANTS_MAX are said, never
+      // waited for.
       const slug = (() => {
         if (!wait || typeof given === "string" || !existsSync(manifestPath)) return null;
         try {
@@ -1052,7 +1057,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         try {
           grant = await requestGrant(r.node, address).catch(async (e: unknown) => {
             // A grant too soon after the last by the faucet's clock, not this tool's: once, its wait and again.
-            if (!(k > 1 && e instanceof FaucetRefusal && e.reason === "too_soon" && e.retryAfter !== null && e.retryAfter <= 600)) throw e;
+            if (!(k > 1 && e instanceof FaucetRefusal && e.reason === "too_soon" && e.retryAfter !== null && e.retryAfter <= WAIT_INSIDE_S)) throw e;
             const retryAfter = e.retryAfter;
             log.step("interval", "ok", "faucet_clock", { seconds: retryAfter });
             console.log(`${e.message}: waiting`);
@@ -1070,7 +1075,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         const landed = await waitForSalt(r.node, address, held + grant.salt.amount, timeoutMs);
         log.step("wait", landed ? "ok" : "timeout", landed ? "landed" : "not_landed");
         if (!landed) {
-          console.log("not in the account yet: its shard's next blocks bring it (grain faucet --wait again in 5 minutes if not)");
+          console.log("not in the account yet: its shard's next blocks bring it (grain faucet --wait again in a few minutes if not)");
           return 1;
         }
         held = await saltOf(r.node, address).catch(() => held + grant.salt.amount);
@@ -1080,12 +1085,18 @@ async function main(argv: string[], log: DevLog): Promise<number> {
           console.log(enough(goal));
           return 0;
         }
-        const every = terms?.every ?? 300;
+        const every = terms?.every ?? 3_600;
         if (k >= grants) {
           // The faucet or the deposit changed under this run: the truth, and the way on.
           log.step("grant", "failed", "still_short");
-          console.log(`${KEY_FILE}'s account holds ${salt(held)} SALT, ${goal.slug}'s first publish needs ${salt(goal.need)}: grain faucet --wait${r.flags} again in ${spanWords(every)}`);
+          console.log(`${KEY_FILE}'s account holds ${salt(held)} SALT, ${goal.slug}'s first publish needs ${salt(goal.need)}: grain faucet --wait${r.flags} again after ${clockAfter(every)}`);
           return 1;
+        }
+        if (every > WAIT_INSIDE_S) {
+          // An hour's interval: said, with the clock, never slept through in a coding agent's shell.
+          log.step("interval", "waiting", "come_back", { seconds: every, grant: k + 1, grants });
+          console.log(`the faucet pays an address once every ${spanWords(every)}: ${grants - k} more grant${grants - k === 1 ? "" : "s"} to go — run grain faucet --wait${r.flags} again after ${clockAfter(every)} (${salt(goal.need - held)} SALT still needed)`);
+          return 0;
         }
         log.step("interval", "ok", "faucet_window", { seconds: every, grant: k + 1, grants });
         console.log(`the faucet pays an address once every ${spanWords(every)}: the next grant (${k + 1} of ${grants}) in ${every} s`);
