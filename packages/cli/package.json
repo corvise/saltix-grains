@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@noble/curves": "^1.6.0",
-    "@saltix/grain": "*",
-    "@saltix/grain-server": "*",
+    "@saltix/grain": "^0.1.0",
+    "@saltix/grain-server": "^0.1.0",
     "jpeg-js": "^0.4.4",
     "pngjs": "^5.0.0",
     "qrcode": "^1.5.4"
