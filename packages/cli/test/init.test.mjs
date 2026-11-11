@@ -38,6 +38,77 @@ test("a slug the registry would refuse stops init before anything is made", () =
   assert.equal(grain(["init", "--slug", "t1x"], dir).status, 0, "a slug of three is one");
 });
 
+test("an app's names by language: --name the English one, --name-ru the Russian one, and a Cyrillic --name alone the Russian one, said", () => {
+  const root = scratch("grain-names-");
+  const read = (dir, file) => JSON.parse(readFileSync(join(root, dir, file), "utf8"));
+  const lintOf = (dir) => grain(["lint"], join(root, dir));
+
+  // A Russian name alone: never written as the English one, which stays the slug until its maker writes it — and said.
+  const fly = grain(["init", "fly", "--slug", "muha", "--name", "Муха", "--chat"], root);
+  assert.equal(fly.status, 0, fly.stderr);
+  assert.deepEqual(read("fly", "grain.json").name, { en: "muha", ru: "Муха" });
+  assert.match(fly.stdout,
+    /^note: "Муха" is the app's Russian name \(name\.ru in grain\.json\); its English name, which every app has, is the slug "muha" until you write one: name\.en there, or grain init --name <English> --name-ru "Муха"$/m);
+  const spec = read("fly", "chat.json");
+  assert.deepEqual(spec.intro, { en: "muha: a chat-only app in Saltix.", ru: "Муха: приложение-чат в Saltix." });
+  assert.deepEqual([spec.commands[0].title, spec.commands[0].help, spec.commands[0].params[0].title],
+    [{ en: "Say hello", ru: "Поздороваться" }, { en: "A greeting", ru: "Приветствие" }, { en: "Your name", ru: "Ваше имя" }],
+    "the hello command reads in both languages, as its handler answers in both");
+  assert.equal(chatSpecFromJson(spec).intro.ru, "Муха: приложение-чат в Saltix.", "a spec every reader takes");
+  assert.match(read("fly", "connect.json").texts.en.about, /^muha lives in your Saltix messenger/);
+  assert.match(read("fly", "connect.json").texts.ru.about, /^Муха живёт в мессенджере Saltix/);
+  assert.match(lintOf("fly").stdout, /^muha v1: no errors/m, "the manifest and the profile pass as written");
+
+  // Both names: each under its language, nothing to say.
+  const both = grain(["init", "both", "--slug", "fly-app", "--name", "Fly", "--name-ru", "Муха"], root);
+  assert.equal(both.status, 0, both.stderr);
+  assert.doesNotMatch(both.stdout, /^note:/m);
+  assert.deepEqual(read("both", "grain.json").name, { en: "Fly", ru: "Муха" });
+  assert.match(readFileSync(join(root, "both", "public", "index.html"), "utf8"), /<title>Fly<\/title>/);
+  assert.match(read("both", "connect.json").texts.en.about, / Fly keeps the count /);
+  assert.match(read("both", "connect.json").texts.ru.about, / Муха хранит счёт /);
+  assert.match(lintOf("both").stdout, /^fly-app v1: no errors/m);
+
+  // The Russian name by its own flag: the slug is the English one, as with no name at all; the page shows the name typed.
+  const ru = grain(["init", "ru", "--slug", "fly-ru", "--name-ru", "Муха"], root);
+  assert.equal(ru.status, 0, ru.stderr);
+  assert.doesNotMatch(ru.stdout, /^note:/m);
+  assert.deepEqual(read("ru", "grain.json").name, { en: "fly-ru", ru: "Муха" });
+  assert.match(readFileSync(join(root, "ru", "public", "index.html"), "utf8"), /<title>Муха<\/title>/);
+
+  // A page project named in Cyrillic alone: the same rule, said, and its one-language page shows the name typed.
+  const page = grain(["init", "page", "--slug", "fly-page", "--name", "Муха"], root);
+  assert.equal(page.status, 0, page.stderr);
+  assert.match(page.stdout, /^note: "Муха" is the app's Russian name .* is the slug "fly-page" until you write one/m);
+  assert.deepEqual(read("page", "grain.json").name, { en: "fly-page", ru: "Муха" });
+  assert.match(readFileSync(join(root, "page", "public", "index.html"), "utf8"), /<title>Муха<\/title>/);
+
+  // An English name alone, and none: one name, as ever.
+  assert.equal(grain(["init", "en", "--slug", "fly-en", "--name", "Fly"], root).status, 0);
+  assert.deepEqual(read("en", "grain.json").name, { en: "Fly" });
+  assert.equal(grain(["init", "none", "--slug", "fly-none"], root).status, 0);
+  assert.deepEqual(read("none", "grain.json").name, { en: "fly-none" });
+
+  // A name's bounds are a manifest's, counted in characters: 32 fit, 33 do not.
+  assert.equal(grain(["init", "wide", "--slug", "fly-wide", "--name", "Fly", "--name-ru", "я".repeat(32)], root).status, 0);
+  assert.equal(read("wide", "grain.json").name.ru, "я".repeat(32));
+
+  // What is refused is a misuse of the command (exit 2), before anything is made.
+  const refused = [
+    [["--name", "Муха", "--name-ru", "Мушка"], /--name is the app's English name and --name-ru its Russian one: --name <English> --name-ru "Мушка"/],
+    [["--name", "x".repeat(33)], /--name: an app's name is 1 to 32 characters, none of them a control character/],
+    [["--name-ru", "я".repeat(33)], /--name-ru: an app's name is 1 to 32 characters/],
+    [["--name", "Fly\u0007"], /--name: an app's name is 1 to 32 characters, none of them a control character/],
+    [["--name", ""], /--name: an app's name is 1 to 32 characters/],
+  ];
+  for (const [flags, message] of refused) {
+    const r = grain(["init", "refused", "--slug", "fly-refused", ...flags], root);
+    assert.equal(r.status, 2, `${flags.join(" ")}: ${r.stderr}`);
+    assert.match(r.stderr, message);
+    assert.equal(existsSync(join(root, "refused")), false, "nothing made");
+  }
+});
+
 test("every key file stays out of git, whatever its name", () => {
   const dir = join(scratch("grain-ignore-"), "dice");
   assert.equal(grain(["init", dir], tmpdir()).status, 0);
@@ -242,7 +313,7 @@ test("a chat-only grain's server starts from its developer key alone and answers
   // A wallet: the user's grain key in the app, a request for hello, the signed card it gets.
   const user = new Uint8Array(32).fill(7);
   const wallet = await RelayClient.connect({
-    endpoints: [pinned.endpoint], secret: user, messagingSecret: derive("Saltix grain messaging key v1", user, new TextEncoder().encode("coach")),
+    endpoints: [pinned.endpoint], secret: user, messagingSecret: derive("Salarium grain messaging key v1", user, new TextEncoder().encode("coach")),
     network: "devnet", log: () => {},
   });
   t.after(() => wallet.close());

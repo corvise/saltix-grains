@@ -22,7 +22,7 @@ import QRCode from "qrcode";
 import {
   APP_JSON_FILE, APP_KEY_FILE, AppKey, MAX_PAIR_NAME, type NetworkName, type NodeLike, type PairTarget, type PairingOffer, PairingError, type RegisteredGrain,
   ID_BYTES, type SlugRecord, decodeOffer, encodeAddress, encodeOffer, fromHex, grainGet, judgeSlug, keyFingerprint, makeOffer, nodeCall,
-  offerCodeText, offerLink, pairTarget, refusedChar, registeredKeyStatus, slugRecordOf, targetOwner, toHex,
+  offerCodeText, offerLink, pairTarget, refusedChar, registeredKeyStatus, slugRecordOf, targetOwner, toHex, updateAdvice,
 } from "@saltix/grain-server";
 import { type DevLog, GRAIN_DIR, grainDir } from "./devlog.js";
 import { Waiting, elapsed } from "./wait.js";
@@ -284,6 +284,9 @@ export interface PairOptions {
   genesis?: string;
   /** `--name`: what to call this server on the owner's screen; the computer's host name unless told. */
   name?: string;
+  /** The genesis hash of the network this release of the SDK was made for, when the command goes by the relays the
+   *  release finds (`releaseGenesis`); absent with relays of one's own or a node, and where the release knows none. */
+  release?: string;
   /** Pair a new key even though `app.key` (or a key waiting) is still named. */
   fresh: boolean;
   /** Show the offer and return: a later `grain pair` waits for the registry. */
@@ -300,11 +303,29 @@ export interface PairOptions {
   pollMs?: number;
 }
 
+/**
+ * What `grain pair` says first when the command from the app's page names another network (`--genesis`, 16 hex) than
+ * the one this release of the SDK was made for (`release`, its genesis hash): a test network begins again under a new
+ * genesis with new relays, so one of the two is behind it — known here, before any relay is asked, where the relays'
+ * own failure could only guess. Null when they agree, or when either is not known.
+ */
+export function releaseNote(genesis16: string | undefined, release: string | undefined): string | null {
+  if (genesis16 === undefined || release === undefined || !/^[0-9a-f]{16}$/.test(genesis16) || release.startsWith(genesis16)) return null;
+  return `note: the command names the network ${genesis16}, and this release of the SDK was made for ${release.slice(0, 16)}. A test network ` +
+    `begins again under a new genesis, with new relays, so one of the two is behind it: ${updateAdvice()}; or, where the command came ` +
+    `from a Saltix not updated since, update Saltix. Asking the relays this release finds all the same`;
+}
+
 /** The whole of `grain pair`: its exit status. */
 export async function pair(o: PairOptions): Promise<number> {
   const out = o.out ?? ((line: string) => console.log(line));
   const now = o.now ?? Date.now;
   const dir = resolve(o.dir);
+  const behind = releaseNote(o.genesis, o.release);
+  if (behind !== null) {
+    o.log.step("release", "refused", "other_genesis");
+    out(behind);
+  }
   const status = await nodeCall<{ network: string; genesis: string }>(o.node, "node_status");
   if (!["mainnet", "testnet", "devnet"].includes(status.network)) throw new Error(`the node answers for ${status.network}, a network the SDK does not know`);
   const network = status.network as NetworkName;

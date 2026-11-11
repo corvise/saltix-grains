@@ -123,3 +123,15 @@ test("the protocol's pages each name the protocol commit they reflect, and the i
   assert.ok(index.includes("](../../vectors/README.md)"), "the index leads to the vectors");
   assert.match(readFileSync(join(root, "vectors", "README.md"), "utf8"), /the protocol's own bytes/i);
 });
+
+test("a relay ticket's prefix, wherever a page, a help text or a template names it, is the one tickets carry", async () => {
+  const { TICKET_PREFIX } = await import("@saltix/grain-server");
+  const stale = [];
+  for (const f of files) {
+    const name = relative(root, f).split("\\").join("/");
+    // The change log tells what a release said then; the vectors are the protocol's bytes, refused texts among them.
+    if (!TEXT.test(f) || name === "CHANGELOG.md" || name.startsWith("vectors/")) continue;
+    for (const m of readFileSync(f, "utf8").matchAll(/\b[A-Z]+-RELAY:/g)) if (m[0] !== TICKET_PREFIX) stale.push(`${name}: ${m[0]}`);
+  }
+  assert.deepEqual(stale, [], "a prefix no reader takes: the page, help or template is behind the protocol");
+});

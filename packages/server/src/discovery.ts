@@ -11,10 +11,11 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NetworkName } from "./address.js";
 import { entryPoints } from "./entry.js";
-import { type RelayEndpoint, relayFailure, relayId, relayName, usableEndpoint } from "./relay.js";
+import { type RelayEndpoint, pinMismatch, relayFailure, relayId, relayName, usableEndpoint } from "./relay.js";
 import {
   type RelayTicket, TICKETS, TICKET_PREFIX, type TicketReason, TicketRefused, isTicketText, openTicketsAnswer, readTicket, ticketsKey,
 } from "./tickets.js";
@@ -56,6 +57,9 @@ export interface RelayTry {
   ms: number | null;
   /** Why not, in a person's words. */
   error: string | null;
+  /** Why not, where code judges by it: `pin` when the relay showed another certificate than the one its record names
+   *  (`releaseBehind`), else null. */
+  cause: "pin" | null;
 }
 
 /** What a finder did, for `grain doctor` and the error when nothing answered: counts, reasons and fingerprints, never a
@@ -98,14 +102,47 @@ const SOURCE_WORDS: Record<RelaySource, string> = {
   given: "given", cache: "from the cache", entry: "the release's entry point", discovered: "found by asking",
 };
 
+/** Where a relay ticket comes from, in one clause: Saltix shows none; the SDK's doctor prints the tickets of the relays
+ *  that answered it. */
+export const TICKET_ADVICE = "a relay ticket from a computer whose SDK reaches the network (grain doctor --json there prints them: relays.answered)";
+
+/** Whether a look that found no relay says that this release of the SDK is, most likely, behind the network: it tried
+ *  entry points, and every one of them showed another certificate than its pin. One relay replaced is that relay's
+ *  matter; all of them at once is a network whose relays were set up anew after the release was made (a test network
+ *  begun again), which a newer release names — or, rarely, something between this computer and the relays that answers
+ *  in their place. */
+export function releaseBehind(r: RelayReport): boolean {
+  const entries = r.tried.filter((t) => t.source === "entry");
+  return entries.length > 0 && entries.every((t) => t.cause === "pin") && !r.tried.some((t) => t.ok);
+}
+
+/** The SDK's directory this package stands in (`<SDK>/packages/server/dist`). */
+const SDK_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+
+/** How a release behind the network is brought up to date, in one clause: by the command, where this package stands in
+ *  a checkout of the SDK (a project's dependencies point into it, so the project needs nothing more); else in words. */
+export function updateAdvice(root: string = SDK_ROOT): string {
+  return existsSync(join(root, ".git")) && existsSync(join(root, "packages", "server"))
+    ? `update the SDK: git pull && npm install && npm run build in ${root}`
+    : "update to a newer release of the SDK (github.com/corvise/saltix-grains: git pull && npm install && npm run build in its checkout), or of the program that carries it";
+}
+
 function describeFailure(r: RelayReport): string {
-  const lines = [`no relay of ${r.network} answered (${r.tried.length} tried in ${(r.took_ms / 1000).toFixed(1)} s):`];
+  const behind = releaseBehind(r);
+  const tried = `${r.tried.length} tried in ${(r.took_ms / 1000).toFixed(1)} s`;
+  const lines = [behind
+    ? `this release of the SDK is most likely behind the ${r.network} network: every entry point it carries showed another certificate than its pin (${tried}):`
+    : `no relay of ${r.network} answered (${tried}):`];
   for (const t of r.tried) lines.push(`  relay ${t.relay} (${SOURCE_WORDS[t.source]}): ${t.error ?? "answered"}`);
   if (r.tried.length === 0) lines.push("  none: nothing was given, the cache is empty and this release carries no entry point for it");
   for (const w of r.warnings) lines.push(`  ${w}`);
   if (r.cache !== null && r.sources.cache === 0) lines.push(`  the cache (${r.cache}) held no relay of this network`);
-  lines.push("what to do: grain doctor says the same; a relay ticket from someone whose Saltix works (--relay SALARIUM-RELAY:…), " +
-    "or a relay or node of your own (--relay wss://host:port/#<SHA-256 of its certificate>, --node URL)");
+  const given = `${TICKET_ADVICE}, given as --relay ${TICKET_PREFIX}…, or a relay or node of your own (--relay wss://host:port/#<SHA-256 of its ` +
+    "certificate>, --node URL)";
+  lines.push(behind
+    ? `what to do: ${updateAdvice()}; if it is the latest already, something between this computer and the relays answers in their place (a proxy ` +
+      `that opens TLS, a network's sign-in page): try another connection, or ${given}`
+    : `what to do: grain doctor says the same; ${given}`);
   return lines.join("\n");
 }
 
@@ -181,7 +218,8 @@ export function projectRelayCache(dir: string, network: NetworkName): RelayCache
 }
 
 /** The relays given in `SALTIX_RELAYS`: tickets (`SALARIUM-RELAY:…`) or endpoints (`wss://host:port/#<pin>`), apart by
- *  spaces or commas — a ticket someone whose Saltix works gave you, for a server whose entry points are blocked. */
+ *  spaces or commas — a ticket from a computer whose SDK reaches the network (`TICKET_ADVICE`), for a server whose entry
+ *  points are blocked. */
 export function relaysFromEnvironment(env: NodeJS.ProcessEnv = process.env): string[] {
   return (env.SALTIX_RELAYS ?? "").split(/[\s,]+/).filter((s) => s !== "");
 }
@@ -232,6 +270,8 @@ interface Probed {
   ok: boolean;
   ms: number;
   error: string | null;
+  /** `RelayTry.cause`, when the probe failed by one. */
+  cause?: "pin";
   genesis: string | null;
 }
 
@@ -673,7 +713,8 @@ export class RelayFinder {
       this.holdTo(probed, this.settled ?? this.prefix);
       return probed;
     } catch (e) {
-      return { candidate, ok: false, ms: Math.max(0, this.now() - started), error: relayFailure(e, this.probeMs), genesis: null };
+      const failed = { candidate, ok: false, ms: Math.max(0, this.now() - started), error: relayFailure(e, this.probeMs), genesis: null };
+      return pinMismatch(e) ? { ...failed, cause: "pin" } : failed;
     }
   }
 
@@ -933,7 +974,9 @@ export class RelayFinder {
       cache: this.options.cache?.where ?? null,
       kept,
       sources,
-      tried: all.map((p) => ({ relay: relayName(p.candidate.endpoint), source: p.candidate.source, ok: p.ok, ms: p.ok ? p.ms : null, error: p.error })),
+      tried: all.map((p) => ({
+        relay: relayName(p.candidate.endpoint), source: p.candidate.source, ok: p.ok, ms: p.ok ? p.ms : null, error: p.error, cause: p.cause ?? null,
+      })),
       discovery: taken > 0 ? "tickets" : "none",
       tickets: { taken, refused },
       answered: [...new Set(good.map((p) => p.candidate.entry).filter((e) => e.startsWith(TICKET_PREFIX)))],

@@ -11,9 +11,10 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
-  AppKey, APP_KEY_FILE, type Manifest, type NetworkName, type NodeLike, type RegisteredGrain, type RelayReport, NO_ICON, NoRelayAnswered, RelayGateways, UNOWNED,
+  AppKey, APP_KEY_FILE, type Manifest, type NetworkName, type NodeLike, type RegisteredGrain, type RelayReport, NO_ICON, NoRelayAnswered, RelayGateways,
+  TICKET_ADVICE, TICKET_PREFIX, UNOWNED,
   blobHeld, decodeOffer, encodeManifest, fromHex, grainGet, grainQuote, iconHash, judgeSlug, keyFingerprint, keyPairedHere, minimumFee, nodeCall,
-  registeredKeyStatus, slugRecordOf, targetOwner, toHex,
+  registeredKeyStatus, releaseBehind, slugRecordOf, targetOwner, toHex, updateAdvice,
 } from "@saltix/grain-server";
 import { type Bundle, makeBundle } from "./bundle.js";
 import { CONNECT_FILE, TEMPLATE_NEXT, lintConnect, readConnectFile, stillTemplate, templateTexts } from "./connect.js";
@@ -93,6 +94,12 @@ export async function keyState(dir: string, node: NodeLike, flags = ""): Promise
   try {
     status = await nodeCall(node, "node_status");
   } catch (e) {
+    // No relay to ask through is said as doctor says it — what was tried, why not, and the way out —, never as a network
+    // that did not answer: a release behind the network is answered, by relays it does not know.
+    if (e instanceof NoRelayAnswered) {
+      const relays = relaysFinding(e.report, flags, "status");
+      return { status: "unknown", detail: `no relay to ask the network through: ${relays.detail}`, next: relays.next ?? null };
+    }
     return {
       status: "unknown", detail: `the network did not answer (${(e as Error).message})`,
       next: `grain status${flags} again once the network answers (or pass --relay or --node)`,
@@ -211,9 +218,11 @@ const SOURCE_LABEL = { given: "given", cache: "cache", entry: "entry points" } a
  * Where a command's relays came from and which answered, how fast (Saltix 41-transport §18.5), in doctor's words: the
  * sources (given, the project's cache, the release's entry points), the tickets taken and those refused by reason, and
  * the times; when none answered, each relay tried — by its key's or its certificate's fingerprint, never its address —
- * and why, and the way out; a ticket given and left out (past its life) as a warning.
+ * and why, and the way out: an update, when every entry point of the release showed another certificate than its pin
+ * (`releaseBehind`), else a relay ticket and where one comes from; a ticket given and left out (past its life) as a
+ * warning. `command` is the one the way out ends with: the command that asked.
  */
-export function relaysFinding(r: RelayReport, flags = ""): Finding {
+export function relaysFinding(r: RelayReport, flags = "", command: "doctor" | "status" = "doctor"): Finding {
   const answered = r.tried.filter((t) => t.ok).map((t) => t.ms!).sort((a, b) => a - b);
   const from = (Object.keys(SOURCE_LABEL) as Array<keyof typeof SOURCE_LABEL>)
     .filter((s) => r.sources[s] > 0).map((s) => `${SOURCE_LABEL[s]} ${r.sources[s]}`).join(", ") || "nothing to start from";
@@ -223,10 +232,19 @@ export function relaysFinding(r: RelayReport, flags = ""): Finding {
   const kept = r.cache === null ? "" : `; kept ${r.kept} in ${r.cache}${r.kept === 0 ? " (entry points never are)" : ""}`;
   const warning = r.warnings.length > 0 ? { warning: r.warnings.join("; ") } : {};
   if (answered.length === 0) {
+    if (releaseBehind(r)) {
+      return {
+        ok: false, what: "relays",
+        detail: `this release of the SDK is most likely behind the ${r.network} network: every entry point it carries showed another certificate ` +
+          `than its pin (none of ${r.tried.length} answered; ${from}${found})`,
+        next: `${updateAdvice()}; then grain ${command}${flags} again`,
+        ...warning,
+      };
+    }
     const tried = r.tried.slice(0, 4).map((t) => `relay ${t.relay} ${t.error}`).join("; ") + (r.tried.length > 4 ? `; … ${r.tried.length - 4} more` : "");
     return {
       ok: false, what: "relays", detail: `none of ${r.tried.length} answered (${from}${found}): ${tried || "nothing to try"}`,
-      next: `a relay ticket from someone whose Saltix works: grain doctor${flags} --relay SALTIX-RELAY:… (or --node URL, a node of your own)`,
+      next: `${TICKET_ADVICE}: grain ${command}${flags} --relay ${TICKET_PREFIX}… (or --node URL, a node of your own)`,
       ...warning,
     };
   }
@@ -526,6 +544,9 @@ export async function doctor(dir: string, node: NodeLike, flags = "", now = Date
   const kind = projectKind(dir);
   if (state.status === "not_needed") {
     findings.push({ ok: true, what: "key", detail: `not needed: a page alone has no server (grain pair${flags} would let grain publish put its bundle into the network before the owner signs)` });
+  } else if (state.status === "unknown" && relays !== null && !relays.finding.ok) {
+    // No relay answered: the relays' finding above says it once, with each relay and the way out.
+    findings.push({ ok: false, what: "key", detail: "not checked: no relay to ask the network through (relays, above)" });
   } else {
     findings.push({ ok: state.status === "paired", what: "key", detail: state.detail, ...(state.next ? { next: state.next } : {}), ...(state.warning ? { warning: state.warning } : {}) });
   }

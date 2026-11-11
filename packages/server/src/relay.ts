@@ -56,12 +56,18 @@ export function withoutAddresses(text: string): string {
     .replace(/(?<![\w:])(?=[0-9a-f:]*::|(?:[0-9a-f]{1,4}:){4})[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}(?::\d+)?(?![\w:])/gi, "<relay>");
 }
 
+/** Whether a request failed because the relay showed another certificate than the one its record names: the cause as
+ *  code reads it (a finder's `RelayTry.cause`), where `relayFailure` gives its words. */
+export function pinMismatch(e: unknown): boolean {
+  return /certificate does not match/.test(e instanceof Error ? e.message : String(e));
+}
+
 /** Why a request to a relay failed, in a person's words and never with its address: the system's codes in words, what
  *  else it says with addresses taken out. */
 export function relayFailure(e: unknown, timeoutMs: number): string {
   const message = e instanceof Error ? e.message : String(e);
   const code = (e as { code?: unknown } | null)?.code;
-  if (/certificate does not match/.test(message)) return "showed another certificate than its pin (not this relay, or it was replaced)";
+  if (pinMismatch(e)) return "showed another certificate than its pin (not this relay, or it was replaced)";
   if (code === "ECONNREFUSED") return "refused the connection";
   if (code === "ECONNRESET" || code === "EPIPE") return "closed the connection";
   if (code === "EHOSTUNREACH" || code === "ENETUNREACH") return "unreachable from here";

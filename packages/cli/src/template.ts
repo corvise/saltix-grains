@@ -306,8 +306,11 @@ const PAGE_COMMANDS = `- \`npm install\` once: it links the \`grain\` command (a
   A key file signs only when \`--key\` names it, or by itself for an app its account owns: the way without a phone is
   [No phone, test network](${HOW_IT_WORKS}#no-phone-test-network). Registry commands reach the test network through
   relays the SDK finds by itself, each pinned by its certificate: no node, nothing to configure. \`--node URL\` is for a
-  node of your own. When none answers, \`npx grain doctor\` names each relay tried and why: a relay ticket someone
-  whose Saltix works gave you goes in \`--relay SALTIX-RELAY:…\` (a value that cannot be a relay exits 78). Never write a
+  node of your own. When none answers, \`npx grain doctor\` names each relay tried and why. If it says this release of
+  the SDK is behind the network (every entry point showed another certificate than its pin), update the SDK as it
+  says and run the command again; otherwise a relay ticket from a computer whose SDK reaches the network (\`npx grain
+  doctor --json\` there prints them as \`relays.answered\`) goes in \`--relay SALARIUM-RELAY:…\` (a value that cannot be
+  a relay exits 78). Never write a
   relay's address into the app: the SDK carries no list of relays and finds them by tickets.
 - **A command that waits for the chain** (\`grain publish\`, \`profile\`, \`access\` signed with a key file) takes about
   1.5 to 2.5 minutes a transaction, up to about 6 for a first publish: run it in the background or with a timeout of 10
@@ -334,8 +337,11 @@ const CHAT_COMMANDS = `- \`npx grain status\` first, every session: whether the 
 - \`npx grain show --slug <slug>\`, \`npx grain app-key --file app.key\`: what the registry holds, whether it names the key.
   Every registry command and \`npx grain faucet\` (test SALT) reach the test network through relays the SDK finds by
   itself, each pinned by its certificate: no node needed. \`--node URL\` is for a node of your own.
-- **Relays are found, never listed.** When none answers, \`npx grain doctor\` names each relay tried and why; then pass a
-  relay ticket someone whose Saltix works gave you (\`--relay SALTIX-RELAY:…\`); the server takes tickets in
+- **Relays are found, never listed.** When none answers, \`npx grain doctor\` names each relay tried and why. If it
+  says this release of the SDK is behind the network (every entry point showed another certificate than its pin),
+  update the SDK as it says and start again; otherwise pass a relay ticket from a computer whose SDK reaches the
+  network, where \`npx grain doctor --json\` prints them as \`relays.answered\` (\`--relay SALARIUM-RELAY:…\`); the
+  server takes tickets in
   \`SALTIX_RELAYS\` and needs two of two different relays (it signs only under the genesis two relays agree on), or
   \`NODE_RPC\`: one that cannot be a relay stops it with 78, one past its life is left out with a warning. Never write a relay's address
   into this app's code, docs or configuration: the SDK carries no list of relays and finds them by tickets.`;
@@ -570,13 +576,17 @@ ${signIn ? `- Check first, render after: \`public/index.html\` shows only a spla
  */
 export const CHAT_SPEC_FIRST_VERSION = 4;
 
-/** \`chat.json\` of a new chat-only grain, at \`CHAT_SPEC_FIRST_VERSION\`. */
-export const chatJson = (slug: string, name: string) => JSON.stringify({
+/** \`chat.json\` of a new chat-only grain, at \`CHAT_SPEC_FIRST_VERSION\`: in English and Russian, as its handlers
+ *  answer; \`nameRu\` is the app's Russian name where it has one. */
+export const chatJson = (slug: string, name: string, nameRu = name) => JSON.stringify({
   slug,
   version: CHAT_SPEC_FIRST_VERSION,
-  intro: { en: `${name}: a chat-only app in Saltix.` },
+  intro: { en: `${name}: a chat-only app in Saltix.`, ru: `${nameRu}: приложение-чат в Saltix.` },
   commands: [
-    { name: "hello", title: { en: "Say hello" }, help: { en: "A greeting" }, params: [{ name: "name", title: { en: "Your name" }, kind: { text: { max: 32 } } }] },
+    {
+      name: "hello", title: { en: "Say hello", ru: "Поздороваться" }, help: { en: "A greeting", ru: "Приветствие" },
+      params: [{ name: "name", title: { en: "Your name", ru: "Ваше имя" }, kind: { text: { max: 32 } } }],
+    },
   ],
   keeps: 0,
   ai: false,
@@ -588,11 +598,11 @@ export const chatJson = (slug: string, name: string) => JSON.stringify({
  * Russian, so it passes `grain lint` as it is and shows what a good profile says: what the app is in one line, what it
  * does, facts it is good at, and what it keeps about a user and for how long. Rewrite it as the app grows.
  */
-export function connectJson(slug: string, name: string, chat: boolean): string {
+export function connectJson(slug: string, name: string, chat: boolean, nameRu = name): string {
   return JSON.stringify({
     version: 1,
     subject: { grain: { slug } },
-    texts: connectTexts(name, chat),
+    texts: connectTexts(name, chat, nameRu),
     // The app's own site, when it has one (an https:// link); never a placeholder, which grain lint refuses.
     website: null,
     support: null,
@@ -600,10 +610,10 @@ export function connectJson(slug: string, name: string, chat: boolean): string {
   }, null, 2) + "\n";
 }
 
-/** The texts of `connectJson`, by language: about the counter (or the chat) `grain init` makes, named `name`. A project
- *  that still has them describes the template, not its app: `grain lint` warns (`connect-template`), `grain profile`
- *  refuses. */
-export function connectTexts(name: string, chat: boolean): Record<string, { tagline: string; about: string; highlights: string[]; privacy: string }> {
+/** The texts of `connectJson`, by language: about the counter (or the chat) `grain init` makes, named `name` (`nameRu`
+ *  in Russian, where the app has a Russian name). A project that still has them describes the template, not its app:
+ *  `grain lint` warns (`connect-template`), `grain profile` refuses. */
+export function connectTexts(name: string, chat: boolean, nameRu = name): Record<string, { tagline: string; about: string; highlights: string[]; privacy: string }> {
   return chat
     ? {
       en: {
@@ -614,7 +624,7 @@ export function connectTexts(name: string, chat: boolean): Record<string, { tagl
       },
       ru: {
         tagline: "Отвечает на запросы прямо в чате Saltix",
-        about: `${name} живёт в мессенджере Saltix: выберите команду, заполните форму, и ответ придёт карточкой.\nНичего не нужно устанавливать и регистрировать.`,
+        about: `${nameRu} живёт в мессенджере Saltix: выберите команду, заполните форму, и ответ придёт карточкой.\nНичего не нужно устанавливать и регистрировать.`,
         highlights: ["Работает в мессенджере Saltix", "Без регистрации и пароля", "Отвечает по-русски и по-английски"],
         privacy: "Хранит запросы, на которые ответил, и число отправленных вам сообщений под идентификатором, который видит для вас, пока приложение работает. Ваш адрес не видит.",
       },
@@ -628,7 +638,7 @@ export function connectTexts(name: string, chat: boolean): Record<string, { tagl
       },
       ru: {
         tagline: "Счётчик, который всегда с вами на любом телефоне",
-        about: `Нажмите Count, чтобы прибавить единицу. ${name} хранит счёт в вашем хранилище Saltix, поэтому он одинаков на всех телефонах аккаунта.`,
+        about: `Нажмите Count, чтобы прибавить единицу. ${nameRu} хранит счёт в вашем хранилище Saltix, поэтому он одинаков на всех телефонах аккаунта.`,
         highlights: ["Один счёт на всех ваших телефонах", "Без регистрации и пароля", "Данные зашифрованы в вашем хранилище"],
         privacy: "Хранит одно число, ваш счёт, зашифрованным в хранилище Saltix, пока вы не удалите данные приложения. Ваш адрес не видит.",
       },
@@ -654,10 +664,11 @@ A chat-only grain: an app users talk to in Saltix, with no page and nothing to h
   (\`npm test\`), and raise \`version\` with every change: a wallet takes only a version above the one it holds, and an
   app made in Saltix starts at 1.
 - Make the app in Saltix (My apps → New app, whose last step shows the pairing command), or \`grain pair\` makes it from its QR code. Without a phone, on the test
-  network: \`grain faucet --wait\` gives \`owner.key\`'s account test SALT — the grants the first publish takes, 10 SALT
-  a grant once every 5 minutes, said and waited for —, then \`grain publish --key owner.key\` registers the slug (a
-  deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain
-  retire\`), private, through the test network's relays.
+  network: \`grain faucet --wait\` gives \`owner.key\`'s account test SALT — the grants the first publish takes: it says
+  how many, makes one, and ends with the time to run it again —, then \`grain publish --key owner.key\` registers the
+  slug (a deposit by its length: 100 SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more; back 30 days after \`grain
+  retire\`), private, through the test network's relays. Where the faucet's grants would not cover the slug's deposit
+  (a shorter slug's is larger), it says so instead, and the owner's Saltix pays (\`grain pair\`).
 - \`grain cert init\` makes \`server.key\`; \`grain configure --slug ${slug} --server server.key\` names it in the registry;
   \`grain app-key make --slug ${slug}\` writes \`app.key\` for it, the file the server runs with. Each takes \`--node
   <url>\` for a node of your own.

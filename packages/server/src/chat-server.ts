@@ -101,8 +101,8 @@ export interface ChatServerOptions {
   endpoints?: RelayEndpoint[];
   /**
    * Relay tickets (`SALARIUM-RELAY:…`) or endpoints (`wss://host:port/#<pin>`) to try first, before the cache and the
-   * release's entry points, when the server finds its relays by itself (41-transport §18.5): a ticket someone whose
-   * Saltix works gave you, where the entry points are blocked. One that cannot be a relay refuses the start
+   * release's entry points, when the server finds its relays by itself (41-transport §18.5): a ticket from a
+   * computer whose SDK reaches the network (`TICKET_ADVICE`), where the entry points are blocked. One that cannot be a relay refuses the start
    * (`chat_relay_refused`, 78); a ticket past its life is left out with a warning, and the rest still serve.
    */
   relays?: string[];

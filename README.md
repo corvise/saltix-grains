@@ -139,7 +139,8 @@ epoch begins from `node_status.epochs_ahead` and `pace`, never from `genesis_tim
   when none answers and every hour. Nothing to configure. `grain doctor` says where they came from, which answered and
   how fast, and when none did, each one — by its key's or its certificate's fingerprint, never its address — and why.
   `--network devnet` is the default; no other network has relays to find yet.
-- **`--relay SALTIX-RELAY:…`** (a relay ticket someone whose Saltix works gave you) or **`--relay
+- **`--relay SALARIUM-RELAY:…`** (a relay ticket from a computer whose SDK reaches the network: `npx grain doctor
+  --json` there prints them as `relays.answered`) or **`--relay
   wss://host:30335/#<sha256>`** (a relay of your own, pinned by its certificate's SHA-256 as its relay record names it),
   repeatable: a ticket goes first, with the project's cache and the entry points still tried; relays of your own named
   by `wss://…#<pin>` are used alone by a command (a private network's). A server takes them in `SALTIX_RELAYS`
@@ -171,6 +172,7 @@ npm install --save-dev ../saltix-grains/packages/cli ../saltix-grains/packages/s
 
 ```sh
 npx grain init ../dice --name "Dice roll"   # grain.json (sealed), connect.json, owner.key (owner-only), public/ with the bridge, AGENTS.md, package.json
+npx grain init ../dice --name "Dice roll" --name-ru "Кости"   # the same with its Russian name (a --name in Cyrillic alone is taken as the Russian one)
 npx grain init ../team-board --sign-in    # a page for some people only: its splash until its sign-in decides
 cd ../dice && npm install && npx grain dev   # links the grain command; serves public/, the signed manifest and the simulator
 npx grain dev --check                     # the simulator headless: every screen, both themes; .grain/check/; exit 1 on an error

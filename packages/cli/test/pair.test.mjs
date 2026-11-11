@@ -9,7 +9,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import { AppKey, PAIR_OFFER_LIFE_MS, accountId, encodeAddress, fromHex, keyFingerprint, parseOfferLink, toHex, verifyServerKeyProof } from "@saltix/grain-server";
-import { ensureGitignore, nameForOffer, ownerAddressOf, pair, readPairState, terminalQr } from "../dist/pair.js";
+import { ensureGitignore, nameForOffer, ownerAddressOf, pair, readPairState, releaseNote, terminalQr } from "../dist/pair.js";
 import { doctor, keyState } from "../dist/status.js";
 import { DevLog, reasonOf } from "../dist/devlog.js";
 import { scratch } from "../../../scripts/scratch.mjs";
@@ -420,6 +420,39 @@ test("doctor walks the path and stops at the first thing to do; a developer key 
   writeFileSync(join(dir, "grain.json"), JSON.stringify({ slug: "dice", version: 1, name: { en: "Dice" }, entry: { chat: {} } }));
   const other = await doctor(dir, node);
   assert.equal(other.findings.find((f) => f.what === "app").next, "set grain.json's slug to access, or grain pair --new --app dice");
+});
+
+test("a command that names another network than this release of the SDK was made for is told first, before the network is asked", async () => {
+  const OTHER = "ab".repeat(32);
+  const note = releaseNote(GENESIS16, OTHER);
+  assert.match(note, /^note: the command names the network 5a5a5a5a5a5a5a5a, and this release of the SDK was made for abababababababab\. /);
+  assert.match(note, /one of the two is behind it: update .+; or, where the command came from a Saltix not updated since, update Saltix\. Asking the relays this release finds all the same$/);
+  assert.equal(releaseNote(GENESIS16, GENESIS), null, "the release's own network");
+  assert.equal(releaseNote(undefined, OTHER), null, "a command with no genesis");
+  assert.equal(releaseNote(GENESIS16, undefined), null, "relays of one's own, a node, or a release that knows no genesis");
+  assert.equal(releaseNote("5A5A", OTHER), null, "a genesis out of form has its own refusal");
+
+  // In the command: told first and logged by its code; the network that answers then decides as ever.
+  const dir = project();
+  const told = run(dir, fakeNode(), { ...FIELDS, release: OTHER, wait: false });
+  assert.equal(await told.done, 0);
+  assert.equal(told.lines[0], note);
+  await linkIn(told.lines);
+  assert.deepEqual(logOf(dir).filter((l) => l.step === "release").map((l) => [l.outcome, l.reason]), [["refused", "other_genesis"]]);
+  // The network silent: the note is what the command knew, and it stands before the failure.
+  const silent = fakeNode();
+  silent.down = true;
+  const lost = run(project(), silent, { ...FIELDS, release: OTHER, wait: false });
+  await assert.rejects(lost.done, /fetch failed/);
+  assert.deepEqual(lost.lines, [note]);
+  // The release's own network, or none it knows: nothing told, nothing logged.
+  for (const over of [{ release: GENESIS }, {}]) {
+    const own = project();
+    const quiet = run(own, fakeNode(), { ...FIELDS, ...over, wait: false });
+    assert.equal(await quiet.done, 0);
+    assert.ok(!quiet.lines.some((l) => l.startsWith("note: the command names")), "no note");
+    assert.ok(!logOf(own).some((l) => l.step === "release"));
+  }
 });
 
 test("the terminal's QR code has no escape codes off a terminal, and the log takes codes only", async () => {

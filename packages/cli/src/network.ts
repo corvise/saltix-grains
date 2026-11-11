@@ -4,7 +4,7 @@
 // pinned by the certificate its ticket names, 09-relay §10.7), through relays named on the command line, or through your
 // own node.
 import {
-  type NetworkName, type NodeLike, RelayFinder, RelayGateways, checkGivenRelay, isTicketText, projectRelayCache, publicGateways,
+  type NetworkName, type NodeLike, RelayFinder, RelayGateways, TICKET_PREFIX, checkGivenRelay, isTicketText, projectRelayCache, publicGateways,
   relayRequest,
 } from "@saltix/grain-server";
 import { UsageError } from "./args.js";
@@ -23,6 +23,9 @@ export interface Reach {
   where: string;
   flags: string;
   gateways?: RelayGateways;
+  /** The network whose relays this release of the SDK finds for the command (its entry points among them); absent when
+   *  the command goes to relays of one's own or to a node, which are whatever network their owner runs. */
+  release?: NetworkName;
 }
 
 /** How a finder's events reach the command's log (`relaysLog`). */
@@ -55,7 +58,7 @@ export function relaysLog(log: { step(step: string, outcome: "ok" | "failed" | "
 const warned = new Set<string>();
 
 /**
- * `--relay`'s value, checked as it is given: a relay ticket (`SALTIX-RELAY:…`, every check but its time — one past its
+ * `--relay`'s value, checked as it is given: a relay ticket (`SALARIUM-RELAY:…`, every check but its time — one past its
  * life is left out when the command runs, with a warning) or `wss://host:port/#<SHA-256 of its certificate>` (a host
  * name may go without it, behind a CA's certificate). Anything else is refused as `GivenRelayRefused`: the command exits
  * with 78, a configuration to fix.
@@ -97,12 +100,13 @@ export function reachOf(flags: Map<string, string | true>, all: (name: string) =
   try {
     gateways = publicGateways(name, request, { given, cache: projectRelayCache(dir, name), log });
   } catch {
-    throw new UsageError(`no relay is known for ${name}: pass --relay SALTIX-RELAY:… (a relay ticket), --relay wss://…#<pin> or --node URL (your node's wallet interface)`);
+    throw new UsageError(`no relay is known for ${name}: pass --relay ${TICKET_PREFIX}… (a relay ticket), --relay wss://…#<pin> or --node URL (your node's wallet interface)`);
   }
   return {
     node: gateways,
     gateways,
     where: `${name === "devnet" ? "the test network's" : `${name}'s`} relays${given.length > 0 ? ` (and the tickets given, ${given.length})` : ""}`,
     flags: (network === undefined ? "" : ` --network ${name}`) + flagged,
+    release: name,
   };
 }

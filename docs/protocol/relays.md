@@ -53,7 +53,7 @@ calls it. A client:
 5. **Adopts the network's genesis** only where two relays that are not one agree on it, one of them an anchor: a server
    signs under it, never under the first relay's `node_status`, and does not start without it.
 
-**A ticket** is a relay's own signed record with the network it serves: `SALTIX-RELAY:` and RFC 4648 base32 (upper case,
+**A ticket** is a relay's own signed record with the network it serves: `SALARIUM-RELAY:` and RFC 4648 base32 (upper case,
 no padding) of `version (1) ‖ the network's genesis hash's first 8 bytes ‖ the record's version (2 or 3) ‖ the record as
 nodes gossip it` (its Borsh body — `node_key`, `peer_id`, `endpoints [{url, cert_sha256?}]`, `issued_at`, and version
 3's `store` and `country` — then the node key's 64-byte signature over `derive("Salarium relay record v2"/"v3", body)`).
@@ -68,8 +68,14 @@ keys it holds without a license, which is why a second relay confirms each ticke
 
 **When none answers**, the SDK's error names every relay tried — by its key's or its certificate's fingerprint, never by
 its address — and why (no answer within 5 s, refused, another certificate, another network), what was left out (a given
-ticket past its life), and the way out: a relay ticket from someone whose Saltix works (`--relay SALTIX-RELAY:…`), or a
-relay or node of one's own. Never put a relay's address in an app.
+ticket past its life), and the way out: a relay ticket from a computer whose SDK reaches the network (`grain doctor
+--json` prints the answering relays' as `relays.answered`; `--relay SALARIUM-RELAY:…`), or a relay or node of one's own.
+When every entry point of the release showed another certificate than its pin, the error says that first: the release
+is most likely behind the network — a test network's relays are set up anew when it begins again —, and the way out is
+a newer release of the SDK. A release also carries the genesis hash of the network its entry points serve
+(`releaseGenesis`), and `grain pair` holds the `--genesis` of the command from the app's page to it before a relay is
+asked: when they differ it says so first — the release, or the Saltix the command came from, is behind the network —
+and goes on, since the network that answers decides. Never put a relay's address in an app.
 
 ## Relay records and certificate pinning
 

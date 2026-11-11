@@ -32,7 +32,7 @@ and no hosting. From an empty folder to an app published in the network, every c
 
 ```sh
 git clone https://github.com/corvise/saltix-grains.git && cd saltix-grains && npm install && npm run build
-npx grain init ../<slug> --slug <slug> --name "<Name>" && cd ../<slug> && npm install
+npx grain init ../<slug> --slug <slug> --name "<Name>" && cd ../<slug> && npm install   # --name-ru "<Имя>": its Russian name
 npx grain status                 # not_needed: a page alone has nothing to pair
 npx grain dev --check --tap      # write public/, then this; it exits: the Connect sheet, every screen, both themes, each button tapped
 npx grain icon --monogram <L>    # or grain icon <picture> --out icon.png
@@ -93,8 +93,11 @@ for you:
    is left. **Never ask the person to paste, type or send a key.** **Never ask the person for a key, a token or an
    address they did not give you**: the command on the app's page holds everything the computer needs; when a field is
    missing, say which and where it is.
-4. **A developer key is retired.** Saltix makes no new ones (24-app-studio §3, 2026-10-28): a host where no command runs
-   is where the program's own first start runs `grain pair` once, its console showing the QR code as any terminal does.
+4. **A developer key made in Saltix is retired.** Saltix makes no new ones (24-app-studio §3, 2026-10-28): a host
+   where no command runs is where the program's own first start runs `grain pair` once, its console showing the QR code
+   as any terminal does. What is retired is the key a person copied out of Saltix, not the file a server runs with:
+   `grain pair` writes `app.key`, and so does `grain app-key make` on a test network with no phone, for a server key
+   file of this computer's own that the registry names ([docs/chats.md](docs/chats.md#from-a-paired-key-registered)).
    One made before keeps working until its owner pairs a server in its place, and the server says so at start. If one
    reaches you anyway, read only its public parts: `salarium-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network
    (`dsalt`: Saltix's test network, of the devnet kind; `tsalt`: a testnet; `salt`: the main network), `genesis` the
@@ -226,10 +229,15 @@ through the network's relays, which the SDK finds when it runs — the project's
 release's entry points, then the relay tickets those hand out, each used once an anchor (a relay you gave, or an entry
 point) confirms its license (Saltix [41-transport §18](docs/protocol/relays.md#finding-relays-relay-tickets)) — each
 pinned by its certificate. When
-none answers, `grain doctor` names each relay it tried and why, by its key's or its certificate's fingerprint; then pass
-a relay ticket someone whose Saltix works gave you (`--relay SALTIX-RELAY:…`; a server takes two of two different relays
-in `SALTIX_RELAYS`, since it signs only under the genesis two relays agree on), or a relay or node of your own (`--relay
-wss://host:port/#<sha256>`, `--node URL`). A value that cannot be a relay is refused at
+none answers, `grain doctor` names each relay it tried and why, by its key's or its certificate's fingerprint. When
+every entry point showed another certificate than its pin, it says that **this release of the SDK is behind the
+network** (a test network's relays are set up anew when it begins again): update the SDK — `git pull && npm install &&
+npm run build` in its checkout, which the message names — and run the command again. `grain pair` says so before it
+asks a relay at all when the command from the app's page names another network (`--genesis`) than the one this release
+was made for: the release, or the Saltix the command came from, is behind. Otherwise pass a relay ticket from
+a computer whose SDK reaches the network, where `npx grain doctor --json` prints them as `relays.answered` (`--relay
+SALARIUM-RELAY:…`; a server takes two of two different relays in `SALTIX_RELAYS`, since it signs only under the genesis
+two relays agree on), or a relay or node of your own (`--relay wss://host:port/#<sha256>`, `--node URL`). A value that cannot be a relay is refused at
 once (exit 78); a ticket past its life is left out with a warning. **Never write a relay's address into an app's code,
 docs or configuration**: the SDK carries no list of relays and finds them by tickets (a list lets a censor block them
 all); Saltix's public list (`relay_list`) is being retired, and the SDK never reads it.
@@ -278,7 +286,8 @@ with `grain status` (a page alone: `not_needed`, nothing to pair); when it is no
 Saltix (`--app`, `--owner`, `--genesis`: public facts, kept by the project once paired), show the user its QR code (or `.grain/pair.html`) and the
 6-digit code, and wait while they scan it with Saltix, compare the code and confirm: the key is made on this computer and never leaves it,
 and `grain pair`, watching the registry, writes `app.key` once it names the key. Never ask the user to paste, type or send a key, nor for an
-address they did not give you; developer keys are retired (one made before keeps working, with a warning to pair a server in its place).
+address they did not give you; developer keys made in Saltix are retired (one made before keeps working, with a warning to pair a
+server in its place; `grain app-key make`, on a test network with no phone, writes `app.key` for a server key file of this computer's own).
 `grain doctor` names the next step. Every command logs its steps to `.grain/log.jsonl`, codes and timings only.
 
 Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, a developer key `salarium-app:1:…`) are never committed,

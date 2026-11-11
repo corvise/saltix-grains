@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   CALL_TIMEOUT_MS, RelayGateways, ChainView, RpcError, usableEndpoint, publicGateways, nodeCall, grainGet, FAUCET, entryPoints, endpointOf,
-  obfuscateEntries, revealEntries, relayFailure, withoutAddresses,
+  obfuscateEntries, revealEntries, relayFailure, releaseGenesis, withoutAddresses,
 } from "../dist/index.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
@@ -26,6 +26,10 @@ test("the release's entry points are obfuscated pinned wss:// endpoints, the tes
   }
   assert.deepEqual(entryPoints("mainnet"), []);
   assert.deepEqual(entryPoints("testnet"), []);
+  // With them, the genesis of the network they serve: what a command's --genesis is held to before a relay is asked.
+  assert.match(releaseGenesis("devnet"), /^[0-9a-f]{64}$/);
+  assert.equal(releaseGenesis("mainnet"), null);
+  assert.equal(releaseGenesis("testnet"), null);
   // The blob is the lines XOR a SHAKE-256 stream of the network's name: no address reads in it, another network's stream
   // reads nothing.
   const lines = ["wss://192.0.2.1:30335/#" + "ab".repeat(32), "wss://192.0.2.2:30335/#" + "cd".repeat(32)];

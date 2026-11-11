@@ -352,6 +352,10 @@ test("init --chat makes a chat-only grain with a spec to build on", async () => 
   assert.deepEqual(m.entry, { chat: {} });
   assert.equal(m.permissions, 4);
   assert.ok(!existsSync(join(dir, "public")));
+  // The way with no phone names the first publish as it is run (--key owner.key: a plain grain publish shows a QR code
+  // for a phone), and says what grain app-key make is for.
+  assert.match(made.stdout, /^ {2}or with no phone, on the test network, from key files \(the app is then owner\.key's account's, not a person's\): grain faucet --wait, grain publish --key owner\.key, grain cert init, grain configure --slug coach --server server\.key, grain app-key make --slug coach \(it writes app\.key for server\.key\), then npm start$/m);
+  assert.doesNotMatch(made.stdout, /grain publish,/, "never the publish that asks for a phone, on the way without one");
   const lint = await run(["lint"], dir);
   assert.match(lint.stdout, /coach v1: no errors; not published yet; left: grain publish .*; rewrite connect\.json for this app/);
   const spec = JSON.parse(readFileSync(join(dir, "chat.json"), "utf8"));

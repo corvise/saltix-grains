@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+- cli, server, docs: **what a developer's coding agent is told when the network is out of reach, and a new app's first
+  steps** (the same agent's remarks of 2026-11-11, after the SDK itself was brought up to the network):
+  - **A release behind the network says so.** A relay that answers with another certificate than its pin is no longer
+    "the network did not answer": the failure names it (`RelayTry.cause`), and when every entry point of the release
+    does, `grain status`, `grain doctor` and every command's error say that this release of the SDK is behind the
+    network and how to update it (`releaseBehind`, `updateAdvice`: `git pull && npm install && npm run build` in the
+    checkout, named by its path). The release also carries the genesis hash of the network its entry points serve
+    (`releaseGenesis`, written and checked with the pins by the protocol repository's `scripts/set-network.py`), and
+    `grain pair` holds the command's `--genesis` to it before a relay is asked: when they differ it says so first and
+    goes on, since the network that answers decides (`releaseNote`; relays of one's own and `--node` are their owner's
+    network and are not held to it).
+  - **Where a relay ticket comes from.** The advice names it: a computer whose SDK reaches the network prints the
+    answering relays' tickets (`npx grain doctor --json`, `relays.answered`), passed as `--relay SALARIUM-RELAY:…`; no
+    text or page spells the retired prefix (a test holds them).
+  - **`grain init`'s next steps agree with the pages.** The no-phone line names `grain publish --key owner.key` and says
+    whose the app then is, and that `grain app-key make` writes `app.key` for `server.key`; the pages say which
+    developer key is retired (the one a person copied out of Saltix) and give the no-phone path its step for an app with
+    a program. The faucet's terms are the network's (`node_status.faucet`), read when the command runs: the pages no
+    longer name a grant's size.
+  - **An app's names by language.** `grain init --name` is the English name and `--name-ru` the Russian one; a `--name`
+    in Cyrillic alone is taken as the Russian name — the English one is then the slug, and the command says so —, and a
+    new chat's `chat.json` and a new app's `connect.json` are written in both languages. A name out of the manifest's
+    bounds is refused before anything is made.
+  - The simulator derives a user's grain key and messaging key under the network's contexts (`"Salarium grain key v1"`,
+    `"Salarium grain messaging key v1"`), as its comment said; the protocol page names the versions the test network
+    runs (11).
+
 - scripts, tests: **the golden vectors are found by one resolver, and the public repository is the SDK of one protocol
   commit, file for file** — every test reads a vector as `goldenVectors("<name>.json")` (`scripts/vectors.mjs`): in the
   public repository the copies in `vectors/`, bound to their commit by `vectors/SOURCE`; in the protocol's repository

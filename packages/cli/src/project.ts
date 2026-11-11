@@ -8,8 +8,51 @@ import {
   MAX_TX_SIZE, accountId, fromHex, toHex,
 } from "@saltix/grain-server";
 
+import { UsageError } from "./args.js";
+
 export const MANIFEST_FILE = "grain.json";
 export const KEY_FILE = "owner.key";
+
+/** A letter of the Cyrillic script: a name that has one is not an English name. */
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+
+/** The names `grain init` gives a new app. */
+export interface InitNames {
+  /** The English name, which every app has (12-grains §2): what a reader of none of its other languages sees. */
+  en: string;
+  /** The Russian name, when one was given. */
+  ru?: string;
+  /** What a page of one language shows: the name as its maker typed it. */
+  page: string;
+  /** What was decided for the app's maker, to be said to them: a name taken as the Russian one. */
+  note?: string;
+}
+
+/**
+ * The names of a new app from `grain init`'s `--name` (the English name; the slug when not given) and `--name-ru` (the
+ * Russian one). A manifest's name is a map by language in which `en` is required, so a name typed in Cyrillic alone is
+ * never written as the English one: it is the Russian name, the slug stands for the English one until its maker writes
+ * it, and `note` says so. Each name keeps a manifest's bounds (1–32 characters, none of them a control character).
+ */
+export function initNames(slug: string, name: string | undefined, nameRu: string | undefined): InitNames {
+  for (const [flag, value] of [["--name", name], ["--name-ru", nameRu]] as const) {
+    if (value !== undefined && (value.length === 0 || [...value].length > 32 || /\p{Cc}/u.test(value))) {
+      throw new UsageError(`${flag}: an app's name is 1 to 32 characters, none of them a control character`);
+    }
+  }
+  if (name !== undefined && CYRILLIC.test(name)) {
+    if (nameRu !== undefined) {
+      throw new UsageError(`--name is the app's English name and --name-ru its Russian one: --name <English> --name-ru "${nameRu}"`);
+    }
+    return {
+      en: slug, ru: name, page: name,
+      note: `"${name}" is the app's Russian name (name.ru in ${MANIFEST_FILE}); its English name, which every app has, is the slug ` +
+        `"${slug}" until you write one: name.en there, or grain init --name <English> --name-ru "${name}"`,
+    };
+  }
+  const en = name ?? slug;
+  return nameRu === undefined ? { en, page: en } : { en, ru: nameRu, page: name ?? nameRu };
+}
 
 /** A manifest file holds either the `manifest` object alone or its signed JSON form. */
 export function readManifest(path: string): { manifest: Manifest; signed: SignedManifest | null } {

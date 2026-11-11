@@ -70,7 +70,9 @@ test("the pairing command alone leads an agent to the SDK, how it works first, a
       "**Pair it, every session from `grain status`**", "`npx grain pair`", "`.grain/pair.html`", "the 6-digit code, and wait",
       "**Add this server**", "`npx grain doctor`", "**Never ask the person to paste, type or send a key.**",
       "**Never ask the person for a key, a token or an address they did not give you**", "`--app`, `--owner`, `--genesis`",
-      "**A developer key is retired.**", "never print, repeat, log or quote it",
+      "**A developer key made in Saltix is retired.**",
+      "What is retired is the key a person copied out of Saltix, not the file a server runs with",
+      "so does `grain app-key make` on a test network with no phone", "never print, repeat, log or quote it",
       "`npx grain app-key --file app.key --offline`", "**One app, one key, one program.**",
       "Never run the SDK's example (`npm run example`) or any other program with the key of an app that already has a program",
       "never reuse another app's key or slug", "`(umask 077 && cat > app.key)`", "**Replace key**", "`npm start`",
@@ -141,7 +143,9 @@ test("how-it-works.md: the pieces, whether an app needs a server, and the lifecy
     "Keep the standards.", "Try it.", "Publish.", "Run the program where it stays up", "Update and rotate."]);
   // What is not built yet says so.
   assert.match(list.replace(/\s+/g, " "), /by \*\*pairing\*\* \(Saltix 24-app-studio \[§3a\]/);
-  assert.match(list.replace(/\s+/g, " "), /\*\*A developer key\*\* is retired: Saltix makes no new ones/);
+  assert.match(list.replace(/\s+/g, " "), /\*\*A developer key made in Saltix\*\* is retired: Saltix makes no new ones/);
+  // What `grain init` names for the test network with no phone is not that key, and the page says so where it retires it.
+  assert.match(list.replace(/\s+/g, " "), /\(`grain app-key make` is not that key: on a test network with no phone it writes `app\.key` for a server key file of this computer's own: \[No phone, test network\]\(#no-phone-test-network\)\.\)/);
   // A page needs no hosting: the network keeps its bundle, which grain publish puts there.
   assert.match(page.replace(/\s+/g, " "), /\*\*The network keeps the bundle\*\*: `grain publish` seals `public\/` and puts it from your computer straight into the Saltix network/);
   assert.doesNotMatch(page, /coming|will upload|needs a URL/i, "nothing about publishing is still to come");

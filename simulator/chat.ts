@@ -102,8 +102,8 @@ export function setupChat(host: ChatHost): SimChat {
   let currentCommand = "";
   let via: string | null = null;
 
-  const grainKey = () => derive("Saltix grain key v1", host.secret(), new TextEncoder().encode(host.slug()));
-  const messagingSecret = () => derive("Saltix grain messaging key v1", host.secret(), new TextEncoder().encode(host.slug()));
+  const grainKey = () => derive("Salarium grain key v1", host.secret(), new TextEncoder().encode(host.slug()));
+  const messagingSecret = () => derive("Salarium grain messaging key v1", host.secret(), new TextEncoder().encode(host.slug()));
   const me = () => encodeAddress("devnet", accountId(ed25519.getPublicKey(grainKey())));
   /** The chat's address: the certificate's key when there is one, else the first key the registry names (§1). */
   const serverKey = () => (cert ? cert.key : servers[0] ?? null);

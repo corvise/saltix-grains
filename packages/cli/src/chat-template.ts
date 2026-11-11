@@ -59,7 +59,8 @@ export const chatServer = (slug: string) => `// The chat of ${slug}, run by its 
 //   npm start             the key from SALTIX_APP_KEY, the file SALTIX_APP_KEY_FILE names (a systemd credential), or
 //                         app.key beside this file (owner-only); with none, it refuses to start (78) and says to run
 //                         grain pair
-//   SALTIX_RELAYS         relay tickets (SALTIX-RELAY:…, space-separated) someone whose Saltix works gave you, tried
+//   SALTIX_RELAYS         relay tickets (SALARIUM-RELAY:…, space-separated) from a computer whose SDK reaches the
+//                         network (grain doctor --json prints them as relays.answered), tried
 //                         first: only where the relays the server finds do not answer (grain doctor says so). A server
 //                         signs only under the genesis two relays agree on: give two tickets of two different relays
 //                         (one alone never starts it), or NODE_RPC. One that cannot be a relay refuses to start (78);

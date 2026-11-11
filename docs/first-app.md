@@ -190,9 +190,9 @@ for an app made in Saltix the tool says what to do there and waits for the regis
 registered, or when `--key` names it (the test network without a phone). Every command reaches the test network through
 relays it finds when it runs, pinned by their certificates; `--node URL` is a node of your own instead
 ([README](../README.md#networks-no-node-of-your-own-needed)). `grain faucet --wait` gives `owner.key`'s account test
-SALT for the fees and deposits — in a project whose slug is still free, as many grants as its first publish takes (the
-test network's faucet pays 3 SALT a grant, one an hour an address: four for a deposit of 10 SALT; each run makes one
-grant and says when to run it again):
+SALT for the fees and deposits — in a project whose slug is still free, as many grants as its first publish takes (what
+a grant pays and how often an address may ask are the test network's own, read when the command runs; each run makes
+one grant and, where more are needed, says when to run it again):
 
 ```sh
 grain faucet --wait                                                # test SALT for owner.key's account: the grants a first publish takes
@@ -473,5 +473,6 @@ coding agent follows them too.
 | `the developer key is for devnet 7e70a4e3…, but the network answering is …: was the network reset?` | The test network was reset: `npx grain pair --new` |
 | `not a developer key` / `a malformed developer key` (`app.key` is not a key file the server reads) | `npx grain pair --new` |
 | `no relay is known for mainnet` | Pass `node` (your own node's wallet interface) to `ChatServer.start`, or `NODE_RPC` to the example |
-| `no relay of devnet answered (… tried …)` | Each relay is named with why: `npx grain doctor`; two relay tickets of two different relays someone whose Saltix works gave you in `SALTIX_RELAYS` (a server signs only under the genesis two relays agree on; `--relay SALTIX-RELAY:…` for a command needs one) |
+| `this release of the SDK is most likely behind the devnet network: every entry point it carries showed another certificate than its pin` | The test network began again after this SDK was made, with new relays: update the SDK (`git pull && npm install && npm run build` in its checkout, which the message names), then run the command again |
+| `no relay of devnet answered (… tried …)` | Each relay is named with why: `npx grain doctor`; two relay tickets of two different relays in `SALTIX_RELAYS`, from a computer whose SDK reaches the network (`npx grain doctor --json` there prints them as `relays.answered`; a server signs only under the genesis two relays agree on; `--relay SALARIUM-RELAY:…` for a command needs one) |
 | `wallets write to the first server key the registry names` (a warning) | Requests reach the first key's server: run that one, or make yours first in Saltix |

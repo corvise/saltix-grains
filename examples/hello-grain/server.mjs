@@ -12,8 +12,9 @@
 //   SALTIX_APP_KEY_FILE  or a file holding it, readable by you alone (app.key in the checkout by default: grain pair writes it)
 //   CHAT_SPEC            the chat spec in its JSON form (chat.json next to this file by default)
 //   CHAT_STORE           where the server remembers answered requests and its numbers (chat.store.json)
-//   SALTIX_RELAYS        a relay ticket (SALTIX-RELAY:…) someone gave you, tried first where the relays the server finds
-//                        by itself do not answer
+//   SALTIX_RELAYS        a relay ticket (SALARIUM-RELAY:…) from a computer whose SDK reaches the network (grain doctor
+//                        --json prints them as relays.answered), tried first where the relays the server finds by
+//                        itself do not answer
 //   NODE_RPC             your own node's wallet interface, instead of the relays (a local devnet)
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

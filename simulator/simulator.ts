@@ -122,7 +122,7 @@ function rulesFor(method: string, params: Record<string, unknown>, activation: b
 }
 
 /** The user's key in the grain, as the wallet derives it (12-grains §5.1). */
-const grainSeed = (slug: string) => derive("Saltix grain key v1", secret(), new TextEncoder().encode(slug));
+const grainSeed = (slug: string) => derive("Salarium grain key v1", secret(), new TextEncoder().encode(slug));
 /** The grain alias's address once `relay.open` registered it. */
 let alias: string | null = null;
 

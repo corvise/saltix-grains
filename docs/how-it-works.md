@@ -112,8 +112,10 @@ at all: `grain publish` puts its files into the network ([Publish](#publish-a-pa
      Saltix shows the same code, keeps **Add this server** and confirms with the PIN; `grain pair` watches the registry
      and writes `app.key` and `app.json` once it names the key (the offer renews itself while nobody scans). No key is
      copied at all, and nothing is asked of the owner but the scan. `npx grain doctor` names what is left.
-   - **A developer key** is retired: Saltix makes no new ones; one made before keeps working until the owner pairs a
-     server in its place, and the server warns at start. A host where no command runs is where the program's own first
+   - **A developer key made in Saltix** is retired: Saltix makes no new ones; one made before keeps working until the
+     owner pairs a server in its place, and the server warns at start. (`grain app-key make` is not that key: on a test
+     network with no phone it writes `app.key` for a server key file of this computer's own:
+     [No phone, test network](#no-phone-test-network).) A host where no command runs is where the program's own first
      start runs `grain pair` once (its console shows the QR code). A coding agent never asks for a key, a token or an
      address it was not given.
    - **A page alone pairs nothing**: it has no program, so `npx grain status` says `not_needed` and names the next
@@ -257,11 +259,11 @@ the owner's phone signs.
    SALT for 3–5 characters, 30 for 6–7, 10 for 8 or more), the fees of the two transactions (millionths of a SALT), and
    what `owner.key`'s account holds; and whether `connect.json` is ready (it is checked here until the registry can hold
    it).
-2. `npx grain faucet --wait`: test SALT for `owner.key`'s account — the grants its first publish takes (the test
-   network's faucet pays 3 SALT a grant, one an hour an address, since 2026-11-05: a deposit of 10 SALT and the fees
-   are four grants; it says how many, makes one, and ends with the clock time to run it again — it never sleeps an
-   hour in your shell). A deposit of 30 or 100 SALT (a slug of 6–7 or 3–5 characters) would take 11 or 34 grants: it
-   says so instead, and a longer slug or the owner's Saltix pays.
+2. `npx grain faucet --wait`: test SALT for `owner.key`'s account — the grants its first publish takes. What a grant
+   pays and how often an address may ask are the test network's own (`node_status.faucet`), read when the command
+   runs: it says how many grants the deposit and the fees take, makes one, and, where more are needed, ends with the
+   clock time to run it again — it never sleeps an hour in your shell. A deposit that would take more than four
+   grants: it says so instead, and a longer slug or the owner's Saltix pays.
 3. `npx grain publish --key owner.key`: it says which account will own the app, sends `RegisterGrain` and, right behind
    it with the next nonce, `SetGrainAccess` private (as an app made in Saltix starts), waits for both to land, then puts
    the bundle and the icon into the network. Later versions are signed by `owner.key` without `--key`: **a key file
@@ -270,7 +272,11 @@ the owner's phone signs.
    commands below, and those the tools suggest, never do (a key file elsewhere is named, `--key <its path>`).
 4. `npx grain profile`: the Connect profile from `connect.json`, signed by `owner.key` (it owns the app now). It refuses
    `grain init`'s own words about its counter: write the profile for your app first.
-5. Who opens it: nobody yet, since it is private and no phone holds its owner's key. `npx grain access --slug <slug>
+5. An app with a program (a chat, payments, notices) then gives its server a key the same way, with no phone:
+   `npx grain cert init` makes `server.key`, `npx grain configure --slug <slug> --server server.key` names it in the
+   registry, and `npx grain app-key make --slug <slug>` writes `app.key` for it, the file the server runs with
+   ([chats](chats.md#from-a-paired-key-registered)); then `npm start`. A page alone skips this step.
+6. Who opens it: nobody yet, since it is private and no phone holds its owner's key. `npx grain access --slug <slug>
    --private --member <your Saltix address>:user` lets your own Saltix open it (the address: Saltix → Receive), or
    `--public` lets anyone. Without a phone, `npx grain dev` runs the same page sealed in the simulator, as Saltix will.
 

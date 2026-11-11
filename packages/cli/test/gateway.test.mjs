@@ -279,12 +279,15 @@ test("where a command goes: the relays it finds by default, relays named, or you
   assert.equal(byDefault.gateways, byDefault.node);
   assert.equal(byDefault.flags, "", "nothing to repeat for the default");
   assert.equal(byDefault.where, "the test network's relays");
+  assert.equal(byDefault.release, "devnet", "the relays this release finds: its network's genesis is what a command is held to");
   const node = reachOf(...flags([["node", "http://127.0.0.1:30334"]]));
   assert.deepEqual([node.node, node.flags, node.gateways], ["http://127.0.0.1:30334", " --node http://127.0.0.1:30334", undefined]);
+  assert.equal(node.release, undefined, "a node is whatever network its owner runs");
   const pin = "Ab".repeat(32);
   const named = reachOf(...flags([["relay", `wss://10.0.0.1:30335/#${pin}`], ["relay", `wss://10.0.0.2:30335/#${pin}`]]));
   assert.ok(named.node instanceof RelayGateways && named.node.finds);
   assert.equal(named.where, "the relays named (2)", "relays of one's own alone: a private network's");
+  assert.equal(named.release, undefined);
   assert.equal(relayOf(`wss://10.0.0.1:30335/#${pin}`), `wss://10.0.0.1:30335/#${"ab".repeat(32)}`, "pins in lower case");
   // A ticket is taken as every reader takes it, in either case, past its life too (the finder leaves it out with a
   // warning when it runs); a refused one says why, and is a configuration to fix (78).
@@ -294,6 +297,7 @@ test("where a command goes: the relays it finds by default, relays named, or you
   const ticketed = reachOf(...flags([["relay", ticket]]));
   assert.ok(ticketed.node instanceof RelayGateways && ticketed.node.finds);
   assert.equal(ticketed.where, "the test network's relays (and the tickets given, 1)");
+  assert.equal(ticketed.release, "devnet", "a ticket goes first, and the release's relays are still tried");
   assert.equal(ticketed.flags, ` --relay ${ticket}`);
   const old = signRelayTicket({ secret: fromHex("71".repeat(32), 32), genesis: GENESIS, endpoints: [{ url: "wss://192.0.2.7:30335/", cert_sha256: "7c".repeat(32) }], issuedAt: Date.now() - 40 * 86_400_000 });
   assert.equal(relayOf(old), old);
@@ -351,7 +355,8 @@ test("grain doctor says where its relays came from, which answered and how fast,
   // A relay that is not there: the finding names it by its pin's fingerprint and why, and the way out.
   const dead = await grain(["doctor", "--relay", `wss://127.0.0.1:1/#${"ab".repeat(32)}`], dir);
   assert.equal(dead.code, 1);
-  assert.match(dead.stdout, /^fix  relays {10}none of 1 answered \(given 1\): relay cert:abababab refused the connection → a relay ticket from someone whose Saltix works/m);
+  assert.match(dead.stdout, /^fix  relays {10}none of 1 answered \(given 1\): relay cert:abababab refused the connection → a relay ticket from a computer whose SDK reaches the network \(grain doctor --json there prints them: relays\.answered\): grain doctor --relay \S+ --relay SALARIUM-RELAY:… /m);
+  assert.match(dead.stdout, /^fix  key {13}not checked: no relay to ask the network through \(relays, above\)$/m, "said once, by the relays' finding");
   const finding = dead.stdout.split("\n").find((l) => l.startsWith("fix  relays")).split(" → ")[0];
   assert.ok(!finding.includes("127.0.0.1"), "what it says of the relay names no address (the next command repeats the --relay given)");
 });
@@ -378,6 +383,53 @@ test("the relays' finding in doctor's words, from a finder's report", async () =
     " --network devnet");
   assert.equal(none.ok, false);
   assert.equal(none.detail, "none of 1 answered (entry points 1): relay cert:9c0d1e2f no answer within 5 s");
-  assert.equal(none.next, "a relay ticket from someone whose Saltix works: grain doctor --network devnet --relay SALTIX-RELAY:… (or --node URL, a node of your own)");
+  assert.equal(none.next, "a relay ticket from a computer whose SDK reaches the network (grain doctor --json there prints them: relays.answered): " +
+    "grain doctor --network devnet --relay SALARIUM-RELAY:… (or --node URL, a node of your own)");
   assert.match(none.warning, /key:77777777 is left out: .*a new one/, "a ticket given and left out, said beside");
+});
+
+test("every entry point showing another certificate: doctor and status say the release is behind the network, and to update", async () => {
+  const { keyState, relaysFinding } = await import("../dist/status.js");
+  const { NoRelayAnswered, updateAdvice } = await import("@saltix/grain-server");
+  const other = "showed another certificate than its pin (not this relay, or it was replaced)";
+  const entry = (n, more = {}) => ({ relay: `cert:0000000${n}`, source: "entry", ok: false, ms: null, error: other, cause: "pin", ...more });
+  const report = (tried, sources = { given: 0, cache: 0, entry: 3, discovered: 0 }) => ({
+    network: "devnet", genesis: null, cache: ".grain/relays.json", sources, tried, discovery: "none", tickets: { taken: 0, refused: {} },
+    warnings: [], took_ms: 310, at: 0, kept: 0, answered: [],
+  });
+  const behind = report([entry(1), entry(2), entry(3)]);
+  assert.deepEqual(relaysFinding(behind, " --network devnet"), {
+    ok: false, what: "relays",
+    detail: "this release of the SDK is most likely behind the devnet network: every entry point it carries showed another certificate than its pin " +
+      "(none of 3 answered; entry points 3)",
+    next: `${updateAdvice()}; then grain doctor --network devnet again`,
+  });
+  assert.match(updateAdvice(), /git pull && npm install && npm run build/, "the update, as a command");
+  // One entry point that failed another way: the network may be out of reach, so each relay is named and a ticket is the way out.
+  const mixed = relaysFinding(report([entry(1), entry(2), entry(3, { error: "no answer within 5 s", cause: null })]));
+  assert.match(mixed.detail, /^none of 3 answered \(entry points 3\): relay cert:00000001 showed another certificate/);
+  assert.match(mixed.next, /^a relay ticket from a computer whose SDK reaches the network/);
+  // A relay of the cache with another certificate beside them changes nothing: the entry points decide.
+  const cached = relaysFinding(report([{ ...entry(9), source: "cache" }, entry(1), entry(2), entry(3)], { given: 0, cache: 1, entry: 3, discovered: 0 }));
+  assert.match(cached.detail, /^this release of the SDK is most likely behind the devnet network: .*\(none of 4 answered; cache 1, entry points 3\)$/);
+  // Relays given alone, none of the release's: nothing says the release is behind.
+  const given = relaysFinding(report([{ ...entry(1), source: "given" }], { given: 1, cache: 0, entry: 0, discovered: 0 }));
+  assert.match(given.detail, /^none of 1 answered \(given 1\)/);
+
+  // grain status: never "the network did not answer" — it answered, with relays this release does not know.
+  const dir = scratch("grain-behind-");
+  writeFileSync(join(dir, "chat.json"), "{}");
+  const node = { call: async () => { throw new NoRelayAnswered(behind); } };
+  const state = await keyState(dir, node, " --network devnet");
+  assert.equal(state.status, "unknown");
+  assert.equal(state.detail, "no relay to ask the network through: this release of the SDK is most likely behind the devnet network: every entry point " +
+    "it carries showed another certificate than its pin (none of 3 answered; entry points 3)");
+  assert.equal(state.next, `${updateAdvice()}; then grain status --network devnet again`);
+  // Out of reach for another reason: the relays tried, and the ticket, for the same command.
+  const out = await keyState(dir, { call: async () => { throw new NoRelayAnswered(report([entry(1, { error: "refused the connection", cause: null })], { given: 0, cache: 0, entry: 1, discovered: 0 })); } });
+  assert.equal(out.detail, "no relay to ask the network through: none of 1 answered (entry points 1): relay cert:00000001 refused the connection");
+  assert.match(out.next, /: grain status --relay SALARIUM-RELAY:… \(or --node URL, a node of your own\)$/);
+  // Any other failure of the call stays the network's silence.
+  const silent = await keyState(dir, { call: async () => { throw new Error("socket hang up"); } });
+  assert.equal(silent.detail, "the network did not answer (socket hang up)");
 });

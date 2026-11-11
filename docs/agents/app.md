@@ -115,11 +115,16 @@ owner signs and served by the network to anyone by its hash).
 Every command takes `--help` and runs nothing then: `npx grain <command> --help`.
 
 **No node needed.** Every registry command (`grain show`, `publish`, `retire`, `profile`, `configure`, `access`, `bind`,
-`rate`, `sponsor`, `app-key`) and `grain faucet` (test SALT for `owner.key`'s account: 3 SALT, once an hour) reach the
-test network through its relays, which the SDK finds when it runs (nothing to configure; Saltix 41-transport §18), each
-pinned by its certificate's hash. When none answers, `grain doctor` names each relay it tried and why: then
-`--relay SALTIX-RELAY:…`, a relay ticket someone whose Saltix works gave you (`SALTIX_RELAYS` for the server: one that
-cannot be a relay stops it with 78; one past its life is left out with a warning). `--node URL` is for a node of your
+`rate`, `sponsor`, `app-key`) and `grain faucet` (test SALT for `owner.key`'s account: one grant an address in the
+faucet's interval, both the network's own) reach the test network through its relays, which the SDK finds when it runs
+(nothing to configure; Saltix 41-transport §18), each pinned by its certificate's hash. When none answers, `grain doctor` names each relay it tried and why. If every entry
+point showed another certificate than its pin, it says that this release of the SDK is behind the network: update the
+SDK (`git pull && npm install && npm run build` in its checkout, which the message names) and run the command again.
+`grain pair` says so before it asks a relay when the command from the app's page names another network (`--genesis`)
+than the one this release was made for.
+Otherwise: `--relay SALARIUM-RELAY:…`, a relay ticket from a computer whose SDK reaches the network, where `npx grain
+doctor --json` prints them as `relays.answered` (`SALTIX_RELAYS` for the server: one that cannot be a relay stops it
+with 78; one past its life is left out with a warning). `--node URL` is for a node of your
 own and `--relay wss://…#<sha256>` for a relay you name, always with its pin. Never write a relay's address into the
 app's code, docs or configuration: the SDK carries no list of relays and finds them by tickets, and Saltix's public list
 is being retired.
@@ -535,7 +540,8 @@ Saltix lays an app's page inside the safe area; full screen only with viewport-f
 | `chat.json changed but keeps version N` / `…below version N this server already served` | Raise `version` in `chat.json` above N and start again |
 | `wallets write to the first server key the registry names` (a warning) | Requests go to the first key's server: run that one |
 | `no relay is known for mainnet` | Pass `NODE_RPC`, your own node's wallet interface |
-| `no relay of devnet answered (… tried …)` with each relay and why | The network is out of reach from here: `npx grain doctor` says the same; set `SALTIX_RELAYS` to two relay tickets (`SALTIX-RELAY:…`) of two different relays someone whose Saltix works gave you — a server signs only under the genesis two relays agree on —, or `NODE_RPC` |
+| `this release of the SDK is most likely behind the devnet network: every entry point it carries showed another certificate than its pin` | The test network began again after this SDK was made, with new relays: update the SDK (`git pull && npm install && npm run build` in its checkout, which the message names), then start again |
+| `no relay of devnet answered (… tried …)` with each relay and why | The network is out of reach from here: `npx grain doctor` says the same; set `SALTIX_RELAYS` to two relay tickets (`SALARIUM-RELAY:…`) of two different relays, from a computer whose SDK reaches the network (`npx grain doctor --json` there prints them as `relays.answered`) — a server signs only under the genesis two relays agree on —, or `NODE_RPC` |
 | `the relays that answered (1) did not agree on devnet's genesis: …` | One relay alone answered: give a second (another relay's ticket in `SALTIX_RELAYS`) or `NODE_RPC` |
 | `relays (SALTIX_RELAYS): relay N given: …` (`chat_relay_refused`, exit 78) | That value cannot be a relay (cut short, another network's, not `wss://host:port/#<pin>`): fix `SALTIX_RELAYS` or remove it |
 | `the ticket given for relay key:… is left out: … past its life` (a warning) | Ask whoever gave the ticket for a new one; the cache and the entry points still serve meanwhile |

@@ -242,11 +242,13 @@ they are, and profile names are personal data no app receives from Saltix.
   transaction carries (a registry call, an action, a memo, a key scheme, a manifest's `Entry`) comes with a new
   version: before its epoch a node refuses it. `node_status.protocol` gives `version` (the current one), `supported`,
   and `next` (`{version, epoch}` or `null`).
-- Saltix's test network runs version 6 from its v15 genesis of 26 October 2026, every version up to it in force, and
-  takes version 7 at epoch 60, 8 at epoch 96 and 9 at epoch 132 (`node_status.protocol.next`; when an epoch begins:
-  [the wallet interface](wallet-interface.md#epochs-and-their-times)). Version 9 brings, for apps, `SetGrainDonations`
-  (tag 76) and the Connect profile's format 2, whose support contact may be a Saltix address
-  ([support](../support.md)). Version 2 brought, for apps, `ConfigureGrain` tag 39 with proofs of its server keys ([app studio §2](app-studio.md#2-the-registry)); a client sends
+- Salarium's test network was born at version 11 (its genesis `76aaf1795cc9c0f5…`, November 2026): every version up
+  to it is in force from its first block, and `node_status.protocol.next` is `null` until a later one is scheduled
+  (when an epoch begins: [the wallet interface](wallet-interface.md#epochs-and-their-times)). Versions 10 and 11 add
+  nothing an app signs through this SDK: 10 is the committee's own (how its members reach each other), 11 brings the
+  network's contracts and their transactions. Version 9 brought, for apps, `SetGrainDonations` (tag 76) and the
+  Connect profile's format 2, whose support contact may be a Saltix address ([support](../support.md)). Version 2
+  brought, for apps, `ConfigureGrain` tag 39 with proofs of its server keys ([app studio §2](app-studio.md#2-the-registry)); a client sends
   tag 34 while `protocol.version` is 1, tag 39 from 2, and never signs tag 34 valid past the switch `next` names. It
   also brought a quorum's message (above), and a sealed manifest that names no source, the network keeping its bundle
   ([grains §2](grains.md#2-manifest)); before it, a sealed manifest names 1–8 sources. `outdated` (`{version, …}` or

@@ -209,7 +209,7 @@ location = /saltix/r/1/ {
 - Take two or three of the relays the SDK finds: `npx grain doctor --json` gives, as `relays.answered`, the tickets of
   the relays that answered — an entry relay's own among them once it handed it out —, and `node -e
   'import("@saltix/grain-server").then(({ readTicket }) => console.log(readTicket(process.argv[1]).endpoints))'
-  SALTIX-RELAY:…` prints a ticket's `url` and `cert_sha256` (the SDK carries no list of relays, and its logs name relays
+  SALARIUM-RELAY:…` prints a ticket's `url` and `cert_sha256` (the SDK carries no list of relays, and its logs name relays
   by fingerprint, never by address; `.grain/relays.json` keeps no entry point). Fetch each
   certificate once (`openssl s_client -connect <host>:30335 </dev/null | openssl x509 >
   relay-1.crt`) and keep it only if `openssl x509 -in relay-1.crt -outform der | sha256sum` is the pin. Give the page two

@@ -2,8 +2,10 @@
 // cached answers. They are obfuscated, never listed: XOR with a SHAKE-256 stream of "Salarium relay entry v1", a zero byte
 // and the network's name. That stops a search of the package for addresses and nothing more — whoever runs
 // `entryPoints` reads them — so they are few, change with each release, and are the last resort, never what makes the
-// SDK work. Saltix's `scripts/set-network.py` writes `ENTRY` from the relays the apps' pins name, and its `--check` holds
-// it to them in CI: never edit it by hand.
+// SDK work. Beside them, the genesis hash of the network they serve (`GENESIS`): a test network begins again under a new
+// genesis with new relays, and a command that names another one tells a release left behind before a relay is asked.
+// Saltix's `scripts/set-network.py` writes both — `ENTRY` from the relays the apps' pins name, `GENESIS` from the
+// network the apps follow — and its `--check` holds them to those in CI: never edit them by hand.
 import { createHash } from "node:crypto";
 import type { NetworkName } from "./address.js";
 import { concat, fromBase64, toBase64 } from "./bytes.js";
@@ -17,6 +19,13 @@ const ENTRY: Readonly<Record<NetworkName, string>> = {
   testnet: "",
   devnet:
     "lpPpdDF1SXwQ/jK4qLFaG0dDj5oRT9R6D9zZEPPl8/RSvDTY/IXn9g0Yl838Uhoisk0XqPEueCM4jkKxBNc9lu6XRLKnZ1qykEY7BhIltJHoqz+XnEZ/zEmJZ2pV72kOUKnOaW5wJFcanKjzhpBmqSS2Hk8IaNFjD0At/+cIJ7fpajnTPnH97ZEbOQF4dCX7koCp7p0Itc2kgGCfV6viLpnyr+qvHbIF37ynPIwNcsvIda8I3NE9bGZuRWKcIliEFzQ8cAv9znSDekFgXR/B9UrX8Keq+wkKL8L9qvSkVs3mtbCvhRHNMRExJfqtyto60g1/fVbyWC70v8ukjE/qfARULzAvFPOHP0lqcmzlnF0pfcq9UA==",
+};
+
+/** By network: the genesis hash (hex) of the network `ENTRY` serves; empty where this release knows none. */
+const GENESIS: Readonly<Record<NetworkName, string>> = {
+  mainnet: "",
+  testnet: "",
+  devnet: "76aaf1795cc9c0f585a3f12a7e25131d011c584be2ebe45073dc320cfcb7d8f8",
 };
 
 /** `length` bytes of the stream of `network`. */
@@ -45,4 +54,10 @@ export function revealEntries(network: string, blob: string): string[] {
  *  relays this release does not know. */
 export function entryPoints(network: NetworkName): string[] {
   return revealEntries(network, ENTRY[network]);
+}
+
+/** The genesis hash (64 hex) of the `network` this release was made for, the one its entry points serve; null where it
+ *  knows none. What answers is the network's own word (`node_status`): this is only what the release expects. */
+export function releaseGenesis(network: NetworkName): string | null {
+  return GENESIS[network] === "" ? null : GENESIS[network];
 }

@@ -5,9 +5,9 @@ import { join, basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AppKey, EXIT_CONFIG, GivenRelayRefused, isChatOnly, verifyManifest, grainGet, grainQuote, parseHandle, nodeCall, checkGrainProfile, profileText,
-  supportKind, type GrainCall, type Manifest, type NetworkName,
+  releaseGenesis, supportKind, type GrainCall, type Manifest, type NetworkName,
 } from "@saltix/grain-server";
-import { MANIFEST_FILE, KEY_FILE, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
+import { MANIFEST_FILE, KEY_FILE, initNames, readManifest, readKey, newKey, lint, signedFor, publicKeyOf, ownerOf } from "./project.js";
 import QRCode from "qrcode";
 import { refuseKeyFileOn, retireCall, show, salt, type Sent, type Signing } from "./registry.js";
 import { type Signer, addressOf, ownerLine, signerFor } from "./owner.js";
@@ -46,12 +46,14 @@ import { type Fit, IconError, parseColour, runIcon } from "./icon.js";
 const HELP = `grain — make, serve, check, sign, register and retire grains (Saltix 12-grains)
 
   grain help [command]                     this, or one command's part of it (also: grain <command> --help)
-  grain init [dir] [--slug S] [--name N] [--chat | --sign-in]
+  grain init [dir] [--slug S] [--name N] [--name-ru N] [--chat | --sign-in]
                                            a new grain: grain.json (its page sealed), connect.json (rewrite it for
                                            the app), owner.key, public/ (a page that works on its own; --sign-in a
                                            page for some people only, which checks first and renders after); --chat
                                            a chat-only one (no page: grain.json, connect.json and chat.json); each
-                                           with a package.json whose npm install links the grain command
+                                           with a package.json whose npm install links the grain command. --name is
+                                           the app's English name (the slug when not given), --name-ru its Russian
+                                           one; a --name in Cyrillic alone is taken as the Russian name, and said
   grain dev [--port 8090] [--host 127.0.0.1] [--app-key F] [--check [--tap]]
                                            serve public/ with the manifest signed for this computer until Ctrl-C
                                            (a coding agent: in the background, or --check), on this computer only
@@ -220,12 +222,15 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
 
   grain faucet [--key owner.key | --address A] [--wait]
                                            test SALT (and WORK while it lasts) for the key file's account or an
-                                           address, from the test network's faucet: once every 5 minutes; --wait
-                                           until it is in the account (--timeout seconds, 120)
+                                           address, from the test network's faucet: one grant an address in the
+                                           faucet's interval (it says what it sent and, where a first publish takes
+                                           more, how many grants and when to ask again); --wait until it is in the
+                                           account (--timeout seconds, 120)
 
   --manifest F   the manifest (grain.json); --key F   a key file (owner.key): the owner's calls only when named
   --network N    whose relays a registry command finds and goes through: devnet, Saltix's test network (the default)
-  --relay R      or a relay ticket someone gave you (SALTIX-RELAY:…), or a relay you name, pinned by its certificate's
+  --relay R      or a relay ticket (SALARIUM-RELAY:…: grain doctor --json prints them as relays.answered wherever the
+                 SDK reaches the network), or a relay you name, pinned by its certificate's
                  SHA-256 H (wss://host:30335/#H); repeat it. One that cannot be a relay exits with 78; a ticket past
                  its life is left out with a warning
   --node URL     or your own node's wallet interface (plain HTTP: a local node or a tunnel)
@@ -406,7 +411,6 @@ async function main(argv: string[], log: DevLog): Promise<number> {
     case "init": {
       const dir = resolve(positional[0] ?? ".");
       const slug = text(flags, "slug", basename(dir).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+/, "").slice(0, 32));
-      const name = text(flags, "name", slug);
       if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(slug)) {
         throw new Error(`the slug "${slug}" is not one: 3 to 32 of [a-z0-9-], starting with a letter or a digit` +
           (flags.has("slug") ? "" : ` (it comes from the directory's name: pass --slug)`));
@@ -415,16 +419,18 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       const chat = flags.get("chat") === true;
       const signIn = flags.get("sign-in") === true;
       if (chat && signIn) throw new UsageError("--chat or --sign-in: a chat-only app has no page to sign in to");
+      const given = (flag: string) => (flags.has(flag) ? text(flags, flag) : undefined);
+      const names = initNames(slug, given("name"), given("name-ru"));
       mkdirSync(chat ? dir : join(dir, "public"), { recursive: true });
       log.at(dir);
       const ownerKey = newKey(join(dir, KEY_FILE));
       const manifest: Manifest = {
-        slug, version: 1, ...ownerOf(ownerKey), name: { en: name }, description: { en: "" }, icon: "00".repeat(32),
+        slug, version: 1, ...ownerOf(ownerKey), name: names.ru === undefined ? { en: names.en } : { en: names.en, ru: names.ru }, description: { en: "" }, icon: "00".repeat(32),
         entry: { chat: {} }, permissions: chat ? 4 : 1, sponsor: null, min_host: 1,
       };
       if (!manifest.description.en) delete (manifest.description as Record<string, string>).en;
       // Every app ships a Connect profile: what Saltix shows before anyone signs in (19-connect §11).
-      writeFileSync(join(dir, CONNECT_FILE), template.connectJson(slug, name, chat));
+      writeFileSync(join(dir, CONNECT_FILE), template.connectJson(slug, names.en, chat, names.ru));
       writeFileSync(join(dir, ".gitignore"), template.gitignore);
       // The rules a coding agent follows (an app's page: safe by default, full screen with viewport-fit=cover), for every
       // agent and for Claude Code.
@@ -432,7 +438,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       writeFileSync(join(dir, "CLAUDE.md"), template.claudeMd);
       if (chat) {
         writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
-        writeFileSync(join(dir, "chat.json"), template.chatJson(slug, name));
+        writeFileSync(join(dir, "chat.json"), template.chatJson(slug, names.en, names.ru));
         writeFileSync(join(dir, "server.mjs"), chatTemplate.chatServer(slug));
         writeFileSync(join(dir, "chat.mjs"), chatTemplate.chatHandlers(slug));
         mkdirSync(join(dir, "test"), { recursive: true });
@@ -440,16 +446,18 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         writeFileSync(join(dir, "package.json"), chatTemplate.chatPackageJson(slug, chatTemplate.sdkDependency(dir), chatTemplate.cliDependency(dir)));
         writeFileSync(join(dir, "README.md"), template.chatReadme(slug));
         console.log(`a chat-only grain "${slug}" in ${dir}; owner public key ${ownerKey}: its secret is in ${KEY_FILE} (keep it secret)`);
+        if (names.note) console.log(`note: ${names.note}`);
         console.log(`next: npm install, then grain pair in ${dir}: scan its QR code with your Saltix, which makes the app ` +
           `${slug} (or pairs it, if it is yours already); then npm start. The server's key is made here and never leaves it. ` +
           `A new app needs the owner's address: grain pair --owner <your address> (the app's page in Saltix shows the whole command)`);
-        console.log(`  or on the test network, with owner.key: grain faucet --wait, grain publish, grain cert init, ` +
-          `grain configure --slug ${slug} --server server.key, grain app-key make --slug ${slug}`);
+        console.log(`  or with no phone, on the test network, from key files (the app is then ${KEY_FILE}'s account's, not a person's): ` +
+          `grain faucet --wait, grain publish --key ${KEY_FILE}, grain cert init, grain configure --slug ${slug} --server server.key, ` +
+          `grain app-key make --slug ${slug} (it writes app.key for server.key), then npm start`);
         log.step("init", "ok", "chat");
         return 0;
       }
       // A page that works on its own; with --sign-in, one for some people only that checks first and renders after.
-      writeFileSync(join(dir, "public", "index.html"), template.indexHtml(name, signIn));
+      writeFileSync(join(dir, "public", "index.html"), template.indexHtml(names.page, signIn));
       writeFileSync(join(dir, "public", "app.js"), template.appJs(slug, signIn));
       const bridge = fileURLToPath((import.meta as unknown as { resolve(s: string): string }).resolve("@saltix/grain"));
       copyFileSync(bridge, join(dir, "public", "grain.js"));
@@ -462,6 +470,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       writeFileSync(join(dir, "package.json"), chatTemplate.pagePackageJson(slug, chatTemplate.cliDependency(dir)));
       console.log(`a grain "${slug}" in ${dir}; owner public key ${ownerKey}: its secret is in ${KEY_FILE} (keep it secret; ` +
         `grain dev signs with it, and grain publish only with --key ${KEY_FILE}, on the test network without a phone)`);
+      if (names.note) console.log(`note: ${names.note}`);
       console.log(`next: npm install in ${dir} (it links the grain command), then npx grain dev`);
       log.step("init", "ok", signIn ? "page_sign_in" : "page");
       return 0;
@@ -807,6 +816,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
         ...(field("app") !== undefined ? { app: field("app")! } : {}),
         ...(field("owner") !== undefined ? { owner: field("owner")! } : {}),
         ...(field("genesis") !== undefined ? { genesis: field("genesis")! } : {}),
+        ...(r.release !== undefined && releaseGenesis(r.release) !== null ? { release: releaseGenesis(r.release)! } : {}),
         ...(field("name") !== undefined ? { name: field("name")! } : {}),
         fresh: flags.get("new") === true, wait: flags.get("no-wait") !== true,
         ...(typeof given === "string" ? { timeoutMs: Number(given) * 1000 } : {}),

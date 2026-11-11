@@ -8,12 +8,12 @@
 // address.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   GivenRelayRefused, NoRelayAnswered, PROBES_AT_ONCE, RelayFinder, RelayGateways, TICKET_PREFIX, TicketRefused, checkGivenRelay,
-  fileRelayCache, fromBase32, fromHex, memoryRelayCache, projectRelayCache, publicHost, readTicket, relaysFromEnvironment, sealTicketsAnswer,
-  signRelayTicket, toBase32,
+  fileRelayCache, fromBase32, fromHex, memoryRelayCache, projectRelayCache, publicHost, readTicket, relaysFromEnvironment, releaseBehind,
+  sealTicketsAnswer, signRelayTicket, toBase32, updateAdvice,
 } from "../dist/index.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
@@ -275,6 +275,52 @@ test("all dead: the error names every source and every relay with its result, by
   assert.ok(!/192\.0\.2/.test(m) && !JSON.stringify(error.report).includes("192.0.2"), "no relay's address");
   assert.equal(error.report.tried.length, 5);
   assert.ok(error.report.took_ms < 5_000);
+  assert.equal(releaseBehind(error.report), false, "one certificate of four differs: the network is out of reach, the release not behind");
+  assert.deepEqual(error.report.tried.filter((t) => t.cause !== null).map((t) => [t.relay, t.cause]), [[cert(99), "pin"]], "the cause code reads, beside the words");
+});
+
+test("every entry point showing another certificate than its pin: the release is behind the network, said first with the update", async () => {
+  // The network began again with new relays at the same addresses: each answers, with a certificate the release's pin does not name.
+  const stale = [1, 2, 3].map((n) => `${url(n)}#${pin(n + 90)}`);
+  const error = await finder(network({ 1: {}, 2: {}, 3: {} }), { entry: stale, genesis: GENESIS }).find().then(() => null, (e) => e);
+  assert.ok(error instanceof NoRelayAnswered, String(error));
+  assert.equal(releaseBehind(error.report), true);
+  assert.deepEqual(error.report.tried.map((t) => [t.source, t.ok, t.cause]), [["entry", false, "pin"], ["entry", false, "pin"], ["entry", false, "pin"]]);
+  const m = error.message;
+  assert.match(m, /^this release of the SDK is most likely behind the devnet network: every entry point it carries showed another certificate than its pin \(3 tried in /);
+  assert.ok(!/no relay of devnet answered/.test(m), "never as a network that did not answer");
+  assert.match(m, new RegExp(`relay ${cert(91)} \\(the release's entry point\\): showed another certificate than its pin`), "each relay still named");
+  assert.match(m, /\nwhat to do: update .*git pull && npm install && npm run build.*; if it is the latest already, .*try another connection, or a relay ticket from a computer whose SDK reaches the network .*--relay SALARIUM-RELAY:/);
+  assert.ok(!/192\.0\.2/.test(m), "no relay's address");
+
+  // One entry point failing another way: the general words, a ticket the way out.
+  const mixed = await finder(network({ 1: {}, 2: {} }), { entry: [`${url(1)}#${pin(91)}`, `${url(2)}#${pin(92)}`, text(3)], genesis: GENESIS })
+    .find().then(() => null, (e) => e);
+  assert.equal(releaseBehind(mixed.report), false);
+  assert.match(mixed.message, /^no relay of devnet answered \(3 tried/);
+  assert.match(mixed.message, /\nwhat to do: grain doctor says the same; a relay ticket from a computer whose SDK reaches the network /);
+  // A relay given that answers: the command works, whatever the entry points show.
+  const found = await finder(network({ 1: {}, 2: {}, 3: {}, 5: {} }), { given: [text(5)], entry: stale, genesis: GENESIS }).find();
+  assert.deepEqual(found.map((e) => e.url), [url(5)]);
+  // The rule itself: entry points there are, every one with the cause `pin`, and no relay that answered.
+  const tried = (source, cause, ok = false) => ({ relay: "cert:00000000", source, ok, ms: ok ? 1 : null, error: ok ? null : "…", cause });
+  const report = (list) => ({ ...error.report, tried: list });
+  assert.equal(releaseBehind(report([tried("entry", "pin"), tried("cache", null)])), true, "a cached relay that failed otherwise changes nothing");
+  assert.equal(releaseBehind(report([tried("given", "pin"), tried("cache", "pin")])), false, "no entry point tried: nothing said of the release");
+  assert.equal(releaseBehind(report([])), false);
+  assert.equal(releaseBehind(report([tried("entry", "pin"), tried("entry", null)])), false);
+  assert.equal(releaseBehind(report([tried("entry", "pin"), tried("given", null, true)])), false, "a relay answered: the network is reached");
+});
+
+test("the update's words name the SDK's checkout where it is one, and the public repository where it is not", () => {
+  const dir = scratch("sdk-root-");
+  assert.equal(updateAdvice(dir), "update to a newer release of the SDK (github.com/corvise/saltix-grains: git pull && npm install && npm run build in its " +
+    "checkout), or of the program that carries it");
+  mkdirSync(join(dir, ".git"));
+  assert.match(updateAdvice(dir), /^update to a newer release/, "a repository that is not the SDK's (the SDK inside a project's node_modules)");
+  mkdirSync(join(dir, "packages", "server"), { recursive: true });
+  assert.equal(updateAdvice(dir), `update the SDK: git pull && npm install && npm run build in ${dir}`);
+  assert.match(updateAdvice(), /git pull && npm install && npm run build/, "this SDK's own, whichever it is");
 });
 
 test("a ticket naming an endpoint behind a CA's certificate is used, the certificate left to the CAs Node trusts", async () => {
