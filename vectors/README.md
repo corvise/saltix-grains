@@ -1,33 +1,25 @@
 # Golden vectors: the protocol's own bytes
 
-The JSON files here are the Saltix protocol's **golden vectors**: keys, signed objects and their encodings, made by the
-protocol's reference implementation and copied here unchanged. They are the protocol's bytes, not this SDK's: every
-client, in any language, reproduces them byte for byte, refusals included. The SDK's tests do
-(`packages/*/test/vectors.test.mjs` and the tests each format has).
+The Saltix protocol's **golden vectors** are JSON files of keys, signed objects and their encodings, made by the
+protocol's reference implementation. They are the protocol's bytes, not this SDK's: every client, in any language,
+reproduces them byte for byte, refusals included. The SDK's tests do (`packages/*/test/vectors.test.mjs` and the tests
+each format has), each reading a file by its name: `goldenVectors("<name>.json")` from `scripts/vectors.mjs`.
 
-- **They are never edited by hand.** `SOURCE` names the protocol commit they were copied from (its first line,
-  `corvise/saltix <commit>`) and each file's git blob id at that commit; `node scripts/check-vectors.mjs`, which CI runs,
-  refuses a file whose bytes differ, one `SOURCE` does not name, and one missing. A new version of a file arrives by
-  `scripts/sync-vectors.sh` from the protocol's repository, which only its maintainers can run while that repository is
-  private.
-- **When they and a page disagree**, the vector is right, unless the page names a protocol change made after
-  `SOURCE`'s commit (below). [docs/protocol/](../docs/protocol/README.md) explains every format they hold; a file's own
-  `spec` field (`"specs/12-grains.md"`, …) names the protocol document, which those pages reflect under the same name
-  and section numbers.
-- **`SOURCE`'s commit** (`5c045a9f`, 2026-10-28) is pairing a server, version 2 (corvise/saltix #488):
-  `server-pairing-v2.json` replaces `server-pairing-v1.json`, whose `SGP1` frames went with version 1. The sync before
-  (`e0492dc4`, 2026-10-28) brought the protocol's support address (corvise/saltix #474): format 2 of
-  the Connect profile, whose support contact may be a Saltix address, the owner's own or one whose holder signed its
-  consent (`connect-profiles-v1.json`'s `support_address`: the cases as a block of protocol version 8 and one of
-  version 9 read them, the contacts, the consent's bytes, the owner's `SetGrainProfile`), and the app's donations
-  (`grains-v1.json`'s `donations`, `SetGrainDonations` tag 76 of protocol version 9, which no call here sends), and
-  the numbers' removal from the v15 genesis (`handles-v1.json`: names alone, a number's text reads as no
-  handle, the vectors bind `@boris_k`; `relay-v1.json`'s profile names may start with `+` since) and bids bound to
-  their auction (`handles-v1.json`, protocol version 5), which no app sends. Earlier syncs brought the pool vocabulary
-  (`e6448704`, 2026-10-22: words only, no byte changed), `images-v1.json` (named blobs: icons, avatars and bundles the
-  network keeps, 32-images), `accounts-v1.json` for the quorums of protocol version 2 (`quorums_v2`), `ConfigureGrain`
-  tag 39 of protocol version 2 (`grains-v1.json`, `configure-v2`), and the member proof's 5 minutes of clock skew
-  (`grain-chats-v1.json`).
+**Where they stand.** In the SDK's public repository, here: copies beside this page, of exactly the files the tests
+read. In the protocol's own repository, where this SDK is the directory `mini-apps/`, this page stands here alone: the
+tests read that repository's vectors in place (`scripts/vectors.mjs` says where), and the copies are made when the SDK
+is published.
+
+- **They are never edited by hand.** `SOURCE` names the protocol commit the copies were taken from (its first line,
+  `corvise/saltix <commit>`) and each file's git blob id at that commit; `node scripts/check-vectors.mjs`, which CI
+  runs, refuses a file whose bytes differ, one `SOURCE` does not name, and one missing. New copies come by
+  `node scripts/sync-vectors.mjs <a checkout of the protocol's repository>`, which takes the files the tests read from
+  that checkout's commit and removes a copy no test reads any more; only the protocol's maintainers can run it while
+  that repository is private.
+- **When they and a page disagree**, the vector is right, unless the page reflects a protocol commit later than the one
+  `SOURCE` names (each page of [docs/protocol/](../docs/protocol/README.md) names the commit it was read at). Those
+  pages explain every format the vectors hold; a file's own `spec` field names the protocol's document, which the pages
+  reflect under the same name and section numbers.
 - **Using one.** A file holds its `version`; the genesis hash and network its network-bound signatures use (`chain`, or
   `genesis_hash` and `network`); the keys it signs with (fixed, fake secrets: never use them for anything real); the
   objects in their Borsh form as hex, and in their JSON form where they have one; the messages signed (`message_hex`);
@@ -37,14 +29,16 @@ client, in any language, reproduces them byte for byte, refusals included. The S
 
 | File | What it holds | Pages |
 |---|---|---|
-| `grains-v1.json` | grain keys from a phrase (`keys`); manifests of every entry (hosted, sealed, managed owner, chat) with their Borsh, JSON form, id and signature; the icon and bundle hashes; a login; invoices signed by the owner key, a certificate and a registered server key, with the wallet's refusals (`invoices.registered`); notifications; the slug deposits and the owner's registry transactions (register, update, retire, configure, access, rate, and donations, which no call here sends); the developer key (`app_key`) | [grains](../docs/protocol/grains.md), [app studio](../docs/protocol/app-studio.md), [basics](../docs/protocol/basics.md#transactions-an-apps-tools-sign) |
+| `grains-v1.json` | grain keys from a phrase (`keys`); manifests of every entry (hosted, sealed, managed owner, chat) with their Borsh, JSON form, id and signature; the icon and bundle hashes; a login; invoices signed by the owner key, a certificate and a registered server key, with the wallet's refusals (`invoices.registered`); notifications; the slug deposits and the owner's registry transactions (register, update, retire, configure in both its forms, access, rate, and donations, which no call here sends); the developer key (`app_key`) | [grains](../docs/protocol/grains.md), [app studio](../docs/protocol/app-studio.md), [basics](../docs/protocol/basics.md#transactions-an-apps-tools-sign) |
 | `grain-chats-v1.json` | a chat spec signed by the owner and by a server key, its `.well-known` document; requests (with a member proof, text only), answers, a report, a poll, a `Publish`, a hello and its welcome, reported numbers, each as signed Borsh and as a sealed frame's plaintext; a file reference in Borsh and JSON; the card standard's cases (`cards`); what every reader refuses | [grain chats](../docs/protocol/grain-chats.md), [relays](../docs/protocol/relays.md#files-next-to-the-relay) |
-| `connect-v1.json` | a page's session, its offer as text and as a link, other offers and refused ones; the wallet's `ConnectSeen`; grants signed by a plain key and by a phone's P-256 key, sealed to the page; the key event logs they are checked against (`managed`, `managed-payments`, `managed-without-phone`, `upgraded`; a plain account's is empty); refused grants and payloads | [connect](../docs/protocol/connect.md) |
-| `connect-profiles-v1.json` | Connect profiles of a mini-app and of a site, signed by a plain account and by a managed account's phone, in Borsh and JSON; links taken and refused; profiles refused for every rule, each with its reason; the profile link; `SetGrainProfile` transactions; the logs a site's owner is checked against; and support addresses (`support_address`, format 2 from protocol version 9): profiles consented, the owner's own, a managed address's, and refused for each consent rule, as a block of version 8 and one of version 9 read them, the contacts in the address form, the consent's payload, message, Borsh and signature, and a `SetGrainProfile` that carries one | [connect §11](../docs/protocol/connect.md#11-the-connect-profile), [support](../docs/support.md) |
+| `connect-v1.json` | a page's session, its offer as text and as a link, other offers and refused ones; the wallet's `ConnectSeen`; grants signed by a plain key and by a phone's P-256 key, sealed to the page; the key event logs they are checked against (`managed`, `managed-payments`, `managed-without-phone`, `upgraded`; a plain account's is empty); refused grants and payloads; the wallet's `ConnectReply`, the page's `ConnectConfirm` and `ConnectRefusal`, and the ones refused (`reply`, `confirm`, `refusals`, `refused_confirms`, `refused_refusals`) | [connect](../docs/protocol/connect.md), [connect §14](../docs/protocol/connect.md#14-connection-feedback) |
+| `connect-profiles-v1.json` | Connect profiles of a mini-app and of a site, signed by a plain account and by a managed account's phone, in Borsh and JSON; links taken and refused; profiles refused for every rule, each with its reason; the profile link; `SetGrainProfile` transactions; the logs a site's owner is checked against; and support addresses (`support_address`, the profile's format 2): profiles consented, the owner's own, a managed address's, and refused for each consent rule, the contacts in the address form, the consent's payload, message, Borsh and signature, and a `SetGrainProfile` that carries one | [connect §11](../docs/protocol/connect.md#11-the-connect-profile), [support](../docs/support.md) |
 | `crypto-v1.json` | phrases, seeds and keys by path, addresses on every network, messaging keys (and the vault's, which no app uses) | [basics](../docs/protocol/basics.md#addresses) |
-| `relay-v1.json` | key bindings, device certificates, address records, mailbox acks and the records a client signs for relays; the rest (the vault, linking a browser, managed records, profile names) is wallets' and no app uses it | [relays](../docs/protocol/relays.md#registering-an-address) |
-| `access-v1.json` | channel and stake transactions, an allowance and its request, a voucher, sponsor certificates signed by a plain key (`grant`) and a phone (`phone_grant`) | [relays](../docs/protocol/relays.md#paying-for-relays-lanes-and-sponsors) |
+| `relay-v1.json` | key bindings, device certificates, address records, mailbox acks and the records a client signs for relays; the rest (the vault, linking a browser, managed records, profile names, the accounts of an EVM key) is wallets' and no app uses it | [relays](../docs/protocol/relays.md#registering-an-address) |
+| `relay-tickets-v1.json` | relay tickets: tickets with their body, signing message, signature and text; texts as they are read (`taken`) and those refused with the reason, for a network and a clock; a sealed answer of `relay_tickets` with the keys that open it; a requester's network bucket by its address (`buckets`) and the relays chosen for it (`choice`); which hosts count as public (`public_hosts`); the domains, lifetimes and bounds | [relays](../docs/protocol/relays.md#finding-relays-relay-tickets) |
+| `access-v1.json` | the transactions of paying for relays (channels, stakes, the exchange, WORK bought and returned); an allowance and its request, a claim, a voucher; sponsor certificates signed by a plain key (`grant`) and a phone (`phone_grant`) | [relays](../docs/protocol/relays.md#paying-for-relays-lanes-and-sponsors) |
 | `server-pairing-v2.json` | pairing a server by QR code, version 2: the command from the app's page (the app, the owner's address, the network) and how it is read; offers (a server named in English, in Russian, unnamed) with their Borsh, link, code, fingerprint and the server's address, each carrying the key's proof for the app and its owner; the proof's message and signature over the fixed key; how the slug is judged from the registry's record; the owner's `ConfigureGrain` with the proof; what readers, the wallet and the registry refuse | [app studio §3a](../docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code) |
 | `images-v1.json` | named blobs: the kinds (tag, name, hash domain, bound, type, sides); icons and avatars each kind takes with their hashes, and those the image check refuses with the reason; the monogram's colours; profiles of version 2 with an avatar; bundles as `grain bundle` writes them and as other tools do, and those the bundle check refuses; a server key's statement for a pending upload (Borsh, message, signature, and refused ones with the node's clock); the frames that carry them (`blob_put`'s pieces, answers and every refusal reason, `blob_get`, `GET /_blob/…`) | [images](../docs/protocol/images.md) |
-| `accounts-v1.json` | a managed account (13-accounts): its phrase's keys and derivation, root uses, device signatures (Ed25519 and P-256), transactions with every proof, its key event log and what the log proves (`log`), an upgrade from kind 0; and the same quorums signed in protocol version 2's form, over their quorum message (`quorums_v2`), which the offline log check takes beside version 1's | [basics](../docs/protocol/basics.md#accounts-whose-keys-change) |
-| `handles-v1.json` | usernames: their forms and Borsh, what a typed text reads as (a number's old form as nothing), how wallets display them, and every handle transaction (`BindHandle` among them) | [basics](../docs/protocol/basics.md#usernames), [app studio §2](../docs/protocol/app-studio.md#2-the-registry) |
+| `accounts-v1.json` | a managed account: its phrase's keys and derivation, root uses, device signatures (Ed25519 and P-256), transactions with every proof, its key event log and what the log proves (`log`), an upgrade from kind 0; and the same quorums signed in protocol version 2's form, over their quorum message (`quorums_v2`), which the offline log check takes beside version 1's | [basics](../docs/protocol/basics.md#accounts-whose-keys-change) |
+| `new-phrase-v1.json` | a managed account's new phrase: the proof its first root signs for one account on one network (`proof`, under `domain`), the action that carries it and the older one that names the phrase by its digest alone, each with the protocol versions that take it (`versions`); the change made by the root and by a quorum; the key event logs of both forms and which phrase each proves (`log`, `bare_log`); the proofs every reader refuses | [basics](../docs/protocol/basics.md#accounts-whose-keys-change) |
+| `handles-v1.json` | usernames: their forms and Borsh, what a typed text reads as (a number's old form as nothing), how wallets display them, and every handle transaction (`BindHandle` and the auctions' bids among them) | [basics](../docs/protocol/basics.md#usernames), [app studio §2](../docs/protocol/app-studio.md#2-the-registry) |

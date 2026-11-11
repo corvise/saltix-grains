@@ -16,13 +16,14 @@ import { accountId, decodeSignedProfile, encodeAddress, fromHex, signSupportCons
 import { CONNECT_FILE, lintConnect } from "../dist/connect.js";
 import { SupportError, addressNotTaken, contactOf, holderConsent, ownerAccountOf, readingOf, supportFor, withSupport } from "../dist/support.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
-const vectors = JSON.parse(readFileSync(new URL("../../../vectors/connect-profiles-v1.json", import.meta.url), "utf8"));
+const vectors = goldenVectors("connect-profiles-v1.json");
 const GENESIS = vectors.chain.genesis_hash_hex;
 const secret = fromHex("61".repeat(32), 32);
 const ownerId = toHex(accountId(ed25519.getPublicKey(secret)));
-const ownAddress = encodeAddress("devnet", fromHex(ownerId, 32));
+const ownAddress = encodeAddress("devnet", fromHex(ownerId, 20));
 const AGENT = vectors.support_address.agent_secret_hex;
 const agentKey = fromHex(AGENT, 32);
 const agentAddress = encodeAddress("devnet", accountId(ed25519.getPublicKey(agentKey)));
@@ -88,7 +89,7 @@ const refused = (reason) => (e) => e instanceof SupportError && e.reason === rea
 
 test("a contact as typed, written as a profile carries it, or refused naming the four forms", () => {
   assert.deepEqual(contactOf(`  ${agentAddress.toUpperCase()}  `), {
-    form: "address", text: agentAddress, network: "devnet", kind: 0, account: toHex(accountId(ed25519.getPublicKey(agentKey))),
+    form: "address", text: agentAddress, network: "devnet", account: toHex(accountId(ed25519.getPublicKey(agentKey))),
   });
   assert.deepEqual(contactOf("@Dice_Help"), { form: "username", text: "@dice_help", name: "dice_help" });
   assert.deepEqual(contactOf("help@dice.app"), { form: "email", text: "mailto:help@dice.app" });
@@ -97,8 +98,9 @@ test("a contact as typed, written as a profile carries it, or refused naming the
   assert.throws(() => contactOf("http://dice.app"), refused("form"));
   assert.throws(() => contactOf("javascript:alert(1)"), refused("form"));
   assert.throws(() => contactOf("@dice__help"), refused("username"));
-  const contract = vectors.support_address.contacts.find((c) => c.name === "contract").text;
-  assert.throws(() => contactOf(contract), refused("address_kind"));
+  // An address names no kind: a contract's reads as any account's (vectors/connect-profiles-v1.json).
+  const contract = vectors.support_address.contacts.find((c) => c.name === "contract");
+  assert.deepEqual(contactOf(contract.text), { form: "address", text: contract.text, network: contract.network, account: contract.account_hex });
   assert.match(String((() => { try { contactOf("tel:+100"); } catch (e) { return e.message; } })()), /https:\/\/ link, a mailto: address, a Saltix username \(@name\) or a Saltix address/);
 });
 
@@ -121,7 +123,7 @@ test("a link or an e-mail address asks no network; a username is what the regist
   };
   assert.equal((await supportFor({ contact: contactOf("https://dice.app/help"), slug: "dice", node: offline, env: {} })).consent, null);
   assert.equal((await supportFor({ contact: contactOf("help@dice.app"), slug: "dice", node: offline, env: {} })).consent, null);
-  const node = await fakeNode({ handles: { dice_help: { owner: ownerId, app: "dice", display: "@dice_help" }, anna: { owner: "77".repeat(32), app: null }, chess: { owner: ownerId, app: "chess-bot" } } });
+  const node = await fakeNode({ handles: { dice_help: { owner: ownerId, app: "dice", display: "@dice_help" }, anna: { owner: "77".repeat(20), app: null }, chess: { owner: ownerId, app: "chess-bot" } } });
   try {
     const say = async (typed) => (await supportFor({ contact: contactOf(typed), slug: "dice", node: () => node.url, env: {} })).said;
     assert.match(await say("@dice_help"), /@dice_help opens dice's chat in Saltix: its program answers there, and every user reaches it/);
@@ -145,7 +147,7 @@ test("an address: from protocol version 9, of this network, the owner's own or w
     // Signed here with the holder's key from the environment: the same consent.
     assert.deepEqual((await of(agentAddress, { env: { SALTIX_SUPPORT_KEY: AGENT } })).consent, consentFor());
     await assert.rejects(of(agentAddress), (e) => refused("consent_missing")(e) && /SALTIX_SUPPORT_KEY=… grain support consent --slug dice/.test(e.message));
-    await assert.rejects(of(agentAddress, { consent: consentText(consentFor({ owner: "77".repeat(32) })) }), refused("consent_owner"));
+    await assert.rejects(of(agentAddress, { consent: consentText(consentFor({ owner: "77".repeat(20) })) }), refused("consent_owner"));
     await assert.rejects(of(agentAddress, { consent: consentText(consentFor({ slug: "dice-two" })) }), refused("consent_slug"));
     await assert.rejects(of(agentAddress, { consent: consentText(consentFor({ key: strangerKey })) }), refused("consent_key"));
     await assert.rejects(of(agentAddress, { consent: consentText(consentFor({ genesis: "5b".repeat(32) })) }), refused("consent_signature"));
@@ -185,8 +187,8 @@ test("the holder's consent from SALTIX_SUPPORT_KEY: the registry's owner unless 
     const signed = await holderConsent({ slug: "dice", node: node.url, env: { SALTIX_SUPPORT_KEY: AGENT } });
     assert.deepEqual(signed.consent, consentFor());
     assert.equal(signed.address, agentAddress);
-    const named = await holderConsent({ slug: "chess-bot", owner: "77".repeat(32), node: node.url, env: { SALTIX_SUPPORT_KEY: AGENT } });
-    assert.deepEqual(named.consent, consentFor({ slug: "chess-bot", owner: "77".repeat(32) }));
+    const named = await holderConsent({ slug: "chess-bot", owner: "77".repeat(20), node: node.url, env: { SALTIX_SUPPORT_KEY: AGENT } });
+    assert.deepEqual(named.consent, consentFor({ slug: "chess-bot", owner: "77".repeat(20) }));
     await assert.rejects(holderConsent({ slug: "chess-bot", node: node.url, env: { SALTIX_SUPPORT_KEY: AGENT } }), refused("unregistered"));
     await assert.rejects(holderConsent({ slug: "dice", node: node.url, env: {} }), /no SALTIX_SUPPORT_KEY/);
   } finally {
@@ -218,7 +220,7 @@ test("grain support end to end: connect.json written, said back, cleared; the ho
     assert.deepEqual(lintConnect(dir, manifestOf(dir)).errors, [], "grain lint takes what grain support wrote");
     // Refused for a consent that does not hold: connect.json stays as it was, and the log says why in a code.
     const before = readFileSync(join(dir, CONNECT_FILE), "utf8");
-    writeFileSync(file, JSON.stringify(consentFor({ owner: "77".repeat(32) })));
+    writeFileSync(file, JSON.stringify(consentFor({ owner: "77".repeat(20) })));
     const wrong = await run(["support", agentAddress, "--consent", file, "--node", node.url], dir);
     assert.equal(wrong.code, 1);
     assert.match(wrong.stderr, /the consent names another owner than dice's/);

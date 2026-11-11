@@ -1,35 +1,35 @@
 {
   "app_key": {
-    "code": "saltix-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:6363636363636363636363636363636363636363636363636363636363636363",
+    "code": "salarium-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:6363636363636363636363636363636363636363636363636363636363636363",
     "server_public": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
     "server_secret": "6363636363636363636363636363636363636363636363636363636363636363",
     "slug": "chess"
   },
   "hashes": {
-    "bundle": "49e95070094efaf164687f13d51bc28bbb8084e589ad0329e119f51558fb31d3",
+    "bundle": "d4952a8893f3276bec43da678f0cbbacacc8d2e9bf060c569158bc169211ee9e",
     "bundle_of": "notes bundle",
-    "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+    "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
     "icon_of": "chess icon"
   },
   "invoices": {
     "cases": [
       {
         "memo_text": "abababababababababababababababab Premium, 1 month",
-        "message": "11b38d453864160ba071e97942f1e6e0b4615316a8fc9a37c4081be05db9e132",
+        "message": "440d81248e5e670c66c6b677239baeadc601dd07b09f371cb53dd83727963a05",
         "name": "by-owner",
-        "signed_borsh": "05000000636865737377777777777777777777777777777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a0010000001b3b310921a9f7b3a433a39fcd222dffc0abf4e4718a70fb64cb3a6bc2017645dd028e30fb272c18ae9fd714e0b52206fedcb257ce060c58ec56838aeab34105"
+        "signed_borsh": "05000000636865737377777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a0010000005d1c78caead439d962ecbbdbe06489155cd2bcf4f7be59049a85c3bd9f65f97d08722e3356b0d0885ec318530de89653e0c459ddce07f424053e7f2b9cb4cb06"
       },
       {
         "memo_text": "abababababababababababababababab Premium, 1 month",
-        "message": "11b38d453864160ba071e97942f1e6e0b4615316a8fc9a37c4081be05db9e132",
+        "message": "440d81248e5e670c66c6b677239baeadc601dd07b09f371cb53dd83727963a05",
         "name": "by-certified-key",
-        "signed_borsh": "05000000636865737377777777777777777777777777777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000dac6b5c3f809e81f028d8a881e4f27010c81f695d8f815d122613d4b933a9f5d43ea53b27a6372bfaf8777aba2666c40afd084c7a2d9c62060994f580772ce07dd81babf04d00d307057a4ae41cb998ddd7d8c4a2ca7cbe091d898703e103c49c87727563ae474326b842d1ad7f2eb76601b2eac65f36718d8b5c716e5543008"
+        "signed_borsh": "05000000636865737377777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000da869ba74f1495fad753cded2ad7920d5dbeaf993bf7e5468a326746ef0ea7a4030fcc5e445bafa6ba177ddb60b898e35859a15a76cca6a4ddd7f485cb22fe057ec0e904d866ed5cb70d701de2b7d5a8de6d4224a1ce50cb5eb357afd70f7e87009c636cc6605b9f035d8e21af1bcd0d4dc11fc19b7320c45b27e28ce7a1490c"
       }
     ],
     "cert": {
       "expires_at": 1790086400000,
       "key": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
-      "signature": "dac6b5c3f809e81f028d8a881e4f27010c81f695d8f815d122613d4b933a9f5d43ea53b27a6372bfaf8777aba2666c40afd084c7a2d9c62060994f580772ce07",
+      "signature": "da869ba74f1495fad753cded2ad7920d5dbeaf993bf7e5468a326746ef0ea7a4030fcc5e445bafa6ba177ddb60b898e35859a15a76cca6a4ddd7f485cb22fe05",
       "slug": "chess"
     },
     "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
@@ -39,18 +39,18 @@
     "phone_cert": {
       "expires_at": 1790086400000,
       "key": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
-      "message": "cc56bc36eea1c2404960a8db302c99bdee1f192c843204c9f32f28bd462aa8ae",
-      "signature": "6112dd9308fcccf28ab3f0f817539db16dd80672f9cc968aa48d5ba31bfa88166825b9f5e9fa94f03d7cdb26b7fa4fba3ee25995831bec7737f2a855f6e37866",
+      "message": "b2d0248c28f5211c7f82700b028187690ef990a630ccfabbcace9118971aea85",
+      "signature": "d195a91186b2d0241819593537cdc83daaed873a28798f92b56ca70e0b148708797c7dcf7f150748f0d78db2d6465326df7dcc0a607ca54bfa63db159df6454f",
       "slug": "club"
     },
     "registered": {
       "cases": [
         {
           "memo_text": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd Coach, 1 month",
-          "message": "121a23d0b12e399e104c24100eabd37160b1d7622fffc64fa3866966dbe0f025",
+          "message": "0d1486cac52e356438b570a004082d877e920571f1442bb5a59b2ace5a87f2f6",
           "name": "to-the-owner",
           "record": {
-            "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+            "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
             "retired": false,
             "servers": [
               "2bc2800b3316e009209ffd757dab19ccf0ae84bc7ae90654e1e81712d270f653",
@@ -58,15 +58,15 @@
             ]
           },
           "result": "ok",
-          "signed_borsh": "050000006368657373fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c90000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a0010000000d14d21ac397f9c8cb3a9af5e22917acb31cca7f6d195cc17b7d824d437a854a94c487619827d8806fc98ddb672116a1468d64f5db8974816518969f49923b05",
+          "signed_borsh": "050000006368657373ffeeec959a1314ebc610876bb1220660bafd77050000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a001000000875d134f61f0fc500c8f5a8b12ccb2427b0143d08854e1ba3e52ca37784bd6681bb74d1035cdc03884b34afd195703d87f670aace549079984adab9c99742c00",
           "what": "taken: a key the record names, paying the record's owner"
         },
         {
           "memo_text": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd Coach, 1 month",
-          "message": "121a23d0b12e399e104c24100eabd37160b1d7622fffc64fa3866966dbe0f025",
+          "message": "0d1486cac52e356438b570a004082d877e920571f1442bb5a59b2ace5a87f2f6",
           "name": "a-key-the-registry-does-not-name",
           "record": {
-            "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+            "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
             "retired": false,
             "servers": [
               "2bc2800b3316e009209ffd757dab19ccf0ae84bc7ae90654e1e81712d270f653",
@@ -74,15 +74,15 @@
             ]
           },
           "result": "signature",
-          "signed_borsh": "050000006368657373fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c90000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a001000000d09fe568452cad05e01c5a728052b9d140fa01f20d92b8e16c374f7057b47d56d006301b0b00b041bec8361d345199dfb69c75a75df43349dcebe75ad12ecb04",
+          "signed_borsh": "050000006368657373ffeeec959a1314ebc610876bb1220660bafd77050000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a001000000bf88e845eda2a4ff6be2a65500f0fe1b6791077e6c1c60d24c093e65fec31af686088b04cd41a8f81a16fcddef1d873b49407b28c8a0fabdad5d2effd9bda001",
           "what": "refused: no key of the record (nor the owner key) signed it"
         },
         {
           "memo_text": "abababababababababababababababab Premium, 1 month",
-          "message": "11b38d453864160ba071e97942f1e6e0b4615316a8fc9a37c4081be05db9e132",
+          "message": "440d81248e5e670c66c6b677239baeadc601dd07b09f371cb53dd83727963a05",
           "name": "to-another-account",
           "record": {
-            "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+            "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
             "retired": false,
             "servers": [
               "2bc2800b3316e009209ffd757dab19ccf0ae84bc7ae90654e1e81712d270f653",
@@ -90,35 +90,35 @@
             ]
           },
           "result": "payee",
-          "signed_borsh": "05000000636865737377777777777777777777777777777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a001000000dd81babf04d00d307057a4ae41cb998ddd7d8c4a2ca7cbe091d898703e103c49c87727563ae474326b842d1ad7f2eb76601b2eac65f36718d8b5c716e5543008",
+          "signed_borsh": "05000000636865737377777777777777777777777777777777777777770000f9029500000000100000005072656d69756d2c2031206d6f6e7468ababababababababababababababababc09359c4a0010000007ec0e904d866ed5cb70d701de2b7d5a8de6d4224a1ce50cb5eb357afd70f7e87009c636cc6605b9f035d8e21af1bcd0d4dc11fc19b7320c45b27e28ce7a1490c",
           "what": "refused: a server key's invoice pays the grain's owner only"
         },
         {
           "memo_text": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd Coach, 1 month",
-          "message": "121a23d0b12e399e104c24100eabd37160b1d7622fffc64fa3866966dbe0f025",
+          "message": "0d1486cac52e356438b570a004082d877e920571f1442bb5a59b2ace5a87f2f6",
           "name": "a-key-removed-since",
           "record": {
-            "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+            "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
             "retired": false,
             "servers": [
               "2bc2800b3316e009209ffd757dab19ccf0ae84bc7ae90654e1e81712d270f653"
             ]
           },
           "result": "signature",
-          "signed_borsh": "050000006368657373fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c90000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a0010000000d14d21ac397f9c8cb3a9af5e22917acb31cca7f6d195cc17b7d824d437a854a94c487619827d8806fc98ddb672116a1468d64f5db8974816518969f49923b05",
+          "signed_borsh": "050000006368657373ffeeec959a1314ebc610876bb1220660bafd77050000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a001000000875d134f61f0fc500c8f5a8b12ccb2427b0143d08854e1ba3e52ca37784bd6681bb74d1035cdc03884b34afd195703d87f670aace549079984adab9c99742c00",
           "what": "refused: the owner replaced the key after it signed (ConfigureGrain)"
         },
         {
           "memo_text": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd Coach, 1 month",
-          "message": "121a23d0b12e399e104c24100eabd37160b1d7622fffc64fa3866966dbe0f025",
+          "message": "0d1486cac52e356438b570a004082d877e920571f1442bb5a59b2ace5a87f2f6",
           "name": "a-retired-grain",
           "record": {
-            "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+            "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
             "retired": true,
             "servers": []
           },
           "result": "retired",
-          "signed_borsh": "050000006368657373fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c90000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a0010000000d14d21ac397f9c8cb3a9af5e22917acb31cca7f6d195cc17b7d824d437a854a94c487619827d8806fc98ddb672116a1468d64f5db8974816518969f49923b05",
+          "signed_borsh": "050000006368657373ffeeec959a1314ebc610876bb1220660bafd77050000f90295000000000e000000436f6163682c2031206d6f6e7468cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc09359c4a001000000875d134f61f0fc500c8f5a8b12ccb2427b0143d08854e1ba3e52ca37784bd6681bb74d1035cdc03884b34afd195703d87f670aace549079984adab9c99742c00",
           "what": "refused: a retired grain takes no payment, whoever signed it"
         }
       ],
@@ -131,13 +131,13 @@
     "account": 0,
     "grains": [
       {
-        "messaging_public": "0b5cfc42a6eb43489a2440ae5ffc7d7c1bb8a0e65eb2821c0406549fc993cf0f",
-        "public_key": "fa18d7e5e4a3e0483acd2763ec0a2658758dab36fd4c03815f798b4176c9b7ca",
+        "messaging_public": "920d2438479921cc8b31d53dccd687c7b8652c0931e792506584e2950228116b",
+        "public_key": "a4514f8e374aec9952a5adb31c747cb9987a51414df90e17d536d5a2a146c6ae",
         "slug": "chess"
       },
       {
-        "messaging_public": "19d1058086cc7d8882cddb1b02d2cd29d0dce6cfedd84c22a973d4f94709995d",
-        "public_key": "a8c9a93bd5b65289376bd928a22e8b50dec3d5445323abc6807f70ab81fcc649",
+        "messaging_public": "f7507367da92a51e989fe7f5096fbc533a0f96165f977604b8312f2bd660d11c",
+        "public_key": "d83bd3d25ba4abe78aa256856a78ac5c078b93c133a392ef9ecbfabe10fa19ca",
         "slug": "salt-notes"
       }
     ],
@@ -150,16 +150,16 @@
     "at": 1790000000000,
     "borsh": "0500000063686573731500000068747470733a2f2f63686573732e6578616d706c650e0000006368616c6c656e67652d30303031006c50c4a0010000",
     "challenge": "6368616c6c656e67652d30303031",
-    "key": "fa18d7e5e4a3e0483acd2763ec0a2658758dab36fd4c03815f798b4176c9b7ca",
-    "message": "fae8279d87d1786615f3c02e693fa4d7f5530ec070cd7d8805c3f9fff462812b",
+    "key": "a4514f8e374aec9952a5adb31c747cb9987a51414df90e17d536d5a2a146c6ae",
+    "message": "f37c565b1d9b9f3a71a3cefa3394cb9c5a8b091b11fb3ec5525dc5fb03713874",
     "origin": "https://chess.example",
-    "signature": "e1943e0a18797207ded7db1c985be4a4d1049db8854a3495ea5bd386cb34527b5db6f17102ee61d9c67b07db4af9e0636ee0d0ccc8e5ff5224253481f9340907",
+    "signature": "ac9b1fd4ea7af45a3baec31317df11124308132eb381777a0bf4419889e128f790139107b4e5220dc4e973c99d056748d8080ded694a7273c75f517a51d22a07",
     "slug": "chess"
   },
   "manifests": [
     {
-      "borsh": "05000000636865737303000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e6473aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444444444444444444444444444440100",
-      "id": "bba92c51a302b29789b769ea94da7064000fb195a33351ef4d4ac5b8d4ca468e",
+      "borsh": "05000000636865737303000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444440100",
+      "id": "37d14e55061ea4cc94e3c5516428c8a2d913a7b3d4283c66701b66d93d1e48c0",
       "json": {
         "manifest": {
           "description": {
@@ -173,36 +173,36 @@
               "url": "https://chess.example/play"
             }
           },
-          "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+          "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
           "min_host": 1,
           "name": {
             "en": "Chess",
             "ru": "Шахматы"
           },
-          "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+          "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
           "owner_key": {
             "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
           },
           "permissions": 67,
           "slug": "chess",
-          "sponsor": "4444444444444444444444444444444444444444444444444444444444444444",
+          "sponsor": "4444444444444444444444444444444444444444",
           "version": 3
         },
-        "signature": "7ece1dbaa54cc5eace25fed00598b9ccd9166c93fd781390b02ea0366fdf8c18cf81a926d4cba2665fb6ec77458799632f3151523c9b3faa326cdb2196dcd20e"
+        "signature": "6d5085fb1026dd25900eea92c4b6b7ec1a73f205c4c93217e4cd2fdc4439736775d4c3cea3bd7297669d59d42e89fbd5e682139de6adf51a8629cce56ebc1c03"
       },
-      "message": "4389e2da6a516a7caace76ead8353a7a4cc306f97d2c0e03521c9d8e6baae351",
+      "message": "4e98fcf52e922b8bbfaa0235dcf303f7e00a3def1a42b8a611cb0fd0467b9f3b",
       "name": "hosted",
-      "signature": "7ece1dbaa54cc5eace25fed00598b9ccd9166c93fd781390b02ea0366fdf8c18cf81a926d4cba2665fb6ec77458799632f3151523c9b3faa326cdb2196dcd20e"
+      "signature": "6d5085fb1026dd25900eea92c4b6b7ec1a73f205c4c93217e4cd2fdc4439736775d4c3cea3bd7297669d59d42e89fbd5e682139de6adf51a8629cce56ebc1c03"
     },
     {
-      "borsh": "0a00000073616c742d6e6f74657301000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e050000004e6f74657300000000c0c78aa71b44ed17b2cac1705dd03f68a93cefb255508920dadf1a5116f8bc1a0149e95070094efaf164687f13d51bc28bbb8084e589ad0329e119f51558fb31d33930000000000000010000002400000068747470733a2f2f63646e2e6578616d706c652f73616c742d6e6f7465732d312e7a69700a000000696e6465782e68746d6c0000000001000000000100",
-      "id": "149bd2c72011480b1eec56c42d2c13867435d73c62662909a67f1407d17a1a5a",
+      "borsh": "0a00000073616c742d6e6f74657301000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e050000004e6f7465730000000093f07baca059d307e8add61881eb5683b11527b829262dd9bd7745d444f614c401d4952a8893f3276bec43da678f0cbbacacc8d2e9bf060c569158bc169211ee9e3930000000000000010000002400000068747470733a2f2f63646e2e6578616d706c652f73616c742d6e6f7465732d312e7a69700a000000696e6465782e68746d6c0000000001000000000100",
+      "id": "964ada4d129b7f113ba220bbcb6f71b4ece7f2889ac8caf4aacdbec6ffe2b343",
       "json": {
         "manifest": {
           "description": {},
           "entry": {
             "sealed": {
-              "bundle": "49e95070094efaf164687f13d51bc28bbb8084e589ad0329e119f51558fb31d3",
+              "bundle": "d4952a8893f3276bec43da678f0cbbacacc8d2e9bf060c569158bc169211ee9e",
               "connect": [],
               "size": 12345,
               "sources": [
@@ -211,12 +211,12 @@
               "start": "index.html"
             }
           },
-          "icon": "c0c78aa71b44ed17b2cac1705dd03f68a93cefb255508920dadf1a5116f8bc1a",
+          "icon": "93f07baca059d307e8add61881eb5683b11527b829262dd9bd7745d444f614c4",
           "min_host": 1,
           "name": {
             "en": "Notes"
           },
-          "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+          "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
           "owner_key": {
             "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
           },
@@ -225,15 +225,15 @@
           "sponsor": null,
           "version": 1
         },
-        "signature": "794324ab70965ce338fa44965ff4281c08e644bf958ef31dea5dc2d804cc908865c36c21fa9f7b1263dfd4cab76a2ec46f05d17d83675e5a2b424831fce96403"
+        "signature": "722718e044cb3d1d96ae9f7affd8e49ebcb1b8edfc920f6064df1b29b9a42f4ff39c1e5fc1cdf544624670483102d0d64fb70cd631a1365faa26a00d2f96de06"
       },
-      "message": "f64452ba74833e324bc26710670c2f026def3d1906085ca3fed4f5158bded24f",
+      "message": "99399a91e86949fb70c60703e77bf49f77138e31e72f9c2fd4a89caa57810ed0",
       "name": "sealed",
-      "signature": "794324ab70965ce338fa44965ff4281c08e644bf958ef31dea5dc2d804cc908865c36c21fa9f7b1263dfd4cab76a2ec46f05d17d83675e5a2b424831fce96403"
+      "signature": "722718e044cb3d1d96ae9f7affd8e49ebcb1b8edfc920f6064df1b29b9a42f4ff39c1e5fc1cdf544624670483102d0d64fb70cd631a1365faa26a00d2f96de06"
     },
     {
-      "borsh": "04000000636c75620100000066d4b105a23066a00e502977a214bb4ff4828fa8bb419a8a5a23cb79ddb2814b01020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed0100000002000000656e04000000436c756200000000cedb5da090acaa0a548187cec48bcb776e31861a6d9812116231a276b21216fd001500000068747470733a2f2f636c75622e6578616d706c652f010000001400000068747470733a2f2f636c75622e6578616d706c6501000000000100",
-      "id": "fbc2b4db98a21e5803e77ea48bef77679235bc897309b8a398b3652d7a403048",
+      "borsh": "04000000636c756201000000b3649dd3c56c9258e0de11871e95b43ff971432701020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed0100000002000000656e04000000436c75620000000099fa61cf5393e8a8c9a6292cdd9ae8497b4ec340956bc03ccae9568bc900a4ae001500000068747470733a2f2f636c75622e6578616d706c652f010000001400000068747470733a2f2f636c75622e6578616d706c6501000000000100",
+      "id": "2da9154377b30cc011852e168e5d3c3ece512981783e36a9e621237f51887958",
       "json": {
         "manifest": {
           "description": {},
@@ -245,12 +245,12 @@
               "url": "https://club.example/"
             }
           },
-          "icon": "cedb5da090acaa0a548187cec48bcb776e31861a6d9812116231a276b21216fd",
+          "icon": "99fa61cf5393e8a8c9a6292cdd9ae8497b4ec340956bc03ccae9568bc900a4ae",
           "min_host": 1,
           "name": {
             "en": "Club"
           },
-          "owner": "66d4b105a23066a00e502977a214bb4ff4828fa8bb419a8a5a23cb79ddb2814b",
+          "owner": "b3649dd3c56c9258e0de11871e95b43ff9714327",
           "owner_key": {
             "p256": "020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed"
           },
@@ -259,15 +259,15 @@
           "sponsor": null,
           "version": 1
         },
-        "signature": "68c5dbcc28af9b45904af52fe4352845af990b6b37fa2211e1e4fd5cf50214df6b0c1f4f25b0ddbfc9e347092becc0034baf4f450d949b3cfa498a002931a1f4"
+        "signature": "a5226f5ee9fb68d170788bc2f17ee5ef0271ba796635e404dfbf04f6ef085e80190c36405ab725312d12634704e218c34b4889a5c933755048bd2ae0bbf0bc69"
       },
-      "message": "9be3f2b695a4642cb14fe4d210d4194f4c2a2033115d3729ae75489123b8f986",
+      "message": "bb585f4b11d651aa43b33b358b098961c3ea8fe727eb55dc3ed10ec5dda23699",
       "name": "managed",
-      "signature": "68c5dbcc28af9b45904af52fe4352845af990b6b37fa2211e1e4fd5cf50214df6b0c1f4f25b0ddbfc9e347092becc0034baf4f450d949b3cfa498a002931a1f4"
+      "signature": "a5226f5ee9fb68d170788bc2f17ee5ef0271ba796635e404dfbf04f6ef085e80190c36405ab725312d12634704e218c34b4889a5c933755048bd2ae0bbf0bc69"
     },
     {
-      "borsh": "0900000063686573732d626f7401000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e20612063686174aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc0204000000000100",
-      "id": "f58a1d575c3577dbf326b31c65106f2dcc0f6a9c76c2d58fd17f7ba8245909fe",
+      "borsh": "0900000063686573732d626f7401000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e2061206368617475bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe0204000000000100",
+      "id": "077125c7869ee12d81214cc7c27b3be18530d053007b4356948d1a86b93acf48",
       "json": {
         "manifest": {
           "description": {
@@ -276,12 +276,12 @@
           "entry": {
             "chat": {}
           },
-          "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+          "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
           "min_host": 1,
           "name": {
             "en": "Chess coach"
           },
-          "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+          "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
           "owner_key": {
             "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
           },
@@ -290,50 +290,50 @@
           "sponsor": null,
           "version": 1
         },
-        "signature": "a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f01"
+        "signature": "3d2b848c46dd4657039ca611bb059533c220f819fc915cd9df63a34d9f0833fa20e94ffc05ab8a6f9ab3c3511431206e51f13186c7518d40a4886283d3e2c00a"
       },
-      "message": "6e7c8c383df74f7d5ca954ea82a7211a49310c0f2b59af253a792fd6927af1e6",
+      "message": "79af7854fa5b5025ad52c984088f5acb392081db0932cd9eb9f2b62b0fe8a195",
       "name": "chat",
-      "signature": "a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f01"
+      "signature": "3d2b848c46dd4657039ca611bb059533c220f819fc915cd9df63a34d9f0833fa20e94ffc05ab8a6f9ab3c3511431206e51f13186c7518d40a4886283d3e2c00a"
     }
   ],
   "notes": [
-    "grain secret: the SLIP-0010 node m/44'/1010'/account'/3'/0'; a grain's key: Ed25519 from the seed BLAKE3-derive_key(\"Saltix grain key v1\", secret || slug)",
-    "manifest: Borsh of GrainManifest; owner: AccountId [32]; owner_key: Ed25519 tag 0 [32] | P256 tag 1 [33] (SEC1 compressed); id = derive_key(\"Saltix grain manifest id v1\", borsh); the owner key signs m = derive_key(\"Saltix grain manifest v1\", borsh): Ed25519 over m, or ECDSA P-256 over SHA-256 of m as r || s with a low s",
+    "grain secret: the SLIP-0010 node m/44'/1010'/account'/3'/0'; a grain's key: Ed25519 from the seed BLAKE3-derive_key(\"Salarium grain key v1\", secret || slug)",
+    "manifest: Borsh of GrainManifest; owner: AccountId [20]; owner_key: Ed25519 tag 0 [32] | P256 tag 1 [33] (SEC1 compressed); id = derive_key(\"Salarium grain manifest id v1\", borsh); the owner key signs m = derive_key(\"Salarium grain manifest v1\", borsh): Ed25519 over m, or ECDSA P-256 over SHA-256 of m as r || s with a low s",
     "managed: the owner is the kind 5 account of accounts-v1.json and the owner key its phone (phone_secret_hex there); P-256 signatures here are RFC 6979's, any valid low-s signature checks",
-    "json: the form a hosted grain serves at /.well-known/saltix-grain; bytes in lowercase hex",
-    "icon = derive_key(\"Saltix grain icon v1\", png); bundle = derive_key(\"Saltix grain bundle v1\", zip)",
-    "login: the grain key signs derive_key(\"Saltix grain login v1\", Borsh(GrainLogin))",
-    "invoice: the signer signs derive_key(\"Saltix grain invoice v1\", genesis_hash || Borsh(Invoice)); a certified key's InvoiceKeyCert is signed by the owner over derive_key(\"Saltix grain invoice key v1\", Borsh((slug, key, expires_at)))",
+    "json: the form a hosted grain serves at /.well-known/salarium-grain; bytes in lowercase hex",
+    "icon = derive_key(\"Salarium grain icon v1\", png); bundle = derive_key(\"Salarium grain bundle v1\", zip)",
+    "login: the grain key signs derive_key(\"Salarium grain login v1\", Borsh(GrainLogin))",
+    "invoice: the signer signs derive_key(\"Salarium grain invoice v1\", genesis_hash || Borsh(Invoice)); a certified key's InvoiceKeyCert is signed by the owner over derive_key(\"Salarium grain invoice key v1\", Borsh((slug, key, expires_at)))",
     "the payment's public memo: the reference in lowercase hex, a space, the invoice's text",
-    "grain messaging key: X25519 secret derive_key(\"Saltix grain messaging key v1\", secret || slug); frames to a grain alias are base64url(nonce 24 || NaCl crypto_box) between messaging keys",
-    "notification: the owner or the certified server key signs derive_key(\"Saltix grain notification v1\", genesis_hash || Borsh(GrainNotification)); SignedGrainNotification is Borsh {notification, cert: Option<InvoiceKeyCert>, signature}",
+    "grain messaging key: X25519 secret derive_key(\"Salarium grain messaging key v1\", secret || slug); frames to a grain alias are base64url(nonce 24 || NaCl crypto_box) between messaging keys",
+    "notification: the owner or the certified server key signs derive_key(\"Salarium grain notification v1\", genesis_hash || Borsh(GrainNotification)); SignedGrainNotification is Borsh {notification, cert: Option<InvoiceKeyCert>, signature}",
     "registry: Action::Registry is tag 1 {call, amount: u64}; the calls after ExchangeDebt (tag 6) are RegisterGrain tag 7 {manifest: SignedGrainManifest}, paid in SALT, at least the slug's deposit (deposits below), kept up to 100 SALT; UpdateGrain tag 8 {manifest}; RetireGrain tag 9 {slug: String}; the sender is the manifest's owner, and its owner_key speaks for it (13-accounts §5); ids as in transaction-v3.json",
-    "app studio (24-app-studio): Entry tag 2 Chat (no fields; JSON {\"chat\": {}}), notifications only; ConfigureGrain tag 34 {slug, servers: Vec<[u8;32]> (0-4, valid Ed25519, distinct, each one live grain's only), category: u8 (0-9)}, protocol version 1 only; ConfigureGrain tag 39 {slug, servers: Vec<ServerKeyProof {key [32], proof [64]}>, category: u8}, from protocol version 2: each key signs (strict Ed25519) derive_key(\"Saltix grain server v1\", Borsh((genesis_hash [32], slug: String, owner: AccountId [32]))) for the call's sender as owner (signed_payload_hex is that Borsh); SetGrainAccess tag 36 {slug, public: bool, members: Vec<(AccountId, u8 roles: 1 user, 2 developer, 4 viewer)> (0-64, distinct, not the owner)}; RateGrain tag 37 {slug, score: u8 (1-5, 0 withdraws), review: String (at most 140 characters, no control characters)} by any account but the owner; BindHandle tag 35 is in handles-v1.json",
+    "app studio (24-app-studio): Entry tag 2 Chat (no fields; JSON {\"chat\": {}}), notifications only; ConfigureGrain tag 34 {slug, servers: Vec<[u8;32]> (0-4, valid Ed25519, distinct, each one live grain's only), category: u8 (0-9)}, protocol version 1 only; ConfigureGrain tag 39 {slug, servers: Vec<ServerKeyProof {key [32], proof [64]}>, category: u8}, from protocol version 2: each key signs (strict Ed25519) derive_key(\"Salarium grain server v1\", Borsh((genesis_hash [32], slug: String, owner: AccountId [20]))) for the call's sender as owner (signed_payload_hex is that Borsh); SetGrainAccess tag 36 {slug, public: bool, members: Vec<(AccountId, u8 roles: 1 user, 2 developer, 4 viewer)> (0-64, distinct, not the owner)}; RateGrain tag 37 {slug, score: u8 (1-5, 0 withdraws), review: String (at most 140 characters, no control characters)} by any account but the owner; BindHandle tag 35 is in handles-v1.json",
     "donations (24-app-studio §2b): SetGrainDonations tag 76 {slug: String, open: bool (Borsh 1 or 0)}, amount 0, from protocol version 9 (a block of an earlier version carries no tag 76): the owner of a live grain opens or closes its donations, off until opened and dropped when it retires; grain_get shows donations; a donation is an ordinary transfer to the grain's owner (grain_get's owner), never to an address typed anywhere",
     "a registered server key signs a notification with cert None, as the owner key does: a wallet checks it against the owner key and the server keys of the grain's registry record (by-registered-key, registered_servers)",
     "a registered server key signs an invoice with cert None too, and only to the grain's owner (invoices.registered): a wallet reads the grain's registry record at its canonical beacon block, refuses any invoice of a retired grain (retired), tries the owner key, then each key the record names (signature when none verifies), and takes a server key's invoice only when to is the record's owner (payee); a certified key's invoice is checked as before, any payee",
-    "developer key: saltix-app:1:<hrp>:<first 8 bytes of the genesis hash, hex>:<slug>:<the server key's Ed25519 secret, hex>, lower case, nothing else"
+    "developer key: salarium-app:1:<hrp>:<first 8 bytes of the genesis hash, hex>:<slug>:<the server key's Ed25519 secret, hex>, lower case, nothing else"
   ],
   "notifications": {
     "cases": [
       {
         "borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000",
-        "message": "ce2b753039842c0ed5cc78c16f80a321ed2fe4a137c0fcfad97a1610eea3a5d4",
+        "message": "1a171bf9df8e7cff48e91fdb27238c5663284886c56764fc89f509445495331c",
         "name": "by-owner",
-        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000000e7a6a7aab1734fceac8a854b9414c4b364b6f7bc11090a5ab3fa893e48528c0aa516cd4a4f4bf044929168140766ecf57ef0c4218b612883a6146a583396dc0c"
+        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000000b05e0fd9aff2a758d040374a4a410f390e94c09d560d05130e61c881c4640527de88f3397b05a934a61b9fc935f325294b1dcd5b7a6f869d05e979b3ab79ed04"
       },
       {
         "borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000",
-        "message": "ce2b753039842c0ed5cc78c16f80a321ed2fe4a137c0fcfad97a1610eea3a5d4",
+        "message": "1a171bf9df8e7cff48e91fdb27238c5663284886c56764fc89f509445495331c",
         "name": "by-server-key",
-        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000dac6b5c3f809e81f028d8a881e4f27010c81f695d8f815d122613d4b933a9f5d43ea53b27a6372bfaf8777aba2666c40afd084c7a2d9c62060994f580772ce073cbe01da32f803aa6049f0646537d2fb778f6277e2d435d74829fe6001820222d9050ad58f934a660f0dc5fac816d9c8118d8dae390d745f1208817846a0320b"
+        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000001050000006368657373a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a998736700c876c9a0010000da869ba74f1495fad753cded2ad7920d5dbeaf993bf7e5468a326746ef0ea7a4030fcc5e445bafa6ba177ddb60b898e35859a15a76cca6a4ddd7f485cb22fe05946cfdc4031b6a85bff72a71cb56a92bee6140326f4b1c29af20b2ff00dcbff2e6c370ac80c93832ce0dfe25542c933f19d77bd55496acae1dd07cf696ad4d00"
       },
       {
         "borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000",
-        "message": "ce2b753039842c0ed5cc78c16f80a321ed2fe4a137c0fcfad97a1610eea3a5d4",
+        "message": "1a171bf9df8e7cff48e91fdb27238c5663284886c56764fc89f509445495331c",
         "name": "by-registered-key",
-        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a0010000003cbe01da32f803aa6049f0646537d2fb778f6277e2d435d74829fe6001820222d9050ad58f934a660f0dc5fac816d9c8118d8dae390d745f1208817846a0320b"
+        "signed_borsh": "05000000636865737309000000596f7572206d6f766521000000d090d0bbd0b8d181d0b020d0bfd0bed188d0bbd0b020d0bad0bed0bdd191d0bc2e0106000000726f6f6d2d37006c50c4a001000000946cfdc4031b6a85bff72a71cb56a92bee6140326f4b1c29af20b2ff00dcbff2e6c370ac80c93832ce0dfe25542c933f19d77bd55496acae1dd07cf696ad4d00"
       }
     ],
     "genesis_hash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
@@ -392,30 +392,30 @@
                   "url": "https://chess.example/play"
                 }
               },
-              "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+              "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
               "min_host": 1,
               "name": {
                 "en": "Chess",
                 "ru": "Шахматы"
               },
-              "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+              "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
               "owner_key": {
                 "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
               },
               "permissions": 67,
               "slug": "chess",
-              "sponsor": "4444444444444444444444444444444444444444444444444444444444444444",
+              "sponsor": "4444444444444444444444444444444444444444",
               "version": 3
             },
-            "signature": "7ece1dbaa54cc5eace25fed00598b9ccd9166c93fd781390b02ea0366fdf8c18cf81a926d4cba2665fb6ec77458799632f3151523c9b3faa326cdb2196dcd20e"
+            "signature": "6d5085fb1026dd25900eea92c4b6b7ec1a73f205c4c93217e4cd2fdc4439736775d4c3cea3bd7297669d59d42e89fbd5e682139de6adf51a8629cce56ebc1c03"
           }
         },
         "fee": "150000",
-        "id_hex": "78a1537baafeecb403b0931ccb018131796681e27207cf3052968dfed1f19b14",
+        "id_hex": "22f00b044b4e0ec38ee71e248fb196ad9b86aaf0ca7bb2c7b6d1246eba973500",
         "name": "register",
         "nonce": "0",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0000000000000000f049020000000000a086010000000000010705000000636865737303000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e6473aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444444444444444444444444444401007ece1dbaa54cc5eace25fed00598b9ccd9166c93fd781390b02ea0366fdf8c18cf81a926d4cba2665fb6ec77458799632f3151523c9b3faa326cdb2196dcd20e00e8764817000000005fd0f70281d17ec16f3d363d0dab749cffc2c50058ef370f769ddb7afb5157530f262717f0e7d817045c7daf9c7a657d04a51325bab7500f47c15af3ea3ddb09",
-        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0000000000000000f049020000000000a086010000000000010705000000636865737303000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e6473aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444444444444444444444444444401007ece1dbaa54cc5eace25fed00598b9ccd9166c93fd781390b02ea0366fdf8c18cf81a926d4cba2665fb6ec77458799632f3151523c9b3faa326cdb2196dcd20e00e8764817000000",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0000000000000000f049020000000000a086010000000000010705000000636865737303000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444401006d5085fb1026dd25900eea92c4b6b7ec1a73f205c4c93217e4cd2fdc4439736775d4c3cea3bd7297669d59d42e89fbd5e682139de6adf51a8629cce56ebc1c0300e8764817000000007edd2c69487ff2a1356b1b01aa5928e67a17f26586db9d9d29c42b6f92aeb207cd8792dcd4e466bd936723f9bfbb76f9be92b2565774436cf7e6116d54648e06",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0000000000000000f049020000000000a086010000000000010705000000636865737303000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444401006d5085fb1026dd25900eea92c4b6b7ec1a73f205c4c93217e4cd2fdc4439736775d4c3cea3bd7297669d59d42e89fbd5e682139de6adf51a8629cce56ebc1c0300e8764817000000",
         "valid_until_slot": "100000"
       },
       {
@@ -435,30 +435,30 @@
                   "url": "https://chess.example/play"
                 }
               },
-              "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+              "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
               "min_host": 1,
               "name": {
                 "en": "Chess",
                 "ru": "Шахматы"
               },
-              "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+              "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
               "owner_key": {
                 "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
               },
               "permissions": 67,
               "slug": "chess",
-              "sponsor": "4444444444444444444444444444444444444444444444444444444444444444",
+              "sponsor": "4444444444444444444444444444444444444444",
               "version": 4
             },
-            "signature": "4a610413cfeac5dc7751cda817701f8af7908b153ce31f361d00a1b94ec1a05e40bd109117749d3facaf73b2ab15ef259aab8569ae6047a259bbceb60b501b05"
+            "signature": "e8764ebc5c66aeb6ace8e42ade91322cdaedf5d297c63cde881d44bfd0971f63e2829802e6e3330947df0b761b27bd02c3f9834065e913fe3104e8308a68a10d"
           }
         },
         "fee": "150000",
-        "id_hex": "218a7a371808b557a32b447dcfad7b9616b53d26e9af71164dc590f446a018da",
+        "id_hex": "059b19978987af01d04d6bfeeffac1514693dff3adb13b88c6579dd50687c0d5",
         "name": "update",
         "nonce": "1",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000000000000f049020000000000a086010000000000010805000000636865737304000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e6473aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444444444444444444444444444401004a610413cfeac5dc7751cda817701f8af7908b153ce31f361d00a1b94ec1a05e40bd109117749d3facaf73b2ab15ef259aab8569ae6047a259bbceb60b501b050000000000000000004d955673000dd0da56b052a261842e567e01a512dd21181f32e0172746232b805855c00ad2eda95c56590fb65f46f378df50b458253e81bd323f7eec93ab1c09",
-        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000000000000f049020000000000a086010000000000010805000000636865737304000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e6473aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c654300000001444444444444444444444444444444444444444444444444444444444444444401004a610413cfeac5dc7751cda817701f8af7908b153ce31f361d00a1b94ec1a05e40bd109117749d3facaf73b2ab15ef259aab8569ae6047a259bbceb60b501b050000000000000000",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000000000000f049020000000000a086010000000000010805000000636865737304000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444440100e8764ebc5c66aeb6ace8e42ade91322cdaedf5d297c63cde881d44bfd0971f63e2829802e6e3330947df0b761b27bd02c3f9834065e913fe3104e8308a68a10d000000000000000000c26ef5ee68802b10b25755722267c97c760c3c93797bf19d671a50d65a53b83755a4fe1972c997c58820a7f7cc0d2b8f69f35da41d128084366a44e2eee34b0e",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000000000000f049020000000000a086010000000000010805000000636865737304000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000002000000656e0500000043686573730200000072750e000000d0a8d0b0d185d0bcd0b0d182d18b0100000002000000656e11000000506c6179207769746820667269656e647375bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe001a00000068747470733a2f2f63686573732e6578616d706c652f706c6179010000001500000068747470733a2f2f63686573732e6578616d706c65430000000144444444444444444444444444444444444444440100e8764ebc5c66aeb6ace8e42ade91322cdaedf5d297c63cde881d44bfd0971f63e2829802e6e3330947df0b761b27bd02c3f9834065e913fe3104e8308a68a10d0000000000000000",
         "valid_until_slot": "100000"
       },
       {
@@ -468,10 +468,10 @@
           "slug": "chess"
         },
         "fee": "150000",
-        "id_hex": "4e72d80e7bd1f80f2db881a66e0a8e92911d2ff6459191a29b0548a98604a329",
+        "id_hex": "f4341cdc0ce386ec9f68609b4192a8665e9f55d1e0d98db546fccb1c51e4d3bf",
         "name": "retire",
         "nonce": "2",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a086010000000000010905000000636865737300000000000000000069a6061850752eb1f525e908bf129bc62f3bd67d907338275f88635c0c434cf45d86cd7724143e3a7ae3b4ce466daef4e44e60bc83cc4c05ebeb0f9ff9e68e06",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a0860100000000000109050000006368657373000000000000000000837d8fbfdc2c3a75d9682d426ccc647805147ecc545d423826daa2af1457a21a3add8aedfc0f9ba5dd815c7e3731d24b2a168e28127be5c146f9b5d26fa66609",
         "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0200000000000000f049020000000000a08601000000000001090500000063686573730000000000000000",
         "valid_until_slot": "100000"
       },
@@ -487,12 +487,12 @@
               "entry": {
                 "chat": {}
               },
-              "icon": "aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc",
+              "icon": "75bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe",
               "min_host": 1,
               "name": {
                 "en": "Chess coach"
               },
-              "owner": "fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9",
+              "owner": "ffeeec959a1314ebc610876bb1220660bafd7705",
               "owner_key": {
                 "ed25519": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d"
               },
@@ -501,15 +501,15 @@
               "sponsor": null,
               "version": 1
             },
-            "signature": "a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f01"
+            "signature": "3d2b848c46dd4657039ca611bb059533c220f819fc915cd9df63a34d9f0833fa20e94ffc05ab8a6f9ab3c3511431206e51f13186c7518d40a4886283d3e2c00a"
           }
         },
         "fee": "150000",
-        "id_hex": "2e94a204e48e86cc449a5605c24d8360541ce38e865835d111136632978b3c59",
+        "id_hex": "36c2fdb7887cbc40e595100bdf375ccfeec0f6e7daab30bc9615df3a08b46062",
         "name": "register-chat",
         "nonce": "3",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0300000000000000f049020000000000a08601000000000001070900000063686573732d626f7401000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e20612063686174aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc0204000000000100a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f0100e40b5402000000005f4be7f0b7ba970b5237dcd9a736416491bda9e56a3a0a6555dc04a41def6b8e67a453ab840ad5d66e9564413f7f4c59c3c1edf6e3372d41532707bf8815de05",
-        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0300000000000000f049020000000000a08601000000000001070900000063686573732d626f7401000000fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c900af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e20612063686174aa0abec12eca43c60e9865235f8499b3711ddae9bc183fa7eb17656e59c228dc0204000000000100a1fabc8a762fe121d27d4fa76e42a2b60c5b9e36da63171c90f72d1c31592f18b98d3cb3291638a8e4a94a47b3109645836571a7ace75166b985919b261f5f0100e40b5402000000",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0300000000000000f049020000000000a08601000000000001070900000063686573732d626f7401000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e2061206368617475bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe02040000000001003d2b848c46dd4657039ca611bb059533c220f819fc915cd9df63a34d9f0833fa20e94ffc05ab8a6f9ab3c3511431206e51f13186c7518d40a4886283d3e2c00a00e40b540200000000bf326119c0aad7bfa113f1f63b4d6c647aac9b3010fc4c8891b53b0ed573afaebc2a638341a928e860c2b77cce20fb1b02580201af2c1207395706c616a70d0e",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0300000000000000f049020000000000a08601000000000001070900000063686573732d626f7401000000ffeeec959a1314ebc610876bb1220660bafd770500af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0100000002000000656e0b000000436865737320636f6163680100000002000000656e1100000050757a7a6c657320696e2061206368617475bf280a95ca45fdcd33383887c4fac773d44c3683abac8453f6250cfa25defe02040000000001003d2b848c46dd4657039ca611bb059533c220f819fc915cd9df63a34d9f0833fa20e94ffc05ab8a6f9ab3c3511431206e51f13186c7518d40a4886283d3e2c00a00e40b5402000000",
         "valid_until_slot": "100000"
       },
       {
@@ -525,10 +525,10 @@
           "tag": 34
         },
         "fee": "150000",
-        "id_hex": "5d2fbe0796f8a93db990254aab3a392624e55c4325008d4a934d44e8a266cf0a",
+        "id_hex": "bfb75c6c414d4a5e1877715899858582d4ecd9b6a2b510341f56064d82550272",
         "name": "configure",
         "nonce": "4",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367040000000000000000001f17e5cd6e89016895ce71751cbc39ca6ad123bd37e7f4ad47af9b608408b312a94c438faad9a47725a1012984b6aa6f962718bd4aca872cdfa7f739f8a99204",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a99873670400000000000000000093dc740b8054cef756607c4596391cdefe714a43500c2c2288f7fb63e4e934fd4c556125c0d2ca27619a5fe2988707bfa394e2643dfb1fb18dc3355827f3b40f",
         "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012205000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367040000000000000000",
         "valid_until_slot": "100000"
       },
@@ -541,19 +541,19 @@
           "servers": [
             {
               "key": "a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367",
-              "proof": "0050e1ca8ee0a265146503000db57b3f4d931d8455df5887c6e6850b81e76f8fb9062333b95f8bccb4f95e8e20ee30c985cc1f8b9cd6b19cf3156447fc119408",
-              "signed_payload_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a050000006368657373fafa3bc525166d5ca4c0db5330e35fe4ea4693169fbbb39a0c2a127f0029c8c9"
+              "proof": "ba7361219a98d064e498877719c1bbfa5de98765998ceae744343b28dc0c0fd645fb47ea8a6a9bdeea5b3c5c3066d1dc20809b461b79b96a4bb715385abdc503",
+              "signed_payload_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a050000006368657373ffeeec959a1314ebc610876bb1220660bafd7705"
             }
           ],
           "slug": "chess",
           "tag": 39
         },
         "fee": "150000",
-        "id_hex": "c4fec81b16327d1826f24ae0aa90ca4a849fdc18794cd72ffd7cd0638e9538aa",
+        "id_hex": "0114eeb6ddd4cfdb92ac4f46105891a499fc3c10ee18cd320125454baa9dffcb",
         "name": "configure-v2",
         "nonce": "4",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012705000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a99873670050e1ca8ee0a265146503000db57b3f4d931d8455df5887c6e6850b81e76f8fb9062333b95f8bccb4f95e8e20ee30c985cc1f8b9cd6b19cf3156447fc1194080400000000000000000048661c43f2ad43bfc74bb7574819bee6ef2c7c313a2072804588e5e1a47e9556a422ea898e9b2629db07615ba25d79c8dbf497db4cee32932830f2cc055ff70f",
-        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012705000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a99873670050e1ca8ee0a265146503000db57b3f4d931d8455df5887c6e6850b81e76f8fb9062333b95f8bccb4f95e8e20ee30c985cc1f8b9cd6b19cf3156447fc119408040000000000000000",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012705000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367ba7361219a98d064e498877719c1bbfa5de98765998ceae744343b28dc0c0fd645fb47ea8a6a9bdeea5b3c5c3066d1dc20809b461b79b96a4bb715385abdc503040000000000000000006cfc1978b27d644d32c9600ad5fcadcb83dc1b9bb999f0f97e5476e988aa67c49b875dd149224a721554b5134805948decf4a57522001847b768baa932ad8108",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0400000000000000f049020000000000a086010000000000012705000000636865737301000000a7f6dfaf8f38b89ba8ce649b594f91e4d01fdc57f9c9493df43b5e50a9987367ba7361219a98d064e498877719c1bbfa5de98765998ceae744343b28dc0c0fd645fb47ea8a6a9bdeea5b3c5c3066d1dc20809b461b79b96a4bb715385abdc503040000000000000000",
         "valid_until_slot": "100000"
       },
       {
@@ -562,11 +562,11 @@
           "call": "set_grain_access",
           "members": [
             {
-              "account": "4545454545454545454545454545454545454545454545454545454545454545",
+              "account": "4545454545454545454545454545454545454545",
               "roles": 3
             },
             {
-              "account": "4646464646464646464646464646464646464646464646464646464646464646",
+              "account": "4646464646464646464646464646464646464646",
               "roles": 4
             }
           ],
@@ -574,11 +574,11 @@
           "slug": "chess"
         },
         "fee": "150000",
-        "id_hex": "552200adc3bf606a0f7900a8936980cfc94b6cb7f5deb35d8ec894c9a7fd8502",
+        "id_hex": "06674eefa295aa6b1786176d393f4be629fb7ebadfb582d7f447d4c529f609d0",
         "name": "access",
         "nonce": "5",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0500000000000000f049020000000000a086010000000000012405000000636865737300020000004545454545454545454545454545454545454545454545454545454545454545034646464646464646464646464646464646464646464646464646464646464646040000000000000000002363493b546c5f3ec03b56104471661a5b4a46ab08bc462536078a922ae2cf8fd6d92ceaaae5831fd6177e07210713631f4ff5686aadd2be92c9d8d6276a0a06",
-        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0500000000000000f049020000000000a086010000000000012405000000636865737300020000004545454545454545454545454545454545454545454545454545454545454545034646464646464646464646464646464646464646464646464646464646464646040000000000000000",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0500000000000000f049020000000000a086010000000000012405000000636865737300020000004545454545454545454545454545454545454545034646464646464646464646464646464646464646040000000000000000002fe17059d49b5784eb8ceef2173737a00c9ab470f76ed28f62310ff27441b3025d76c9fa1d7e9b6449f339974658307d13e6bdde15175c16d5354fc1d2076c09",
+        "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0500000000000000f049020000000000a086010000000000012405000000636865737300020000004545454545454545454545454545454545454545034646464646464646464646464646464646464646040000000000000000",
         "valid_until_slot": "100000"
       },
       {
@@ -590,10 +590,10 @@
           "slug": "chess"
         },
         "fee": "150000",
-        "id_hex": "adb5f99aed063ca20071a0fd969a243f0a92bc407f48e121c898a3a980c4c0ea",
+        "id_hex": "bc40904145cf1b1b47303bfa95bbccbfbe5fbe8013882ba2d7d031e946012c6f",
         "name": "rate",
         "nonce": "0",
-        "signed_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b0000000000000000002e5a38a8e24597a45cb76c610f30d66b72f30f2925795b7709c1c847dd858d7e1d7b302d6051bef1ac64e857d7ac819074f342bc852a79f9db41642ed57bd301",
+        "signed_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b000000000000000000fe1ef8fedd8aef37610fe30bab179bbe969e0ccce1bdfaba38538cc7339ba26cec6141f57e6f7f2cdad7807f3b8b708f395af0b8f0421822161a63c542070709",
         "transaction_hex": "00d62f016a1efd1e4fdf793eb42cd84471e1ba9f0cf04d1287b5cc71f616287cb80000000000000000f049020000000000a0860100000000000125050000006368657373051b000000d09bd183d187d188d0b8d0b520d188d0b0d185d0bcd0b0d182d18b0000000000000000",
         "valid_until_slot": "100000"
       },
@@ -607,10 +607,10 @@
           "tag": 76
         },
         "fee": "150000",
-        "id_hex": "789deba85456a7a72eb475ed5fd96e57fb9e2aba6aabbcff5ac08f7444416be7",
+        "id_hex": "657800d84e68ee7018ee1b5d8445ddf905444410322fd244402198a012132aa2",
         "name": "donations",
         "nonce": "6",
-        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0600000000000000f049020000000000a086010000000000014c05000000636865737301000000000000000000ecd8f02b9e7b92dfb4b85bbe582576f4292a73763a7f01dfff520e20136ec50de0a2a3684b5b19301990651f7a3c4d77557550ecb1cfd851c7e7a83c04804104",
+        "signed_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0600000000000000f049020000000000a086010000000000014c050000006368657373010000000000000000006e951b76e0e9a452ab1684220596b5d9a0d0b7d2aebd8f3b1b237b10f5103f1954ff57484d1be63324b89f5ff66a321d4e3fa0c7c87f721eb4912836f2ab6b0e",
         "transaction_hex": "00af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d0600000000000000f049020000000000a086010000000000014c050000006368657373010000000000000000",
         "valid_until_slot": "100000"
       }

@@ -93,7 +93,7 @@ ParamKind = 0 Text     { max: u16 }                          1–2 000 character
 Choice { value: String (1–32 of [a-z0-9_-]), title: Map<lang, String> (at most 32 characters each, "en" among them) }
 
 SignedGrainChatSpec { spec, server: Option<[u8; 32]>, signature: [u8; 64] }
-  over derive("Saltix grain chat spec v1", Borsh(spec)):
+  over derive("Salarium grain chat spec v1", Borsh(spec)):
     server None: by the manifest's owner_key, as the manifest is signed;
     server a key: by that key, a server key the registry record names and the spec does not revoke, while every
                   command's price is 0
@@ -154,11 +154,11 @@ Value = 0 Text(String) | 1 Number(i64: in units of 10^-decimals) | 2 Choice(Stri
       | 4 Date(u32: days since 1970-01-01) | 5 File(FileRef: relays.md) | 6 Flag(bool)
 
 SignedChatRequest { request, key: [u8; 32] (the user's grain key), signature: [u8; 64] }
-  by key over derive("Saltix grain chat request v1", genesis_hash ‖ Borsh(request))
+  by key over derive("Salarium grain chat request v1", genesis_hash ‖ Borsh(request))
 
 MemberProof       { slug: String, account: [u8; 32], grain_key: [u8; 32], expires_at: u64 (Unix ms) }
 SignedMemberProof { proof, key: DeviceKey, signature: [u8; 64] }
-  by key, which speaks for `account`, over derive("Saltix grain member v1", genesis_hash ‖ Borsh(proof)):
+  by key, which speaks for `account`, over derive("Salarium grain member v1", genesis_hash ‖ Borsh(proof)):
   Ed25519, or P-256 over SHA-256 with a low s
 ```
 
@@ -212,11 +212,11 @@ request's proof, and answers with a **welcome**.
 ```text
 ChatHello         { slug: String, id: [u8; 16] (random), at: u64 (Unix ms), member: SignedMemberProof, lang: String }
 SignedChatHello   { hello, key: [u8; 32] (the user's grain key), signature: [u8; 64] }
-  by key over derive("Saltix grain chat hello v1", genesis_hash ‖ Borsh(hello))
+  by key over derive("Salarium grain chat hello v1", genesis_hash ‖ Borsh(hello))
 
 ChatWelcome       { slug: String, hello: [u8; 16] (the hello's id), at: u64 (Unix ms) }
 SignedChatWelcome { welcome, server: ServerKey, signature: [u8; 64] }
-  by the server key over derive("Saltix grain chat welcome v1", genesis_hash ‖ Borsh(welcome))
+  by the server key over derive("Salarium grain chat welcome v1", genesis_hash ‖ Borsh(welcome))
 ```
 
 - **A frame of its own** (`ChatFrame` tags 4 and 5, §4), not a command: it is not drawn in the chat, not answered with
@@ -280,7 +280,7 @@ ActionKind = 0 Run     { command: String, args: Vec<(String, Value)> }   a reque
 ServerKey = 0 Certified(InvoiceKeyCert)       the certificate's key
           | 1 Registered([u8; 32])            a key the grain's registry record names
 SignedChatMessage { message, server: ServerKey, signature: [u8; 64] }
-  by the server key over derive("Saltix grain chat message v1", genesis_hash ‖ Borsh(message))
+  by the server key over derive("Salarium grain chat message v1", genesis_hash ‖ Borsh(message))
 ```
 
 Beyond the bounds above, an `Invoice` block holds an invoice of this grain; a `Run`'s `command` is a command's name
@@ -352,7 +352,7 @@ ChatFrame = 0 Request(SignedChatRequest)
 
 GrainStats       { slug: String, at: u64 (Unix ms), users_1d: u32, users_30d: u32, requests_30d: u64 }
 SignedGrainStats { stats, key: [u8; 32] (a registered server key), signature: [u8; 64] }
-  by key over derive("Saltix grain stats v1", genesis_hash ‖ Borsh(stats))
+  by key over derive("Salarium grain stats v1", genesis_hash ‖ Borsh(stats))
 ```
 
 - Frames are sealed as grain frames ([grains §5.4](grains.md#54-relays-real-time-between-users)), at most 48 000 bytes

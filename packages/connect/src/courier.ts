@@ -101,6 +101,8 @@ export const OFFER_MS = 10_000;
 export const TAKE_MS = 20_000;
 
 const HEX64 = /^[0-9a-f]{64}$/;
+/** An account's id: 20 bytes. */
+const HEX40 = /^[0-9a-f]{40}$/;
 
 /** 32 bytes from a base64url string, or null. */
 function key32(v: unknown): Uint8Array | null {
@@ -124,7 +126,7 @@ export function deliveryOf(v: unknown): Delivery | null {
 function connectionOf(v: unknown): Connection | null {
   const c = v as Partial<Connection> | null;
   if (
-    !c || typeof c !== "object" || typeof c.network !== "string" || !HEX64.test(c.network) || typeof c.account !== "string" || !HEX64.test(c.account) ||
+    !c || typeof c !== "object" || typeof c.network !== "string" || !HEX64.test(c.network) || typeof c.account !== "string" || !HEX40.test(c.account) ||
     typeof c.address !== "string" || c.address.length === 0 || c.address.length > 120 || (c.signer !== "ed25519" && c.signer !== "p256") ||
     typeof c.managed !== "boolean" || typeof c.since !== "number" || !Number.isFinite(c.since)
   ) {

@@ -37,7 +37,7 @@ export function encodeSponsorCert(c: SponsorCert): Uint8Array {
 
 /** What the sponsor signs: the certificate on the network of `genesisHash` (hex). */
 export function sponsorCertMessage(c: SponsorCert, genesisHash: string): Uint8Array {
-  return derive("Saltix sponsor certificate v1", fromHex(genesisHash, 32), encodeSponsorCert(c));
+  return derive("Salarium sponsor certificate v1", fromHex(genesisHash, 32), encodeSponsorCert(c));
 }
 
 /**

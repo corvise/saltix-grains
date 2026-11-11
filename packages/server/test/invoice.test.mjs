@@ -50,7 +50,7 @@ test("a developer key's invoice pays the grain's owner, in a card the wallet tak
     const signed = server.invoice({ amount: 1_000n, asset: "WORK", memo: "One key" });
     assert.equal(signed.invoice.to, owner, "the owner the registry names");
     assert.equal(signed.invoice.slug, "access");
-    assert.equal(signed.payee, encodeAddress("devnet", fromHex(owner, 32)));
+    assert.equal(signed.payee, encodeAddress("devnet", fromHex(owner, 20)));
     assert.match(signed.invoice.reference, /^[0-9a-f]{32}$/);
     const record = fake.state.grain;
     assert.equal(invoiceProblem(signed.hex, "access", ownerKey, chain.genesis, Date.now(), record), null, "a wallet of today takes it");
@@ -62,7 +62,7 @@ test("a developer key's invoice pays the grain's owner, in a card the wallet tak
     assert.equal(server.invoice({ amount: 1n, reference: "ab".repeat(16), expiresInMs: 60_000 }).invoice.reference, "ab".repeat(16));
 
     // Anyone else as the payee is refused before anything is signed: a wallet would refuse it (payee).
-    assert.throws(() => server.invoice({ amount: 1n, to: "77".repeat(32) }), /owner only/);
+    assert.throws(() => server.invoice({ amount: 1n, to: "77".repeat(20) }), /owner only/);
     assert.equal(server.invoice({ amount: 1n, to: owner }).invoice.to, owner, "the owner, named, is fine");
     assert.throws(() => server.invoice({ amount: 0n }), /positive/);
     assert.throws(() => server.invoice({ amount: "1.0000000001" }), /decimal/);
@@ -111,7 +111,7 @@ test("the payment is found by its reference, of the invoice's asset and at least
     assert.equal(paid.tx, "aa".repeat(32));
     assert.equal(paid.confirmations, 3);
     assert.deepEqual(await server.paymentOf(signed.invoice), paid, "the invoice alone does too");
-    assert.equal(signed.payee, encodeAddress("devnet", fromHex(owner, 32)));
+    assert.equal(signed.payee, encodeAddress("devnet", fromHex(owner, 20)));
   } finally {
     await close();
   }
@@ -164,7 +164,7 @@ test("a retired grain's server signs no invoice, and a certified key names its p
   const { server: certified, close: closeCertified } = await serverOn({ log: quiet });
   try {
     assert.throws(() => certified.invoice({ amount: 1n }), /to/);
-    const signed = certified.invoice({ amount: 1n, to: "77".repeat(32) });
+    const signed = certified.invoice({ amount: 1n, to: "77".repeat(20) });
     assert.notEqual(decodeInvoice(signed.hex).cert, null, "with its certificate");
     assert.equal(invoiceProblem(signed.hex, "access", ownerKey, chain.genesis, Date.now()), null);
     await assert.rejects(() => certified.paymentOf(signed), /no node/);

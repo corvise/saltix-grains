@@ -66,7 +66,7 @@ function valid(c: unknown, genesis: string | null, now: number): c is Connection
     /^[0-9a-f]{64}$/.test(v.network) &&
     (genesis === null || v.network === genesis) &&
     typeof v.account === "string" &&
-    /^[0-9a-f]{64}$/.test(v.account) &&
+    /^[0-9a-f]{40}$/.test(v.account) &&
     typeof v.address === "string" &&
     v.address.length <= 120 &&
     typeof v.grant === "string" &&

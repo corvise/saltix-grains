@@ -1,10 +1,10 @@
 // Address v1 as vectors/crypto-v1.json has it: the id of a key, and its address on each network.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { accountId, encodeAddress, decodeAddress, toHex, fromHex } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/crypto-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("crypto-v1.json");
 
 test("addresses are the node's", () => {
   for (const c of v.vectors) {

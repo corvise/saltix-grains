@@ -22,6 +22,29 @@ import { type DevLog, GRAIN_DIR } from "./devlog.js";
 /** How many looks a page gets to come to rest around a tap (`steady`): 10, about 1.6 s with their spacing. */
 const STEADY_LOOKS = 10;
 
+/** How far a pixel's channel (of 255) differs between two looks before the pixel differs clearly: a change, wherever. */
+export const LOOK_CLEAR = 16;
+/** The share of a look's pixels that may differ by less than that and be a scatter still: one in a thousand. */
+export const LOOK_SCATTER = 1 / 1000;
+
+/**
+ * Whether two looks of the page (RGBA pixels of one size) are one look to a person: no pixel differs clearly, and those
+ * that differ faintly are a scatter. A browser does not draw a page at rest the same to the last bit: the ends of its
+ * rounded corners come a few levels apart from one frame to another — the same 57 pixels of 280 800, by at most 5, on a
+ * busy machine (2026-11-11), when a tap that did nothing was taken for one that worked. What a tap changes moves the
+ * pixels it touches by tens (a digit, a line, a colour), or tints a region (a row lit faintly: thousands of pixels).
+ */
+export function sameLook(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let faint = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    const most = Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!));
+    if (most > LOOK_CLEAR) return false;
+    if (most > 0) faint++;
+  }
+  return faint <= (a.length / 4) * LOOK_SCATTER;
+}
+
 /** Where the check writes its screenshots and report, in the project. */
 export const CHECK_DIR = join(GRAIN_DIR, "check");
 
@@ -436,7 +459,7 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
   await evaluate(`window.saltixSimulator.set(${JSON.stringify({ device, theme: "dark" })})`);
   await sleep(450);
   // The page's own frame, never the phone's bars (the status bar's clock moves on its own), as a PNG and its pixels: two
-  // encodings of the same pixels may differ, so the pixels are what is compared.
+  // encodings of the same pixels may differ, so the pixels are what is compared, as a person sees them (`sameLook`).
   const snap = async () => {
     const m = await evaluate<Measure>("window.saltixSimulator.measure()");
     const { data } = await send<{ data: string }>("Page.captureScreenshot", {
@@ -454,7 +477,7 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
     for (let i = 0; i < STEADY_LOOKS; i++) {
       await sleep(Math.min(80 + i * 40, 240));
       const next = await snap();
-      if (next.pixels.equals(last.pixels)) return { ...next, rests: true };
+      if (sameLook(next.pixels, last.pixels)) return { ...next, rests: true };
       last = next;
     }
     return { ...last, rests: false };
@@ -488,7 +511,7 @@ async function drive(browser: Browser, origin: string, out: string, icon: boolea
       await sleep(TAP_SETTLE_MS);
       const asked = await evaluate<TapSeen["asked"]>(`window.saltixSimulator.calls(${mark.calls})`);
       const after = await steady();
-      const changed = !look.rests || !after.rests || !after.pixels.equals(look.pixels);
+      const changed = !look.rests || !after.rests || !sameLook(after.pixels, look.pixels);
       // What each tap left on the page, for a person to look at; and what it found, when it changed, to see what moved.
       writeFileSync(join(out, `tap-${seen.length + 1}.png`), after.png);
       if (changed) writeFileSync(join(out, `tap-${seen.length + 1}-before.png`), look.png);

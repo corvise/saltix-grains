@@ -3,7 +3,6 @@
 // profile as a wallet does.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { decodeSignedProfile, encodeAddress, fromHex, policyOf, profileToJson, toHex, verifyByDeviceKey } from "@saltix/grain-server/web";
 import {
@@ -11,10 +10,10 @@ import {
   decodePayload, encodeConfirm, encodeGrant, encodeLogin, encodeRefusal, encodeReply, encodeSeen, fromB64url, isAndroid, loginMessage, makeRefusal,
   offerAppLink, offerIntentLink, offerLink, offerText, openLinkPayload, parseOffer, readSiteProfile, refusalMoment, refusalReasonOf, sealLinkPayload,
 } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const read = (name) => JSON.parse(readFileSync(new URL(`../../../vectors/${name}`, import.meta.url), "utf8"));
-const v = read("connect-v1.json");
-const p = read("connect-profiles-v1.json");
+const v = goldenVectors("connect-v1.json");
+const p = goldenVectors("connect-profiles-v1.json");
 
 const genesis = fromHex(v.chain.genesis_hash_hex, 32);
 const policy = policyOf(v.chain.account_policy);
@@ -91,8 +90,8 @@ test("the page takes every grant of the file and shows its address", () => {
     const payload = decodePayload(plain);
     assert.equal(payload.kind, "grant");
     checkGrant(payload.grant, session, now);
-    const { kind } = checkAccount(payload.grant, logEvents(g.log), genesis, policy);
-    assert.equal(encodeAddress("devnet", payload.grant.login.account, kind), g.address, g.name);
+    checkAccount(payload.grant, logEvents(g.log), genesis, policy);
+    assert.equal(encodeAddress("devnet", payload.grant.login.account), g.address, g.name);
   }
 });
 
@@ -213,8 +212,8 @@ test("the page's refusals open for the wallet with their reason and moment, and 
 test("the link that opens Saltix keeps the page: an intent link on Android, the https link elsewhere (§14.1)", () => {
   const offer = parseOffer(v.offer.text);
   const intent = offerIntentLink(offer);
-  assert.equal(intent, `intent:${v.offer.text.slice("saltix-connect:".length)}#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=${encodeURIComponent(v.offer.link)};end`);
-  assert.ok(!intent.includes("#saltix-connect"), "the offer is the intent's own URI, never its fragment");
+  assert.equal(intent, `intent:${v.offer.text.slice("salarium-connect:".length)}#Intent;scheme=salarium-connect;package=io.saltix.app;S.browser_fallback_url=${encodeURIComponent(v.offer.link)};end`);
+  assert.ok(!intent.includes("#salarium-connect"), "the offer is the intent's own URI, never its fragment");
   assert.equal(decodeURIComponent(intent.split("S.browser_fallback_url=")[1].split(";end")[0]), v.offer.link, "without Saltix, the https link");
   const android = "Mozilla/5.0 (Linux; Android 15; SM-F966B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
   const ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -266,7 +265,7 @@ test("readSiteProfile fetches the well-known document without cookies or redirec
   const options = (f) => ({ node, genesis: p.chain.genesis_hash_hex, policy: pPolicy, fetch: f });
   const ok = await readSiteProfile("https://dex.example", options(fetcher(JSON.stringify(site.json))));
   assert.equal(ok.problem, null);
-  assert.equal(asked[0].url, "https://dex.example/.well-known/saltix-connect");
+  assert.equal(asked[0].url, "https://dex.example/.well-known/salarium-connect");
   assert.equal(asked[0].init.credentials, "omit");
   assert.equal(asked[0].init.redirect, "error");
   assert.equal(asked[0].init.referrerPolicy, "no-referrer");

@@ -10,12 +10,12 @@
 //
 // No Node APIs here: the simulator runs it in a browser.
 import { ed25519 } from "@noble/curves/ed25519";
-import { accountId } from "./address.js";
+import { ID_BYTES, accountId } from "./address.js";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, readDeviceKey, sameDeviceKey, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
 import { ROLES } from "./registry.js";
 
-export const MEMBER_DOMAIN = "Saltix grain member v1";
+export const MEMBER_DOMAIN = "Salarium grain member v1";
 /** The longest a member proof lives: 30 days, ms. */
 export const MEMBER_PROOF_LIFE_MS = 30 * 86_400_000;
 /** How far past 30 days a proof's end may lie: a wallet sets it by its own clock, which may run ahead of the server's by
@@ -64,11 +64,11 @@ export type MemberProblem = "missing" | "mismatch" | "expired" | "signer" | "sig
 
 export function writeMemberProof(w: Writer, p: MemberProof): Writer {
   if (!Number.isSafeInteger(p.expires_at) || p.expires_at < 0) throw new TypeError("expires_at: Unix ms");
-  return w.string(p.slug).fixed(fromHex(p.account, 32), 32).fixed(fromHex(p.grain_key, 32), 32).u64(p.expires_at);
+  return w.string(p.slug).fixed(fromHex(p.account, ID_BYTES), ID_BYTES).fixed(fromHex(p.grain_key, 32), 32).u64(p.expires_at);
 }
 
 export function readMemberProof(r: Reader): MemberProof {
-  return { slug: r.string(), account: toHex(r.fixed(32)), grain_key: toHex(r.fixed(32)), expires_at: r.u64n() };
+  return { slug: r.string(), account: toHex(r.fixed(ID_BYTES)), grain_key: toHex(r.fixed(32)), expires_at: r.u64n() };
 }
 
 export function writeSignedMemberProof(w: Writer, s: SignedMemberProof): Writer {

@@ -2,14 +2,14 @@
 // byte for byte the node's; and what a wallet checks of a grant.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   fromHex, toHex, issueSponsorCert, decodeSponsorCert, sponsorCertMessage, sponsorCertProblem, signChannelTx, channelTxFee,
   grantFor, SERVICE, MIN_FEE_PER_BYTE,
 } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/access-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("access-v1.json");
 const genesis = v.chain.genesis_hash_hex;
 const payer = fromHex(v.keys.payer_private_hex, 32);
 

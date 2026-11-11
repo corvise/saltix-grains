@@ -11,7 +11,7 @@ import { unwatchFile, watchFile } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ed25519 } from "@noble/curves/ed25519";
 import { sha256 } from "@noble/hashes/sha256";
-import { accountId, decodeAddress, encodeAddress } from "./address.js";
+import { ID_BYTES, accountId, decodeAddress, encodeAddress } from "./address.js";
 import { AppKey, AppKeyError } from "./app-key.js";
 import { fromHex, toBase64, toHex } from "./bytes.js";
 import {
@@ -50,7 +50,7 @@ import { type Asset, type Invoice, signInvoice, unitsOf } from "./invoice.js";
 import { type Payment, findPayment, paysAsset } from "./node.js";
 
 /** Where a grain serves its chat spec, the server key's certificate and the numbers it reports (§2). */
-export const CHAT_DOCUMENT_PATH = "/.well-known/saltix-grain-chat";
+export const CHAT_DOCUMENT_PATH = "/.well-known/salarium-grain-chat";
 
 export type ChatLog = (level: "info" | "warn" | "error", event: string, meta?: Record<string, unknown>) => void;
 
@@ -75,7 +75,7 @@ export interface ChatServerOptions {
   /**
    * The server's key as `grain pair` wrote it to `app.key` once the registry named it (`appKeyFromEnvironment`;
    * 24-app-studio §3a) — or a developer key made in Saltix before pairing (§3, retired), in the same form
-   * (`saltix-app:1:…`): its whole configuration. The server reads the slug, the network and the server key from it,
+   * (`salarium-app:1:…`): its whole configuration. The server reads the slug, the network and the server key from it,
    * finds the network's relays by itself (41-transport §18.5: no list) and its node through them, and checks that the
    * registry names the key. Keep it out of code and logs: an owner-only file, or an environment variable.
    */
@@ -100,7 +100,7 @@ export interface ChatServerOptions {
   /** The relays' endpoints to use, yours alone: with a developer key, instead of the relays it finds by itself. */
   endpoints?: RelayEndpoint[];
   /**
-   * Relay tickets (`SALTIX-RELAY:…`) or endpoints (`wss://host:port/#<pin>`) to try first, before the cache and the
+   * Relay tickets (`SALARIUM-RELAY:…`) or endpoints (`wss://host:port/#<pin>`) to try first, before the cache and the
    * release's entry points, when the server finds its relays by itself (41-transport §18.5): a ticket someone whose
    * Saltix works gave you, where the entry points are blocked. One that cannot be a relay refuses the start
    * (`chat_relay_refused`, 78); a ticket past its life is left out with a warning, and the rest still serve.
@@ -125,6 +125,13 @@ export interface ChatServerOptions {
   checkEveryMs?: number;
   /** Called once if the server stops because the registry no longer names its key. */
   onStop?: (reason: ChatStopReason) => void;
+  /**
+   * Called when the server learns where a team member's chat is — an address it did not keep: the member's first, a new
+   * key's, or one its store lost —, from the member's hello or a request or a sign-in with its proof. What waited for
+   * the team can go now (an update the owner's console did not get, a report). The member as `team()` names it, once
+   * for two copies of one hello at once; a callback that throws costs only a line in the log.
+   */
+  onTeamReachable?: (member: TeamMember) => void;
   /** Your app's version (`1.4.2`, a commit): the error reports the team gets name it. */
   version?: string;
   /**
@@ -584,6 +591,8 @@ export class ChatServer {
   private readonly onFrameListener: (frame: RelayFrame) => void;
   /** The team's addresses by account, when the store keeps none. */
   private readonly teamMemory = new Map<string, string>();
+  /** The addresses being kept, one at a time: two copies of one hello at once keep, log and tell one. */
+  private remembering: Promise<void> = Promise.resolve();
   /** Errors reported in the last hour, by fingerprint. */
   private readonly folding = new Map<string, Folding>();
   /** What reports and logs never carry: the options' `redact`, and the server secret's base64 forms (hex goes anyway). */
@@ -919,7 +928,7 @@ export class ChatServer {
     return this.stopReason;
   }
 
-  /** What `/.well-known/saltix-grain-chat` serves now: `{spec, cert?, stats?}` in hex, without the numbers while the
+  /** What `/.well-known/salarium-grain-chat` serves now: `{spec, cert?, stats?}` in hex, without the numbers while the
    *  grain is private. A chat-only grain has no origin: its users get the same in the chat. */
   document(): ChatDocument {
     return chatDocumentOf(this.signed, this.certificate, this.statsWithheld ? null : this.stats);
@@ -1036,7 +1045,7 @@ export class ChatServer {
     };
     const hex = signInvoice(invoice, this.secret, this.chain.genesis, this.certificate ?? undefined);
     this.log("info", "invoice_signed", { asset, registered: !this.certificate });
-    return { invoice, hex, payee: encodeAddress(this.chain.network, fromHex(to, 32)) };
+    return { invoice, hex, payee: encodeAddress(this.chain.network, fromHex(to, ID_BYTES)) };
   }
 
   /**
@@ -1048,7 +1057,7 @@ export class ChatServer {
   async paymentOf(invoice: Invoice | SignedAppInvoice, limit = 200): Promise<Payment | null> {
     const inv = "invoice" in invoice ? invoice.invoice : invoice;
     if (!this.view) throw new Error("paymentOf: no node to read the chain from (pass node, or start from a developer key)");
-    const payee = encodeAddress(this.chain.network, fromHex(inv.to, 32));
+    const payee = encodeAddress(this.chain.network, fromHex(inv.to, ID_BYTES));
     const payment = await findPayment(this.view.node, payee, inv.reference, limit);
     if (!payment || !paysAsset(inv.asset, payment.asset) || BigInt(payment.amount) < inv.amount) return null;
     return payment;
@@ -1284,7 +1293,7 @@ export class ChatServer {
     const controller = await this.view.controller(p.account).catch(unchecked);
     const problem = memberProofProblem(proof, { genesis: this.chain.genesis, slug: this.slug, grainKey: key, controller, now });
     if (problem) return none(problem);
-    if (onTeam(access, p.account)) await this.remember(p.account, key);
+    if (onTeam(access, p.account)) await this.remember(access, p.account, key);
     const rights = rightsOf(access, p.account);
     this.log("info", "chat_signin_member", { rights });
     return { account: p.account, roles, rights, problem: null };
@@ -1479,12 +1488,24 @@ export class ChatServer {
     else this.teamMemory.set(account, address);
   }
 
-  /** Keep where `account`'s chat is: the address of the grain key its proof showed. */
-  private async remember(account: string, key: string): Promise<void> {
+  /** Keep where `account`'s chat is, on the team of `access`: the address of the grain key its proof showed. One it did
+   *  not keep is told to `onTeamReachable`. */
+  private remember(access: GrainAccess, account: string, key: string): Promise<void> {
+    const kept = this.remembering.then(() => this.keepAddress(access, account, key));
+    this.remembering = kept.catch(() => {});
+    return kept;
+  }
+
+  private async keepAddress(access: GrainAccess, account: string, key: string): Promise<void> {
     const address = this.userAddress(key);
     if ((await this.knownTeam())[account] === address) return;
     await this.setTeamAddress(account, address);
     this.log("info", "chat_team_reachable", {});
+    try {
+      this.options.onTeamReachable?.({ account, owner: account === access.owner, roles: rolesOf(access, account), address });
+    } catch (e) {
+      this.log("warn", "chat_team_reachable_failed", { reason: (e as Error).message });
+    }
   }
 
   /**
@@ -1511,7 +1532,7 @@ export class ChatServer {
       this.log("info", "chat_team_proof_ignored", { reason: "signer" });
       return null;
     }
-    await this.remember(account, check.requestKey);
+    await this.remember(access, account, check.requestKey);
     return account;
   }
 
@@ -1560,7 +1581,7 @@ export class ChatServer {
       return { refused: problem };
     }
     const account = signed.request.member!.proof.account;
-    if (onTeam(access, account)) await this.remember(account, signed.key);
+    if (onTeam(access, account)) await this.remember(access, account, signed.key);
     return { member: { account, roles: rolesOf(access, account) } };
   }
 
@@ -1635,7 +1656,7 @@ export class ChatServer {
     }
     const refused = introductionProblem(access, { genesis: this.chain.genesis, slug: this.slug, helloKey: signed.key, proof, controller, now });
     if (refused) return drop(`member:${refused}`);
-    await this.remember(account, signed.key);
+    await this.remember(access, account, signed.key);
     // A welcome under an expired certificate is one no wallet takes: the address is kept, and nothing is sent.
     if (this.certificate && this.certificate.expires_at <= now) {
       this.log("warn", "chat_hello_unwelcomed", { reason: "cert_expired", hint: "issue a new certificate (grain cert) and pass it to setCert" });
@@ -1798,7 +1819,7 @@ function refusalText(problem: string): string {
   return "This request does not fit the chat's commands.";
 }
 
-/** The response that serves `doc` at `/.well-known/saltix-grain-chat` in any HTTP framework: status, headers, body. */
+/** The response that serves `doc` at `/.well-known/salarium-grain-chat` in any HTTP framework: status, headers, body. */
 export function chatDocumentResponse(doc: ChatDocument): { status: number; headers: Record<string, string>; body: string } {
   return {
     status: 200,

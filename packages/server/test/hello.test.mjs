@@ -76,7 +76,8 @@ test("a team member's hello is welcomed, and the console reaches the team before
   const fake = teamChain();
   const t = Date.now();
   const { store, calls } = countingStore();
-  const { relay, server, events, close } = await studio(fake, { now: () => t, store });
+  const reached = [];
+  const { relay, server, events, close } = await studio(fake, { now: () => t, store, onTeamReachable: (m) => reached.push(m) });
   const handled = [];
   server.text(() => { handled.push("text"); return card().text("text"); });
   for (const name of ["key", "revoke", "report", "idle"]) server.command(name, () => { handled.push(name); return card().text(name); });
@@ -101,6 +102,10 @@ test("a team member's hello is welcomed, and the console reaches the team before
     assert.deepEqual(team.map((m) => [m.account, m.address]), [
       [ownerAccount, owner.address], [accountOf(DEV), dev.address], [accountOf(VIEWER), null],
     ], "the hellos' addresses, as a request's proof would give them");
+    assert.deepEqual(reached, [
+      { account: ownerAccount, owner: true, roles: ROLES.user | ROLES.developer | ROLES.viewer, address: owner.address },
+      { account: accountOf(DEV), owner: false, roles: ROLES.developer, address: dev.address },
+    ], "the app is told of each member as it reaches it, the owner as such, as team() names them");
 
     // The console reaches them: the update goes to the one who approves it, a notice to the owner and the developer.
     const next = { ...manifest().manifest, version: 2, name: { en: "Access" } };
@@ -152,11 +157,28 @@ test("a viewer of a private grain is welcomed too: the team is the team, public 
   }
 });
 
+test("an app's onTeamReachable that throws costs a line in the log: the address is kept and the hello welcomed", async () => {
+  const fake = teamChain();
+  const t = Date.now();
+  const { relay, server, events, close } = await studio(fake, { now: () => t, onTeamReachable: () => { throw new Error("the app's own"); } });
+  const dev = await wallet(relay, 0x89, server.address, [serverKey]);
+  try {
+    await dev.sendHello(dev.hello(DEV, { at: t }));
+    await dev.until(() => dev.welcomes().length === 1);
+    assert.equal((await server.team()).find((m) => m.account === accountOf(DEV)).address, dev.address);
+    assert.equal(count(events, "chat_team_reachable_failed"), 1);
+  } finally {
+    dev.client.close();
+    await close();
+  }
+});
+
 test("a hello that does not check gets no answer at all, and its frame is acked", async () => {
   const fake = teamChain();
   const t = Date.now();
   const store = memoryChatStore();
-  const { relay, server, events, close } = await studio(fake, { now: () => t, store });
+  let told = 0;
+  const { relay, server, events, close } = await studio(fake, { now: () => t, store, onTeamReachable: () => told++ });
   const dev = await wallet(relay, 0x84, server.address, [serverKey]);
   const user = await wallet(relay, 0x85, server.address, [serverKey]);
   const stranger = await wallet(relay, 0x86, server.address, [serverKey]);
@@ -194,6 +216,7 @@ test("a hello that does not check gets no answer at all, and its frame is acked"
     await sleep(150);
     for (const w of [dev, user, stranger]) assert.deepEqual(w.frames, [], "no answer at all");
     assert.deepEqual(store.team(), {}, "nobody's address kept");
+    assert.equal(told, 0, "nobody told to the app");
     assert.equal(count(events, "chat_hello_welcomed"), 0);
     await until(() => unacked(relay, server) === 0);
   } finally {
@@ -206,7 +229,8 @@ test("a key is welcomed once an hour: a hello within it is taken, the address ke
   const fake = teamChain();
   let t = Date.now();
   const store = memoryChatStore();
-  const { relay, server, events, close } = await studio(fake, { now: () => t, store });
+  const reached = [];
+  const { relay, server, events, close } = await studio(fake, { now: () => t, store, onTeamReachable: (m) => reached.push(m.account) });
   const dev = await wallet(relay, 0x87, server.address, [serverKey]);
   const owner = await wallet(relay, 0x88, server.address, [serverKey]);
   try {
@@ -238,6 +262,9 @@ test("a key is welcomed once an hour: a hello within it is taken, the address ke
     await until(() => count(events, "chat_hello_repeated") === 3);
     await sleep(100);
     assert.equal(owner.welcomes().length, 1);
+    assert.deepEqual(reached, [accountOf(DEV), accountOf(DEV), ownerAccount],
+      "told when an address is kept: the first, the one the store lost, one for two copies of a hello at once");
+    assert.equal(count(events, "chat_team_reachable"), 3);
   } finally {
     dev.client.close();
     owner.client.close();

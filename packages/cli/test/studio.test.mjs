@@ -127,7 +127,7 @@ test("from protocol version 2 configure names each key with its proof, which its
   const [proven] = call.configureProven.servers;
   assert.equal(proven.key, server);
   assert.ok(verifyServerKeyProof(server, proven.proof, GENESIS, "chess-bot", ownerId), "the key's proof for this app and owner");
-  assert.ok(!verifyServerKeyProof(server, proven.proof, GENESIS, "chess-bot", "99".repeat(32)), "for this owner only");
+  assert.ok(!verifyServerKeyProof(server, proven.proof, GENESIS, "chess-bot", "99".repeat(20)), "for this owner only");
   const { sent } = await sendCall(call, secret, signing(node.url));
   assert.equal(sent.call, "configure");
   assert.equal(callTag(node.submitted[0]), 39);
@@ -184,8 +184,8 @@ test("from protocol version 2 the owner's Saltix names a key of this computer by
 test("access makes the grain private with its members; rate and bind are refused as the registry would", async () => {
   const node = await fakeNode({ grain: grain() });
   const member = toHex(accountId(fromHex("44".repeat(32), 32)));
-  const members = membersOf([`${encodeAddress("testnet", fromHex(member, 32))}:user+developer`, `${"46".repeat(32)}:viewer`]);
-  assert.deepEqual(members, [{ account: member, roles: 3 }, { account: "46".repeat(32), roles: 4 }]);
+  const members = membersOf([`${encodeAddress("testnet", fromHex(member, 20))}:user+developer`, `${"46".repeat(20)}:viewer`]);
+  assert.deepEqual(members, [{ account: member, roles: 3 }, { account: "46".repeat(20), roles: 4 }]);
   assert.throws(() => membersOf(["tsalt1xyz:user"]), /address/);
   assert.throws(() => membersOf([`${member}:owner`]), /roles/);
   assert.throws(() => membersOf([member]), /<address>:<roles>/);
@@ -246,7 +246,7 @@ test("without a key file, the tool says what to do in Saltix and waits for the r
 });
 
 test("a key file signs an owner's call only for an app it owns, or when --key names it; else the owner's Saltix, the owner said first", async () => {
-  const theirs = "77".repeat(32);
+  const theirs = "77".repeat(20);
   const node = await fakeNode({ grain: grain({ owner: theirs }) });
   const dir = scratch("owner-calls-");
   writeFileSync(join(dir, "owner.key"), toHex(secret) + "\n", { mode: 0o600 });
@@ -258,7 +258,7 @@ test("a key file signs an owner's call only for an app it owns, or when --key na
   // --key naming it: refused before anything is signed.
   const named = await run(["access", "--slug", "chess-bot", "--public", "--key", "owner.key", "--node", node.url], dir);
   assert.equal(named.code, 1);
-  assert.match(named.stderr, /chess-bot: the registry names another owner \(7{64}\) than owner\.key's account/);
+  assert.match(named.stderr, /chess-bot: the registry names another owner \(7{40}\) than owner\.key's account/);
   // --wallet and --key at once: a misuse.
   assert.equal((await run(["access", "--slug", "chess-bot", "--public", "--key", "owner.key", "--wallet", "--node", node.url], dir)).code, 2);
   // Its own app: owner.key signs without --key, and says so.
@@ -295,7 +295,7 @@ const run = (args, cwd, env = {}, input) => new Promise((resolve) => {
 });
 
 test("a developer key's public parts, never its secret, and never from the command line", async () => {
-  const code = "saltix-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:" + "63".repeat(32);
+  const code = "salarium-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:" + "63".repeat(32);
   const dir = scratch("app-key-");
   const shown = await run(["app-key", "--offline"], dir, { SALTIX_APP_KEY: code });
   assert.equal(shown.code, 0);
@@ -337,7 +337,7 @@ test("app-key make writes the developer key owner-only, and says when the regist
   assert.ok(!made.stdout.includes("63".repeat(32)), "not on the terminal");
   assert.match(made.stdout, /grain configure --slug chess --server/);
   assert.equal(statSync(join(dir, "app.key")).mode & 0o777, 0o600);
-  assert.equal(readFileSync(join(dir, "app.key"), "utf8").trim(), "saltix-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:" + "63".repeat(32));
+  assert.equal(readFileSync(join(dir, "app.key"), "utf8").trim(), "salarium-app:1:tsalt:5a5a5a5a5a5a5a5a:chess:" + "63".repeat(32));
   const again = await run(["app-key", "make", "--slug", "chess", "--node", node.url], dir);
   assert.match(again.stderr, /exists already/);
   node.close();

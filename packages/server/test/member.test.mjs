@@ -14,6 +14,7 @@ import {
   memoryChatStore, fileChatStore, AppKey, AppKeyError, MEMBER_PROOF_AHEAD_MS, MESSAGE_AHEAD_MS, memberProofTimely,
 } from "../dist/index.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 const NOW = 1_800_000_000_000;
 const DAY = 86_400_000;
@@ -26,7 +27,7 @@ const SERVER = key(0x32);
 const USER = key(0x33);
 const MEMBER = key(0x50);
 
-const access = (roles) => ({ owner: account(OWNER), public: false, members: [{ account: "09".repeat(32), roles: ROLES.user }, { account: account(MEMBER), roles }] });
+const access = (roles) => ({ owner: account(OWNER), public: false, members: [{ account: "09".repeat(20), roles: ROLES.user }, { account: account(MEMBER), roles }] });
 const proof = (expires_at, over = {}) => ({ slug: "access", account: account(MEMBER), grain_key: pub(USER), expires_at, ...over });
 const check = (p, a, controller = null, now = NOW) => admits(a, { genesis, slug: "access", requestKey: pub(USER), proof: p, controller, now });
 
@@ -36,7 +37,7 @@ test("a private grain admits its members only", () => {
   assert.equal(check(good, access(ROLES.user)), null);
   assert.equal(check(good, access(ROLES.developer)), null);
   assert.equal(check(good, access(ROLES.viewer)), "not_member", "a viewer reads the page, it does not use the app");
-  const stranger = { ...access(ROLES.user), members: [{ account: "09".repeat(32), roles: ROLES.user }] };
+  const stranger = { ...access(ROLES.user), members: [{ account: "09".repeat(20), roles: ROLES.user }] };
   assert.equal(check(good, stranger), "not_member", "removed from the members");
   assert.equal(check(null, { ...stranger, public: true }), null, "a public grain takes anyone");
   assert.equal(check(signMemberProof(proof(NOW), MEMBER, genesis), { ...stranger, public: true }), null, "and reads no proof");
@@ -195,7 +196,7 @@ test("a store keeps the numbers' window, and forgets it as it goes", async () =>
   assert.deepEqual(Object.keys(saved.usage.users), ["bob"], "the file forgets alice too");
 });
 
-const grains = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
+const grains = goldenVectors("grains-v1.json");
 
 test("the developer key is the vectors', and reads back", () => {
   const v = grains.app_key;
@@ -234,9 +235,9 @@ test("anything else is refused, and the refusal never quotes it", () => {
   };
   assert.equal(refused(code), null);
   assert.equal(refused("access"), "not_app_key");
-  assert.equal(refused(code.replace("saltix-app:1:", "saltix-app:2:")), "not_app_key");
-  assert.equal(refused(code.replace("saltix-app:1:", "saltix-node:1:")), "not_app_key");
-  assert.equal(refused(code.replace("saltix-app:1:", "SALTIX-APP:1:")), "not_app_key");
+  assert.equal(refused(code.replace("salarium-app:1:", "saltix-app:2:")), "not_app_key");
+  assert.equal(refused(code.replace("salarium-app:1:", "saltix-node:1:")), "not_app_key");
+  assert.equal(refused(code.replace("salarium-app:1:", "SALTIX-APP:1:")), "not_app_key");
   assert.equal(refused(code.replace(":tsalt:", ":xsalt:")), "unknown_network");
   assert.equal(refused(`${code}:00`), "malformed");
   assert.equal(refused(code.replace(":chess:", ":")), "malformed", "no slug");

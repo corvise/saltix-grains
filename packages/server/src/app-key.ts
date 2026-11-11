@@ -1,5 +1,5 @@
 // A grain's developer key (Saltix 24-app-studio §3): a server key the grain's registry record names, handed to
-// whoever builds the app as one string, `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>` — the network's address prefix,
+// whoever builds the app as one string, `salarium-app:1:<hrp>:<genesis>:<slug>:<secret>` — the network's address prefix,
 // the first 8 bytes of its genesis hash, the grain's slug and the server key's Ed25519 secret, hex in lower case. It is
 // read as strictly as the reference's `saltix_types::app_key` reads it, and it is a secret: whoever holds it speaks
 // for the app until the owner replaces the key. An `AppKey` never prints, logs or serializes its secret.
@@ -10,7 +10,7 @@ import { type NetworkName, accountId, encodeAddress } from "./address.js";
 import { fromHex, toHex } from "./bytes.js";
 
 /** What every developer key starts with. */
-export const APP_KEY_PREFIX = "saltix-app:1:";
+export const APP_KEY_PREFIX = "salarium-app:1:";
 
 const HRP: Record<NetworkName, string> = { mainnet: "salt", testnet: "tsalt", devnet: "dsalt" };
 
@@ -18,7 +18,7 @@ const HRP: Record<NetworkName, string> = { mainnet: "salt", testnet: "tsalt", de
 export type AppKeyProblem = "not_app_key" | "unknown_network" | "malformed" | "bad_slug";
 
 const EXPLAINED: Record<AppKeyProblem, string> = {
-  not_app_key: "not a developer key (it starts with saltix-app:1:)",
+  not_app_key: "not a developer key (it starts with salarium-app:1:)",
   unknown_network: "a developer key of an unknown network",
   malformed: "a malformed developer key",
   bad_slug: "the developer key names no grain's slug",
@@ -65,7 +65,7 @@ export class AppKey {
   }
 
   /**
-   * Read a developer key: exactly the form Saltix writes, `saltix-app:1:<hrp>:<16 hex>:<slug>:<64 hex>`, lower-case
+   * Read a developer key: exactly the form Saltix writes, `salarium-app:1:<hrp>:<16 hex>:<slug>:<64 hex>`, lower-case
    * hex, a known prefix, a valid slug, white space only around it. Throws an `AppKeyError` that never quotes the text.
    */
   static parse(text: string): AppKey {

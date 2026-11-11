@@ -7,7 +7,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { verifyEd25519 } from "./keys.js";
 
-export const STATS_DOMAIN = "Saltix grain stats v1";
+export const STATS_DOMAIN = "Salarium grain stats v1";
 /** The oldest numbers a wallet shows: 2 days, ms. */
 export const STATS_MAX_AGE_MS = 2 * 86_400_000;
 /** How far ahead of the wallet's clock they may be dated, ms. */

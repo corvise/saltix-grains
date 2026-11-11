@@ -4,7 +4,7 @@
 //
 //   BundleUpload       { slug: String, bundle: [u8; 32], size: u64, at: u64 }      at: Unix ms
 //   SignedBundleUpload { upload, key: [u8; 32], signature: [u8; 64] }
-//     signature: Ed25519 by key over derive("Saltix grain bundle upload v1", genesis_hash ‖ Borsh(BundleUpload))
+//     signature: Ed25519 by key over derive("Salarium grain bundle upload v1", genesis_hash ‖ Borsh(BundleUpload))
 //
 // The key is one the live grain's registry record names (`ConfigureGrain`): the key `grain pair` made on this computer, or
 // a developer key's. Byte for byte `saltix_types::grain::bundle` (`vectors/images-v1.json`, `uploads`).
@@ -15,7 +15,7 @@ import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { verifyEd25519 } from "./keys.js";
 import { MAX_NETWORK_BUNDLE_BYTES } from "./named.js";
 
-export const UPLOAD_DOMAIN = "Saltix grain bundle upload v1";
+export const UPLOAD_DOMAIN = "Salarium grain bundle upload v1";
 /** How long a node holds a pending bundle after its statement's time: a day. */
 export const PENDING_MS = 24 * 3_600_000;
 /** How far ahead of a node's clock a statement may be dated. */

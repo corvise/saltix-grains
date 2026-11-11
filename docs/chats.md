@@ -33,7 +33,7 @@ Both sign invoices. A registered key's invoice pays the grain's owner only, whic
 `grain pair` makes the server's key on the computer that runs it and pairs it with the app in the owner's Saltix by a QR
 code, from the command the app's page shows — the app, the owner's address, the network (Saltix 24-app-studio
 [§3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code), [docs/first-app.md](first-app.md)): once the registry
-names it, `app.key` holds it as `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, the form developer keys had — which
+names it, `app.key` holds it as `salarium-app:1:<hrp>:<genesis>:<slug>:<secret>`, the form developer keys had — which
 Saltix made before pairing and makes no more ([§3](protocol/app-studio.md#3-the-developer-key)): a key of that origin
 keeps working, with a warning at start to pair a server in its place. It is the server's whole configuration:
 
@@ -358,7 +358,7 @@ nothing: the error's name and message are the fields, and every line the copy fo
   and the next card says "×N since the last report". If they stop, the count goes out within 10 minutes after the hour
   (`flushReports()`, which you may also call before stopping). A loop of one error sends at most one card an hour, and
   the team's budget bounds the rest.
-- **No secrets.** Before anything leaves, the card is scrubbed of developer keys (`saltix-app:1:…`), every run of 64 or
+- **No secrets.** Before anything leaves, the card is scrubbed of developer keys (`salarium-app:1:…`), every run of 64 or
   more hex digits (keys and secrets, and also hashes and accounts, which cannot be told apart by look: name them by a
   prefix in your errors), the server key's secret in base64, and whatever you name in `redact` (text of 8 characters or
   more, or patterns). Handlers' errors in your log are scrubbed the same way. A request's arguments and text never go
@@ -399,6 +399,19 @@ So `proposeUpdate` and `notifyTeam` reach the owner and the developers from the 
 store that survives restarts (`fileChatStore`, or `team` and `setTeam` of your own): a welcomed wallet says hello again
 only when the server key it writes to changes or its proof is renewed, 3 days before it ends. The welcomes of the last
 hour live in memory, so a restart may welcome a key once more.
+
+What waited for a member who could not be reached yet goes the moment they are: `onTeamReachable` (a `ChatServer`
+option) is called with the member as `team()` names it whenever the server keeps an address it did not have — the
+member's first, a new key's, one its store lost —, from a hello, a request or a sign-in, once for two copies of one
+hello at once. An update proposed while the owner's wallet had not reached the app (`owner: false`) is proposed again
+then, with no timer:
+
+```ts
+const server = await ChatServer.start({ appKey, spec, onTeamReachable: (m) => { if (m.owner) void proposeAgain(); } });
+```
+
+A callback that throws costs only a line in the log (`chat_team_reachable_failed`): the address is kept and the hello
+welcomed all the same.
 
 The log names reasons only, never an account, a key or an address: `chat_hello_welcomed`, `chat_hello_repeated` (within
 the hour), `chat_hello_dropped` with its `reason` (`slug`, `sender`, `language`, `signature`, `time`, `proof`,

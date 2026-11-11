@@ -36,7 +36,7 @@ const PROOF_KEY = 0;
 
 /** The transaction's id and what the sender signs: bound to the network's genesis. */
 export function txId(body: Uint8Array, genesisHash: string): string {
-  return toHex(derive("Saltix transaction v3", fromHex(genesisHash, 32), body));
+  return toHex(derive("Salarium transaction v3", fromHex(genesisHash, 32), body));
 }
 
 /** Sign the transaction of `action` with the sender's 32-byte secret: hex as `transaction_submit` takes it, and its id. */

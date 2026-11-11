@@ -73,7 +73,7 @@ export interface ConnectOptions {
 export interface OfferView {
   /** The offer's text: what the QR code holds. */
   text: string;
-  /** `https://saltix.io/connect#…`: the link that opens Saltix, for a message or another device. */
+  /** `https://salarium.io/connect#…`: the link that opens Saltix, for a message or another device. */
   link: string;
   /** The link that opens Saltix on this device without unloading the page (19-connect §14.1): an intent link on
    *  Android, `link` elsewhere. What "Open Saltix" on a phone points at. */

@@ -1,13 +1,13 @@
 // A link payload (Saltix 09-relay §10.3), byte for byte the node's `saltix_crypto::sealed::seal_link_payload`:
 //   E = X25519(e, 9) · S = X25519(e, Q) (an all-zero S is refused)
-//   key = BLAKE3 derive_key("Saltix link payload v1", S ‖ E ‖ Q)
+//   key = BLAKE3 derive_key("Salarium link payload v1", S ‖ E ‖ Q)
 //   payload = E ‖ XChaCha20-Poly1305(key, 24 zero bytes, aad = sid ‖ P)
 // What a wallet delivers to a Connect page's slot (19-connect §5).
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { x25519 } from "@noble/curves/ed25519";
 import { concat, derive } from "@saltix/grain-server/web";
 
-export const LINK_PAYLOAD_DOMAIN = "Saltix link payload v1";
+export const LINK_PAYLOAD_DOMAIN = "Salarium link payload v1";
 
 export const boxPublic = (secret: Uint8Array): Uint8Array => x25519.getPublicKey(secret);
 

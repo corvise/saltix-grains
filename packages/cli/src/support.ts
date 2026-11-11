@@ -27,7 +27,7 @@ export type SupportContact =
   | { form: "link"; text: string }
   | { form: "email"; text: string }
   | { form: "username"; text: string; name: string }
-  | { form: "address"; text: string; network: NetworkName; kind: 0 | 5; account: string };
+  | { form: "address"; text: string; network: NetworkName; account: string };
 
 const FORMS = "an https:// link, a mailto: address, a Saltix username (@name) or a Saltix address (dsalt1…)";
 
@@ -40,10 +40,7 @@ export function contactOf(typed: string): SupportContact {
   const text = typed.trim();
   const address = decodeAddress(text);
   if (address !== null) {
-    if (address.kind !== 0 && address.kind !== 5) {
-      throw new SupportError("address_kind", `${text}: an address of kind ${address.kind}; support takes an address people write to, a personal or a managed one`);
-    }
-    return { form: "address", text: encodeAddress(address.network, address.id, address.kind), network: address.network, kind: address.kind, account: toHex(address.id) };
+    return { form: "address", text: encodeAddress(address.network, address.id), network: address.network, account: toHex(address.id) };
   }
   if (text.startsWith("@")) {
     const handle = parseHandle(text);
@@ -187,7 +184,7 @@ export async function supportFor(o: SupportOptions): Promise<{ consent: SupportC
 export function ownerAccountOf(text: string): string {
   const decoded = decodeAddress(text);
   if (decoded) return toHex(decoded.id);
-  if (/^[0-9a-f]{64}$/.test(text)) return text;
+  if (/^[0-9a-f]{40}$/.test(text)) return text;
   throw new SupportError("owner", `--owner ${text}: an address (dsalt1…) or an account id in hex`);
 }
 

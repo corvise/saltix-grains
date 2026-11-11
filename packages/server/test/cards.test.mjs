@@ -3,7 +3,6 @@
 // place of its poll through a relay.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   card, fromHex, toHex, decodeChatFrame, encodeChatFrame, encodeSignedChatMessage, signChatMessage, chatMessageToSign,
   chatMessageProblem, chatMessageBoundsProblem, decodeSignedChatSpec, requestFitProblem, cardLayout, isDestructive, perRow, pollLook,
@@ -13,8 +12,9 @@ import {
 } from "../dist/index.js";
 import { ed25519 } from "@noble/curves/ed25519";
 import { spec as helperSpec, serverOn, wallet } from "./chat-helpers.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/grain-chats-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("grain-chats-v1.json");
 const chain = { genesis: v.chain.genesis_hash_hex, network: v.chain.network };
 const NOW = Number(v.now_ms);
 const SERVER = fromHex(v.keys.server_secret_hex, 32);
@@ -25,17 +25,17 @@ const vspec = decodeSignedChatSpec(v.spec_doc.signed_hex).spec;
 
 /** The vectors' card with a poll and code (grain_chat_vectors.rs, `poll`), in this SDK's form. */
 const pollMessage = () => {
-  const pick = (label, seconds, votes) => ({ label, args: [["duration", { duration: seconds }], ["site", { choice: "saltix-io" }]], votes });
+  const pick = (label, seconds, votes) => ({ label, args: [["duration", { duration: seconds }], ["site", { choice: "salarium-io" }]], votes });
   return {
     slug: "access", id: "36".repeat(16), at: NOW + 4_000, answers: null, replaces: null,
     blocks: [
       {
         poll: {
-          question: "How long should a new key open saltix.io?", command: "key",
+          question: "How long should a new key open salarium.io?", command: "key",
           options: [pick("10 minutes", 600, 3), pick("1 day", 86_400, 12), pick("30 days", 2_592_000, 5)], chosen: 1, closed: false, tally: true,
         },
       },
-      { code: { text: "curl -H 'X-Saltix-Key: 7KQ2-M9XA-4F' \\\n  https://saltix.io/" } },
+      { code: { text: "curl -H 'X-Salarium-Key: 7KQ2-M9XA-4F' \\\n  https://salarium.io/" } },
     ],
     actions: [{ label: "Revoke", kind: { run: { command: "revoke", args: [["id", { text: "k-0042" }]] } } }],
   };
@@ -102,11 +102,11 @@ test("a poll's options are typed by the spec when the card is sent, as a run's a
   const s = helperSpec();
   const commandOf = (name) => s.commands.find((c) => c.name === name);
   const c = card().poll("How long?", "key", [
-    { label: "10 minutes", args: { duration: 600, site: "saltix-io" }, votes: 2 },
+    { label: "10 minutes", args: { duration: 600, site: "salarium-io" }, votes: 2 },
     { label: "1 day", args: { duration: 86_400, site: "web" } },
   ], { chosen: 0 });
   const [poll] = c.typedBlocks(commandOf);
-  assert.deepEqual(poll.poll.options[0].args, [["duration", { duration: 600 }], ["site", { choice: "saltix-io" }]]);
+  assert.deepEqual(poll.poll.options[0].args, [["duration", { duration: 600 }], ["site", { choice: "salarium-io" }]]);
   assert.deepEqual(poll.poll.options[1].args, [["duration", { duration: 86_400 }], ["site", { choice: "web" }]]);
   assert.equal(poll.poll.tally, true, "votes given: a tally");
   assert.equal(poll.poll.chosen, 0);
@@ -118,8 +118,8 @@ test("a poll's options are typed by the spec when the card is sent, as a run's a
 
 test("the lint says what a card does against the standard, and nothing for a good one", () => {
   const s = helperSpec();
-  const good = card().status("done", "Your key is ready").secret("Key", "7KQ2").fields({ Site: "saltix.io" })
-    .run("Renew", "key", { duration: 600, site: "saltix-io" }).run("Revoke", "revoke", { id: "k-1" }).open("All keys", "keys");
+  const good = card().status("done", "Your key is ready").secret("Key", "7KQ2").fields({ Site: "salarium.io" })
+    .run("Renew", "key", { duration: 600, site: "salarium-io" }).run("Revoke", "revoke", { id: "k-1" }).open("All keys", "keys");
   assert.deepEqual(lintCard(good, s), []);
   assert.doesNotThrow(() => assertCardStandard(good, s));
   const rules = (c, sp) => lintCard(c, sp).map((w) => w.rule);
@@ -166,9 +166,9 @@ test("a vote is answered in place of its poll, with the new votes and the user's
   const { relay, server, close } = await serverOn();
   const user = await wallet(relay, 0x51, server.address);
   try {
-    const votes = { "saltix-io": 0, web: 0 };
+    const votes = { "salarium-io": 0, web: 0 };
     const pollCard = (chosen) => card().poll("Where do you test?", "key", [
-      { label: "saltix.io", args: { duration: 600, site: "saltix-io" }, votes: votes["saltix-io"] },
+      { label: "salarium.io", args: { duration: 600, site: "salarium-io" }, votes: votes["salarium-io"] },
       { label: "Web", args: { duration: 600, site: "web" }, votes: votes.web },
     ], { chosen });
     server.command("report", () => pollCard(null));

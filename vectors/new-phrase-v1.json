@@ -1,0 +1,224 @@
+{
+  "account": {
+    "address": "dsalt1q44g065vhytnc4tf7qjrljaeqdwjs7kem3zqqqw",
+    "device_public_key_hex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+    "id_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+    "roots": [
+      {
+        "digest_hex": "5ff96e93fb80f1cc6ff2ad94ecf15a5e70f2f0f4d7dd547d68b72b3c6aa0d7b3",
+        "index": 0,
+        "public_key_hex": "28f66526ff2d8668ac4c5a023cd2d2469de946b0d6e258ab2bf0b1a0aadd03a8"
+      },
+      {
+        "digest_hex": "219d6fd332697db063e02422b706bb2a7738d8f7443fd0d38826fda939f1ae20",
+        "index": 1,
+        "public_key_hex": "e02159e9388b7c5155330dd1f2905f98c9435e9f02f73da13305395b321d93ee"
+      },
+      {
+        "digest_hex": "15456108518a5d986aaf7d34a030a8b50213edede5b7b42a7d8d818c16f8e465",
+        "index": 2,
+        "public_key_hex": "c5e5b23d4bd0bf62fd76bbf28f04bbe70548b0a4ff1e8f4926ce775800319b17"
+      }
+    ],
+    "seed_hex": "31313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131"
+  },
+  "bare_log": {
+    "events": [
+      {
+        "borsh_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b0100000000000000000000000000000000000000000000000000000000000000000000000a000000000000000001ad50fd519722e78aad3e0487f977206ba50f5b3b00000000000000008096980000000000102700000000000007000017cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0200000000000000000000000000000000030028f66526ff2d8668ac4c5a023cd2d2469de946b0d6e258ab2bf0b1a0aadd03a8219d6fd332697db063e02422b706bb2a7738d8f7443fd0d38826fda939f1ae20d2a7e21f05ca1b99a3ee7f1afc6591cb2ff032e241057d8accbd736775a4627ab38ca470e5003ee23b1d8ec15b4f04c7804635823fbe3f7ab7385ae738ab5c09",
+        "id_hex": "711b1bf3f4f07a7cc9f37b5f1a5fb6ee861af6c56b7cdb0348dc3d7f1727e94d",
+        "seq": 1,
+        "slot": 10
+      },
+      {
+        "borsh_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b02000000711b1bf3f4f07a7cc9f37b5f1a5fb6ee861af6c56b7cdb0348dc3d7f1727e94d14000000000000000001ad50fd519722e78aad3e0487f977206ba50f5b3b01000000000000008096980000000000102700000000000007039a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a40400e02159e9388b7c5155330dd1f2905f98c9435e9f02f73da13305395b321d93ee15456108518a5d986aaf7d34a030a8b50213edede5b7b42a7d8d818c16f8e465271df35a3abe1f995f3a2f45c22dfb7e09078047cb4fab36ba2c116573b3ead3422d7772873ab9a0f3b9752baf7991552c4c6d29459baee0317afe6ab51ad90f008b15e373e4a235b23bbc9ba2f8943030b518002a5e3a3feb9180268ab210c03159e8454d4759cc82ec415eb3b40c393f85c56dfd2422e2c9431cd497e6678a01",
+        "id_hex": "7f2d34ea489daa687d82fe73bec5e7fc0e2d7666f24eb3d30716c2b7972ab4a5",
+        "seq": 2,
+        "slot": 20
+      }
+    ],
+    "phrase_roots_hex": [
+      "9a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a4"
+    ],
+    "proves_new_phrase": false,
+    "proves_own_phrase": false,
+    "root_digest_hex": "9a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a4",
+    "root_index": 0
+  },
+  "by_quorum": {
+    "borsh_hex": "01ad50fd519722e78aad3e0487f977206ba50f5b3b010000000000000080969800000000001027000000000000070700c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f84060400e02159e9388b7c5155330dd1f2905f98c9435e9f02f73da13305395b321d93ee15456108518a5d986aaf7d34a030a8b50213edede5b7b42a7d8d818c16f8e4654729037e25638c76fbdc210cc794c67890d00e4ed212a497082836702b0638aac1fef4e86f4ae945bb0d71fece181073010be2a65b0af2917d5b4815a98fc90200644de59787e918f91b12886b5bc778dbee3044dc68cadae93a101a51e85d49b3f5f31d4562ca3cbe58d50498166b0db8c1a5efe78358c8f8752b7ee49c40b70a",
+    "fee": "10000000",
+    "id_hex": "29507b8ce599663898e8f487cafd337d2c36cff5d8889f6eea5aafe9869fd8f9",
+    "proof": "root_and_device"
+  },
+  "by_root": {
+    "borsh_hex": "01ad50fd519722e78aad3e0487f977206ba50f5b3b010000000000000080969800000000001027000000000000070700c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f84060300e02159e9388b7c5155330dd1f2905f98c9435e9f02f73da13305395b321d93ee15456108518a5d986aaf7d34a030a8b50213edede5b7b42a7d8d818c16f8e4654b3bf0482402109c38544efa87039b3263cb0434a5364e312cdd60938081d3bcd3e790c56292d6c0a8fe2704c6dd1865cd2588aab99956c93dc563c2270e6c0f",
+    "fee": "10000000",
+    "id_hex": "29507b8ce599663898e8f487cafd337d2c36cff5d8889f6eea5aafe9869fd8f9",
+    "proof": "root"
+  },
+  "chain": {
+    "account_policy": {
+      "delay": 600,
+      "dispute_timeout": 3600
+    },
+    "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "network": "devnet"
+  },
+  "description": "A new phrase proves itself (13-accounts §6.6, protocol version 10; the money audit of 2026-10-29, M-1). ReplaceRoot (AccountAction tag 7) carries NewRoot {scheme u8, public_key [32], next_digest [32], signature [64]}: the new phrase's first root, whose digest is the phrase's root_digest_0, signs derive(\"Salarium new root v1\", genesis_hash ‖ account ‖ root_digest_0 ‖ next_digest) with Ed25519; the stateless check verifies it for the sender's account and the network; the account moves on to next_digest (root index 1) and the alias goes to derive_id(5, root_digest_0). ReplaceRootV1 (tag 3, the bare digest) is taken by versions 1 to 9 only. From version 10 an address that holds an alias takes itself back by its first transaction: signed by the root its address commits to, with an account action, it pays no fee and clears the alias. A wallet follows an alias at a phrase's own address only to an account whose key event log proves that phrase (proves_phrase).",
+  "domain": "Salarium new root v1",
+  "log": {
+    "events": [
+      {
+        "borsh_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b0100000000000000000000000000000000000000000000000000000000000000000000000a000000000000000001ad50fd519722e78aad3e0487f977206ba50f5b3b00000000000000008096980000000000102700000000000007000017cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce0200000000000000000000000000000000030028f66526ff2d8668ac4c5a023cd2d2469de946b0d6e258ab2bf0b1a0aadd03a8219d6fd332697db063e02422b706bb2a7738d8f7443fd0d38826fda939f1ae20d2a7e21f05ca1b99a3ee7f1afc6591cb2ff032e241057d8accbd736775a4627ab38ca470e5003ee23b1d8ec15b4f04c7804635823fbe3f7ab7385ae738ab5c09",
+        "id_hex": "711b1bf3f4f07a7cc9f37b5f1a5fb6ee861af6c56b7cdb0348dc3d7f1727e94d",
+        "seq": 1,
+        "slot": 10
+      },
+      {
+        "borsh_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b02000000711b1bf3f4f07a7cc9f37b5f1a5fb6ee861af6c56b7cdb0348dc3d7f1727e94d14000000000000000001ad50fd519722e78aad3e0487f977206ba50f5b3b010000000000000080969800000000001027000000000000070700c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f84060400e02159e9388b7c5155330dd1f2905f98c9435e9f02f73da13305395b321d93ee15456108518a5d986aaf7d34a030a8b50213edede5b7b42a7d8d818c16f8e4654729037e25638c76fbdc210cc794c67890d00e4ed212a497082836702b0638aac1fef4e86f4ae945bb0d71fece181073010be2a65b0af2917d5b4815a98fc90200644de59787e918f91b12886b5bc778dbee3044dc68cadae93a101a51e85d49b3f5f31d4562ca3cbe58d50498166b0db8c1a5efe78358c8f8752b7ee49c40b70a",
+        "id_hex": "99c733b693cfc3e140fe2bb1c13d7fd35dba608468352607b33f6aca52f362c6",
+        "seq": 2,
+        "slot": 20
+      },
+      {
+        "borsh_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b0300000099c733b693cfc3e140fe2bb1c13d7fd35dba608468352607b33f6aca52f362c61e000000000000000001ad50fd519722e78aad3e0487f977206ba50f5b3b02000000000000008096980000000000102700000000000000777777777777777777777777777777777777777700e8030000000000000003006f60bf326eba6ab7b471b9697bc2c149a060a1bbb7cfb961ed4b22c7128d7987e2001db3ac0c3791e58877b8287bb1f0c63640abb30a9af96dd2ebfd9bd6e132377cd43728a2289a923a9fd90c0baef0db31035bba6fb3a39130b74c5818e1dd410701d1e1b8c9d4721d4cfb7dad900c5eb35e891c0ad33aea04b6d54337b00b",
+        "id_hex": "906e67ba30dcf8d06155f79c0d5d3349c7780a3d9f196b71b35a982f7b89d3fc",
+        "seq": 3,
+        "slot": 30
+      }
+    ],
+    "phrase_roots_hex": [
+      "9a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a4",
+      "09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e",
+      "e2001db3ac0c3791e58877b8287bb1f0c63640abb30a9af96dd2ebfd9bd6e132"
+    ],
+    "proves_new_phrase": true,
+    "proves_own_phrase": false,
+    "root_digest_hex": "e2001db3ac0c3791e58877b8287bb1f0c63640abb30a9af96dd2ebfd9bd6e132",
+    "root_index": 2
+  },
+  "new_phrase": {
+    "address": "dsalt1qwelsqe8pkug6f3j4mj0tejunht7chkgmf4ehaf",
+    "id_hex": "767f0064e1b711a4c655dc9ebccb93bafd8bd91b",
+    "roots": [
+      {
+        "digest_hex": "9a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a4",
+        "index": 0,
+        "public_key_hex": "c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c"
+      },
+      {
+        "digest_hex": "09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e",
+        "index": 1,
+        "public_key_hex": "6f60bf326eba6ab7b471b9697bc2c149a060a1bbb7cfb961ed4b22c7128d7987"
+      },
+      {
+        "digest_hex": "e2001db3ac0c3791e58877b8287bb1f0c63640abb30a9af96dd2ebfd9bd6e132",
+        "index": 2,
+        "public_key_hex": "e854d962bc46d2e0ebc21c098f0fc680014eab3cbd6f333546a4a38e4bc3e42a"
+      }
+    ],
+    "seed_hex": "32323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232"
+  },
+  "proof": {
+    "action_borsh_hex": "0700c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+    "alias_hex": "767f0064e1b711a4c655dc9ebccb93bafd8bd91b",
+    "message_hex": "86584eca577894b27c36b1541ba7b8adcb98e430950a33097e935681fbda2764",
+    "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+    "root_after_hex": "09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e",
+    "root_index_after": 1,
+    "signature_hex": "1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406"
+  },
+  "reclaim": {
+    "required_fee": "0",
+    "transaction": {
+      "borsh_hex": "01767f0064e1b711a4c655dc9ebccb93bafd8bd91b00000000000000000000000000000000102700000000000007000017cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce02000000000000000000000000000000000300c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5ecbcb2dee3362301efbfe326adc80b9416cd14d794749e226389814ea2eea823a6c17a380b5ff6f4d226580dbd1b9ce10b006fa97b05096bf966873f9a6565f0e",
+      "fee": "0",
+      "id_hex": "81c0d7413e2c61d8106fee29525aa81895bed04f7c928b9b2c5a58b456ebd664",
+      "proof": "root"
+    },
+    "what": "the first transaction of an address that holds an alias, by the root its address commits to, with an account action: from version 10 it pays no fee and clears the alias"
+  },
+  "refused": [
+    {
+      "account_hex": "7777777777777777777777777777777777777777",
+      "case": "another_account",
+      "error": "new_root_signature",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+      "what": "a proof made for another account"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "another_network",
+      "error": "new_root_signature",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5ebb471d5469a67794ba19f47e5402e6f34dd0ae14c2ae233bb821d1509f576aad4391e6ae47a83c47e71955bae5919df212936a04e9b35753684430b52050e203",
+      "what": "a proof made on another network"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "forged_signature",
+      "error": "new_root_signature",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1f4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+      "what": "a signature with one bit flipped"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "another_next_root",
+      "error": "new_root_signature",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239ce2001db3ac0c3791e58877b8287bb1f0c63640abb30a9af96dd2ebfd9bd6e1321e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+      "what": "the next root's digest changed after signing"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "a_strangers_signature",
+      "error": "new_root_signature",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e94cbd2b7358da7c9d23b0f135318498527196a3a2bd266eb4c6e67fc7a03cb2829d59be6ece314ea18ef32d7ecad8f97a60210bdf24f34d3e17223b404516d0a",
+      "what": "the first root's key with a stranger's signature over the right message"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "next_is_first",
+      "error": "new_root_next",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c9a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a404082807021edd3615fb0b8db95ce021f2d587adcbcb24c8b088587131924b136ebb7e78e8c8124a6a6f2530ccb1118d0a32d784f83ffb24a667b4057ebbfc07",
+      "what": "the first root names itself as the next"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "another_scheme",
+      "error": "new_root_scheme",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "01c54d249370a2ff52801c0fb80c88ec7fc6bff74ffadd1efcfa6cb5f72512239c09da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+      "what": "a root scheme other than 0, Ed25519"
+    },
+    {
+      "account_hex": "ad50fd519722e78aad3e0487f977206ba50f5b3b",
+      "case": "not_a_key",
+      "error": "new_root_key",
+      "genesis_hash_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "new_root_borsh_hex": "00000000000000000000000000000000000000000000000000000000000000000009da5886d8c2f45690c9a3032fe1a6c714c63423d9146b6145b8047b0772cf5e1e4d098769e9065ff5470007eba2e56671c632f287e233ca6d4437a0ff51b48da700bf7cc0d4ce48adc5e9237ec969da633324d4a07e7a11a34cbb8baf2f8406",
+      "what": "32 zero bytes, a point of small order"
+    }
+  ],
+  "version": 10,
+  "versions": [
+    {
+      "action": "replace_root_v1",
+      "bare_borsh_hex": "01ad50fd519722e78aad3e0487f977206ba50f5b3b01000000000000008096980000000000102700000000000007039a9d0185ca64c1e39f6800581908823cb81a9b6e98033209834f64d127ba41a40400e02159e9388b7c5155330dd1f2905f98c9435e9f02f73da13305395b321d93ee15456108518a5d986aaf7d34a030a8b50213edede5b7b42a7d8d818c16f8e465271df35a3abe1f995f3a2f45c22dfb7e09078047cb4fab36ba2c116573b3ead3422d7772873ab9a0f3b9752baf7991552c4c6d29459baee0317afe6ab51ad90f008b15e373e4a235b23bbc9ba2f8943030b518002a5e3a3feb9180268ab210c03159e8454d4759cc82ec415eb3b40c393f85c56dfd2422e2c9431cd497e6678a01",
+      "refused_from": 10,
+      "tag": 3,
+      "taken_through": 9
+    },
+    {
+      "action": "replace_root",
+      "newest_scheduled": 10,
+      "tag": 7,
+      "taken_from": 10
+    }
+  ]
+}

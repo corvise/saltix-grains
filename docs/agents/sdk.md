@@ -382,9 +382,14 @@ What the SDK decided, and why, where a choice was made; the newest first. A chan
     size in the dark theme) by the DevTools protocol's pointer events, so the page's bridge carries a user's tap; then
     the page's exceptions and the requests Saltix refused are errors (a user's 4001 never), no change on the page and no
     request a warning, and so are a covered button and a document from another origin. The page's frame is compared
-    pixel by pixel (two PNG encodings of the same pixels differ, and the status bar's clock moves), each look taken at
+    by its pixels (two PNG encodings of the same pixels differ, and the status bar's clock moves), each look taken at
     rest, until two agree (a hover's look is drawn a frame or two later; a page that never rests, an animation, is never
-    called unchanged). Bounded and safe:
+    called unchanged). Two looks are one as a person sees them (`sameLook`): no pixel differs by more than 16 of 255
+    in a channel, and at most one pixel in a thousand differs at all. An exact comparison failed on a busy machine
+    (2026-11-11): a browser draws a resting page's rounded corners a few levels apart from frame to frame (57 pixels
+    of 280 800, by at most 5), and a tap that did nothing was taken for one that worked. The limit: a page of wide
+    gradients may be drawn apart over thousands of pixels, and there a button that does nothing gets no warning, as
+    before. Bounded and safe:
     40 s for all taps; documents from elsewhere stopped before they load (`Fetch`, documents only); no window
     (`--block-new-web-contents`); the simulator, driven by a tool, declines payments (4001) and opens no link. Opt-in:
     a page's buttons may reach its server, and `--check` keeps its meaning. Rejected: `el.click()` (no user activation:

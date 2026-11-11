@@ -105,9 +105,9 @@ function fakeConnect(offer) {
 
 const NOW = 1_800_000_000_000;
 const OFFER = {
-  text: "saltix-connect:1:x",
-  link: "https://saltix.io/connect#saltix-connect:1:x",
-  app: "intent:1:x#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=https%3A%2F%2Fsaltix.io%2Fconnect%23saltix-connect%3A1%3Ax;end",
+  text: "salarium-connect:1:x",
+  link: "https://salarium.io/connect#salarium-connect:1:x",
+  app: "intent:1:x#Intent;scheme=salarium-connect;package=io.saltix.app;S.browser_fallback_url=https%3A%2F%2Fsalarium.io%2Fconnect%23salarium-connect%3A1%3Ax;end",
   qr: { size: 33, path: "M4 4h7v1h-7z", svg: "" },
   expiresAt: NOW + 108_000,
 };
@@ -173,7 +173,7 @@ test("the dialog: Saltix Connect, the QR code, its words; on a phone Open Saltix
   assert.equal(dialog.find(DIALOG_CLASSES.actions).hidden, true, "nothing to press while a code is shown");
   for (const el of dialog.all()) assert.doesNotMatch(el.textValue, /New code|Новый код/);
   // The session's next code (its own, at the old one's time) is drawn, and counted down afresh.
-  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:y", qr: { ...OFFER.qr, path: "M5 5h7v1h-7z" }, expiresAt: NOW + 1_000 + 120_000 });
+  connect.fire("offer", { ...OFFER, text: "salarium-connect:1:y", qr: { ...OFFER.qr, path: "M5 5h7v1h-7z" }, expiresAt: NOW + 1_000 + 120_000 });
   assert.equal(dialog.find(DIALOG_CLASSES.qrDark).getAttribute("d"), "M5 5h7v1h-7z");
   assert.equal(countdown.textContent, "The code changes in 2:00");
   assert.equal(clock.running, 1, "one ticker, however many codes");
@@ -207,11 +207,11 @@ test("a refusal stays under the fresh code that follows it, and every code after
   assert.equal(status.textContent, WORDS.en.checking);
   // A refusal ends its code: the session shows a fresh one at once, the reason under it, its countdown running.
   connect.fire("refused", { reason: "time" });
-  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:y" });
+  connect.fire("offer", { ...OFFER, text: "salarium-connect:1:y" });
   assert.match(status.textContent, /\(time\)/, "the reason stays under the fresh code");
   assert.equal(dialog.find(DIALOG_CLASSES.countdown).hidden, false, "and its countdown goes on");
   // That code changes by itself: the reason is still the last attempt's.
-  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:x" });
+  connect.fire("offer", { ...OFFER, text: "salarium-connect:1:x" });
   assert.match(status.textContent, /\(time\)/);
   // A wallet reads the code: a new attempt, whatever the last one's reason was.
   connect.fire("seen", OFFER);
@@ -219,7 +219,7 @@ test("a refusal stays under the fresh code that follows it, and every code after
   connect.fire("checking", {});
   assert.equal(status.textContent, WORDS.en.checking);
   connect.fire("refused", { reason: "unchecked" });
-  connect.fire("offer", { ...OFFER, text: "saltix-connect:1:z" });
+  connect.fire("offer", { ...OFFER, text: "salarium-connect:1:z" });
   assert.equal(status.textContent, WORDS.en.unchecked, "a check that could not be made says so under the fresh code");
   dialog.find(DIALOG_CLASSES.close).click();
   assert.equal(clock.running, 0);

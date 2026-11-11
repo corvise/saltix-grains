@@ -35,7 +35,7 @@ runs for months.
 version 1 (every network today):  ConfigureGrain { slug: String, servers: Vec<[u8; 32]>, category: u8 }       tag 34
 from protocol version 2:          ConfigureGrain { slug: String, servers: Vec<ServerKeyProof>, category: u8 }  tag 39
 ServerKeyProof { key: [u8; 32], proof: [u8; 64] }
-  proof = Ed25519 by `key` over derive("Saltix grain server v1", Borsh((genesis_hash, slug, owner: [u8; 32])))
+  proof = Ed25519 by `key` over derive("Salarium grain server v1", Borsh((genesis_hash, slug, owner: [u8; 32])))
 ```
 
 - `servers` holds 0–4 distinct, valid Ed25519 keys; `category` is 0–9 (§6). An empty list removes every server key at
@@ -119,7 +119,7 @@ the person opens to join. The two wallets do the rest; the app's server takes no
 AppInvite   { slug: String, owner: [u8; 32], roles: u8 (not 0), id: [u8; 16], secret: [u8; 16], expires_at: u64 (Unix ms) }
 JoinRequest { slug: String, invite_id: [u8; 16], account: [u8; 32], mac: [u8; 32] }
 JoinAnswer  { slug: String, invite_id: [u8; 16], result: u8 }     0 added, 1 used, 2 expired, 3 unknown, 4 refused
-key  = derive("Saltix app invite v1", genesis_hash ‖ secret)
+key  = derive("Salarium app invite v1", genesis_hash ‖ secret)
 mac  = BLAKE3-keyed(key, Borsh((slug, invite_id, account)))
 link = "salt:grain/" slug "?invite=" base64url-without-padding(Borsh(AppInvite))
 1:1 message plaintext: {"cmd":"app_join","request":"<base64url of Borsh(JoinRequest)>"}
@@ -168,7 +168,7 @@ as any terminal does). So:
 The form, for the readers of a key still in use:
 
 ```text
-saltix-app:1:<hrp>:<genesis>:<slug>:<secret>
+salarium-app:1:<hrp>:<genesis>:<slug>:<secret>
 ```
 
 - `hrp` is the network's address prefix (`dsalt` on the test network) and `genesis` the first 8 bytes of its genesis
@@ -239,13 +239,13 @@ PairingOffer {                    Borsh; in a QR code and a link, never secret; 
   slug:       String              the app
   owner:      [u8; 32]            the owner's account (AccountId)
   proof:      [u8; 64]            ServerKeyProof.proof (§2): Ed25519 by key over
-                                  BLAKE3-derive_key("Saltix grain server v1", Borsh((genesis_hash, slug, owner)))
+                                  BLAKE3-derive_key("Salarium grain server v1", Borsh((genesis_hash, slug, owner)))
   name:       String              what to call this server: at most 32 characters, or ""
   created_at: u64                 Unix ms
   expires_at: u64                 Unix ms, after created_at and at most PAIR_OFFER_LIFE (30 minutes) after it
 }
 link = "salt:grain-pair?o=" base64url-without-padding(Borsh(PairingOffer))
-code = the first 4 bytes of BLAKE3-derive_key("Saltix grain pairing code v1", Borsh(PairingOffer)),
+code = the first 4 bytes of BLAKE3-derive_key("Salarium grain pairing code v1", Borsh(PairingOffer)),
        read as a big-endian u32, modulo 1 000 000: six digits with leading zeros, shown "482 913"
 ```
 
@@ -454,7 +454,7 @@ the number of versions, the owner (with a username if bound), the owner's other 
 ```text
 GrainStats       { slug: String, at: u64 (Unix ms), users_1d: u32, users_30d: u32, requests_30d: u64 }
 SignedGrainStats { stats, key: [u8; 32], signature: [u8; 64] }
-  by a registered server key over derive("Saltix grain stats v1", genesis_hash ‖ Borsh(stats))
+  by a registered server key over derive("Salarium grain stats v1", genesis_hash ‖ Borsh(stats))
 ```
 
 The SDKs count distinct grain keys that sent a request in the last day and the last 30 days, publish at most once an
@@ -480,7 +480,7 @@ The wallet interface: `grain_get` and `grain_list` show `ratings {count, sum, mi
 | `APP_SILENT` | 2 days |
 | Deposit | 100 / 30 / 10 SALT for slugs of 3–5 / 6–7 / 8+ characters |
 | Categories | 0–9 |
-| Developer key (retired) | `saltix-app:1:<hrp>:<16 hex>:<slug>:<64 hex>`, the form `app.key` keeps |
+| Developer key (retired) | `salarium-app:1:<hrp>:<16 hex>:<slug>:<64 hex>`, the form `app.key` keeps |
 | The pairing command | `grain pair --app <slug> --owner <address> --genesis <16 hex>` |
 | `PAIR_OFFER_LIFE` | 30 minutes; a wallet takes an offer made at most 5 minutes ahead of its clock (`PAIR_SKEW`) |
 | A pairing offer | version 2: `salt:grain-pair?o=<base64url of Borsh(PairingOffer)>`, with the key's proof for the app and its owner; a 6-digit code; the server's name at most 32 characters |

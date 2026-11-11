@@ -17,7 +17,7 @@ const ORIGIN = "https://dex.example";
 const ACCOUNT_SECRET = new Uint8Array(32).fill(0x44);
 
 function grantFor(offer, at) {
-  const login = { network: GENESIS, account: new Uint8Array(32), origin: offer.origin, sid: offer.sid, page: offer.page, at: BigInt(at) };
+  const login = { network: GENESIS, account: new Uint8Array(20), origin: offer.origin, sid: offer.sid, page: offer.page, at: BigInt(at) };
   const signer = { ed25519: toHex(ed25519.getPublicKey(ACCOUNT_SECRET)) };
   return { version: 1, login, signer, signature: ed25519.sign(loginMessage(login), ACCOUNT_SECRET) };
 }
@@ -94,7 +94,7 @@ test("a slot is opened and offered with the relay's key, the page's origin and n
   assert.deepEqual(offer.relay, RELAY_KEY);
   assert.equal(offer.origin, ORIGIN);
   assert.equal(offer.name, "Example DEX");
-  assert.ok(last(h).link.startsWith("https://saltix.io/connect#saltix-connect:1:"));
+  assert.ok(last(h).link.startsWith("https://salarium.io/connect#salarium-connect:1:"));
   assert.ok(named(h, "connect_open"));
   // Telemetry names no key, slot or account.
   for (const { meta } of h.events) for (const value of Object.values(meta ?? {})) assert.ok(String(value).length < 20);
@@ -678,7 +678,7 @@ test("the offer carries the link that opens Saltix without unloading the page: a
   await started(h);
   const p = last(h);
   assert.equal(p.kind, "offer");
-  assert.ok(p.app.startsWith("intent:1:") && p.app.includes("#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url="));
+  assert.ok(p.app.startsWith("intent:1:") && p.app.includes("#Intent;scheme=salarium-connect;package=io.saltix.app;S.browser_fallback_url="));
   assert.equal(decodeURIComponent(p.app.split("S.browser_fallback_url=")[1].split(";end")[0]), p.link);
   const mac = harness();
   await started(mac);

@@ -11,8 +11,8 @@ import {
   issueSponsorCert, recordProblem, signAddressRecord, signKeyBinding, sponsorCertProblem, toHex, verifyByDeviceKey, verifyEd25519,
   verifyLogin, verifyManifest,
 } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const vectors = (name) => JSON.parse(readFileSync(new URL(`../../../vectors/${name}`, import.meta.url), "utf8"));
 
 /**
  * Cases built to tell the checks apart, with ed25519-dalek 2.2.0's verdicts (`verify_strict`, and
@@ -112,7 +112,7 @@ test("a key of small order signs nothing in, wherever the SDK checks a signature
     { ok: false, reason: "login" });
 
   // A chat's request and a team member's hello, from the small-order key's own address.
-  const chats = vectors("grain-chats-v1.json");
+  const chats = goldenVectors("grain-chats-v1.json");
   const chain = { genesis: chats.chain.genesis_hash_hex, network: chats.chain.network };
   const now = Number(chats.now_ms);
   const from = encodeAddress("devnet", accountId(fromHex(IDENTITY, 32)));
@@ -143,7 +143,7 @@ test("a key of small order signs nothing in, wherever the SDK checks a signature
 });
 
 test("the golden vectors' signatures verify strictly, and a changed byte verifies nothing", () => {
-  const grains = vectors("grains-v1.json");
+  const grains = goldenVectors("grains-v1.json");
   const l = grains.login;
   assert.equal(verifyEd25519(fromHex(l.key, 32), fromHex(l.message, 32), fromHex(l.signature, 64)), true);
   assert.equal(verifyLogin({ key: l.key, signature: l.signature, at: l.at, origin: l.origin },
@@ -155,7 +155,7 @@ test("the golden vectors' signatures verify strictly, and a changed byte verifie
     assert.equal(verifyByDeviceKey(m.json.manifest.owner_key, fromHex(m.message, 32), m.signature), true, m.name);
     assert.ok(verifyManifest(m.json), m.name);
   }
-  const connect = vectors("connect-v1.json");
+  const connect = goldenVectors("connect-v1.json");
   for (const g of connect.grants) {
     assert.equal(verifyByDeviceKey(g.signer, fromHex(g.message_hex, 32), g.signature_hex), true, g.name);
     const flipped = fromHex(g.signature_hex, 64);

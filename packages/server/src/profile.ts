@@ -2,7 +2,7 @@
 // words, signed by a key that speaks for its owner's account. One format for mini-apps and websites:
 // - a mini-app's (subject `grain`) lives in the registry beside its manifest: its owner sets it with `SetGrainProfile`
 //   (12-grains §3, `GrainCall` `profile`), `grain_get` serves it, and a wallet checks it with `checkGrainProfile`;
-// - a website's (subject `site`) is served by the site at `/.well-known/saltix-connect` in its JSON form, and a wallet
+// - a website's (subject `site`) is served by the site at `/.well-known/salarium-connect` in its JSON form, and a wallet
 //   checks it with `checkSiteProfile` and, by the owner's key event log, `checkProfileOwner`.
 //
 // Format 2 (protocol version 9) lets the support contact be a Saltix address too: the owner's own, or one whose holder
@@ -12,7 +12,7 @@
 // byte `saltix-types` `connect::profile`, refusals and their reasons included (vectors/connect-profiles-v1.json). Plain
 // TypeScript for any runtime (a page, the simulator); the profile link's writer needs Node's zlib (`profile-link.ts`).
 import { ed25519 } from "@noble/curves/ed25519";
-import { type NetworkName, accountId, decodeAddress, encodeAddress } from "./address.js";
+import { ID_BYTES, type NetworkName, accountId, decodeAddress, encodeAddress } from "./address.js";
 import { Reader, Writer, compareUtf8, derive, fromBase64, fromHex, toHex } from "./bytes.js";
 import { handleProblem } from "./handle.js";
 import { inflateRaw } from "./inflate.js";
@@ -20,7 +20,7 @@ import { type DeviceKey, deviceKeyOf, readDeviceKey, verifyByDeviceKey, verifyEd
 import { type AccountPolicy, keySpeaksFor, rootDigest } from "./keylog.js";
 
 /** The domain of the message a profile's key signs. */
-export const PROFILE_DOMAIN = "Saltix connect profile v1";
+export const PROFILE_DOMAIN = "Salarium connect profile v1";
 /** The format's version, the profile's first byte: format 1, which every reader takes, its support contact a link, a
  *  `mailto:` or a username. */
 export const PROFILE_VERSION = 1;
@@ -31,11 +31,11 @@ export const PROFILE_VERSION_2 = 2;
  *  (`version`), as every node built before it does. */
 export const SUPPORT_ADDRESS_VERSION = 9;
 /** The domain a support address's holder signs its consent in. */
-export const SUPPORT_CONSENT_DOMAIN = "Saltix support consent v1";
+export const SUPPORT_CONSENT_DOMAIN = "Salarium support consent v1";
 /** A profile's Borsh form, at most. */
 export const MAX_PROFILE_BYTES = 8192;
 /** Where a site serves its signed profile, at its origin (19-connect §11.3). */
-export const CONNECT_PROFILE_PATH = "/.well-known/saltix-connect";
+export const CONNECT_PROFILE_PATH = "/.well-known/salarium-connect";
 
 /** The bounds of 19-connect §11.1: characters (Unicode scalar values) unless they say bytes. */
 export const PROFILE_LIMITS = {
@@ -290,25 +290,24 @@ export function supportOk(support: unknown): boolean {
   return httpsLinkOk(support) || mailtoOk(support);
 }
 
-/** A support contact that is a Saltix address: its network, its kind (0 personal, 5 managed) and its account (hex). */
+/** A support contact that is a Salarium address: its network and its account (hex). */
 export interface SupportAddress {
   network: NetworkName;
-  kind: 0 | 5;
   account: string;
 }
 
 /**
- * A support contact that is a Saltix address (19-connect §11.1, format 2): its canonical text, lowercase Bech32m as an
- * address is written (an uppercase spelling, a broken checksum or another text of it refused), of a kind an account
- * messages from (0 personal, 5 managed: an AI agent's address is a personal one of its own; a contract's or a system
- * module's refused), on any network: whether the network is the reader's is `ProfileReading`'s. Null otherwise.
+ * A support contact that is a Salarium address (19-connect §11.1, format 2): its canonical text, lowercase Bech32m as an
+ * address is written (an uppercase spelling, a broken checksum or another text of it refused), on any network: whether
+ * the network is the reader's is `ProfileReading`'s. The text says nothing of the account's kind: an address other than
+ * the owner's counts only with the consent of the key that makes it, personal or managed (an AI agent's address is a
+ * personal one of its own), which no contract has. Null otherwise.
  */
 export function supportAddress(support: unknown): SupportAddress | null {
   if (typeof support !== "string") return null;
   const address = decodeAddress(support);
-  if (address === null || (address.kind !== 0 && address.kind !== 5)) return null;
-  if (encodeAddress(address.network, address.id, address.kind) !== support) return null;
-  return { network: address.network, kind: address.kind, account: toHex(address.id) };
+  if (address === null || encodeAddress(address.network, address.id) !== support) return null;
+  return { network: address.network, account: toHex(address.id) };
 }
 
 /** What a support contact is, for a reader that shows it: an `https://` link and an e-mail address open outside the
@@ -336,16 +335,16 @@ export function offlineOwner(value: unknown, manifestOwner: string): string {
   if (address === null) return manifestOwner;
   const consent = value.support_consent;
   if (consent === undefined || consent === null) return address.account;
-  return isObject(consent) && byteKey(consent.owner, 32) ? consent.owner : manifestOwner;
+  return isObject(consent) && byteKey(consent.owner, ID_BYTES) ? consent.owner : manifestOwner;
 }
 
 /** What a key signs to stand for `owner`'s (hex account) app `slug` on the chain of `genesis` (hash, hex):
  *  `Borsh((genesis_hash, slug, owner))`. A server key's proof (24-app-studio §2) and a support address's consent
  *  (19-connect §11.1) sign it, each in a domain of its own. */
 export const grainOwnerPayload = (genesis: string, slug: string, owner: string): Uint8Array =>
-  new Writer().fixed(fromHex(genesis, 32), 32).string(slug).fixed(fromHex(owner, 32), 32).done();
+  new Writer().fixed(fromHex(genesis, 32), 32).string(slug).fixed(fromHex(owner, ID_BYTES), ID_BYTES).done();
 
-/** What a support address's key signs: `derive("Saltix support consent v1", Borsh((genesis_hash, slug, owner)))`. */
+/** What a support address's key signs: `derive("Salarium support consent v1", Borsh((genesis_hash, slug, owner)))`. */
 export const supportConsentMessage = (genesis: string, slug: string, owner: string): Uint8Array =>
   derive(SUPPORT_CONSENT_DOMAIN, grainOwnerPayload(genesis, slug, owner));
 
@@ -359,7 +358,7 @@ export function signSupportConsent(secret: Uint8Array, genesis: string, slug: st
 /** Whether the consent's signature holds over its own slug and owner on the network of `genesis` (hex): strict
  *  Ed25519, the node's. */
 export function verifySupportConsent(consent: SupportConsent, genesis: string): boolean {
-  if (!isObject(consent) || typeof consent.slug !== "string" || !byteKey(consent.owner, 32) || !byteKey(consent.key, 32) ||
+  if (!isObject(consent) || typeof consent.slug !== "string" || !byteKey(consent.owner, ID_BYTES) || !byteKey(consent.key, 32) ||
     !byteKey(consent.signature, 64) || !byteKey(genesis, 32)) {
     return false;
   }
@@ -415,7 +414,7 @@ function writeProfile(w: Writer, p: ConnectProfile): Writer {
   } else {
     throw new TypeError("a profile's subject: grain or site");
   }
-  w.fixed(fromHex(p.owner, 32), 32).u32(p.revision);
+  w.fixed(fromHex(p.owner, ID_BYTES), ID_BYTES).u32(p.revision);
   const langs = languagesOf(p.texts);
   w.u32(langs.length);
   for (const lang of langs) writeText(w.string(lang), p.texts[lang]!);
@@ -427,7 +426,7 @@ function writeProfile(w: Writer, p: ConnectProfile): Writer {
 
 /** A consent's Borsh form: `slug` (a `u32` length and UTF-8), `owner` [32], `key` [32], `signature` [64]. */
 function writeConsent(w: Writer, c: SupportConsent): Writer {
-  return w.string(c.slug).fixed(fromHex(c.owner, 32), 32).fixed(fromHex(c.key, 32), 32).fixed(fromHex(c.signature, 64), 64);
+  return w.string(c.slug).fixed(fromHex(c.owner, ID_BYTES), ID_BYTES).fixed(fromHex(c.key, 32), 32).fixed(fromHex(c.signature, 64), 64);
 }
 
 /** A consent's Borsh form (19-connect §11.1). Throws on a value Borsh cannot hold. */
@@ -454,7 +453,7 @@ function readProfile(r: Reader): ConnectProfile {
   if (tag === 0) subject = { grain: { slug: r.string() } };
   else if (tag === 1) subject = { site: { origin: r.string(), name: r.string(), category: r.u8() } };
   else throw new TypeError(`borsh: a subject's tag ${tag}`);
-  const owner = toHex(r.fixed(32));
+  const owner = toHex(r.fixed(ID_BYTES));
   const revision = r.u32();
   // Entries by `fromEntries`: a key such as `__proto__` is an entry like any other, never the object's prototype.
   const texts = Object.fromEntries(r.vec((r): [string, ProfileText] => [r.string(), readText(r)]));
@@ -464,7 +463,7 @@ function readProfile(r: Reader): ConnectProfile {
   const profile: ConnectProfile = { version, subject, owner, revision, texts, website, support, terms };
   // Format 2 (and any later, which the checks refuse) carries the consent after `terms`.
   if (version >= PROFILE_VERSION_2) {
-    profile.support_consent = r.option((r) => ({ slug: r.string(), owner: toHex(r.fixed(32)), key: toHex(r.fixed(32)), signature: toHex(r.fixed(64)) }));
+    profile.support_consent = r.option((r) => ({ slug: r.string(), owner: toHex(r.fixed(ID_BYTES)), key: toHex(r.fixed(32)), signature: toHex(r.fixed(64)) }));
   }
   return profile;
 }
@@ -501,7 +500,7 @@ export function decodeProfile(bytes: Uint8Array): ConnectProfile {
   }
 }
 
-/** What the key signs: `derive("Saltix connect profile v1", Borsh(profile))`. */
+/** What the key signs: `derive("Salarium connect profile v1", Borsh(profile))`. */
 export const profileMessage = (p: ConnectProfile): Uint8Array => derive(PROFILE_DOMAIN, encodeProfile(p));
 
 // ── The checks ───────────────────────────────────────────────────────────────
@@ -544,7 +543,7 @@ export function profileProblem(p: ConnectProfile, reading: ProfileReading = {}):
   if (!known || (p.version === PROFILE_VERSION && (p.support_consent ?? null) !== null)) return "version";
   if (!subjectOk(p.subject)) return "subject";
   if (!integerIn(p.revision, 1, 0xffff_ffff)) return "revision";
-  if (!byteKey(p.owner, 32)) return "owner";
+  if (!byteKey(p.owner, ID_BYTES)) return "owner";
   const texts = p.texts as unknown;
   if (!isObject(texts)) return "languages";
   const langs = languagesOf(texts as Record<string, ProfileText>);
@@ -603,7 +602,8 @@ function consentProblem(p: SupportFields, address: SupportAddress | null, consen
   const other = address !== null && address.account !== p.owner ? address : null;
   if (other === null) return consent === null ? null : "consent_unneeded";
   if (consent === null) return "consent_missing";
-  if (!isObject(consent) || supportConsentAccount(other.kind, consent.key) !== other.account) return "consent_key";
+  // The address names no kind: the key must make it as a personal or a managed account.
+  if (!isObject(consent) || ![0, 5].some((kind) => supportConsentAccount(kind, consent.key) === other.account)) return "consent_key";
   // A consent binds an app: a site's profile names its owner's own address alone.
   const slug = isObject(p.subject) && "grain" in p.subject && isObject(p.subject.grain) ? p.subject.grain.slug : null;
   if (typeof consent.slug !== "string" || consent.slug !== slug) return "consent_slug";
@@ -647,7 +647,7 @@ export function checkSiteProfile(s: SignedConnectProfile, origin: string, readin
  */
 export function checkProfileOwner(s: SignedConnectProfile, events: Uint8Array[], genesis: Uint8Array, policy: AccountPolicy): "key" | null {
   try {
-    return keySpeaksFor(s.key, fromHex(s.profile.owner, 32), events, genesis, policy).problem === null ? null : "key";
+    return keySpeaksFor(s.key, fromHex(s.profile.owner, ID_BYTES), events, genesis, policy).problem === null ? null : "key";
   } catch {
     return "key";
   }
@@ -670,7 +670,7 @@ export const plainOwnerOf = (secret: Uint8Array): string => toHex(accountId(ed25
 // ── The JSON form ────────────────────────────────────────────────────────────
 
 /**
- * The JSON form of `s` as a site serves it at `/.well-known/saltix-connect` and the wallet interface shows it: the fields
+ * The JSON form of `s` as a site serves it at `/.well-known/salarium-connect` and the wallet interface shows it: the fields
  * by name, bytes in lowercase hex, absent links null. The signature covers the Borsh form, so the order of keys does not
  * matter to a reader; this one writes them in the format's order.
  */
@@ -736,7 +736,7 @@ export function profileFromJson(value: unknown): ConnectProfile {
     });
   }
   const owner = jsonText(value, "owner");
-  if (!byteKey(owner, 32)) throw new ProfileError("json", "owner");
+  if (!byteKey(owner, ID_BYTES)) throw new ProfileError("json", "owner");
   const optional = (key: string): string | null => {
     const v = value[key];
     if (v === undefined || v === null) return null;
@@ -765,7 +765,7 @@ export function supportConsentFromJson(value: unknown): SupportConsent | null {
   if (value === null) return null;
   if (!isObject(value)) throw new ProfileError("json", "support_consent");
   const { slug, owner, key, signature } = value;
-  if (typeof slug !== "string" || /\p{Cs}/u.test(slug) || !byteKey(owner, 32) || !byteKey(key, 32) || !byteKey(signature, 64)) {
+  if (typeof slug !== "string" || /\p{Cs}/u.test(slug) || !byteKey(owner, ID_BYTES) || !byteKey(key, 32) || !byteKey(signature, 64)) {
     throw new ProfileError("json", "support_consent");
   }
   return { slug, owner, key, signature };
@@ -790,7 +790,7 @@ export const PROFILE_LINK_PREFIX = "salt:grain-profile?p=";
 export const MAX_PROFILE_LINK = 2048;
 
 /** The owner a profile link leaves for the wallet to fill in: 32 zero bytes, and revision 0. */
-export const UNOWNED_PROFILE = { owner: "00".repeat(32), revision: 0 } as const;
+export const UNOWNED_PROFILE = { owner: "00".repeat(ID_BYTES), revision: 0 } as const;
 
 /** `p` as a link carries it: its owner and revision left for the wallet. */
 export const unownedProfile = (p: ConnectProfile): ConnectProfile => ({ ...p, ...UNOWNED_PROFILE });

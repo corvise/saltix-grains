@@ -2,6 +2,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, deviceKeyOf, readDeviceKey, verifyByDeviceKey, writeDeviceKey } from "./keys.js";
 import { MAX_NETWORK_BUNDLE_BYTES } from "./named.js";
+import { ID_BYTES } from "./address.js";
 
 export const PERMISSIONS = {
   storage: 1,
@@ -38,7 +39,7 @@ export interface Manifest {
   min_host: number;
 }
 
-/** The JSON form a hosted grain serves at `/.well-known/saltix-grain`. */
+/** The JSON form a hosted grain serves at `/.well-known/salarium-grain`. */
 export interface SignedManifest {
   manifest: Manifest;
   signature: string;
@@ -78,7 +79,7 @@ function texts(w: Writer, map: Record<string, string>): void {
 
 /** The manifest's Borsh form: what is hashed and signed. */
 export function encodeManifest(m: Manifest): Uint8Array {
-  const w = writeDeviceKey(new Writer().string(m.slug).u32(m.version).fixed(fromHex(m.owner, 32), 32), m.owner_key);
+  const w = writeDeviceKey(new Writer().string(m.slug).u32(m.version).fixed(fromHex(m.owner, ID_BYTES), ID_BYTES), m.owner_key);
   texts(w, m.name);
   texts(w, m.description);
   w.fixed(fromHex(m.icon, 32), 32);
@@ -99,7 +100,7 @@ export function encodeManifest(m: Manifest): Uint8Array {
   }
   w.u32(m.permissions);
   if (m.sponsor === null) w.u8(0);
-  else w.u8(1).fixed(fromHex(m.sponsor, 32), 32);
+  else w.u8(1).fixed(fromHex(m.sponsor, ID_BYTES), ID_BYTES);
   return w.u16(m.min_host).done();
 }
 
@@ -113,7 +114,7 @@ export function decodeManifest(bytes: Uint8Array): Manifest {
   const r = new Reader(bytes);
   const slug = r.string();
   const version = r.u32();
-  const owner = toHex(r.fixed(32));
+  const owner = toHex(r.fixed(ID_BYTES));
   const owner_key = readDeviceKey(r);
   const name = readTexts(r);
   const description = readTexts(r);
@@ -131,7 +132,7 @@ export function decodeManifest(bytes: Uint8Array): Manifest {
     default: throw new TypeError("borsh: a manifest's entry tag");
   }
   const permissions = r.u32();
-  const sponsor = r.option((r) => toHex(r.fixed(32)));
+  const sponsor = r.option((r) => toHex(r.fixed(ID_BYTES)));
   const min_host = r.u16();
   r.end();
   const m: Manifest = { slug, version, owner, owner_key, name, description, icon, entry, permissions, sponsor, min_host };
@@ -139,11 +140,11 @@ export function decodeManifest(bytes: Uint8Array): Manifest {
   return m;
 }
 
-export const manifestId = (m: Manifest) => toHex(derive("Saltix grain manifest id v1", encodeManifest(m)));
-export const manifestMessage = (m: Manifest) => derive("Saltix grain manifest v1", encodeManifest(m));
+export const manifestId = (m: Manifest) => toHex(derive("Salarium grain manifest id v1", encodeManifest(m)));
+export const manifestMessage = (m: Manifest) => derive("Salarium grain manifest v1", encodeManifest(m));
 /** What a manifest names its icon or a sealed bundle by. */
-export const iconHash = (png: Uint8Array) => toHex(derive("Saltix grain icon v1", png));
-export const bundleHash = (zip: Uint8Array) => toHex(derive("Saltix grain bundle v1", zip));
+export const iconHash = (png: Uint8Array) => toHex(derive("Salarium grain icon v1", png));
+export const bundleHash = (zip: Uint8Array) => toHex(derive("Salarium grain bundle v1", zip));
 
 /** The protocol version from which a sealed manifest may name no source (12-grains §2, 32-images §10): the network keeps
  *  its bundle, of at most 16 MiB. Before it, a sealed manifest names 1–8 sources. */
@@ -157,7 +158,7 @@ export const NETWORK_BUNDLES = 2;
 export function manifestProblem(m: Manifest, dev = false, protocol = NETWORK_BUNDLES): string | null {
   if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(m.slug)) return "slug";
   if (!Number.isInteger(m.version) || m.version < 1 || m.version > 0xffffffff) return "version";
-  if (typeof m.owner !== "string" || !/^[0-9a-f]{64}$/.test(m.owner)) return "owner";
+  if (typeof m.owner !== "string" || !/^[0-9a-f]{40}$/.test(m.owner)) return "owner";
   if (deviceKeyOf(m.owner_key) === null) return "owner_key";
   const textsOk = (map: Record<string, string>, max: number) =>
     Object.keys(map).length <= 16 &&

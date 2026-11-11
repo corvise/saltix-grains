@@ -12,9 +12,10 @@ that the SDK does not have, so that it is built on the protocol, not on a guess.
 
 - Registering an address of its own at the relays, signed by its own key: `RelayClient` with any Ed25519 secret
   (`signKeyBinding`, `signAddressRecord`; 09-relay §1.2), reconnecting by itself.
-- Another plain address's messaging key from a record it checks itself (`get_key`, `messagingKeyOf`), sealed frames both
-  ways (`sealFrame`, `openFrame`: `crypto_box` between messaging keys), a kept frame taken off the mailbox with a
-  signed proof (`signMailboxAck`).
+- Another address's messaging key from a record it checks itself (`get_key`): a plain one's (`messagingKeyOf`), and a
+  managed one's checked against its key event log (`managedMessagingKeyOf`, 09-relay §1.4; `RelayClient` does both),
+  sealed frames both ways (`sealFrame`, `openFrame`: `crypto_box` between messaging keys), a kept frame taken off the
+  mailbox with a signed proof (`signMailboxAck`).
 - The consent: `signSupportConsent`, `supportConsentFromEnvironment` (the key from `SALTIX_SUPPORT_KEY`), and
   `grain support consent` / `grain support <address> --consent F` for the profile.
 
@@ -27,10 +28,9 @@ that the SDK does not have, so that it is built on the protocol, not on a guess.
    sealing, not that envelope, and no golden vector holds it. This repository follows the protocol and defines no
    format of its own, so an agent here would read and write a guess, and misread or drop what a newer Saltix sends.
    **Needed**: the envelope specified in the protocol (09-relay), with vectors this repository syncs.
-2. **Managed users.** `RelayClient` takes another address's messaging key only from a plain record (kind 0). A managed
-   account (kind 5) publishes a managed record checked against its key event log (09-relay §1.4): an agent could
-   neither open a managed user's message nor answer it. **Needed**: managed records in `records.ts`, checked with the
-   offline log check the SDK already has (`keylog.ts`).
+2. **Managed users** — done (2026-11-06): `RelayClient` takes a managed account's messaging key from its managed record
+   checked against its key event log (`managed.ts`, 09-relay §1.4), under the network's rules its `accounts` option
+   gives or its `node` tells, so an agent opens a managed user's message and answers it.
 3. **Key rotation.** A person's key binding has an epoch (09-relay §1.2); a message sealed before a rotation opens only
    with the key of the epoch before. **Needed**: `RelayClient` keeping a correspondent's previous key for a while.
 4. **The agent's own activation.** The support address answers by its own activation (44-messenger-activation §5): its

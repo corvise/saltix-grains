@@ -8,6 +8,7 @@
 import { fromBase64 } from "./bytes.js";
 import { inflateRaw } from "./inflate.js";
 import { type Manifest, decodeManifest } from "./manifest.js";
+import { ID_BYTES } from "./address.js";
 
 /** What a publishing link starts with. */
 export const PUBLISH_LINK_PREFIX = "salt:grain-publish?m=";
@@ -19,7 +20,7 @@ export const MAX_PUBLISH_TEXT = MAX_PUBLISH_LINK - PUBLISH_LINK_PREFIX.length;
 export const MAX_PUBLISH_MANIFEST = 16_384;
 
 /** The owner a publishing link leaves for the wallet to fill in: zero bytes, an Ed25519 key. */
-export const UNOWNED = { owner: "00".repeat(32), owner_key: { ed25519: "00".repeat(32) } } as const;
+export const UNOWNED = { owner: "00".repeat(ID_BYTES), owner_key: { ed25519: "00".repeat(32) } } as const;
 
 /** Why a text is not a manifest to publish: `size`, `encoding` (not canonical base64url without padding), `inflate`
  *  (not one raw DEFLATE stream of at most 16 384 bytes with nothing after it), `manifest` (not the canonical Borsh of a

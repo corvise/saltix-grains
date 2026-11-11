@@ -79,11 +79,11 @@ export async function verifyGrant(grant: ConnectGrant, bytes: Uint8Array, sessio
   } catch {
     throw new UncheckedError("bad_answer");
   }
-  const { kind, log } = checkAccount(grant, events, fromHex(deps.genesis, 32), policy);
+  const { log } = checkAccount(grant, events, fromHex(deps.genesis, 32), policy);
   return {
     network: deps.genesis,
     account,
-    address: encodeAddress(deps.network, grant.login.account, kind),
+    address: encodeAddress(deps.network, grant.login.account),
     grant: b64url(bytes),
     signer: signerKind(grant.signer),
     managed: log !== null,

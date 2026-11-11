@@ -12,7 +12,7 @@ const relay = (n, over = {}) => ({
   key: toHex(derive("test relay", Uint8Array.of(n))), store_gib: null,
   endpoints: [{ url: `wss://10.${n}.0.1:30335/`, cert_sha256: "ab".repeat(32) }], ...over,
 });
-const placement = (key) => toHex(derive("Saltix bundle placement v1", fromHex(HASH, 32), fromHex(key, 32)));
+const placement = (key) => toHex(derive("Salarium bundle placement v1", fromHex(HASH, 32), fromHex(key, 32)));
 
 test("a relay's endpoint as a source: https at its host and port, the bundle's path; endpoints a manifest cannot name are passed over", () => {
   assert.equal(relayBlobUrl("wss://203.0.113.1:30335/", HASH), `https://203.0.113.1:30335/_blob/grain_bundle/${HASH}`);
@@ -46,7 +46,7 @@ test("up to 3 relays: room for the bundle first, then by its placement; one per 
 });
 
 const base = {
-  slug: "space-game", version: 2, owner: "11".repeat(32), owner_key: { ed25519: "22".repeat(32) }, name: { en: "Space" }, description: {},
+  slug: "space-game", version: 2, owner: "11".repeat(20), owner_key: { ed25519: "22".repeat(32) }, name: { en: "Space" }, description: {},
   icon: "00".repeat(32), entry: { sealed: { bundle: HASH, size: 483, sources: [], start: "index.html", connect: [] } }, permissions: 0, sponsor: null, min_host: 1,
 };
 

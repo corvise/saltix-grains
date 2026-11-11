@@ -18,8 +18,9 @@ import {
 } from "../dist/index.js";
 import { ed25519 } from "@noble/curves/ed25519";
 import * as web from "../dist/web.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/connect-profiles-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("connect-profiles-v1.json");
 const genesis = fromHex(v.chain.genesis_hash_hex, 32);
 const policy = policyOf(v.chain.account_policy);
 const events = (name) => (name === null ? null : v.logs[name].map((e) => fromHex(e.event_hex)));
@@ -234,7 +235,7 @@ test("one signed profile has one encoding: languages out of order or repeated ar
   // The profile's Borsh with its languages in the order given, not the node's (sorted), and its signature after it.
   const encodeAs = (langs) => {
     const p = s.profile;
-    const w = new Writer().u8(p.version).u8(0).string(p.subject.grain.slug).fixed(fromHex(p.owner, 32), 32).u32(p.revision).u32(langs.length);
+    const w = new Writer().u8(p.version).u8(0).string(p.subject.grain.slug).fixed(fromHex(p.owner, 20), 20).u32(p.revision).u32(langs.length);
     for (const lang of langs) {
       const t = p.texts[lang];
       w.string(lang).string(t.tagline).string(t.about).u32(t.highlights.length);
@@ -340,7 +341,7 @@ test("support contacts in the address form: the canonical text of a kind people 
     assert.equal(supportOk(c.text), false, `${c.name}: no form of format 1`);
     assert.equal(supportKind(c.text), a === null ? null : "address", c.name);
   }
-  assert.equal(supportAddress(sa.contacts.find((c) => c.name === "managed").text).kind, 5);
+  assert.ok(supportAddress(sa.contacts.find((c) => c.name === "managed").text), "a managed account's address reads as any other");
   for (const [text, kind] of [["@splitbill_help", "username"], ["mailto:help@splitbill.example", "email"], ["https://splitbill.example", "link"], ["tel:+100", null], [null, null]]) {
     assert.equal(supportKind(text), kind, String(text));
   }
@@ -361,7 +362,7 @@ test("the consent: payload, message, Borsh and signature as the node's, signed a
   assert.ok(verifySupportConsent(consent, genesisHex));
   assert.ok(!verifySupportConsent(consent, "5b".repeat(32)), "another network");
   assert.ok(!verifySupportConsent({ ...consent, slug: "split-bills" }, genesisHex), "another app");
-  assert.ok(!verifySupportConsent({ ...consent, owner: "77".repeat(32) }, genesisHex), "another owner");
+  assert.ok(!verifySupportConsent({ ...consent, owner: "77".repeat(20) }, genesisHex), "another owner");
   assert.ok(!verifySupportConsent({ ...consent, signature: "zz" }, genesisHex), "no signature at all");
   // A personal address is its key's; a managed one is its first root key's root digest, kind 5.
   const agent = toHex(ed25519.getPublicKey(fromHex(sa.agent_secret_hex, 32)));
@@ -401,7 +402,7 @@ test("a reading: format 2 from version 9, an address of the reader's network, a 
   assert.equal(supportProblem({ ...broken, support_consent: { ...broken.support_consent, signature: "zz" } }), "consent_signature", "never throws");
   // A site's profile names its owner's own address alone: a consent binds an app.
   const site = signedProfileFromJson(v.accepted.find((a) => a.name === "site-plain-key").json).profile;
-  const own = encodeAddress("devnet", fromHex(site.owner, 32));
+  const own = encodeAddress("devnet", fromHex(site.owner, 20));
   assert.equal(profileProblem({ ...site, version: 2, support: own, support_consent: null }), null, "a site's operator's own address");
   assert.equal(profileProblem({ ...site, version: 2, support: own, support_consent: null }, { version: 8 }), "version");
   assert.equal(profileProblem({ ...site, version: 2, support: supportOf("consented"), support_consent: consented.profile.support_consent }), "consent_slug");

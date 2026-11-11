@@ -18,16 +18,16 @@
 // Byte for byte the reference's (`saltix_types::grain::pairing`, vectors/server-pairing-v2.json). Nothing here is secret
 // but the server key's secret, which only `makeOffer` takes, to sign the proof. No Node APIs.
 import { ed25519 } from "@noble/curves/ed25519";
-import { type NetworkName, accountId, decodeAddress, encodeAddress } from "./address.js";
+import { ID_BYTES, type NetworkName, accountId, decodeAddress, encodeAddress } from "./address.js";
 import { Reader, Writer, derive, fromBase64, fromHex, toBase64, toHex } from "./bytes.js";
 import { ed25519KeyValid, verifyEd25519 } from "./keys.js";
 import { grainOwnerPayload, refusedChar } from "./profile.js";
 import type { RegisteredGrain } from "./registry.js";
 
 /** The domain of an offer's code. */
-export const PAIRING_CODE_DOMAIN = "Saltix grain pairing code v1";
+export const PAIRING_CODE_DOMAIN = "Salarium grain pairing code v1";
 /** The domain a server key signs its proof for an app and owner under (24-app-studio §2). */
-export const SERVER_KEY_DOMAIN = "Saltix grain server v1";
+export const SERVER_KEY_DOMAIN = "Salarium grain server v1";
 /** The version of an offer this SDK makes and takes. */
 export const PAIR_OFFER_VERSION = 2;
 /** An offer lives at most 30 minutes after it is made (`PAIR_OFFER_LIFE`), ms. */
@@ -69,7 +69,7 @@ export interface PairingOffer {
   nonce: string;
   /** The app. */
   slug: string;
-  /** The owner's account (32 bytes). */
+  /** The owner's account (20 bytes). */
   owner: string;
   /** `ServerKeyProof.proof` by `key` for the network, `slug` and `owner` (24-app-studio §2), 64 bytes. */
   proof: string;
@@ -154,7 +154,7 @@ function nameOk(name: string): boolean {
  *  `malformed` for anything else that is not an address. */
 function addressOf(address: string): { network: NetworkName; kind: number; id: Uint8Array; text: string } {
   const decoded = decodeAddress(address);
-  if (decoded) return { ...decoded, text: encodeAddress(decoded.network, decoded.id, decoded.kind) };
+  if (decoded) return { ...decoded, text: encodeAddress(decoded.network, decoded.id) };
   const lower = address.toLowerCase();
   const sep = lower.lastIndexOf("1");
   throw new PairingError(sep > 0 && networkOfHrp(lower.slice(0, sep)) === null ? "unknown_network" : "malformed");
@@ -237,7 +237,7 @@ export function verifyServerKeyProof(key: string, proof: string, genesis: string
  *  genesis hash (`offerProblem`), not the form's. */
 export function offerFormProblem(offer: PairingOffer): PairingProblem | null {
   if (offer.version !== PAIR_OFFER_VERSION) return "version";
-  if (!lowerHex(offer.genesis, 8) || !lowerHex(offer.key, 32) || !lowerHex(offer.nonce, 16) || !lowerHex(offer.owner, 32) || !lowerHex(offer.proof, 64)) {
+  if (!lowerHex(offer.genesis, 8) || !lowerHex(offer.key, 32) || !lowerHex(offer.nonce, 16) || !lowerHex(offer.owner, ID_BYTES) || !lowerHex(offer.proof, 64)) {
     return "malformed";
   }
   if (!Number.isSafeInteger(offer.createdAt) || !Number.isSafeInteger(offer.expiresAt) || offer.createdAt < 0 || offer.expiresAt < 0) return "malformed";
@@ -298,7 +298,7 @@ export const offerProof = (offer: PairingOffer): { key: string; proof: string } 
 export function encodeOffer(offer: PairingOffer): Uint8Array {
   return new Writer()
     .u8(offer.version).string(offer.hrp).fixed(fromHex(offer.genesis, 8), 8).fixed(fromHex(offer.key, 32), 32)
-    .fixed(fromHex(offer.nonce, 16), 16).string(offer.slug).fixed(fromHex(offer.owner, 32), 32).fixed(fromHex(offer.proof, 64), 64)
+    .fixed(fromHex(offer.nonce, 16), 16).string(offer.slug).fixed(fromHex(offer.owner, ID_BYTES), ID_BYTES).fixed(fromHex(offer.proof, 64), 64)
     .string(offer.name).u64(offer.createdAt).u64(offer.expiresAt).done();
 }
 
@@ -312,7 +312,7 @@ export function decodeOffer(bytes: Uint8Array): PairingOffer {
     const r = new Reader(bytes);
     offer = {
       version: r.u8(), hrp: r.string(), genesis: toHex(r.fixed(8)), key: toHex(r.fixed(32)), nonce: toHex(r.fixed(16)), slug: r.string(),
-      owner: toHex(r.fixed(32)), proof: toHex(r.fixed(64)), name: r.string(), createdAt: r.u64n(), expiresAt: r.u64n(),
+      owner: toHex(r.fixed(ID_BYTES)), proof: toHex(r.fixed(64)), name: r.string(), createdAt: r.u64n(), expiresAt: r.u64n(),
     };
     r.end();
   } catch {
@@ -342,7 +342,7 @@ export function parseOfferLink(text: string): PairingOffer {
   return decodeOffer(bytes);
 }
 
-/** The code both screens show: the first 4 bytes of derive_key("Saltix grain pairing code v1", Borsh(offer)) as a
+/** The code both screens show: the first 4 bytes of derive_key("Salarium grain pairing code v1", Borsh(offer)) as a
  *  big-endian u32, modulo 1 000 000. Derived from everything in the offer, the key and the proof included. */
 export function offerCode(offer: PairingOffer): number {
   const digest = derive(PAIRING_CODE_DOMAIN, encodeOffer(offer));

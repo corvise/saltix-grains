@@ -39,7 +39,7 @@ GrainManifest {
                                    devices, a phone's P-256 key among them
   name:        Map<lang, String>   1–16 languages, "en" among them; at most 32 characters each
   description: Map<lang, String>   at most 16 languages; at most 200 characters each
-  icon:        [u8; 32]            derive("Saltix grain icon v1", the icon: a 512×512 opaque PNG, images.md §3), a
+  icon:        [u8; 32]            derive("Salarium grain icon v1", the icon: a 512×512 opaque PNG, images.md §3), a
                                    named blob the network keeps; 32 zero bytes: none (the wallet draws the monogram)
   entry:       Entry
   permissions: u32                 a bit set of §6
@@ -50,9 +50,9 @@ Entry = 0 Hosted { url: String, origins: Vec<String> }
       | 1 Sealed { bundle: [u8; 32], size: u64, sources: Vec<String>, start: String, connect: Vec<String> }
       | 2 Chat                    no page and no origin: the grain is its chat (app-studio.md §2)
 
-manifest message m = derive("Saltix grain manifest v1", Borsh(manifest))
+manifest message m = derive("Salarium grain manifest v1", Borsh(manifest))
 SignedGrainManifest { manifest, signature: [u8; 64] }    by owner_key over m: Ed25519, or P-256 as basics.md says
-manifest id        = derive("Saltix grain manifest id v1", Borsh(manifest))
+manifest id        = derive("Salarium grain manifest id v1", Borsh(manifest))
 ```
 
 - **Languages.** A code is 2–8 of `[a-z-]`. Maps are encoded sorted by code. Texts are not empty and hold no control
@@ -252,7 +252,7 @@ in every grain and unlinkable across grains.
 
 ```text
 grain secret = the SLIP-0010 node m/44'/1010'/account'/3'/0' (its private key)
-grain key    = the Ed25519 key whose seed is derive("Saltix grain key v1", grain secret ‖ slug)
+grain key    = the Ed25519 key whose seed is derive("Salarium grain key v1", grain secret ‖ slug)
 ```
 
 The grain secret does not rotate; a phone with the phrase derives it, and a managed account's devices receive it.
@@ -260,7 +260,7 @@ The grain secret does not rotate; a phone with the phrase derives it, and a mana
 
 ```text
 GrainLogin { slug: String, origin: String, challenge: Vec<u8>, at: u64 }      challenge at most 64 bytes; at in Unix ms
-signature by the grain key over derive("Saltix grain login v1", Borsh(GrainLogin))
+signature by the grain key over derive("Salarium grain login v1", Borsh(GrainLogin))
 answer: {key, signature, at, origin, member}    key and signature hex, at Unix ms, origin text; member: §5.1a
 ```
 
@@ -331,10 +331,10 @@ An **invoice** makes the sheet trustworthy:
 Invoice        { slug: String, to: [u8; 32], asset: Asset, amount: u64,
                  memo: String (at most 200 bytes, no control characters), reference: [u8; 16], expires_at: u64 (Unix ms) }
 InvoiceKeyCert { slug: String, key: [u8; 32], expires_at: u64,
-                 signature: [u8; 64]   by owner_key over derive("Saltix grain invoice key v1", Borsh((slug, key, expires_at))) }
+                 signature: [u8; 64]   by owner_key over derive("Salarium grain invoice key v1", Borsh((slug, key, expires_at))) }
 SignedInvoice  { invoice, cert: Option<InvoiceKeyCert>,
                  signature: [u8; 64]   by owner_key (no cert), cert.key, or a registered server key (no cert), over
-                                       derive("Saltix grain invoice v1", genesis_hash ‖ Borsh(invoice)) }
+                                       derive("Salarium grain invoice v1", genesis_hash ‖ Borsh(invoice)) }
 ```
 
 The grain hands the wallet the hex of the signed invoice's Borsh in `grain_pay {invoice}`, or its server puts it in a
@@ -385,7 +385,7 @@ never under the account's address.
 
 - **The grain alias.** `grain_relay_open {grant?}` → `{address}` registers the grain key at the wallet's relay as a
   *grain alias*: the grain key's personal address (kind 0), with a key binding the grain key signs for the **grain
-  messaging key**, an X25519 key whose secret is `derive("Saltix grain messaging key v1", grain secret ‖ slug)`. It
+  messaging key**, an X25519 key whose secret is `derive("Salarium grain messaging key v1", grain secret ‖ slug)`. It
   differs per grain and comes back with the phrase. The alias stays registered while the grain is open, or while its
   notifications are allowed (§5.5).
 - **Frames.** `grain_relay_send {to, payload, keep?}`: `to` an address (another user's grain alias, or the grain's
@@ -428,7 +428,7 @@ GrainNotification {
 }
 SignedGrainNotification { notification, cert: Option<InvoiceKeyCert>, signature: [u8; 64] }
   by the key `cert` certifies, or without a certificate by the owner key or a server key the registry record names,
-  over derive("Saltix grain notification v1", genesis_hash ‖ Borsh(notification))
+  over derive("Salarium grain notification v1", genesis_hash ‖ Borsh(notification))
 ```
 
 The wallet shows it as the grain's notification (not as a chat message) when the signature checks against the
@@ -440,7 +440,7 @@ closed, anything else to its alias is taken off the mailbox and dropped: a grain
 
 **A grain's server at a relay** registers like any client under its own key (better a server key than the owner's),
 with an address record that key signs itself and a binding to its messaging key, whose secret is
-`derive("Saltix grain server messaging key v1", the key's Ed25519 secret)`: one key keeps one messaging key across
+`derive("Salarium grain server messaging key v1", the key's Ed25519 secret)`: one key keeps one messaging key across
 restarts and SDKs, and users' wallets keep sealing to it ([relays](relays.md#registering-an-address)). It pays for its
 frames like any sender. The SDK: `RelayClient`, `signNotification`, `notificationProblem`.
 
@@ -508,7 +508,7 @@ permission nothing in the app's sources uses.
 
 ## 8. Sealed bundles
 
-A bundle is a ZIP of the grain's files, at most 20 MiB. `bundle = derive("Saltix grain bundle v1", its bytes)`.
+A bundle is a ZIP of the grain's files, at most 20 MiB. `bundle = derive("Salarium grain bundle v1", its bytes)`.
 
 **The network keeps it** ([images §6–§8](images.md#6-named-blobs)): a bundle of at most 16 MiB that a live grain's
 manifest names is a named blob, kept whole by its keepers (three storage pools and five relays offering space) and

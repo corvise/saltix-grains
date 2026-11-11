@@ -240,7 +240,7 @@ test("a given relay that cannot be one stops the start; a given ticket past its 
   refused([text(2), flipped(ticket(1))], "signature");
   refused(["wss://192.0.2.1:30335/#abc"], "form");
   refused(["wss://192.0.2.1:30335/"], "form"); // an address without its pin: a pin forgotten
-  refused(["SALTIX-RELAY:not base32!"], "encoding");
+  refused(["SALARIUM-RELAY:not base32!"], "encoding");
   refused([ticket(1, { genesis: OTHER })], "network", { genesis: GENESIS });
   assert.deepEqual(net.asked, [], "nothing asked before the developer's typo is fixed");
   assert.equal(checkGivenRelay(ticket(1).toLowerCase()), ticket(1), "a ticket in either case");
@@ -271,7 +271,7 @@ test("all dead: the error names every source and every relay with its result, by
   assert.match(m, new RegExp(`relay ${cert(99)} \\(the release's entry point\\): showed another certificate than its pin`));
   assert.match(m, new RegExp(`relay ${cert(4)} \\(the release's entry point\\): is on testnet, not devnet`));
   assert.match(m, new RegExp(`relay ${cert(5)} \\(given\\): is on another devnet`));
-  assert.match(m, /--relay SALTIX-RELAY:/, "and the way out");
+  assert.match(m, /--relay SALARIUM-RELAY:/, "and the way out");
   assert.ok(!/192\.0\.2/.test(m) && !JSON.stringify(error.report).includes("192.0.2"), "no relay's address");
   assert.equal(error.report.tried.length, 5);
   assert.ok(error.report.took_ms < 5_000);
@@ -293,7 +293,7 @@ test("public hosts as the node judges them: no loopback, private, link-local, CG
   const v4 = (...octets) => octets.join(".");
   for (const host of [v4(100, 63, 255, 255), v4(100, 128, 0, 0), v4(172, 15, 255, 255), v4(172, 32, 0, 1), v4(223, 255, 255, 255),
     "[2a00:1450:4001::1]", "2001:4860:4860::8888", "::ffff:808:808", `::ffff:${v4(8, 8, 4, 4)}`, "64:ff9b::808:808", "2002:808:808::1",
-    "relay.example.net", "relay.saltix.io."]) {
+    "relay.example.net", "relay.salarium.io."]) {
     assert.ok(publicHost(host), host);
   }
   for (const host of ["0.1.2.3", "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "192.0.0.8", "192.0.2.1",

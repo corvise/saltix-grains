@@ -10,6 +10,7 @@ import { accountId, bundleHash, checkBundle, fromHex, toHex, verifyManifest } fr
 import { STORED, makeBundle, sealed } from "../dist/bundle.js";
 import { serve, DEV_BUNDLE } from "../dist/dev.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 function grainDir() {
   const dir = scratch("grain-bundle-");
@@ -94,7 +95,8 @@ function entries(zip) {
 // The bytes of a bundle are a constant of its files: this hash names the ZIP built on Node 22 and 24 and, byte for byte,
 // one built by hand from the format with another language's CRC; CI builds it again on Node 20 and 24
 // (.github/workflows/ci.yml). A change here changes the next hash of every published grain.
-const FIXED_HASH = "9a2d268c1857a1fd9bd39338d65a7370d476b46c19849f608638d9917627d589";
+/** The fixed tree's bundle under "Salarium grain bundle v1": the same ZIP bytes as under the old domain's 9a2d268c…. */
+const FIXED_HASH = "4589054d3a893f9fbfa716895724eb4d30fd3cc6fe931467aecf8acb32b3afc7";
 
 test("a bundle's bytes depend on its files only: every entry stored, the same hash on any Node", () => {
   const dir = fixedTree();
@@ -175,7 +177,7 @@ test("the agents' rules say how a bundle is checked: rebuilt in CI, grain.json u
 });
 
 test("grain bundle writes the protocol's bundle byte for byte, and the network's bundle check takes it (vectors/images-v1.json)", () => {
-  const v = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const v = goldenVectors("images-v1.json");
   const dir = scratch("grain-vector-");
   for (const f of v.bundles.made_from) {
     mkdirSync(join(dir, ...f.name.split("/").slice(0, -1)), { recursive: true });

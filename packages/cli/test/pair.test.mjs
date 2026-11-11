@@ -20,7 +20,7 @@ const OWNER_KEY = ed25519.getPublicKey(fromHex("41".repeat(32), 32));
 const OWNER = toHex(accountId(OWNER_KEY));
 const OWNER_ADDRESS = encodeAddress("devnet", accountId(OWNER_KEY));
 const STRANGER = toHex(accountId(ed25519.getPublicKey(fromHex("43".repeat(32), 32))));
-const STRANGER_ADDRESS = encodeAddress("devnet", fromHex(STRANGER, 32));
+const STRANGER_ADDRESS = encodeAddress("devnet", fromHex(STRANGER, 20));
 
 /** A node's wallet interface for one network: the registry holds `grains` (by slug), changed by the test; `down` makes
  *  it stop answering. Only reads: no relay, no mailbox. */
@@ -210,7 +210,7 @@ test("the fields fall back: the project's app.json, the offer shown, grain.json'
   const bad = project(null);
   await assert.rejects(run(bad, node, { ...FIELDS, genesis: "5b5b5b5b5b5b5b5b" }).done, /another network.*5b5b5b5b5b5b5b5b.*network answering is devnet 5a5a5a5a5a5a5a5a/s);
   await assert.rejects(run(bad, node, { ...FIELDS, genesis: "5A5A" }).done, /--genesis 5A5A: the first 8 bytes/);
-  await assert.rejects(run(bad, node, { ...FIELDS, owner: encodeAddress("testnet", fromHex(OWNER, 32)) }).done, /owner's address tsalt1.* is of another network/);
+  await assert.rejects(run(bad, node, { ...FIELDS, owner: encodeAddress("testnet", fromHex(OWNER, 20)) }).done, /owner's address tsalt1.* is of another network/);
   await assert.rejects(run(bad, node, { ...FIELDS, owner: "anna" }).done, /--owner anna: not an address of this network \(its prefix: dsalt1…\)/);
   await assert.rejects(run(bad, node, { ...FIELDS, app: "Dice" }).done, /--app Dice: a slug is/);
   assert.ok(!existsSync(join(bad, ".grain", "pair.key")), "no key made for a refused command");
@@ -377,13 +377,13 @@ test("the server's name: --name, cut to what an offer takes, kept with the offer
   assert.equal(unnamed.name, "");
   assert.notEqual(unnamed.nonce, offer.nonce);
   assert.match(renamed.lines.join("\n"), /^ {2}server {7}\(unnamed\) · key /m);
-  // A record's owner as an address: a plain account's by the manifest's key, a managed account's otherwise.
+  // A record's owner as an address, whatever kind of account it is: an address names no kind.
   assert.equal(ownerAddressOf("devnet", record("access", OWNER, [])), OWNER_ADDRESS);
   const manifest = { manifest: { owner: OWNER, owner_key: { ed25519: toHex(OWNER_KEY) } }, signature: "00".repeat(64) };
   assert.equal(ownerAddressOf("devnet", record("access", OWNER, [], { manifest })), OWNER_ADDRESS);
-  const managedId = "55".repeat(32);
+  const managedId = "55".repeat(20);
   const managed = { manifest: { owner: managedId, owner_key: { p256: "02" + "11".repeat(32) } }, signature: "00".repeat(64) };
-  assert.equal(ownerAddressOf("devnet", record("club", managedId, [], { manifest: managed })), encodeAddress("devnet", fromHex(managedId, 32), 5));
+  assert.equal(ownerAddressOf("devnet", record("club", managedId, [], { manifest: managed })), encodeAddress("devnet", fromHex(managedId, 20)));
   assert.equal(nameForOffer("x".repeat(40)).length, 32);
   assert.equal(nameForOffer("Keys\n​now"), "Keysnow");
 });

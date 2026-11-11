@@ -130,7 +130,7 @@ test("a server starts only while the registry names its key, on the key's networ
     await assert.rejects(start(fakeChain(), { cert: cert() }), /no certificate/);
     await assert.rejects(start(fakeChain(), { secret: SERVER }), /not both/);
     await assert.rejects(start(fakeChain(), { slug: "other" }), /access's, not other's/);
-    await assert.rejects(start(fakeChain(), { appKey: "saltix-app:1:dsalt:6c6c6c6c6c6c6c6c:access:" + "AB".repeat(32) }), AppKeyError);
+    await assert.rejects(start(fakeChain(), { appKey: "salarium-app:1:dsalt:6c6c6c6c6c6c6c6c:access:" + "AB".repeat(32) }), AppKeyError);
     await assert.rejects(start(fakeChain(), { spec: signChatSpecAsServer(spec(), fromHex("41".repeat(32), 32)) }), /chat spec: cert/, "a spec another key signed");
     await assert.rejects(start(fakeChain(), { spec: { ...spec(), slug: "chess" } }), /for chess, not access/);
     const priced = spec();
@@ -163,7 +163,7 @@ test("a server starts only while the registry names its key, on the key's networ
     assert.deepEqual(said.find((e) => e.event === "chat_relay_refused"), { level: "error", event: "chat_relay_refused", meta: { reason: "form", position: 1 } });
     assert.ok(!JSON.stringify(said).includes("192.0.2"));
     // Checked whatever reaches the network: with a node of one's own too, where the relays given go unused.
-    await assert.rejects(start(fakeChain(), { node: "http://127.0.0.1:1", wallet: undefined, relays: ["SALTIX-RELAY:not base32!"] }),
+    await assert.rejects(start(fakeChain(), { node: "http://127.0.0.1:1", wallet: undefined, relays: ["SALARIUM-RELAY:not base32!"] }),
       setup("chat_relay_refused", /relay 1 given: relay ticket refused: not base32/));
     // Without a developer key, a chain given that the node contradicts.
     await assert.rejects(ChatServer.start({ slug: "access", secret: SERVER, spec: spec(), wallet: fakeChain().wallet, chain: { ...chain, genesis: "6d".repeat(32) }, log: quiet }),
@@ -478,7 +478,7 @@ test("membership is read once per tip, and a node that does not answer fails the
     assert.equal(fake.calls.account_get, 1, "the account's keys once on this shard tip");
     assert.equal(fake.calls.grain_get, grains, "the grain's record once on this beacon tip");
     // Strangers' proofs cost the node nothing: they are refused before the account is asked for.
-    await ask(signMemberProof({ slug: "access", account: "52".repeat(32), grain_key: user.key, expires_at: t + DAY }, fromHex("52".repeat(32), 32), chain.genesis));
+    await ask(signMemberProof({ slug: "access", account: "52".repeat(20), grain_key: user.key, expires_at: t + DAY }, fromHex("52".repeat(32), 32), chain.genesis));
     assert.equal(fake.calls.account_get, 1);
     fake.shardBlock();
     t += 3_000;

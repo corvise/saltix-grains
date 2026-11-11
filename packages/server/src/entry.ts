@@ -1,5 +1,5 @@
 // The release's entry points (Saltix 41-transport §18.6): the relays the SDK tries last, when nothing it was given or
-// cached answers. They are obfuscated, never listed: XOR with a SHAKE-256 stream of "Saltix relay entry v1", a zero byte
+// cached answers. They are obfuscated, never listed: XOR with a SHAKE-256 stream of "Salarium relay entry v1", a zero byte
 // and the network's name. That stops a search of the package for addresses and nothing more — whoever runs
 // `entryPoints` reads them — so they are few, change with each release, and are the last resort, never what makes the
 // SDK work. Saltix's `scripts/set-network.py` writes `ENTRY` from the relays the apps' pins name, and its `--check` holds
@@ -9,14 +9,14 @@ import type { NetworkName } from "./address.js";
 import { concat, fromBase64, toBase64 } from "./bytes.js";
 
 /** The stream's domain. */
-export const ENTRY_DOMAIN = "Saltix relay entry v1";
+export const ENTRY_DOMAIN = "Salarium relay entry v1";
 
 /** By network: base64 of the entries, one a line (an endpoint `wss://host:port/#<pin>` or a ticket), XOR the stream. */
 const ENTRY: Readonly<Record<NetworkName, string>> = {
   mainnet: "",
   testnet: "",
   devnet:
-    "hdyrNe8pCwgcNkU2SZACKx40rf/CitPSNnV82KYBq05QXMk3G0wtDWfH27qVit28JeR9+X0CWbVPC0J3HWvTHDxi6c3jcMOEe4+LAlT+xT9grZ9Z3NCW4tBz6sWUfGVprTcTtoxbFic/JGflp0yAcRON3bxiv7g9oNnu78zWOUpzytb817g3LN06V15l8mI0D93DEEEcKrsjX4XwNf6HKLO83kibP9MefN3TowAFtAQKNPZCfFiKnlSiH9z673jQKgS73a4v8gclkFTyuuYncdBX67yk2HKA/ZqlMyODJQ1k4+xFsldTmtNRE2O2x82xlFUoTzsmPhQGRb7HmV0zqnSGZhq2KScvMHPXujFbrN5dJWH8Lg==",
+    "lpPpdDF1SXwQ/jK4qLFaG0dDj5oRT9R6D9zZEPPl8/RSvDTY/IXn9g0Yl838Uhoisk0XqPEueCM4jkKxBNc9lu6XRLKnZ1qykEY7BhIltJHoqz+XnEZ/zEmJZ2pV72kOUKnOaW5wJFcanKjzhpBmqSS2Hk8IaNFjD0At/+cIJ7fpajnTPnH97ZEbOQF4dCX7koCp7p0Itc2kgGCfV6viLpnyr+qvHbIF37ynPIwNcsvIda8I3NE9bGZuRWKcIliEFzQ8cAv9znSDekFgXR/B9UrX8Keq+wkKL8L9qvSkVs3mtbCvhRHNMRExJfqtyto60g1/fVbyWC70v8ukjE/qfARULzAvFPOHP0lqcmzlnF0pfcq9UA==",
 };
 
 /** `length` bytes of the stream of `network`. */

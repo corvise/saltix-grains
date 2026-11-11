@@ -26,12 +26,12 @@ The site's own profile is signed once, offline, with `grain connect-profile`. Th
 
 ## The flow, end to end
 
-1. **The site publishes its Connect profile** at `https://<origin>/.well-known/saltix-connect`: its own words about
+1. **The site publishes its Connect profile** at `https://<origin>/.well-known/salarium-connect`: its own words about
    itself, signed by its operator's key (below).
 2. **It shows the Sign in with Saltix button** (`signInButton`, `connect.css`).
 3. **A tap opens a session** (`createConnect(…).offer()`): the page makes a slot at a relay and fresh keys, and shows the
    offer: on a computer a QR code in a dialog titled "Saltix Connect" ("Scan with Saltix to sign in"), on a phone the link
-   `https://saltix.io/connect#saltix-connect:1:…` ("Open Saltix"), which opens Saltix. An offer nobody scanned is
+   `https://salarium.io/connect#salarium-connect:1:…` ("Open Saltix"), which opens Saltix. An offer nobody scanned is
    replaced by itself after 2 minutes (the page's `qrLifeMs`, below), at once when a grant for it is refused after
    them.
 4. **Saltix shows its Connect sheet**: "Saltix Connect" on top, the site's host in large type and its origin in full,
@@ -88,19 +88,19 @@ Then sign it with the operator's key file (a plain account's key, owner-only; ne
 
 ```sh
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key \
-  --profile site-connect.json --out public/.well-known/saltix-connect
+  --profile site-connect.json --out public/.well-known/salarium-connect
 ```
 
 - `--origin` is the page's origin exactly as the browser serializes it (`location.origin`): `https://`, a lowercase host,
   a port only when it is not 443, no path and no trailing `/`. `--name` is 1–32 characters; `--category` is 0–9 or its
   name (`other`, `tools`, `finance`, `social`, `games`, `shopping`, `education`, `news`, `business`, `developer`).
 - The owner is the key's account; `--owner <address>` names a managed account whose Ed25519 device key signs.
-- Each run goes above the revision the site serves now (read at `/.well-known/saltix-connect` as a wallet reads it) and
+- Each run goes above the revision the site serves now (read at `/.well-known/salarium-connect` as a wallet reads it) and
   the file written before, or takes `--revision N`. Wallets keep a site's profile for a day and replace it only with a
   higher revision, so a revision that starts over at 1 would reach none of them: when the site cannot be read and no file
   of it is here, the command asks for `--revision N` instead. `--offline` (a machine without the network) reads only
   the file.
-- Serve the file at `/.well-known/saltix-connect` as `application/json`, with no redirect (a wallet follows none), at most
+- Serve the file at `/.well-known/salarium-connect` as `application/json`, with no redirect (a wallet follows none), at most
   64 KiB. A wallet fetches it without cookies or a referrer and waits at most 5 seconds.
 - `readSiteProfile(origin, { node, genesis, policy, network })` (in `@saltix/connect`) reads it as a wallet does,
   owner's key event log included (`network`, `node_status`'s, holds a support address to it): a status page or a test of
@@ -513,7 +513,7 @@ on it has only to render what the client tells it.
    other tabs (the client raises them on the storage event).
 3. **The link to Saltix must not unload the page** (`openConnectDialog` does it right; your own UI: an
    `<a href={offer.app}>` without `target`, never `offer.link` on a phone). `offer.app` is an **intent link** on
-   Android (`intent:1:…#Intent;scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=…;end`): the browser
+   Android (`intent:1:…#Intent;scheme=salarium-connect;package=io.saltix.app;S.browser_fallback_url=…;end`): the browser
    hands it to the installed Saltix as an external intent and overrides the URL's loading instead of navigating the
    tab, so the page, its socket and its slot stay; without Saltix it loads the fallback, the https link, which offers
    the app (and then there was nothing to deliver to anyway). Elsewhere `offer.app` is the https link: iOS Safari hands
@@ -545,7 +545,7 @@ on it has only to render what the client tells it.
 6. **The relay path must pass `link_deliver` from the page** (09-relay §10.3 step 5: a connection holding a slot may
    deliver): a relay before 2026-10-21 refuses it (`not_registered`), the client logs `not_delivered`, and the wallet
    falls back to "login sent" — honest, and the page is still connected.
-7. **Serve the profile exactly** at `/.well-known/saltix-connect` as `application/json`, or serve nothing there (404).
+7. **Serve the profile exactly** at `/.well-known/salarium-connect` as `application/json`, or serve nothing there (404).
    A single-page site that answers its page for every path shows Saltix an HTML document, which is no profile; from
    this date a wallet reads any non-JSON answer as "no profile", but a JSON document that is not a profile that checks
    is shown as "did not check" with its reason, so never serve a placeholder.
@@ -559,7 +559,7 @@ on it has only to render what the client tells it.
 | An offer shown | 2 minutes unseen (`qrLifeMs`: 30 seconds to 10 minutes; 3 at most in the server-held mode), and 3 minutes read with no login (`SEEN_WAIT_MS`), then a new slot and new keys by itself; the slot is kept open every minute, 30 minutes in all |
 | An offer at a server (the server-held mode) | 5 minutes from its making, then dropped with its keys; one grant per offer (`sid` spent with it); 10 000 offers kept at most, the oldest dropped first |
 | An offer's name | 1–40 bytes; its origin at most 128 bytes |
-| A site's profile | at `/.well-known/saltix-connect`, at most 64 KiB, read within 5 seconds, kept a day by a wallet |
+| A site's profile | at `/.well-known/salarium-connect`, at most 64 KiB, read within 5 seconds, kept a day by a wallet |
 | The wallet's delivery | tried again every 2.5 seconds while the relay finds no slot, 30 seconds in all; the page's confirmation waited for 10 seconds after |
 | The page's confirmation | sent when the grant checks; the relay's `link_delivered` waited for 5 seconds, then the slot closes |
 | A profile's texts | tagline 1–80, about 0–600, highlights 0–4 of 1–60, privacy 0–300 characters; 1–8 languages, `en` among them; 8 192 bytes in all |

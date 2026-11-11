@@ -7,6 +7,8 @@ import WebSocket from "ws";
 import { ed25519 } from "@noble/curves/ed25519";
 import { type NetworkName, accountId, encodeAddress } from "./address.js";
 import { toHex } from "./bytes.js";
+import type { LogRules } from "./keylog.js";
+import { logRulesOf, managedMessagingKey } from "./managed.js";
 import { rpc } from "./node.js";
 import {
   type KeyBinding, encodeAddressRecord, fromBase64Url, messagingKeyOf, signAddressRecord, signKeyBinding, signMailboxAck, toBase64Url,
@@ -78,6 +80,9 @@ export interface RelayOptions {
   node?: string;
   /** Or the endpoints to use, tried in random order. */
   endpoints?: RelayEndpoint[];
+  /** Endpoints tried first in each round, in this order, before the others — a server beside its own node prefers the
+   *  computer's relay (Saltix 48-agents §4) and goes to the network's when that one does not take it. */
+  preferred?: RelayEndpoint[];
   /** More endpoints, asked before each round of relays (`ChatServer` asks the relays its finder found). */
   discover?: () => Promise<RelayEndpoint[]>;
   /** The Ed25519 secret of the address you write from — your grain's server key. It never leaves the process. */
@@ -95,10 +100,23 @@ export interface RelayOptions {
    * again after a restart (`ChatServer` does this, and answers each request once).
    */
   ackKept?: "on_receipt" | "by_handler";
+  /**
+   * What a managed account's key event log is checked under (its network's genesis hash and first account policy,
+   * Saltix 13-accounts §7): the client takes such an account's messaging key — a new wallet's is one — from its record
+   * checked against its log (09-relay §1.4). By default `node`'s `node_status` gives them, once; with neither, a managed
+   * account's key is not taken, and nothing is sealed to it or opened from it.
+   */
+  accounts?: LogRules;
 }
 
 /** What a relay's node made of the numbers `reportStats` sent (Saltix 09-relay §3): taken, or why not. */
 export type StatsOutcome = { taken: true; slug: string; at: number } | { taken: false; reason: string };
+
+/** This address's messenger activation as its relay tells it (44-messenger-activation §5); `price` in base units. */
+export interface RelayActivation {
+  activated: boolean;
+  price: string | null;
+}
 
 /** A frame to your address, opened. `kept`: it was kept in your mailbox. */
 export interface RelayFrame {
@@ -222,6 +240,8 @@ export class RelayClient extends EventEmitter {
   private readonly slots = new Map<string, { resolve: (slot: FileSlot) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   /** The newest numbers the app reported: sent again whenever the client registers. */
   private stats: SignedGrainStats | null = null;
+  /** The rules managed accounts' logs are checked under, as the node gave them (asked once, again after a failure). */
+  private rules: Promise<LogRules | null> | null = null;
 
   private constructor(private readonly options: RelayOptions) {
     super();
@@ -347,6 +367,22 @@ export class RelayClient extends EventEmitter {
     return this.send(to, signedNotification, { keep: true });
   }
 
+  /**
+   * Tell `to` this address is typing, or stopped (Saltix 09-relay §3 `typing`; `activity` as vectors/activity-v1.json
+   * names one). Live only and best effort: nothing is sent without a connection.
+   */
+  typing(to: string, on: boolean, activity?: string): void {
+    if (!this.ws) return;
+    this.write({ type: "typing", to, typing: on, ...(activity ? { activity } : {}) });
+  }
+
+  /** Tell `to` its message `msgId` was read (09-relay §3 `message_read`), with this address's signed proof. */
+  read(to: string, msgId: string): void {
+    if (!this.ws) return;
+    const proof = toBase64Url(signMailboxAck(this.secret, msgId, Date.now()));
+    this.write({ type: "message_read", to, msgId, proof });
+  }
+
   close(): void {
     this.closed = true;
     this.ws?.close();
@@ -372,6 +408,22 @@ export class RelayClient extends EventEmitter {
   private write(frame: object): void {
     if (!this.ws) throw new Error("not connected to a relay");
     this.ws.send(JSON.stringify(frame));
+  }
+
+  /** The rules a managed account's log is checked under: given, or `node`'s (asked once, and again after a failure). */
+  private logRules(): Promise<LogRules | null> {
+    if (this.options.accounts) return Promise.resolve(this.options.accounts);
+    const node = this.options.node;
+    if (!node) {
+      this.log("warn", "relay_no_account_rules", { why: "neither accounts nor node given: a managed account's key is not taken" });
+      return Promise.resolve(null);
+    }
+    this.rules ??= logRulesOf(node, this.options.network).catch((e: unknown) => {
+      this.log("warn", "relay_account_rules_failed", { reason: relayFailure(e, KEY_TIMEOUT_MS) });
+      this.rules = null;
+      return null;
+    });
+    return this.rules;
   }
 
   private answerKey(address: string, key: Uint8Array | null, cache: boolean): void {
@@ -403,7 +455,9 @@ export class RelayClient extends EventEmitter {
     // two pins is tried under both, and only the certificate it shows passes).
     const byId = new Map<string, RelayEndpoint>();
     for (const e of list.filter(usableEndpoint)) if (!byId.has(relayId(e))) byId.set(relayId(e), e);
-    return [...byId.values()].sort(() => Math.random() - 0.5);
+    const preferred = (this.options.preferred ?? []).filter(usableEndpoint);
+    const first = new Set(preferred.map(relayId));
+    return [...preferred, ...[...byId.values()].filter((e) => !first.has(relayId(e))).sort(() => Math.random() - 0.5)];
   }
 
   private async run(): Promise<void> {
@@ -528,7 +582,19 @@ export class RelayClient extends EventEmitter {
       case "key_response": {
         const address = String(f.pubkey);
         if (!this.asked.has(address)) return;
-        this.answerKey(address, messagingKeyOf(address, f.record as string | null, Date.now(), this.options.network), true);
+        if (f.record != null || typeof f.managed !== "string") {
+          this.answerKey(address, messagingKeyOf(address, f.record as string | null, Date.now(), this.options.network), true);
+          return;
+        }
+        // A managed account (09-relay §1.4): its record is checked against its log, which the network's rules check.
+        const managed = f.managed;
+        const log = typeof f.log === "string" ? f.log : "";
+        void this.logRules().then((rules) => {
+          if (!rules) return this.answerKey(address, null, true);
+          const found = managedMessagingKey(address, managed, log, Date.now(), this.options.network, rules);
+          if ("problem" in found) this.log("warn", "relay_key_refused", { address, problem: found.problem, ...(found.detail ? { detail: found.detail } : {}) });
+          this.answerKey(address, "key" in found ? found.key : null, true);
+        });
         return;
       }
       case "file_slot": {
@@ -540,6 +606,19 @@ export class RelayClient extends EventEmitter {
       }
       case "message":
         void this.onMessage(f);
+        return;
+      case "activation": {
+        // 44-messenger-activation §5: after `registered` and on each change, this address's activation and the price.
+        const activation: RelayActivation = {
+          activated: f.activated === true,
+          price: typeof f.price === "string" && /^\d{1,30}$/.test(f.price) ? f.price : null,
+        };
+        this.emit("activation", activation);
+        return;
+      }
+      case "account":
+        // 09-relay §3: the canonical chain changed this address's account.
+        if (f.address === this.address) this.emit("account", f);
         return;
       case "grain_stats_taken": {
         const outcome: StatsOutcome = { taken: true, slug: String(f.slug), at: Number(f.at) };

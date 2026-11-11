@@ -4,7 +4,7 @@
 // start without one and warning of a developer key made elsewhere.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
@@ -15,8 +15,9 @@ import {
   targetNetwork, targetOwner, toHex, verdictPairs, verifyServerKeyProof, versionMessage,
 } from "../dist/index.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/server-pairing-v2.json", import.meta.url), "utf8"));
+const v = goldenVectors("server-pairing-v2.json");
 const chain = { network: v.chain.network, genesis: v.chain.genesis_hash_hex };
 const now = Number(v.now_ms);
 const secret = fromHex(v.keys.server.secret_hex, 32);
@@ -42,7 +43,7 @@ test("the constants are the reference's", () => {
   assert.deepEqual([...SLUG_VERDICTS], ["free", "own", "paired_already", "another_account", "retired"]);
   assert.equal(toHex(ed25519.getPublicKey(secret)), v.keys.server.public_hex);
   assert.equal(toHex(accountId(ed25519.getPublicKey(fromHex(v.keys.owner.secret_hex, 32)))), owner);
-  assert.equal(encodeAddress("devnet", fromHex(owner, 32)), v.keys.owner.address);
+  assert.equal(encodeAddress("devnet", fromHex(owner, 20)), v.keys.owner.address);
   assert.equal(keyFingerprint(v.keys.server.public_hex), v.keys.server.fingerprint);
 });
 
@@ -59,14 +60,14 @@ test("the command from the app's page: its text, its parse in any order, and the
   assert.ok(!targetIsFor(target, "testnet", chain.genesis));
   assert.ok(!targetIsFor(target, "devnet", "5b" + chain.genesis.slice(2)));
   // A target is of one chain: an address of another network, a slug out of form.
-  const testnet = encodeAddress("testnet", fromHex(owner, 32));
+  const testnet = encodeAddress("testnet", fromHex(owner, 20));
   assert.equal(problemOf(() => pairTarget("devnet", chain.genesis, "access", testnet)), "other_network");
   assert.equal(problemOf(() => pairTarget("devnet", chain.genesis, "Access", target.owner)), "slug");
   assert.equal(problemOf(() => pairTarget("devnet", chain.genesis, "access", "not an address")), "malformed");
   assert.equal(problemOf(() => pairTarget("devnet", chain.genesis, "access", "xsalt1" + target.owner.slice(6))), "unknown_network");
-  // A managed owner's address (kind 5) names its account as any other.
-  const managed = encodeAddress("devnet", fromHex("55".repeat(32), 32), 5);
-  assert.equal(targetOwner({ ...target, owner: managed }), "55".repeat(32));
+  // A managed owner's address names its account as any other: the address says nothing of the kind.
+  const managed = encodeAddress("devnet", fromHex("55".repeat(20), 20));
+  assert.equal(targetOwner({ ...target, owner: managed }), "55".repeat(20));
   assert.deepEqual(parsePairCommand(pairCommand({ ...target, owner: managed })), { ...target, owner: managed });
 });
 
@@ -93,7 +94,7 @@ test("the offers read from their links with the reference's Borsh, code, address
     assert.equal(offerLink(made), f.link, f.case);
     assert.equal(made.expiresAt, made.createdAt + PAIR_OFFER_LIFE_MS);
   }
-  assert.equal(fromHex(v.offers[0].borsh_hex).length, 204, "about 200 bytes (§3a)");
+  assert.equal(fromHex(v.offers[0].borsh_hex).length, 192, "about 200 bytes (§3a)");
   // The code changes with everything in the offer, the proof and the owner included.
   const [english] = v.offers;
   const offer = parseOfferLink(english.link);
@@ -104,7 +105,7 @@ test("the offers read from their links with the reference's Borsh, code, address
   const make = (over) => makeOffer({ network: chain.network, genesis: chain.genesis, secret, target, nonce: "a1".repeat(16), name: "", createdAt: now, ...over });
   assert.equal(problemOf(() => make({ network: "testnet" })), "other_network");
   assert.equal(problemOf(() => make({ genesis: "5b" + chain.genesis.slice(2) })), "other_network");
-  assert.equal(problemOf(() => make({ target: { ...target, owner: encodeAddress("testnet", fromHex(owner, 32)) } })), "other_network");
+  assert.equal(problemOf(() => make({ target: { ...target, owner: encodeAddress("testnet", fromHex(owner, 20)) } })), "other_network");
   assert.equal(problemOf(() => make({ name: "x".repeat(MAX_PAIR_NAME + 1) })), "name");
   assert.equal(problemOf(() => make({ name: "Keys\n" })), "name");
   assert.equal(make({ name: "я".repeat(MAX_PAIR_NAME) }).name.length, MAX_PAIR_NAME);
@@ -198,7 +199,7 @@ test("a server finds its key, or refuses to start and says to run grain pair; a 
   assert.equal(appKeyFromEnvironment({ dir, env: {}, warn }).publicKey, key.publicKey);
   assert.deepEqual(warned, [DEVELOPER_KEY_WARNING]);
   assert.match(DEVELOPER_KEY_WARNING, /developer key made in Saltix.*grain pair --new/);
-  assert.ok(!DEVELOPER_KEY_WARNING.includes("saltix-app:1"), "the warning never shows a key's form");
+  assert.ok(!DEVELOPER_KEY_WARNING.includes("salarium-app:1"), "the warning never shows a key's form");
   assert.ok(!keyPairedHere(dir, key));
   // Beside app.json naming it: paired here, no warning.
   writeFileSync(join(dir, "app.json"), JSON.stringify({ slug: "access", network: "devnet", genesis: "5a".repeat(8), key: key.publicKey, fingerprint: keyFingerprint(key.publicKey), paired_at: "" }));

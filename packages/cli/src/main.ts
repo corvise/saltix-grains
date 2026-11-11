@@ -140,7 +140,7 @@ const HELP = `grain — make, serve, check, sign, register and retire grains (Sa
   grain connect-profile --origin URL --name N --category C --key site.key [--profile F] [--revision N] [--out F]
                         [--offline]        a website's Connect profile signed by its operator's key file (or a
                                            device's of the account --owner names), written where the site serves
-                                           it (--out .well-known/saltix-connect); its revision goes above the one
+                                           it (--out .well-known/salarium-connect); its revision goes above the one
                                            the site serves now and the file before (--offline: the file only)
   grain chat-spec [--spec chat.json] [--cert cert.json] [--out chat.signed.json]
                                            lint the chat spec and sign it with the owner key: the document to serve
@@ -986,7 +986,7 @@ async function main(argv: string[], log: DevLog): Promise<number> {
       return 0;
     }
     case "connect-profile": {
-      const out = text(flags, "out", ".well-known/saltix-connect");
+      const out = text(flags, "out", ".well-known/salarium-connect");
       const given = flags.get("revision");
       if (given !== undefined && (typeof given !== "string" || !/^[1-9][0-9]{0,9}$/.test(given) || Number(given) > 0xffff_ffff)) {
         throw new UsageError("--revision N: 1 or more, above the one the site serves now");

@@ -3,17 +3,17 @@
 // username bound to a grain; the deposits by the slug's length; what the shard refuses before a call leaves it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   encodeGrainTx, grainTxId, signGrainTx, minimumFee, fromHex, toHex, sameManifest, grainDeposit, grainCallProblem, callAmount,
   parseRoles, roleNames, categoryOf, accountId, parseHandle, displayHandle, encodeHandle, handleProblem, GRAIN_DEPOSIT, ROLES,
   serverKeyProofPayload, verifyServerKeyProof,
 } from "../dist/index.js";
 import { ed25519 } from "@noble/curves/ed25519";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
-const handles = JSON.parse(readFileSync(new URL("../../../vectors/handles-v1.json", import.meta.url), "utf8"));
-const access = JSON.parse(readFileSync(new URL("../../../vectors/access-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("grains-v1.json");
+const handles = goldenVectors("handles-v1.json");
+const access = goldenVectors("access-v1.json");
 const secret = fromHex(v.owner_secret, 32);
 /** The rater of the vectors: `RATER` of chain/crates/saltix-types/src/grain/vectors.rs (its public key is checked below). */
 const RATER = fromHex("65".repeat(32), 32);
@@ -64,7 +64,7 @@ test("registry transactions are the node's", () => {
     assert.equal(toHex(serverKeyProofPayload(r.genesis_hash, v2.call.slug, owner)), s.signed_payload_hex);
     assert.ok(verifyServerKeyProof(s.key, s.proof, r.genesis_hash, v2.call.slug, owner));
     assert.ok(!verifyServerKeyProof(s.key, s.proof, r.genesis_hash, "chess-bot", owner), "another app");
-    assert.ok(!verifyServerKeyProof(s.key, s.proof, r.genesis_hash, v2.call.slug, "00".repeat(32)), "another owner");
+    assert.ok(!verifyServerKeyProof(s.key, s.proof, r.genesis_hash, v2.call.slug, "00".repeat(20)), "another owner");
   }
   assert.match(grainCallProblem({ configureProven: { slug: "chess", servers: [{ key: v2.call.servers[0].key, proof: "ab" }], category: 4 } }), /proof/);
 });
@@ -130,12 +130,12 @@ test("what the shard refuses is refused before a call is signed", () => {
   assert.match(refused({ configure: { slug: "chess", servers: [key], category: 10 } }), /category/);
   assert.match(refused({ configure: { slug: "Chess", servers: [key], category: 1 } }), /slug/);
   const m = (account, roles) => ({ account, roles });
-  assert.equal(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(32), 3)] } }), null);
-  assert.match(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(32), 0)] } }), /members/, "no role");
-  assert.match(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(32), 8)] } }), /members/, "an unknown role");
+  assert.equal(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(20), 3)] } }), null);
+  assert.match(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(20), 0)] } }), /members/, "no role");
+  assert.match(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(20), 8)] } }), /members/, "an unknown role");
   assert.match(refused({ access: { slug: "chess", public: false, members: [m(owner, 1)] } }), /members/, "the owner is no member");
-  assert.match(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(32), 1), m("45".repeat(32), 2)] } }), /members/, "twice");
-  const many = Array.from({ length: 65 }, (_, i) => m(i.toString(16).padStart(64, "0"), 1));
+  assert.match(refused({ access: { slug: "chess", public: false, members: [m("45".repeat(20), 1), m("45".repeat(20), 2)] } }), /members/, "twice");
+  const many = Array.from({ length: 65 }, (_, i) => m(i.toString(16).padStart(40, "0"), 1));
   assert.match(refused({ access: { slug: "chess", public: true, members: many } }), /members/, "65 members");
   assert.equal(refused({ access: { slug: "chess", public: true, members: many.slice(0, 64) } }), null, "64 members");
   assert.equal(refused({ rate: { slug: "chess", score: 5, review: "x".repeat(140) } }), null);
@@ -174,6 +174,6 @@ test("only the owner's manifest and a valid slug are signed", () => {
 
 test("a wallet's manifest is the same but for its owner", () => {
   const m = v.manifests.find((c) => c.name === "hosted").json.manifest;
-  assert.ok(sameManifest(m, { ...m, owner: "22".repeat(32), owner_key: { p256: "02" + "33".repeat(32) } }));
+  assert.ok(sameManifest(m, { ...m, owner: "22".repeat(20), owner_key: { p256: "02" + "33".repeat(32) } }));
   assert.ok(!sameManifest(m, { ...m, version: m.version + 1 }));
 });

@@ -17,25 +17,25 @@ v1"`: `derive(context, bytes)`. Nothing is ever signed raw. The domains an app m
 
 | Context | What it makes | Bound to the network | Page |
 |---|---|---|---|
-| `Saltix address v1` | an account id: `derive(…, [kind] ‖ material)` | no (the address prefix is) | [Addresses](#addresses) |
-| `Saltix transaction v3` | a transaction's id, which its sender signs | yes | [Transactions](#transactions-an-apps-tools-sign) |
-| `Saltix grain manifest v1`, `Saltix grain manifest id v1` | a manifest's signed message, its id | no | [grains §2](grains.md#2-manifest) |
-| `Saltix grain icon v1`, `Saltix grain bundle v1` | the icon's and a sealed bundle's hash | no | [grains §2](grains.md#2-manifest), [§8](grains.md#8-sealed-bundles) |
-| `Saltix grain key v1` | a user's grain key (its Ed25519 seed) | no | [grains §5.1](grains.md#51-identity) |
-| `Saltix grain login v1` | a sign-in's signed message | no (origin and slug are in it) | [grains §5.1](grains.md#51-identity) |
-| `Saltix grain invoice v1`, `Saltix grain invoice key v1` | an invoice, a server key's certificate | the invoice yes, the certificate no | [grains §5.2](grains.md#52-payments) |
-| `Saltix grain notification v1` | a notification | yes | [grains §5.5](grains.md#55-notifications) |
-| `Saltix grain messaging key v1`, `Saltix grain server messaging key v1` | a user's and a server's messaging secret | no | [grains §5.4](grains.md#54-relays-real-time-between-users), [§5.5](grains.md#55-notifications) |
-| `Saltix grain chat spec v1`, `… chat request v1`, `… chat message v1`, `… chat hello v1`, `… chat welcome v1` | a chat's signed objects | all but the spec | [grain chats](grain-chats.md) |
-| `Saltix grain member v1` | a member proof | yes | [grain chats §3](grain-chats.md#3-requests-what-the-user-sends) |
-| `Saltix grain stats v1` | an app's reported numbers | yes | [grain chats §4](grain-chats.md#4-messages-what-the-app-sends) |
-| `Saltix grain server v1` | a server key's proof of its holder (protocol version 2) | yes | [app studio §2](app-studio.md#2-the-registry) |
-| `Saltix app invite v1` | an invite's MAC key | yes | [app studio §2a.1](app-studio.md#2a1-invites) |
-| `Saltix connect login v1`, `Saltix connect profile v1` | a Connect login, a Connect profile | the login names its network | [connect](connect.md) |
-| `Saltix link payload v1` | the key that seals a payload to a link slot | no (bound to the slot) | [relays](relays.md#link-slots) |
-| `Saltix messaging key v1`, `Saltix address record v1`, `Saltix device certificate v1`, `Saltix mailbox ack v1` | records a client signs for relays | no | [relays](relays.md#registering-an-address) |
-| `Saltix sponsor certificate v1`, `Saltix allowance request v1`, `Saltix access allowance v1` | paying for relays | yes | [relays](relays.md#paying-for-relays-lanes-and-sponsors) |
-| `Saltix key event v1`, `Saltix root digest v1`, `Saltix root use v1` | an account's key event log | the events' transactions are | [Accounts whose keys change](#accounts-whose-keys-change) |
+| `Salarium address v1` | an account id: `derive(…, [kind] ‖ material)` | no (the address prefix is) | [Addresses](#addresses) |
+| `Salarium transaction v3` | a transaction's id, which its sender signs | yes | [Transactions](#transactions-an-apps-tools-sign) |
+| `Salarium grain manifest v1`, `Salarium grain manifest id v1` | a manifest's signed message, its id | no | [grains §2](grains.md#2-manifest) |
+| `Salarium grain icon v1`, `Salarium grain bundle v1` | the icon's and a sealed bundle's hash | no | [grains §2](grains.md#2-manifest), [§8](grains.md#8-sealed-bundles) |
+| `Salarium grain key v1` | a user's grain key (its Ed25519 seed) | no | [grains §5.1](grains.md#51-identity) |
+| `Salarium grain login v1` | a sign-in's signed message | no (origin and slug are in it) | [grains §5.1](grains.md#51-identity) |
+| `Salarium grain invoice v1`, `Salarium grain invoice key v1` | an invoice, a server key's certificate | the invoice yes, the certificate no | [grains §5.2](grains.md#52-payments) |
+| `Salarium grain notification v1` | a notification | yes | [grains §5.5](grains.md#55-notifications) |
+| `Salarium grain messaging key v1`, `Salarium grain server messaging key v1` | a user's and a server's messaging secret | no | [grains §5.4](grains.md#54-relays-real-time-between-users), [§5.5](grains.md#55-notifications) |
+| `Salarium grain chat spec v1`, `… chat request v1`, `… chat message v1`, `… chat hello v1`, `… chat welcome v1` | a chat's signed objects | all but the spec | [grain chats](grain-chats.md) |
+| `Salarium grain member v1` | a member proof | yes | [grain chats §3](grain-chats.md#3-requests-what-the-user-sends) |
+| `Salarium grain stats v1` | an app's reported numbers | yes | [grain chats §4](grain-chats.md#4-messages-what-the-app-sends) |
+| `Salarium grain server v1` | a server key's proof of its holder (protocol version 2) | yes | [app studio §2](app-studio.md#2-the-registry) |
+| `Salarium app invite v1` | an invite's MAC key | yes | [app studio §2a.1](app-studio.md#2a1-invites) |
+| `Salarium connect login v1`, `Salarium connect profile v1` | a Connect login, a Connect profile | the login names its network | [connect](connect.md) |
+| `Salarium link payload v1` | the key that seals a payload to a link slot | no (bound to the slot) | [relays](relays.md#link-slots) |
+| `Salarium messaging key v1`, `Salarium address record v1`, `Salarium device certificate v1`, `Salarium mailbox ack v1` | records a client signs for relays | no | [relays](relays.md#registering-an-address) |
+| `Salarium sponsor certificate v1`, `Salarium allowance request v1`, `Salarium access allowance v1` | paying for relays | yes | [relays](relays.md#paying-for-relays-lanes-and-sponsors) |
+| `Salarium key event v1`, `Salarium root digest v1`, `Salarium root use v1` | an account's key event log | the events' transactions are | [Accounts whose keys change](#accounts-whose-keys-change) |
 
 "Bound to the network" means the context's input starts with the network's **genesis hash** (32 bytes), so a signature
 made for the test network is worthless on another.
@@ -73,20 +73,21 @@ made for the test network is worthless on another.
 ## Addresses
 
 ```text
-identifier = derive("Saltix address v1", [kind] ‖ material)          32 bytes: the account id
-address    = Bech32m(prefix, [kind as one 5-bit symbol] ‖ identifier)
+identifier = the first 20 bytes of derive("Salarium address v1", [kind] ‖ material): the account id
+address    = Bech32m(prefix, q ‖ identifier)          or 0x… (EIP-55) for EVM tools: the same 20 bytes
 ```
 
-| Kind | Symbol | Material | |
-|---|---|---|---|
-| 0 | `q` | an Ed25519 public key (32 bytes) | a **personal address**: `salt1q…`, `dsalt1q…` |
-| 5 | `9` | the hash of the phrase's first root key | a **managed account** ([below](#accounts-whose-keys-change)): `salt19…` |
-| 3 | `r` | a module's name | the chain's own modules (funds, registries); never an app's |
+| Kind | Material | |
+|---|---|---|
+| 0 | an Ed25519 public key (32 bytes) | a **personal address** |
+| 5 | the hash of the phrase's first root key | a **managed account** ([below](#accounts-whose-keys-change)) |
+| 3 | a module's name | the chain's own modules (funds, registries); never an app's |
 
-The other kinds (contracts, and kinds retired before launch) are not an app's.
+The kind enters the derivation only: an address names none, so every address reads `salt1q…` (`tsalt1q…`,
+`dsalt1q…`), a contract's as anyone's. The other kinds (contracts, and kinds retired before launch) are not an app's.
 
 - **Bech32m** (BIP-350), all lowercase or all uppercase (uppercase for QR codes). The checksum catches up to 4 errors.
-- **The account id** is the 32-byte identifier: the network is not part of it. JSON gives accounts as a Bech32m address
+- **The account id** is the 20-byte identifier: the network is not part of it. JSON gives accounts as a Bech32m address
   of the node's network, or as the id in hex.
 - **A key's personal address** is kind 0 of that key. Every key an app meets has one: a user's grain key (the grain
   alias at relays), a server key (the chat's address), a sponsor's key (its account). The SDK: `accountId(key)`,
@@ -129,7 +130,7 @@ received funds has no controller and no devices yet.
   ```text
   KeyEvent  { account: [u8; 32], seq: u32, prev: [u8; 32], slot: u64, body: EventBody }
   EventBody = 0 Signed(SignedTransaction) | 1 Matured(transaction id [u8; 32])
-  event id  = derive("Saltix key event v1", Borsh(event))
+  event id  = derive("Salarium key event v1", Borsh(event))
   ```
 
   `seq` counts from 1, `prev` is the id of the event before (zeros for the first), `slot` never decreases. From the
@@ -143,9 +144,9 @@ received funds has no controller and no devices yet.
   proof's shape so that nobody can cut a quorum down to one of its signers and change what it may do:
 
   ```text
-  q = derive("Saltix quorum v1", transaction id ‖ [proof tag] ‖ the devices' indexes in the proof's order)
+  q = derive("Salarium quorum v1", transaction id ‖ [proof tag] ‖ the devices' indexes in the proof's order)
       Devices (tag 2): two indexes; RootAndDevice (tag 4): one
-  the devices sign q; the root signs its use of q: derive("Saltix root use v1", q ‖ next_digest)
+  the devices sign q; the root signs its use of q: derive("Salarium root use v1", q ‖ next_digest)
   ```
 
   A log does not say which version each event's block ran, so its check takes a quorum in either form, the newer
@@ -193,7 +194,7 @@ Action = 0 Transfer { to: [u8; 32], asset: Asset, amount: u64, memo: Memo }
        | 3 TopUpChannel { exchange, amount } | 4 CloseChannel { exchange }
        | 5 StakeAccess { amount } | 6 UnstakeAccess | 7 Account(…)       not an app's
 Memo   = 0 None | 1 Text(String: 1–512 bytes) | 2 Sealed { key_hint: [u8; 4], ephemeral: [u8; 32], ciphertext: Vec<u8> }
-id     = derive("Saltix transaction v3", genesis_hash ‖ Borsh(tx))
+id     = derive("Salarium transaction v3", genesis_hash ‖ Borsh(tx))
 SignedTransaction { tx: Transaction, proof }    proof 0 Key([u8; 64]): the key's Ed25519 signature over id
 ```
 

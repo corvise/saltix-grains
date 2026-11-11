@@ -7,13 +7,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
-import { readFileSync } from "node:fs";
 import {
   BLOB_PIECE, BlobRefused, RpcError, accountId, blobHeld, fromHex, getBlob, namedHash, putBundle, putIcon, signBundleUpload, signManifest, toHex,
 } from "../dist/index.js";
 import { createDevRegistry } from "../dist/dev.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("images-v1.json");
 const ownerSecret = fromHex("41".repeat(32), 32);
 const serverSecret = fromHex("42".repeat(32), 32);
 const serverKey = toHex(ed25519.getPublicKey(serverSecret));

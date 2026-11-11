@@ -9,6 +9,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { accountId, fromHex, toHex } from "@saltix/grain-server";
 import { serve } from "../dist/dev.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const secret = fromHex("62".repeat(32), 32);
@@ -84,7 +85,7 @@ test("grain dev keeps a development registry: the simulator's team and members, 
     assert.deepEqual(dev.servers, []);
     assert.deepEqual(dev.access, { owner: toHex(accountId(fromHex(owner, 32))), public: true, members: [] });
     // The simulator's account joins a private app as a developer: its sign-ins carry a member proof.
-    const member = "aa".repeat(32);
+    const member = "aa".repeat(20);
     const set = await (await fetch(`${base}/api/dev/access`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ public: false, members: [member, "not hex", dev.access.owner] }),
     })).json();
@@ -137,7 +138,7 @@ test("a sealed grain's start page is where the simulator opens it, and the icon 
   const { devPageUrl } = await import("@saltix/grain/rules");
   const { iconHash } = await import("@saltix/grain-server");
   const { readFileSync } = await import("node:fs");
-  const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const vectors = goldenVectors("images-v1.json");
   const icon = Buffer.from(vectors.images.find((i) => i.kind === "grain_icon" && i.width === 512).hex, "hex");
   const dir = scratch("grain-dev-sealed-");
   mkdirSync(join(dir, "public"));

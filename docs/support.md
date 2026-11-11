@@ -51,7 +51,7 @@ account a wallet opens a chat with; `supportKind` says whether a contact opens a
 
 ```text
 SupportConsent { slug: String, owner: [u8; 32], key: [u8; 32], signature: [u8; 64] }
-  signature: strict Ed25519 by key over derive("Saltix support consent v1", Borsh((genesis_hash, slug, owner)))
+  signature: strict Ed25519 by key over derive("Salarium support consent v1", Borsh((genesis_hash, slug, owner)))
 ```
 
 - **Who signs**: the address's holder, with the key the address is made of (a personal address's own key; a managed

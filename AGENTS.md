@@ -63,7 +63,7 @@ these steps, in English, with a line saying which language to answer the person 
 ([the brief](docs/first-app.md#building-with-a-coding-agent)). Beside it is the **pairing command**,
 `grain pair --app <slug> --owner <address> --genesis <16 hex>` (Saltix 24-app-studio
 [§3a](docs/protocol/app-studio.md#3a-pairing-a-server-by-qr-code)): three public facts, which the registry holds for
-every app, and nothing else. A string that starts with `saltix-app:1:` is a **developer key** made before pairing
+every app, and nothing else. A string that starts with `salarium-app:1:` is a **developer key** made before pairing
 ([§3](docs/protocol/app-studio.md#3-the-developer-key), retired: step 4). Whichever you were given, an app is waiting
 for you:
 
@@ -96,7 +96,7 @@ for you:
 4. **A developer key is retired.** Saltix makes no new ones (24-app-studio §3, 2026-10-28): a host where no command runs
    is where the program's own first start runs `grain pair` once, its console showing the QR code as any terminal does.
    One made before keeps working until its owner pairs a server in its place, and the server says so at start. If one
-   reaches you anyway, read only its public parts: `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network
+   reaches you anyway, read only its public parts: `salarium-app:1:<hrp>:<genesis>:<slug>:<secret>`, `hrp` the network
    (`dsalt`: Saltix's test network, of the devnet kind; `tsalt`: a testnet; `salt`: the main network), `genesis` the
    first 8 bytes of its genesis hash in hex, `slug` the app (`salt:grain/<slug>`). The last part, 64 hex characters, is
    the secret: never print, repeat, log or quote it, nor the whole key; `npx grain app-key --file app.key --offline`
@@ -255,7 +255,7 @@ own signs its visitors in by the **server-held mode** (19-connect §15): the ser
 login itself with `@saltix/connect/server` (`createServerConnect`: `offer`, `take`, the offer spent once), the page is
 its courier (`createConnect({server})`), and `packages/connect/example` is a whole site to copy; never a hosted check
 as the only way ([docs/connect.md §5](docs/connect.md#5-the-two-modes-the-pages-own-and-the-server-held)). **What a
-site needs**, in order: its profile at `/.well-known/saltix-connect`, the button, a relay path of its own and a node
+site needs**, in order: its profile at `/.well-known/salarium-connect`, the button, a relay path of its own and a node
 ([docs/connect.md §1–§3](docs/connect.md#1-the-sites-profile)); with a session, the two routes of the server's sign-in —
 a DApp's back end ([§5.1](docs/connect.md#51-a-worked-example-a-dapps-back-end-node)) or a plain website behind
 `auth_request` ([§5.2](docs/connect.md#52-a-worked-example-a-plain-website)) — and its test plan run against its own
@@ -281,7 +281,7 @@ and `grain pair`, watching the registry, writes `app.key` once it names the key.
 address they did not give you; developer keys are retired (one made before keeps working, with a warning to pair a server in its place).
 `grain doctor` names the next step. Every command logs its steps to `.grain/log.jsonl`, codes and timings only.
 
-Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, a developer key `saltix-app:1:…`) are never committed,
+Secrets (`owner.key`, `server.key`, `app.key`, `.grain/pair.key`, a developer key `salarium-app:1:…`) are never committed,
 printed, logged or pasted into a chat. The other rules every app follows (the chat spec's version, the unasked budget, state, the exit
 status of a dead key, payments, the Connect profile, people's names) are in
 [docs/agents/app.md](docs/agents/app.md#the-rules-every-app-follows). Two of them, in short:
@@ -382,7 +382,7 @@ Connect sheet and card (Saltix 19-connect [§11.1](docs/protocol/connect.md#111-
   for any change of the profile, and refuses format 2 before the network runs protocol version 9. Or in Saltix: My
   apps → the app → Connect profile.
 - **An address other than the owner's own carries its holder's consent**, so nobody becomes an app's support without
-  saying so: the address's key signs `"Saltix support consent v1"` over the network's genesis hash, the app's slug and
+  saying so: the address's key signs `"Salarium support consent v1"` over the network's genesis hash, the app's slug and
   the owner's account (`SupportConsent`). A person signs in their Saltix. An agent's key signs from the environment,
   never a file: `SALTIX_SUPPORT_KEY=… npx grain support consent --slug <slug>` (or `supportConsentFromEnvironment`)
   writes `support-consent.json`, public, and the owner runs `npx grain support <address> --consent

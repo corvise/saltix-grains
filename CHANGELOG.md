@@ -2,6 +2,55 @@
 
 ## [Unreleased]
 
+- scripts, tests: **the golden vectors are found by one resolver, and the public repository is the SDK of one protocol
+  commit, file for file** — every test reads a vector as `goldenVectors("<name>.json")` (`scripts/vectors.mjs`): in the
+  public repository the copies in `vectors/`, bound to their commit by `vectors/SOURCE`; in the protocol's repository
+  its own files, with no copy beside them. `scripts/sync-vectors.mjs` (a shell script before) copies exactly the files
+  the tests read, from the commit and never from a working tree, and removes a copy no test reads;
+  `scripts/check-vectors.mjs` holds each to its bytes. Publishing rewrites nothing, CI and `.gitignore` included, so
+  what the protocol's repository tests is what stands here. Found on 2026-11-11 by a developer's coding agent: the
+  public repository stood at the SDK of 2026-11-05 — a retired network's relay pins, `SALTIX-RELAY:` tickets and
+  signing contexts — and no app made with it reached the network. A clone comes up to date by
+  `git pull && npm install && npm run build`. The link test refuses a link that leaves the SDK: in the protocol's
+  repository it reaches a file, in the public one nothing (one stood in this page, found by the first trial publish).
+- simulator: **the Connect sheet names the app's owner by a short address again** — it read the manifest's account as a
+  key's 32 bytes where an account is 20, and showed the owner's hex in its place (`dice · by 11f780e0…` for
+  `dice · by dsalt1q…`). The real-browser test sees it wherever a browser stands; `packages/cli/test/simulator.test.mjs`
+  now holds the sheet's words on a computer without one. A manifest loaded by hand with something else in the owner's
+  place is still shown as written.
+- cli: **`grain dev --check --tap` compares two looks of the page as a person sees them** — no pixel differs by more
+  than 16 of 255 in a channel, and at most one in a thousand differs at all (`sameLook`). The comparison was exact, and
+  a browser on a busy machine draws a resting page's rounded corners a few levels apart from frame to frame (57 pixels
+  of 280 800, by at most 5): a button that does nothing was taken for one that works and its warning was lost, which
+  failed the real-browser test once in a run of the whole workspace. A page of wide gradients may still be drawn apart
+  over thousands of pixels; there a dead button gets no warning, as before.
+- connect, cli: **Saltix Connect and the grain CLI speak Salarium**, as the wallet and the server SDK do — a login is
+  `{network, account [20], origin, sid, page, at}` under `"Salarium connect login v1"`, payloads seal under `"Salarium link
+  payload v1"`, an offer is `salarium-connect:1:…` and its link `https://salarium.io/connect#…`, a page keeps 20-byte
+  accounts, and an address names no kind (`checkAccount` returns the log alone). The CLI reads 20-byte owners and
+  members, writes a site's profile for `/.well-known/salarium-connect`, ranks a bundle's relays under `"Salarium bundle
+  placement v1"` as the network's nodes do, and takes any address as support, a contract's included. Their tests read
+  `salarium/vectors/`; the docs name Salarium's contexts, `salarium-app:1:` keys and 20-byte ids. Found by CI: the SDK
+  had moved and these two packages had not built since.
+- server: **the app learns the moment its team can be reached** — `onTeamReachable`, a `ChatServer` option, is called
+  with the member as `team()` names it whenever the server keeps an address it did not have (a hello, a request, a
+  sign-in; once for two copies of one hello at once), so what waited for the owner — an update the console did not get —
+  goes then, not on a timer. A callback that throws costs a line in the log (`chat_team_reachable_failed`).
+- server: **a server beside its own node** — `RelayClient`'s `preferred` endpoints are tried first in each round (the
+  computer's own relay), `typing` and `read` say typing and a message read (09-relay §3), and the `activation` and
+  `account` events pass on what the relay pushes about the address (44-messenger-activation §5, 09-relay §3); for the
+  agent on the node (Saltix 48-agents).
+- server: **managed accounts' messaging keys** (09-relay §1.4) — `RelayClient` takes a managed account's key (a new
+  wallet's account is one) from its `ManagedRecord` checked against its key event log, as the node's relay checks it:
+  the binding and the record signed by signers current in the log (a device not a guardian, or a root of the current
+  phrase), the log at least at the binding's `seq`, nothing dated ahead, an empty log only a new address's own first
+  root's — for sealing to it and opening from it, under the network's rules its new `accounts` option gives or its
+  `node`'s `node_status` tells (`managed.ts`: `managedMessagingKeyOf`, `managedRecordProblem`, `managedLogOf`,
+  `logRulesOf`, `signManagedBinding`, `signManagedRecord`; vectors/relay-v1.json byte for byte). The key event log check
+  keeps the current phrase's roots as the node does (`phraseRoots`, `isPhraseRoot`, `provesPhrase`), reads a proven new
+  phrase (`ReplaceRoot`, account action tag 7, protocol version 10; a log that carried one did not check before, and the
+  bare digest's action is now `replace_root_v1`), checks a log from a given origin (`checkLogFrom`) and splits the log as
+  relays carry it (`splitLog`).
 - cli: **one way at a time** — `grain publish` shows no QR code when the owner's console got the proposal (the card is
   the way; `--qr` shows the code instead), and says why when the code is the way (the owner, 2026-11-05: a card one
   time, a code the next); the code's words say it is good once.

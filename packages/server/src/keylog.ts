@@ -13,20 +13,30 @@
 // controller (its kind 0 key, or rule set 1 of its first root), and a `SetController` replaces it. A controller of a
 // version this SDK does not know refuses the log as "a newer controller": keys not verified, never a broken account.
 //
+// The replay also keeps the current phrase's roots as the node's `CheckedLog` keeps them (saltix-types managed.rs,
+// `phrase_roots`; 13-accounts §8): the root the address commits to, then the next root each use of a root moves the
+// account on to; a new phrase starts them over — a bare one (`ReplaceRootV1`) from its digest, a proven one (`ReplaceRoot`,
+// 13-accounts §6.6) from its first root and the next one — and so does a new controller, from its root. A root signs for
+// the account at relays while it is one of them (09-relay §1.4, `managed.ts`).
+//
 // A quorum's proof (two devices, or the root and a device) comes in two forms (13-accounts §6.1, §7): up to protocol
 // version 1 its signers sign the transaction's id, from version 2 its quorum message, which names the proof's shape so
 // that nobody can cut it down to one of its signers. A log does not say which version each event's block ran, so a
 // quorum is taken in either form, the newer first, all its signers in the same one; one signer signs the id in every
 // version.
-import { accountId } from "./address.js";
+import { ID_BYTES, accountId } from "./address.js";
 import { Reader, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, deviceKeyValid, ed25519KeyValid, readDeviceKey, sameDeviceKey, verifyByDeviceKey, verifyEd25519 } from "./keys.js";
 
-const KEY_EVENT_DOMAIN = "Saltix key event v1";
-const TX_DOMAIN = "Saltix transaction v3";
-const ROOT_DIGEST_DOMAIN = "Saltix root digest v1";
-const ROOT_USE_DOMAIN = "Saltix root use v1";
-const QUORUM_DOMAIN = "Saltix quorum v1";
+const KEY_EVENT_DOMAIN = "Salarium key event v1";
+const TX_DOMAIN = "Salarium transaction v3";
+const ROOT_DIGEST_DOMAIN = "Salarium root digest v1";
+const ROOT_USE_DOMAIN = "Salarium root use v1";
+const QUORUM_DOMAIN = "Salarium quorum v1";
+const NEW_ROOT_DOMAIN = "Salarium new root v1";
+/** A log at relays is at most this many events and bytes (09-relay §1.4). */
+export const MAX_LOG_EVENTS = 512;
+export const MAX_LOG_BYTES = 192 * 1024;
 /** The protocol version from which a quorum's signers sign its quorum message (13-accounts §6.1). */
 const QUORUM_MESSAGE = 2;
 const MAX_DEVICES = 8;
@@ -59,14 +69,30 @@ export interface NewDevice {
   limit: DeviceLimit;
 }
 
+/**
+ * A new phrase's first root speaking for itself (13-accounts §6.6, protocol version 10): its key, whose digest is the
+ * phrase's `root_digest_0`, the digest of the phrase's next root, which the account moves on to, and its signature over
+ * `derive("Salarium new root v1", genesis hash ‖ account ‖ root_digest_0 ‖ next_digest)`.
+ */
+export interface NewRoot {
+  /** The root's signature scheme: 0, Ed25519, is the only one taken (23-upgrades §4). */
+  scheme: number;
+  publicKey: Uint8Array;
+  nextDigest: Uint8Array;
+  signature: Uint8Array;
+}
+
 export type AccountAction =
   | { kind: "add_device"; device: NewDevice }
   | { kind: "remove_device"; key: DeviceKey }
   | { kind: "set_limit"; key: DeviceKey; limit: DeviceLimit }
-  | { kind: "replace_root"; rootDigest: Uint8Array }
+  /** A new phrase named by its digest alone (tag 3), which versions 1 to 9 take: nothing proves the sender holds it. */
+  | { kind: "replace_root_v1"; rootDigest: Uint8Array }
   | { kind: "set_policy"; policy: AccountPolicy }
   | { kind: "cancel"; id: Uint8Array }
-  | { kind: "set_controller"; expectedTip: Uint8Array; controller: ControllerInit };
+  | { kind: "set_controller"; expectedTip: Uint8Array; controller: ControllerInit }
+  /** A new phrase its first root proves (tag 7, from protocol version 10). */
+  | { kind: "replace_root"; newRoot: NewRoot };
 
 /** What a `SetController` starts (23-upgrades §3): one case per controller version; rule set 1 is all there is. */
 export interface ControllerInit {
@@ -133,6 +159,18 @@ export interface CheckedLog {
   policy: AccountPolicy;
   seq: number;
   tip: Uint8Array;
+  /** The digests of the current phrase's roots, oldest first (13-accounts §8): the node's `CheckedLog.phrase_roots`. */
+  phraseRoots: Uint8Array[];
+  /** Whether the log proves that the current phrase's holder made it the account's (13-accounts §6.6): the root the
+   *  address commits to started it, or the phrase's first root signed a `ReplaceRoot` for it. */
+  phraseProven: boolean;
+}
+
+/** What a managed account's log is checked under (the node's `LogRules`): the network's genesis hash and its first
+ *  account policy (13-accounts §5, §7; `node_status.genesis` and `.accounts.policy`). */
+export interface LogRules {
+  genesis: Uint8Array;
+  policy: AccountPolicy;
 }
 
 /** A log that does not check, at the event that does not. */
@@ -151,6 +189,33 @@ const equal = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length &
 export const rootDigest = (publicKey: Uint8Array): Uint8Array => derive(ROOT_DIGEST_DOMAIN, publicKey);
 /** The account a log's origin starts: kind 5 of the root's digest, or kind 0 of the key. */
 export const logOriginAccount = (o: LogOrigin): Uint8Array => (o.kind === "root" ? accountId(o.digest, 5) : accountId(o.key, 0));
+
+/** Whether the root `publicKey` (Ed25519) belongs to the account's current phrase (`CheckedLog::is_phrase_root`). */
+export const isPhraseRoot = (log: Pick<CheckedLog, "phraseRoots">, publicKey: Uint8Array): boolean => {
+  const digest = rootDigest(publicKey);
+  return log.phraseRoots.some((d) => equal(d, digest));
+};
+
+/** Whether the log proves the phrase of first root digest `rootDigest0` the account's current one, made so by its holder
+ *  (`CheckedLog::proves_phrase`, 13-accounts §6.6): what a wallet restoring that phrase asks before it follows the alias
+ *  at the phrase's own address. A phrase named by a bare digest is never proven. */
+export const provesPhrase = (log: Pick<CheckedLog, "phraseRoots" | "phraseProven">, rootDigest0: Uint8Array): boolean =>
+  log.phraseProven && log.phraseRoots.length > 0 && equal(log.phraseRoots[0]!, rootDigest0);
+
+/** Why a new phrase's first root did not sign it for `account` on the network of `genesis` (`NewRoot::verify`, stateless:
+ *  an Ed25519 root, a valid key, a next root that is not the first, the signature), or null. */
+export function newRootProblem(
+  n: NewRoot,
+  genesis: Uint8Array,
+  account: Uint8Array,
+): "new_root_scheme" | "new_root_key" | "new_root_next" | "new_root_signature" | null {
+  if (n.scheme !== 0) return "new_root_scheme";
+  if (!ed25519KeyValid(n.publicKey)) return "new_root_key";
+  const digest = rootDigest(n.publicKey);
+  if (equal(n.nextDigest, digest)) return "new_root_next";
+  const message = derive(NEW_ROOT_DOMAIN, genesis, account, digest, n.nextDigest);
+  return verifyEd25519(n.publicKey, message, n.signature) ? null : "new_root_signature";
+}
 
 /** A policy as `node_status.accounts.policy` gives it (seconds as numbers). */
 export const policyOf = (p: { delay: number | bigint; dispute_timeout: number | bigint }): AccountPolicy => ({
@@ -185,13 +250,15 @@ export function readAccountAction(r: Reader): AccountAction {
     case 2:
       return { kind: "set_limit", key: readDeviceKey(r), limit: readLimit(r) };
     case 3:
-      return { kind: "replace_root", rootDigest: r.fixed(32) };
+      return { kind: "replace_root_v1", rootDigest: r.fixed(32) };
     case 4:
       return { kind: "set_policy", policy: readPolicy(r) };
     case 5:
       return { kind: "cancel", id: r.fixed(32) };
     case 6:
       return { kind: "set_controller", expectedTip: r.fixed(32), controller: readControllerInit(r) };
+    case 7:
+      return { kind: "replace_root", newRoot: { scheme: r.u8(), publicKey: r.fixed(32), nextDigest: r.fixed(32), signature: r.fixed(64) } };
     default:
       throw new TypeError(`borsh: account action ${tag}`);
   }
@@ -239,7 +306,7 @@ function readSigned(r: Reader, bytes: Uint8Array): EventTx[] {
   const senderTag = r.u8();
   let sender: Sender;
   if (senderTag === 0) sender = { kind: "key", key: r.fixed(32) };
-  else if (senderTag === 1) sender = { kind: "account", id: r.fixed(32) };
+  else if (senderTag === 1) sender = { kind: "account", id: r.fixed(ID_BYTES) };
   else throw new TypeError("borsh: sender");
   r.u64(); // nonce
   r.u64(); // fee
@@ -270,10 +337,70 @@ function readSigned(r: Reader, bytes: Uint8Array): EventTx[] {
   return out;
 }
 
+/**
+ * A log as relays carry it (09-relay §1.4 `log`, `key_response.log`: the Borsh of its events, from the first — their count,
+ * then each event) as its events' own bytes, each as `account_log` hands it out and `checkLog` takes it. An account
+ * action's event is read to its end; a payment's, whose action this SDK passes over (above), ends where the next event
+ * begins — bytes that name this account, the next number and this event's id, as each event names the one before it — or
+ * at the log's end. Throws for bytes that are no such log, or one longer than a relay takes.
+ */
+export function splitLog(bytes: Uint8Array): Uint8Array[] {
+  if (bytes.length > MAX_LOG_BYTES) throw new TypeError("a log is at most 192 KiB");
+  const n = new Reader(bytes).u32();
+  if (n > MAX_LOG_EVENTS) throw new TypeError(`a log is at most ${MAX_LOG_EVENTS} events`);
+  const events: Uint8Array[] = [];
+  let at = 4;
+  for (let i = 0; i < n; i++) {
+    const end = eventEnd(bytes, at, i === n - 1);
+    events.push(bytes.slice(at, end));
+    at = end;
+  }
+  if (at !== bytes.length) throw new TypeError("borsh: bytes left over");
+  return events;
+}
+
+/** An event's account, sequence, previous id and slot. */
+const EVENT_HEADER = ID_BYTES + 4 + 32 + 8;
+
+/** Where the event that starts at `start` of a log's Borsh ends (`splitLog`). */
+function eventEnd(bytes: Uint8Array, start: number, last: boolean): number {
+  const r = new Reader(bytes.subarray(start));
+  const account = r.fixed(ID_BYTES);
+  const seq = r.u32();
+  r.fixed(32);
+  r.u64();
+  const tag = r.u8();
+  if (tag === 1) {
+    r.fixed(32);
+    return start + r.position;
+  }
+  if (tag !== 0) throw new TypeError(`borsh: event body ${tag}`);
+  const sender = r.u8();
+  if (sender > 1) throw new TypeError("borsh: sender");
+  r.fixed(sender === 0 ? 32 : ID_BYTES);
+  r.u64(); // nonce
+  r.u64(); // fee
+  r.u64(); // valid until slot
+  if (r.u8() === ACCOUNT_ACTION) {
+    readAccountAction(r);
+    readProof(r);
+    return start + r.position;
+  }
+  if (last) return bytes.length;
+  // A payment: the next event names this account, the next number and this event's id, which only its true end gives.
+  const next = new Uint8Array(4);
+  new DataView(next.buffer).setUint32(0, seq + 1, true);
+  const at = (p: number, part: Uint8Array) => part.every((b, i) => bytes[p + i] === b);
+  for (let p = start + r.position; p + EVENT_HEADER <= bytes.length; p++) {
+    if (at(p, account) && at(p + ID_BYTES, next) && at(p + ID_BYTES + 4, derive(KEY_EVENT_DOMAIN, bytes.subarray(start, p)))) return p;
+  }
+  throw new TypeError("a payment's event does not end where the next one begins");
+}
+
 /** One event as `account_log` gives it (Borsh; hex in the node's answer). */
 function decodeEvent(bytes: Uint8Array): KeyEvent {
   const r = new Reader(bytes);
-  const account = r.fixed(32);
+  const account = r.fixed(ID_BYTES);
   const seq = r.u32();
   const prev = r.fixed(32);
   const slot = r.u64();
@@ -453,8 +580,12 @@ class Controller {
       case "set_limit":
         this.device(a.key)!.limit = a.limit;
         return;
-      case "replace_root":
+      case "replace_root_v1":
         this.rootDigest = a.rootDigest;
+        return;
+      case "replace_root":
+        // The first root signed the action: the account moves on to the next one at once, as every root's use moves it on.
+        this.rootDigest = a.newRoot.nextDigest;
         return;
       case "set_policy":
         this.policy = a.policy;
@@ -462,6 +593,52 @@ class Controller {
       default:
         return;
     }
+  }
+
+  copy(): Controller {
+    return new Controller(this.rootDigest, this.devices.map((d) => ({ ...d })), this.policy);
+  }
+}
+
+/**
+ * What a log replayed so far proves (the node's `CheckedLog` while it is built): the controller in force — none before the
+ * first event —, the current phrase's roots and whether its holder proved it, and the actions one signer registered.
+ */
+interface LogState {
+  controller: Controller | null;
+  phraseRoots: Uint8Array[];
+  phraseProven: boolean;
+  registered: Map<string, AccountAction>;
+}
+
+const copyState = (s: LogState): LogState => ({
+  controller: s.controller?.copy() ?? null,
+  phraseRoots: [...s.phraseRoots],
+  phraseProven: s.phraseProven,
+  registered: new Map(s.registered),
+});
+
+/**
+ * `action` took effect (the node's `CheckedLog::take_effect`): the controller changes as it says, and a new phrase or a new
+ * controller starts the phrase's roots over; a new controller voids what the old one's signers registered.
+ */
+function takeEffect(s: LogState, action: AccountAction): void {
+  if (action.kind === "set_controller") {
+    checkAction(action);
+    s.controller = started(action.controller);
+    s.phraseRoots = [action.controller.rootDigest];
+    s.phraseProven = false;
+    s.registered.clear();
+    return;
+  }
+  s.controller!.apply(action);
+  if (action.kind === "replace_root_v1") {
+    s.phraseRoots = [action.rootDigest];
+    s.phraseProven = false;
+  } else if (action.kind === "replace_root") {
+    // The first root, revealed and checked with the transaction, and the next, which the account moved on to.
+    s.phraseRoots = [rootDigest(action.newRoot.publicKey), action.newRoot.nextDigest];
+    s.phraseProven = true;
   }
 }
 
@@ -480,7 +657,7 @@ function quorumShape(p: Proof): Uint8Array | null {
 
 /**
  * What `proof`'s signers sign for transaction `id` in a block of protocol `version` (13-accounts §6.1): the id for one
- * signer in every version; a quorum's message `derive("Saltix quorum v1", id ‖ [tag] ‖ indexes)` from `QUORUM_MESSAGE`
+ * signer in every version; a quorum's message `derive("Salarium quorum v1", id ‖ [tag] ‖ indexes)` from `QUORUM_MESSAGE`
  * on. A root signs its use of this message.
  */
 function proofMessage(proof: Proof, id: Uint8Array, version: number): Uint8Array {
@@ -517,28 +694,65 @@ function statelessForms(tx: EventTx, genesis: Uint8Array): { id: Uint8Array; ver
     // A kind 0 key's birth controller takes only its replacement (23-upgrades §3).
     if (tx.sender.kind === "key" && tx.action.kind !== "set_controller") throw new Refusal("account sender");
     checkAction(tx.action);
+    // A new phrase's first root signed it for this account on this network (13-accounts §6.6).
+    if (tx.action.kind === "replace_root") {
+      const problem = newRootProblem(tx.action.newRoot, genesis, senderAccountOf(tx.sender));
+      if (problem) throw new Refusal(NEW_ROOT_REFUSALS[problem]);
+    }
   }
   return { id, versions };
 }
+
+const NEW_ROOT_REFUSALS = {
+  new_root_scheme: "a new phrase's root is of a scheme that is not taken",
+  new_root_key: "a new phrase's root is not a valid Ed25519 key",
+  new_root_next: "a new phrase's next root is its first root",
+  new_root_signature: "the new phrase's first root did not sign it for this account and network",
+} as const;
+
+const senderAccountOf = (s: Sender): Uint8Array => (s.kind === "key" ? accountId(s.key, 0) : s.id);
 
 /**
  * Check `account`'s log (events' Borsh as `account_log` hands them out, in order) offline from the origin its first event
  * shows, under the network's genesis hash and first `policy`: what it proves, or a `LogError`.
  */
 export function checkLog(account: Uint8Array, eventsBytes: Uint8Array[], genesis: Uint8Array, policy: AccountPolicy): CheckedLog {
-  let events: KeyEvent[];
+  const events = decodeEvents(eventsBytes);
+  const origin = originOfEvents(events);
+  if (!origin) throw new LogError(1, "does not start the account from its origin");
+  return replay(account, origin, events, genesis, policy);
+}
+
+/**
+ * Check `account`'s log from `origin` (the node's `check_log`): as `checkLog`, from the origin the caller has rather than
+ * the one the first event shows — which the replay holds the first event to. With no events it proves the account before
+ * its first transaction: a kind 5 address's birth controller, its first root alone, no device (09-relay §1.4).
+ */
+export function checkLogFrom(account: Uint8Array, origin: LogOrigin, eventsBytes: Uint8Array[], genesis: Uint8Array, policy: AccountPolicy): CheckedLog {
+  return replay(account, origin, decodeEvents(eventsBytes), genesis, policy);
+}
+
+function decodeEvents(eventsBytes: Uint8Array[]): KeyEvent[] {
   try {
-    events = eventsBytes.map(decodeEvent);
+    return eventsBytes.map(decodeEvent);
   } catch (e) {
     throw new LogError(0, e instanceof Error ? e.message : String(e));
   }
-  const origin = originOfEvents(events);
-  if (!origin || !equal(logOriginAccount(origin), account)) throw new LogError(1, "does not start the account from its origin");
-  let controller: Controller | null = null;
+}
+
+/** The replay of the node's `check_log` and `extend_log`, from `origin`. */
+function replay(account: Uint8Array, origin: LogOrigin, events: KeyEvent[], genesis: Uint8Array, policy: AccountPolicy): CheckedLog {
+  if (!equal(logOriginAccount(origin), account)) throw new LogError(1, "does not start the account from its origin");
+  // The address commits to its first root, which signs the first event; a kind 0 key's account has no phrase yet.
+  let state: LogState = {
+    controller: null,
+    phraseRoots: origin.kind === "root" ? [origin.digest] : [],
+    phraseProven: origin.kind === "root",
+    registered: new Map(),
+  };
   let seq = 0;
   let tip: Uint8Array = new Uint8Array(32);
   let slot = 0n;
-  const registered = new Map<string, AccountAction>();
   for (const event of events) {
     const n = seq + 1;
     const fail = (reason: string): never => {
@@ -549,20 +763,13 @@ export function checkLog(account: Uint8Array, eventsBytes: Uint8Array[], genesis
     try {
       if (event.body.kind === "matured") {
         const key = toHex(event.body.id);
-        const action = registered.get(key);
+        const action = state.registered.get(key);
         if (!action) fail("no pending account action of that transaction");
-        registered.delete(key);
-        if (!controller) fail("does not start the account from its origin");
-        if (action!.kind === "set_controller") {
-          // A new controller: what the old one's signers registered never matures.
-          checkAction(action!);
-          controller = started(action!.controller);
-          registered.clear();
-        } else {
-          controller!.apply(action!);
-        }
+        state.registered.delete(key);
+        if (!state.controller) fail("does not start the account from its origin");
+        takeEffect(state, action!);
       } else {
-        controller = replaySigned(controller, origin, event.body.txs, genesis, policy, registered, tip);
+        state = replaySigned(state, origin, event.body.txs, genesis, policy, tip);
       }
     } catch (e) {
       if (e instanceof LogError) throw e;
@@ -572,29 +779,31 @@ export function checkLog(account: Uint8Array, eventsBytes: Uint8Array[], genesis
     tip = event.id;
     slot = event.slot;
   }
+  // Before the first event a kind 5 address has its birth controller: its first root, no device, the network's policy.
+  const controller = state.controller ?? (origin.kind === "root" ? new Controller(origin.digest, [], policy) : null);
   if (!controller) throw new LogError(0, "no events");
-  return { origin, controllerVersion: 1, devices: controller.devices, rootDigest: controller.rootDigest, policy: controller.policy, seq, tip };
+  return {
+    origin, controllerVersion: 1, devices: controller.devices, rootDigest: controller.rootDigest, policy: controller.policy, seq, tip,
+    phraseRoots: state.phraseRoots, phraseProven: state.phraseProven,
+  };
 }
 
+/** A `Signed` event: of the ways it splits, the one whose proofs hold under the controller (a wrong split never
+ *  verifies), replayed on a copy of what the log proves so far, which it replaces. */
 function replaySigned(
-  current: Controller | null,
+  current: LogState,
   origin: LogOrigin,
   txs: EventTx[],
   genesis: Uint8Array,
   policy: AccountPolicy,
-  registered: Map<string, AccountAction>,
   tip: Uint8Array,
-): Controller {
-  // Of the ways the event splits, the one whose proofs hold under the controller: a wrong split never verifies.
+): LogState {
   let last: unknown = null;
   for (const tx of txs) {
-    const trial = current ? new Controller(current.rootDigest, current.devices.map((d) => ({ ...d })), current.policy) : null;
-    const pending = new Map(registered);
+    const trial = copyState(current);
     try {
-      const next = replayOne(trial, origin, tx, genesis, policy, pending, tip);
-      registered.clear();
-      for (const [k, v] of pending) registered.set(k, v);
-      return next;
+      replayOne(trial, origin, tx, genesis, policy, tip);
+      return trial;
     } catch (e) {
       last = e;
     }
@@ -602,51 +811,50 @@ function replaySigned(
   throw last instanceof Error ? last : new Refusal("no proof holds");
 }
 
-function replayOne(
-  controller: Controller | null,
-  origin: LogOrigin,
-  tx: EventTx,
-  genesis: Uint8Array,
-  policy: AccountPolicy,
-  registered: Map<string, AccountAction>,
-  tip: Uint8Array,
-): Controller {
+/** The node's `replay_signed`: the transaction under the controller in force before it — the birth controller for the
+ *  first event — as the ledger takes it. */
+function replayOne(s: LogState, origin: LogOrigin, tx: EventTx, genesis: Uint8Array, policy: AccountPolicy, tip: Uint8Array): void {
   const { id, versions } = statelessForms(tx, genesis);
-  const senderAccount = tx.sender.kind === "key" ? accountId(tx.sender.key, 0) : tx.sender.id;
-  if (!equal(senderAccount, logOriginAccount(origin))) throw new Refusal("names another account");
+  if (!equal(senderAccountOf(tx.sender), logOriginAccount(origin))) throw new Refusal("names another account");
   const action = tx.action;
   // A change of controller names the log's tip before it (zeros before the first event).
   if (action?.kind === "set_controller" && !equal(action.expectedTip, tip)) throw new Refusal("a stale log tip");
-  const first = controller === null;
+  const first = s.controller === null;
   if (first) {
-    // A kind 0 key's birth controller: its only account action replaces it, at once.
-    if (origin.kind === "key" && tx.sender.kind === "key" && action?.kind === "set_controller") return started(action.controller);
-    if (origin.kind === "root" && tx.sender.kind === "account") controller = new Controller(origin.digest, [], policy);
+    // A kind 0 key's birth controller: its only account action replaces it, at once, its root the phrase's.
+    if (origin.kind === "key" && tx.sender.kind === "key" && action?.kind === "set_controller") {
+      s.controller = started(action.controller);
+      s.phraseRoots = [action.controller.rootDigest];
+      s.phraseProven = false;
+      return;
+    }
+    if (origin.kind === "root" && tx.sender.kind === "account") s.controller = new Controller(origin.digest, [], policy);
     else throw new Refusal("does not start the account from its origin");
   }
-  const c = controller!;
+  const c = s.controller!;
   if (tx.sender.kind !== "account") throw new Refusal("does not start the account from its origin");
   // A quorum's devices sign in the form its root signed in, when a root signs (`versions`); either form otherwise.
   const proven = c.authorizeIn(tx.proof, id, versions);
   // The address's first transaction acts as a quorum's (13-accounts §6.1).
   const by: Authority = first ? { kind: "quorum" } : proven;
   const use = rootUseOf(tx.proof);
-  if (use) c.rootDigest = use.nextDigest;
+  if (use) {
+    // The root signed: the account moves on to the next one, which joins the phrase's roots.
+    c.rootDigest = use.nextDigest;
+    s.phraseRoots.push(use.nextDigest);
+  }
   if (!action) {
     if (!use) throw new Refusal("the transaction changes nothing the log records");
-    return c;
+    return;
   }
+  // Offline, disputes and cancels change nothing: whatever the chain drops or cancels never matures, so a log naming it as
+  // matured is refused.
   if (by.kind === "quorum" || c.strengthens(action, by)) {
-    if (action.kind === "set_controller") {
-      registered.clear();
-      return started(action.controller);
-    }
-    if (action.kind !== "cancel") c.apply(action);
+    if (action.kind !== "cancel") takeEffect(s, action);
   } else {
     c.check(action);
-    registered.set(toHex(id), action);
+    s.registered.set(toHex(id), action);
   }
-  return c;
 }
 
 /**

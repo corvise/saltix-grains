@@ -4,7 +4,6 @@
 // through this path byte for byte.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server/web";
 import {
@@ -12,12 +11,13 @@ import {
   sealLinkPayload,
 } from "../dist/index.js";
 import { MAX_PAYLOAD_BYTES, OFFER_LIFE_MS, createServerConnect, makeServerKeys } from "../dist/server.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 const GENESIS = "5a".repeat(32);
 const ORIGIN = "https://shop.example";
 const SECRET = new Uint8Array(32).fill(0x44);
 const KEY = ed25519.getPublicKey(SECRET);
-const ADDRESS = encodeAddress("devnet", accountId(KEY), 0);
+const ADDRESS = encodeAddress("devnet", accountId(KEY));
 const STATUS = { network: "devnet", genesis: GENESIS, accounts: { policy: { delay: 600, dispute_timeout: 3600 } } };
 const REPLY_RELAY = new Uint8Array(32).fill(0x36);
 const REPLY_SID = new Uint8Array(32).fill(0x55);
@@ -260,7 +260,7 @@ test("what createServerConnect refuses at once, and keys it will not make an off
 
 // ── The vectors through the server's path ───────────────────────────────────
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/connect-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("connect-v1.json");
 
 test("vectors/connect-v1.json through the server's path: every grant taken for its address, every refused one for its reason, the reply confirmed", async () => {
   const s = v.session;

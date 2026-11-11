@@ -201,7 +201,7 @@ export function createDevRelay(options: { network?: NetworkName; port?: number; 
       r.u64();
       if (r.u8() !== 0) throw new Error("device");
       r.end();
-      const signed = verifyEd25519(key, derive("Saltix mailbox ack v1", body), proof.subarray(proof.length - 64));
+      const signed = verifyEd25519(key, derive("Salarium mailbox ack v1", body), proof.subarray(proof.length - 64));
       if (!signed || msgId !== f.msgId || encodeAddress(network, accountId(key)) !== ws.address) throw new Error("proof");
     } catch {
       return send(ws, { type: "error", message: "bad_proof" });

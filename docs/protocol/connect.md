@@ -46,8 +46,8 @@ shows a QR code for 2 minutes and then a new one, with a new slot and keys, leav
 ## 3. The offer
 
 ```text
-saltix-connect:1:<relay node key>:<sid>:<Q>:<P>:<origin>:<name>
-https://saltix.io/connect#saltix-connect:1:…        the same text after the #, for a page on the phone itself
+salarium-connect:1:<relay node key>:<sid>:<Q>:<P>:<origin>:<name>
+https://salarium.io/connect#salarium-connect:1:…        the same text after the #, for a page on the phone itself
 ```
 
 - Every value is base64url without padding: the relay's node key, `sid`, `Q` and `P` are 32 bytes each; `origin` and
@@ -58,7 +58,7 @@ https://saltix.io/connect#saltix-connect:1:…        the same text after the #,
 - `name` is what the page calls itself, 1 to 40 bytes. Refused: Unicode's `Cc` and `Cf` characters (the bidirectional
   controls among them) and the line and paragraph separators (U+2028, U+2029). `vectors/connect-v1.json` lists the
   refused characters and an offer refused for each rule.
-- The link is exactly `https://saltix.io/connect#` and the text: the fragment never reaches a server, so whoever serves
+- The link is exactly `https://salarium.io/connect#` and the text: the fragment never reaches a server, so whoever serves
   that page learns nothing of the offer.
 - The wallet takes an offer only from its scanner or from that link, never from a page's script.
 
@@ -80,13 +80,13 @@ https://saltix.io/connect#saltix-connect:1:…        the same text after the #,
 ```text
 ConnectLogin {
   network:  [u8; 32]   the genesis hash
-  account:  [u8; 32]   the account's id
+  account:  [u8; 20]   the account's id
   origin:   String     as in the offer
   sid:      [u8; 32]
   page:     [u8; 32]   P, the session's Ed25519 key
   at:       u64        Unix ms
 }
-message = derive("Saltix connect login v1", Borsh(ConnectLogin))
+message = derive("Salarium connect login v1", Borsh(ConnectLogin))
 
 ConnectGrant {
   version:   u8          1
@@ -106,7 +106,7 @@ session:
 
 ```text
 e = a fresh one-time X25519 secret;  E = X25519(e, 9);  S = X25519(e, Q)        an all-zero S is refused
-key        = derive("Saltix link payload v1", S ‖ E ‖ Q)
+key        = derive("Salarium link payload v1", S ‖ E ‖ Q)
 ciphertext = XChaCha20-Poly1305(key, nonce = 24 zero bytes, aad = sid ‖ P, plaintext = Borsh(grant or ConnectSeen))
 payload    = base64url(E ‖ ciphertext)
 ```
@@ -179,7 +179,7 @@ console and not built for other sites yet.
 | `MAX_PROFILE_BYTES` | 8 192 bytes | a Connect profile's Borsh form |
 | Profile texts | tagline 1–80, about 0–600, highlights 0–4 of 1–60, privacy 0–300 characters; 1–8 languages | §11.1 |
 | `MAX_LINK` | 256 bytes | a profile's website, support or terms |
-| A site's profile | `/.well-known/saltix-connect`, 64 KiB, 5 s, kept a day | what a wallet fetches (§11.3) |
+| A site's profile | `/.well-known/salarium-connect`, 64 KiB, 5 s, kept a day | what a wallet fetches (§11.3) |
 | A tap before asking again | 5 seconds | a mini-app asks for what the user declined on the sheet only after a tap (§12.2) |
 
 ## 11. The Connect profile
@@ -193,7 +193,7 @@ that speaks for the service's owner, so nobody else can put words in its mouth. 
 ConnectProfile {
   version:   u8                       the format: 1, or 2 (from protocol version 9)
   subject:   Subject
-  owner:     [u8; 32]                 the service's owner: a grain's owner, a site's operator
+  owner:     [u8; 20]                 the service's owner: a grain's owner, a site's operator
   revision:  u32                      at least 1, raised with every change
   texts:     Map<lang, ProfileText>   1–8 languages, "en" among them
   website:   Option<String>           an https link
@@ -205,10 +205,10 @@ ConnectProfile {
 }
 SupportConsent {
   slug:      String                   the grain it answers for
-  owner:     [u8; 32]                 the grain's owner it consents to
+  owner:     [u8; 20]                 the grain's owner it consents to
   key:       [u8; 32]                 the Ed25519 key the support address is Address v1 of
   signature: [u8; 64]                 strict Ed25519 by key over
-             derive("Saltix support consent v1", Borsh((genesis_hash, slug, owner)))
+             derive("Salarium support consent v1", Borsh((genesis_hash, slug, owner)))
 }
 Subject = 0 Grain { slug: String }                                a mini-app: its name, icon and category are its
                                                                   manifest's and registry record's
@@ -221,7 +221,7 @@ ProfileText {
   privacy:    String          what it keeps about a user: 0–300 characters
 }
 SignedConnectProfile { profile, key: DeviceKey, signature: [u8; 64] }
-  by key over derive("Saltix connect profile v1", Borsh(profile)): Ed25519, or P-256 over SHA-256 with a low s
+  by key over derive("Salarium connect profile v1", Borsh(profile)): Ed25519, or P-256 over SHA-256 with a low s
 ```
 
 - **Texts.** Characters are Unicode scalar values. Refused everywhere: `Cc`, `Cf`, U+2028 and U+2029, as in an offer's
@@ -319,7 +319,7 @@ that fails is not shown, and the sheet says the app has none.
 A site serves its signed profile, subject `Site` with its own origin, at:
 
 ```text
-GET https://<origin>/.well-known/saltix-connect        the JSON form, application/json
+GET https://<origin>/.well-known/salarium-connect        the JSON form, application/json
 ```
 
 Its offer stays as it is (§3). When a wallet reads an offer it fetches the profile from the offer's origin: no
@@ -408,7 +408,7 @@ a profile.
 
 A DEX or any DApp signs its users in with Saltix Connect:
 
-1. The site publishes its profile at `/.well-known/saltix-connect` (§11.3), signed once with its operator's key.
+1. The site publishes its profile at `/.well-known/salarium-connect` (§11.3), signed once with its operator's key.
 2. It shows the **Sign in with Saltix** button: Saltix's mark and the words "Sign in with Saltix" ("Войти через
    Saltix"), on Saltix's navy with white text, or white with navy text on a dark page; at least 44 px tall, the mark at
    its left, corners rounded by a quarter of its height. Its look is fixed so that users recognise it everywhere.
@@ -432,7 +432,7 @@ The owner's rule (2026-10-21): the reference standard for every site, mini-app a
 The page renders the connected state from the login itself, in the same browsing context, as soon as the grant checks
 (§5): who (the address, shortened), since when, and how to disconnect. No reload, no polling, no Back. The code it
 showed is gone with it: the slot is closed, and nothing offers the consumed offer again. **The link to Saltix must not
-unload the page**: on Android an intent link (`intent:…#Intent;scheme=saltix-connect;package=io.saltix.app;
+unload the page**: on Android an intent link (`intent:…#Intent;scheme=salarium-connect;package=io.saltix.app;
 S.browser_fallback_url=<the https link>;end`), which the browser hands to the installed app as an external intent and
 overrides the URL's loading instead of navigating the tab; elsewhere the https link, which iOS Safari hands to the app
 without navigating. Never a new tab (the visitor comes back to a page still offering a consumed offer), never the https
@@ -500,7 +500,7 @@ Refused; a refused sheet is done with, so the same code read again opens a new o
 
 ### 14.4. The profile check has one reading
 
-A site's profile is at `/.well-known/saltix-connect` and nowhere else; the registry holds mini-apps' profiles only. An
+A site's profile is at `/.well-known/salarium-connect` and nowhere else; the registry holds mini-apps' profiles only. An
 answer that is not a JSON object is **no profile** (the site's silence); a JSON document that is not a profile that
 checks **did not check** (the site's mistake, with its reason). A single-page site that answers its page for every path
 is never shown as a site whose profile failed.

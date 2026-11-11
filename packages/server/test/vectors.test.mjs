@@ -1,15 +1,15 @@
 // vectors/grains-v1.json: what the node signs and hashes, this SDK reproduces and checks.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   encodeManifest, manifestId, manifestMessage, verifyManifest, signManifest, iconHash, bundleHash, manifestProblem,
   loginMessage, verifyLogin, decodeInvoice, invoiceMessage, invoiceProblem, signInvoice, issueInvoiceKeyCert, memoText,
   referenceInMemo, toHex, fromHex, isChatOnly, AppKey,
 } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("grains-v1.json");
 
 test("manifests: Borsh, id, message and the owner's signature", () => {
   for (const c of v.manifests) {
@@ -24,7 +24,7 @@ test("manifests: Borsh, id, message and the owner's signature", () => {
     if ("ed25519" in m.owner_key) assert.deepEqual(signManifest(m, fromHex(v.owner_secret, 32)), c.json);
     else assert.throws(() => signManifest(m, fromHex(v.owner_secret, 32)), /owner_key/);
     assert.ok(!verifyManifest({ ...c.json, manifest: { ...m, version: m.version + 1 } }));
-    assert.ok(!verifyManifest({ ...c.json, manifest: { ...m, owner: "22".repeat(32) } }), "the owner is signed");
+    assert.ok(!verifyManifest({ ...c.json, manifest: { ...m, owner: "22".repeat(20) } }), "the owner is signed");
   }
   const managed = v.manifests.find((c) => c.name === "managed").json.manifest;
   assert.ok("p256" in managed.owner_key);

@@ -86,7 +86,7 @@ test network, after **New app** in Saltix and with the developer key, and is see
 
 Testing one command end to end today (done in the walk): start a development relay imported by path from the SDK's
 `scripts/`, fake a node's `node_status`, `grain_get`, `account_get` and `relay_list`, connect a `RelayClient` with a
-messaging key derived under `"Saltix grain messaging key v1"`, sign a request with its arguments as Borsh-shaped pairs
+messaging key derived under `"Salarium grain messaging key v1"`, sign a request with its arguments as Borsh-shaped pairs
 sorted by name, decode the frame, find the block. About 50 lines, and every one is something an agent has to guess.
 
 ```ts

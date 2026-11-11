@@ -104,7 +104,7 @@ function describeFailure(r: RelayReport): string {
   if (r.tried.length === 0) lines.push("  none: nothing was given, the cache is empty and this release carries no entry point for it");
   for (const w of r.warnings) lines.push(`  ${w}`);
   if (r.cache !== null && r.sources.cache === 0) lines.push(`  the cache (${r.cache}) held no relay of this network`);
-  lines.push("what to do: grain doctor says the same; a relay ticket from someone whose Saltix works (--relay SALTIX-RELAY:…), " +
+  lines.push("what to do: grain doctor says the same; a relay ticket from someone whose Saltix works (--relay SALARIUM-RELAY:…), " +
     "or a relay or node of your own (--relay wss://host:port/#<SHA-256 of its certificate>, --node URL)");
   return lines.join("\n");
 }
@@ -116,7 +116,7 @@ function describeFailure(r: RelayReport): string {
 export class GivenRelayRefused extends Error {
   constructor(readonly reason: TicketReason | "form" | "repeated" | "endpoint", readonly position: number) {
     super(`relay ${position + 1} given: ${reason === "form"
-      ? "neither a relay ticket (SALTIX-RELAY:…) nor wss://host:port/#<the SHA-256 of its certificate, 64 hex> (a host name may go without it, behind a CA's certificate)"
+      ? "neither a relay ticket (SALARIUM-RELAY:…) nor wss://host:port/#<the SHA-256 of its certificate, 64 hex> (a host name may go without it, behind a CA's certificate)"
       : reason === "repeated" ? "a relay ticket naming one host and port twice (one relay under several names)"
         : reason === "endpoint" ? "a relay ticket naming an endpoint that is no URL a connection can dial"
         : new TicketRefused(reason).message}`);
@@ -180,7 +180,7 @@ export function projectRelayCache(dir: string, network: NetworkName): RelayCache
   return existsSync(`${dir}/.grain`) ? fileRelayCache(`${dir}/.grain/relays.json`, network) : memoryRelayCache();
 }
 
-/** The relays given in `SALTIX_RELAYS`: tickets (`SALTIX-RELAY:…`) or endpoints (`wss://host:port/#<pin>`), apart by
+/** The relays given in `SALTIX_RELAYS`: tickets (`SALARIUM-RELAY:…`) or endpoints (`wss://host:port/#<pin>`), apart by
  *  spaces or commas — a ticket someone whose Saltix works gave you, for a server whose entry points are blocked. */
 export function relaysFromEnvironment(env: NodeJS.ProcessEnv = process.env): string[] {
   return (env.SALTIX_RELAYS ?? "").split(/[\s,]+/).filter((s) => s !== "");
@@ -194,7 +194,7 @@ export interface FinderOptions {
   /** The network's genesis hash, or its first 16 hex digits (an app key's), when known: a relay of another is refused,
    *  and a full one given is taken as settled. */
   genesis?: string | null;
-  /** Tickets (`SALTIX-RELAY:…`) or endpoints (`wss://host:port/#<pin>`) given by the developer, tried first: trust
+  /** Tickets (`SALARIUM-RELAY:…`) or endpoints (`wss://host:port/#<pin>`) given by the developer, tried first: trust
    *  anchors, with the entry points. One that cannot be a relay throws `GivenRelayRefused` here. */
   given?: readonly string[];
   /** The relays that answered in earlier runs; none by default. */

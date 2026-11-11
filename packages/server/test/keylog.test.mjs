@@ -3,14 +3,14 @@
 // broken in the ways a node or a relay could break it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519";
 import { Writer, accountId, checkLog, concat, derive, fromHex, keySpeaksFor, deviceProblem, LogError, policyOf, rootDigest, toHex } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/connect-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("connect-v1.json");
 const genesis = fromHex(v.chain.genesis_hash_hex, 32);
 const policy = policyOf(v.chain.account_policy);
-const managed = fromHex(v.accounts.managed_hex, 32);
+const managed = fromHex(v.accounts.managed_hex, 20);
 const log = (name) => v.logs[name].map((e) => fromHex(e.event_hex));
 const kinds = (checked) => checked.devices.map((d) => d.kind);
 
@@ -23,7 +23,7 @@ test("the vectors' logs prove the devices the grants rely on", () => {
   const payments = checkLog(managed, log("managed-payments"), genesis, policy);
   assert.deepEqual(kinds(payments), ["phone"]);
   assert.equal(payments.seq, 3);
-  const upgraded = checkLog(fromHex(v.accounts.upgraded_hex, 32), log("upgraded"), genesis, policy);
+  const upgraded = checkLog(fromHex(v.accounts.upgraded_hex, 20), log("upgraded"), genesis, policy);
   assert.equal(upgraded.origin.kind, "key");
   assert.deepEqual(kinds(upgraded), ["phone"]);
 });
@@ -35,7 +35,7 @@ test("a log missing an event, out of order, on another chain, of another account
   fails(events.slice(1));
   fails([events[1], events[0], ...events.slice(2)]);
   fails(events, new Uint8Array(32).fill(1));
-  fails(events, genesis, new Uint8Array(32));
+  fails(events, genesis, new Uint8Array(20));
   // A byte of each event's last 64, its proof's signature or a matured event's id.
   for (let i = 0; i < events.length; i++) {
     const changed = events.map((e) => e.slice());
@@ -52,7 +52,7 @@ test("a log missing an event, out of order, on another chain, of another account
 
 test("who speaks for an account: its own key while it has no log, a device of the log, never a guardian", () => {
   const plainKey = { ed25519: toHex(ed25519.getPublicKey(fromHex(v.plain_secret_hex, 32))) };
-  const plain = fromHex(v.accounts.plain_hex, 32);
+  const plain = fromHex(v.accounts.plain_hex, 20);
   assert.equal(keySpeaksFor(plainKey, plain, [], genesis, policy).problem, null);
   assert.equal(keySpeaksFor(plainKey, managed, [], genesis, policy).problem, "not_the_account");
   const devices = checkLog(managed, log("managed"), genesis, policy).devices;
@@ -60,7 +60,7 @@ test("who speaks for an account: its own key while it has no log, a device of th
   assert.equal(keySpeaksFor(plainKey, managed, log("managed"), genesis, policy).problem, "not_a_device");
   assert.equal(keySpeaksFor(devices[0].key, managed, log("managed").slice(1), genesis, policy).problem, "log");
   // The upgraded account's own kind 0 key speaks for nothing once it has a controller.
-  const upgraded = fromHex(v.accounts.upgraded_hex, 32);
+  const upgraded = fromHex(v.accounts.upgraded_hex, 20);
   const { origin } = checkLog(upgraded, log("upgraded"), genesis, policy);
   const birthKey = { ed25519: toHex(origin.key) };
   assert.equal(toHex(accountId(origin.key, 0)), v.accounts.upgraded_hex);
@@ -80,21 +80,21 @@ test("a log made here: the root and a device, a root used again, a bad device si
   const phone = crypto.getRandomValues(new Uint8Array(32));
   const phoneKey = ed25519.getPublicKey(phone);
   const pol = { delay: 600n, disputeTimeout: 3600n };
-  const tx = (nonce, action, sender = account) => new Writer().u8(1).fixed(sender, 32).u64(BigInt(nonce)).u64(5000n).u64(90000n).raw(action).done();
+  const tx = (nonce, action, sender = account) => new Writer().u8(1).fixed(sender, 20).u64(BigInt(nonce)).u64(5000n).u64(90000n).raw(action).done();
   const addDevice = (key, kind = 0) => new Writer().u8(7).u8(0).u8(0).fixed(key, 32).u8(kind).u64(0n).u64(0n).done();
   const removeDevice = (key) => new Writer().u8(7).u8(1).u8(0).fixed(key, 32).done();
-  const idOf = (t) => derive("Saltix transaction v3", G, t);
+  const idOf = (t) => derive("Salarium transaction v3", G, t);
   const root = (t, r, next = digests[r + 1]) =>
-    new Writer().u8(3).u8(0).fixed(ed25519.getPublicKey(roots[r]), 32).fixed(next, 32).fixed(ed25519.sign(derive("Saltix root use v1", idOf(t), next), roots[r]), 64).done();
+    new Writer().u8(3).u8(0).fixed(ed25519.getPublicKey(roots[r]), 32).fixed(next, 32).fixed(ed25519.sign(derive("Salarium root use v1", idOf(t), next), roots[r]), 64).done();
   const device = (t, signature = ed25519.sign(idOf(t), phone)) => new Writer().u8(1).u8(0).fixed(signature, 64).done();
   const build = (bodies, who = account) => {
     const out = [];
     let prev = new Uint8Array(32);
     bodies.forEach(([slot, body], i) => {
-      const w = new Writer().fixed(who, 32).u32(i + 1).fixed(prev, 32).u64(BigInt(slot));
+      const w = new Writer().fixed(who, 20).u32(i + 1).fixed(prev, 32).u64(BigInt(slot));
       const e = "signed" in body ? w.u8(0).raw(body.signed).done() : w.u8(1).fixed(body.matured, 32).done();
       out.push(e);
-      prev = derive("Saltix key event v1", e);
+      prev = derive("Salarium key event v1", e);
     });
     return out;
   };
@@ -125,7 +125,7 @@ test("a log made here: the root and a device, a root used again, a bad device si
 });
 
 test("a quorum signed in either form proves, all its signers in one; a quorum cut to one signer of version 2 does not", () => {
-  // From protocol version 2 a quorum's signers sign its quorum message, derive("Saltix quorum v1", id ‖ [tag] ‖
+  // From protocol version 2 a quorum's signers sign its quorum message, derive("Salarium quorum v1", id ‖ [tag] ‖
   // indexes), the root its use of it (13-accounts §6.1); before it, the id. A log takes either form (§7).
   const G = new Uint8Array(32).fill(7);
   const roots = [1, 2, 3, 4].map(() => crypto.getRandomValues(new Uint8Array(32)));
@@ -134,22 +134,22 @@ test("a quorum signed in either form proves, all its signers in one; a quorum cu
   const [phone, browser] = [1, 2].map(() => crypto.getRandomValues(new Uint8Array(32)));
   const [phoneKey, browserKey] = [phone, browser].map((k) => ed25519.getPublicKey(k));
   const pol = { delay: 1200n, disputeTimeout: 7200n };
-  const tx = (nonce, action) => new Writer().u8(1).fixed(account, 32).u64(BigInt(nonce)).u64(5000n).u64(90000n).raw(action).done();
+  const tx = (nonce, action) => new Writer().u8(1).fixed(account, 20).u64(BigInt(nonce)).u64(5000n).u64(90000n).raw(action).done();
   const addDevice = (key, kind) => new Writer().u8(7).u8(0).u8(0).fixed(key, 32).u8(kind).u64(0n).u64(0n).done();
   // Weaker than the network's: only a quorum applies it at once; one signer registers it for later.
   const setPolicy = new Writer().u8(7).u8(4).u64(600n).u64(3600n).done();
-  const idOf = (t) => derive("Saltix transaction v3", G, t);
-  const quorum = (t, shape) => derive("Saltix quorum v1", idOf(t), Uint8Array.of(...shape));
+  const idOf = (t) => derive("Salarium transaction v3", G, t);
+  const quorum = (t, shape) => derive("Salarium quorum v1", idOf(t), Uint8Array.of(...shape));
   const rootUse = (r, message) =>
-    new Writer().u8(0).fixed(ed25519.getPublicKey(roots[r]), 32).fixed(digests[r + 1], 32).fixed(ed25519.sign(derive("Saltix root use v1", message, digests[r + 1]), roots[r]), 64).done();
+    new Writer().u8(0).fixed(ed25519.getPublicKey(roots[r]), 32).fixed(digests[r + 1], 32).fixed(ed25519.sign(derive("Salarium root use v1", message, digests[r + 1]), roots[r]), 64).done();
   const sig = (index, key, message) => new Writer().u8(index).fixed(ed25519.sign(message, key), 64).done();
   const build = (bodies) => {
     const out = [];
     let prev = new Uint8Array(32);
     bodies.forEach(([slot, signed], i) => {
-      const e = new Writer().fixed(account, 32).u32(i + 1).fixed(prev, 32).u64(BigInt(slot)).u8(0).raw(signed).done();
+      const e = new Writer().fixed(account, 20).u32(i + 1).fixed(prev, 32).u64(BigInt(slot)).u8(0).raw(signed).done();
       out.push(e);
-      prev = derive("Saltix key event v1", e);
+      prev = derive("Salarium key event v1", e);
     });
     return out;
   };
@@ -200,10 +200,10 @@ test("a quorum signed in either form proves, all its signers in one; a quorum cu
 test("the protocol's version 2 quorums prove the log's keys in place of version 1's; mixed or cut, nothing", () => {
   // vectors/accounts-v1.json: its log's events 2 and 3 are quorums signed in version 1's form (the id); `quorums_v2`
   // signs the same transactions in version 2's (13-accounts §6.1). The log rebuilt with them proves what the file says.
-  const a = JSON.parse(readFileSync(new URL("../../../vectors/accounts-v1.json", import.meta.url), "utf8"));
+  const a = goldenVectors("accounts-v1.json");
   const G = fromHex(a.chain.genesis_hash_hex, 32);
   const pol = policyOf(a.chain.account_policy);
-  const account = fromHex(a.account.account_hex, 32);
+  const account = fromHex(a.account.account_hex, 20);
   const original = a.log.events.map((e) => fromHex(e.event_hex));
   const v1 = Object.fromEntries(a.transactions.map((t) => [t.name, t]));
   const proves = a.log.proves;
@@ -214,18 +214,19 @@ test("the protocol's version 2 quorums prove the log's keys in place of version 
     const id = fromHex(q.id_hex, 32);
     const proof = fromHex(q.proof_hex);
     const shape = proof[0] === 2 ? Uint8Array.of(2, proof[1], proof[66]) : Uint8Array.of(4, proof[130]);
-    assert.equal(toHex(derive("Saltix quorum v1", id, shape)), q.quorum_message_hex, q.name);
+    assert.equal(toHex(derive("Salarium quorum v1", id, shape)), q.quorum_message_hex, q.name);
   }
   // An event's signed transaction swapped for another form, the log re-linked as the node links it.
-  const header = 32 + 4 + 32 + 8;
+  // The event's account (20 bytes), number, previous id and slot.
+  const header = 20 + 4 + 32 + 8;
   const relink = (swaps) => {
     let prev = new Uint8Array(32);
     return original.map((e, i) => {
       // A signed event's body is tag 0 and the signed transaction; a matured one's (tag 1) stays as it is.
       const body = swaps.has(i) ? concat(Uint8Array.of(0), swaps.get(i)) : e.subarray(header);
       if (swaps.has(i)) assert.equal(e[header], 0, "a signed event");
-      const out = concat(e.subarray(0, 36), prev, e.subarray(68, header), body);
-      prev = derive("Saltix key event v1", out);
+      const out = concat(e.subarray(0, 24), prev, e.subarray(56, header), body);
+      prev = derive("Salarium key event v1", out);
       return out;
     });
   };
@@ -262,7 +263,7 @@ test("a P-256 device key in its compact form (05 ‖ x), which protocol versions
   const { compressedP256, deviceKeyValid, sameDeviceKey, verifyByDeviceKey, readAccountAction, Reader } = await import("../dist/index.js");
   const { p256 } = await import("@noble/curves/p256");
   const { sha256 } = await import("@noble/hashes/sha256");
-  const a = JSON.parse(readFileSync(new URL("../../../vectors/accounts-v1.json", import.meta.url), "utf8"));
+  const a = goldenVectors("accounts-v1.json");
   const forms = a.device_key_forms;
   const compressed = forms.keys.find((k) => k.name === "compressed").key_hex.slice(2);
   const compact = forms.keys.find((k) => k.name === "compact").key_hex.slice(2);
@@ -272,7 +273,7 @@ test("a P-256 device key in its compact form (05 ‖ x), which protocol versions
   assert.equal(compressedP256(compressed), compressed);
   assert.ok(sameDeviceKey({ p256: compact }, { p256: compressed }) && sameDeviceKey({ p256: compressed }, { p256: compact }));
   // The key's secret signs; the signature verifies under either form, and under no other point.
-  const message = derive("Saltix key event v1", new Uint8Array([1, 2, 3]));
+  const message = derive("Salarium key event v1", new Uint8Array([1, 2, 3]));
   const signature = toHex(p256.sign(sha256(message), fromHex(forms.secret_hex, 32), { prehash: false, lowS: true }).toCompactRawBytes());
   assert.equal(toHex(p256.getPublicKey(fromHex(forms.secret_hex, 32), true)), compressed, "the vector's secret is the key's");
   assert.ok(verifyByDeviceKey({ p256: compressed }, message, signature));
@@ -287,7 +288,7 @@ test("a P-256 device key in its compact form (05 ‖ x), which protocol versions
   // The vector's AddDevice of the compact key reads as an action a log replay takes (versions 1 and 2).
   const tx = fromHex(forms.add_device.transaction_hex);
   const r = new Reader(tx);
-  r.u8(); r.fixed(32); r.u64(); r.u64(); r.u64();
+  r.fixed(r.u8() === 0 ? 32 : 20); r.u64(); r.u64(); r.u64();
   assert.equal(r.u8(), 7, "an account action");
   const action = readAccountAction(r);
   assert.equal(action.kind, "add_device");

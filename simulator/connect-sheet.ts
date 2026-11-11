@@ -9,7 +9,7 @@
  * by a short address (`shortAddress`), never by hex.
  */
 import { type SafeArea, shortAddress } from "../packages/grain/src/index";
-import { type NetworkName, encodeAddress } from "../packages/server/src/address";
+import { ID_BYTES, type NetworkName, encodeAddress } from "../packages/server/src/address";
 import { fromHex } from "../packages/server/src/bytes";
 import { PERMISSIONS } from "../packages/server/src/manifest";
 import { type ConnectProfile, offlineOwner, profileFromJson, profileProblem, profileText, supportKind } from "../packages/server/src/profile";
@@ -101,13 +101,16 @@ export interface SheetHost {
 }
 
 /** The owner as the sheet names it (19-connect §12.1: a username, else a short address): the manifest's account as an
- *  address of the network, shortened as Saltix shortens one; the development registry binds no username. */
+ *  address of the network, shortened as Saltix shortens one; the development registry binds no username. A manifest
+ *  loaded by hand may hold anything in the owner's place: what is no account is shown as written. */
 export function ownerWords(owner: string, network: NetworkName): string {
+  let account: Uint8Array;
   try {
-    return shortAddress(encodeAddress(network, fromHex(owner, 32)));
+    account = fromHex(owner, ID_BYTES);
   } catch {
     return owner;
   }
+  return shortAddress(encodeAddress(network, account));
 }
 
 /** The project's profile as `connect.json` holds it, with the manifest's owner and revision 1, and why a wallet would

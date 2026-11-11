@@ -51,7 +51,7 @@ links to go deeper; [AGENTS.md](../AGENTS.md) has the rules every app keeps.
   **no domain, no open port and no certificate**: it runs on a laptop behind a home router as well as on a small server. While it is off, requests wait in its mailbox (a
   command waits up to 7 days) and are answered when it comes back.
 - **The program's key** is one of the server keys the registry names, kept in the project's `app.key` with the network
-  and the slug (`saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`): the program's whole configuration. **It is made on the
+  and the slug (`salarium-app:1:<hrp>:<genesis>:<slug>:<secret>`): the program's whole configuration. **It is made on the
   computer where the program runs and never leaves it**: `grain pair`, with the command from the app's page in Saltix
   (the app, the owner's address, the network: public facts), makes it, and the owner's Saltix names it by a QR code
   ([app-studio §3a](protocol/app-studio.md#3a-pairing-a-server-by-qr-code)). Developer keys made in Saltix are retired

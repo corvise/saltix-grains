@@ -117,7 +117,7 @@ test("what a wallet would not take over the spec served, and which setups restar
   assert.ok(setupCannotWork(new ChatSpecVersionError(3, 3)));
   assert.ok(setupCannotWork(new ChatKeyNotRegistered("replaced", "access")));
   assert.ok(setupCannotWork(new AppKeyError("malformed")));
-  assert.throws(() => AppKey.parse("saltix-app:1:dsalt:zz"), (e) => setupCannotWork(e));
+  assert.throws(() => AppKey.parse("salarium-app:1:dsalt:zz"), (e) => setupCannotWork(e));
   assert.ok(!setupCannotWork(new Error("connect ECONNREFUSED")), "a network that is down may come back");
   assert.ok(!setupCannotWork("chat_spec_changed_under_version"));
 });
@@ -132,10 +132,10 @@ test("a request is checked, routed by command with typed arguments, and answered
       return card().secret("Key", "7KQ2-M9XA-4F", { expiresAt: Date.now() + DAY }).fields({ Site: ask.args.site, For: `${ask.args.duration} s` })
         .status("done", "Opens the site once").run("Revoke", "revoke", { id: "k-0042" }).open("All keys", "keys").reply("Thanks");
     });
-    const request = user.request("key", [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "saltix-io" }]]);
+    const request = user.request("key", [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "salarium-io" }]]);
     await user.send(request);
     await user.until(() => user.answers(request.request.id).length === 1);
-    assert.deepEqual(seen, { args: { duration: 86_400, note: "for the tester", site: "saltix-io" }, key: user.key, user: user.address, command: "key", lang: "en" });
+    assert.deepEqual(seen, { args: { duration: 86_400, note: "for the tester", site: "salarium-io" }, key: user.key, user: user.address, command: "key", lang: "en" });
 
     // The spec first (the user had not been sent this version), then the answer, which the wallet shows.
     assert.ok("spec" in user.frames[0], "the spec came first");
@@ -174,7 +174,7 @@ test("requests that do not fit are refused with a reason; untrusted or expired o
   try {
     const cases = {
       unknown: user.request("delete"),
-      argument: user.request("key", [["duration", { duration: 3_600 }], ["site", { choice: "saltix-io" }]]),
+      argument: user.request("key", [["duration", { duration: 3_600 }], ["site", { choice: "salarium-io" }]]),
       missing: user.request("key", [["duration", { duration: 600 }]]),
       unserved: user.request("idle"),
       text: user.request("", [], { text: "hello" }),
@@ -196,7 +196,7 @@ test("requests that do not fit are refused with a reason; untrusted or expired o
 
     // Dropped: nothing in them can be trusted, or nobody waits. Each leaves the mailbox all the same.
     const forged = user.request("key", [["duration", { duration: 600 }], ["site", { choice: "web" }]]);
-    forged.request.args[1][1] = { choice: "saltix-io" };
+    forged.request.args[1][1] = { choice: "salarium-io" };
     const now = Date.now();
     const expired = user.request("key", [["duration", { duration: 600 }], ["site", { choice: "web" }]], { at: now - DAY, expires_at: now - 1 });
     const otherNetwork = signChatRequest({ ...user.request("idle").request }, user.secret, "6d".repeat(32));
@@ -467,7 +467,7 @@ test("the well-known document is served for any framework and for Node's http", 
     assert.equal(got.status, 200);
     assert.deepEqual(await got.json(), doc);
     assert.equal((await fetch(base + CHAT_DOCUMENT_PATH, { method: "POST" })).status, 404);
-    assert.equal((await fetch(base + "/.well-known/saltix-grain")).status, 404);
+    assert.equal((await fetch(base + "/.well-known/salarium-grain")).status, 404);
   } finally {
     http.close();
   }

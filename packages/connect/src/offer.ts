@@ -1,12 +1,14 @@
 // A page's offer (Saltix 19-connect §3): its slot at a relay, its session's keys, its origin and its name, as the QR
-// code's text and as the link that opens Saltix on the phone the page is on. The rules are `saltix-types` `connect`'s,
-// and vectors/connect-v1.json holds offers refused for each. A port of the explorer's own.
+// code's text and as the link that opens Saltix on the phone the page is on. The rules are Salarium's `connect`'s, and
+// vectors/connect-v1.json holds offers refused for each. A port of the explorer's own.
 import { connectOriginOk, refusedChar } from "@saltix/grain-server/web";
 import { b64url, fromB64url } from "./codec.js";
 
-export const OFFER_PREFIX = "saltix-connect:1:";
-/** The link: the offer follows the `#`, which never reaches a server. */
-export const LINK_PREFIX = "https://saltix.io/connect#";
+/** The offer's scheme: the wallet opens it (an intent, a QR code). */
+export const OFFER_SCHEME = "salarium-connect";
+export const OFFER_PREFIX = `${OFFER_SCHEME}:1:`;
+/** The link, the wallet's App Link: the offer follows the `#`, which never reaches a server. */
+export const LINK_PREFIX = "https://salarium.io/connect#";
 /** An offer's name at most, bytes. */
 export const MAX_NAME = 40;
 
@@ -36,8 +38,8 @@ export const offerLink = (o: Offer): string => LINK_PREFIX + offerText(o);
 export const APP_PACKAGE = "io.saltix.app";
 
 /**
- * The offer as an Android intent link (19-connect §14.1): `intent:<the offer's text after "saltix-connect:">#Intent;
- * scheme=saltix-connect;package=io.saltix.app;S.browser_fallback_url=<the https link>;end`. A tap on it hands the
+ * The offer as an Android intent link (19-connect §14.1): `intent:<the offer's text after "salarium-connect:">#Intent;
+ * scheme=salarium-connect;package=io.saltix.app;S.browser_fallback_url=<the https link>;end`. A tap on it hands the
  * request to the installed Saltix as an external intent — the browser overrides the URL's loading instead of navigating
  * the tab, so the page, its socket and its slot stay (Chromium's ExternalNavigationHandler: "We should override the
  * URL loading and launch an intent"); without Saltix the browser loads the fallback, the https link, which offers the
@@ -46,7 +48,7 @@ export const APP_PACKAGE = "io.saltix.app";
  */
 export function offerIntentLink(o: Offer): string {
   const text = offerText(o);
-  return `intent:${text.slice("saltix-connect:".length)}#Intent;scheme=saltix-connect;package=${APP_PACKAGE};S.browser_fallback_url=${encodeURIComponent(offerLink(o))};end`;
+  return `intent:${text.slice(OFFER_SCHEME.length + 1)}#Intent;scheme=${OFFER_SCHEME};package=${APP_PACKAGE};S.browser_fallback_url=${encodeURIComponent(offerLink(o))};end`;
 }
 
 /** Whether `userAgent` is an Android browser, where the intent link opens Saltix without unloading the page. */

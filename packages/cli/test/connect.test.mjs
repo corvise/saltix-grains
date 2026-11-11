@@ -18,6 +18,7 @@ import { CONNECT_FILE, TEMPLATE_RULE, lintConnect, lintIcon, lintPermissionsUse,
 import { connectJson, connectTexts } from "../dist/template.js";
 import { servedSiteRevision, siteProfile } from "../dist/profile.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const grain = (args, cwd) => spawnSync("node", [main, ...args], { cwd, encoding: "utf8", timeout: 20_000 });
@@ -159,7 +160,7 @@ test("lint warns, and passes: about empty, English only, owner or revision given
   assert.deepEqual(english.errors, []);
   assert.match(english.warnings.join("\n"), /English only; add "ru"/);
   writeFileSync(join(dir, CONNECT_FILE), connectJson("dice", "Dice", false));
-  assert.match(w((c) => { c.owner = "00".repeat(32); c.revision = 4; }).warnings.join("\n"), /owner and revision are filled in when it is set/);
+  assert.match(w((c) => { c.owner = "00".repeat(20); c.revision = 4; }).warnings.join("\n"), /owner and revision are filled in when it is set/);
   writeFileSync(join(dir, CONNECT_FILE), connectJson("dice", "Dice", false));
   // Six more languages of text that does not compress: within 8 KiB, too long for a QR code.
   const noise = (n, seed) => {
@@ -182,7 +183,7 @@ test("lint warns, and passes: about empty, English only, owner or revision given
 
 test("lint checks the icon file a project keeps: one every wallet takes (32-images §2), whose hash grain.json names", () => {
   const dir = project();
-  const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const vectors = goldenVectors("images-v1.json");
   const standard = Buffer.from(vectors.images.find((i) => i.kind === "grain_icon" && i.width === 512).hex, "hex");
   const legacy = Buffer.from(vectors.images.find((i) => i.kind === "grain_icon" && i.width === 256).hex, "hex");
   const header = (w, h) => {
@@ -343,10 +344,10 @@ test("grain profile --key: signed by the key file, the registry's revision and o
   assert.equal(profileOf(node.submitted[1]), null);
   // Another owner's app (one made in Saltix): owner.key here never signs for it. Without --key the owner's Saltix is
   // asked, the owner said first; --key naming it is refused before anything is sent.
-  node.state.grain = { owner: "77".repeat(32) };
+  node.state.grain = { owner: "77".repeat(20) };
   const theirs = await run(["profile", "--key", "owner.key", "--node", node.url], dir);
   assert.equal(theirs.code, 1);
-  assert.match(theirs.stderr, /dice: the registry names another owner \(7{64}\) than owner\.key's account/);
+  assert.match(theirs.stderr, /dice: the registry names another owner \(7{40}\) than owner\.key's account/);
   const asked = await run(["profile", "--timeout", "1", "--node", node.url], dir);
   assert.match(asked.stdout, /^owner: dsalt1\S+, as the registry names it: its Saltix signs \(owner\.key here is another account's\)$/m);
   assert.match(asked.stdout, /salt:grain-profile\?p=/);
@@ -394,7 +395,7 @@ test("grain profile without a key: a QR code and the link for the owner's Saltix
     });
   });
   const unowned = readProfileLink(link);
-  assert.equal(unowned.owner, "00".repeat(32));
+  assert.equal(unowned.owner, "00".repeat(20));
   assert.equal(unowned.revision, 0);
   assert.deepEqual(unowned.texts, connectOf(dir).texts);
   // The owner's wallet signs it with a key of its own and the next revision.
@@ -420,7 +421,7 @@ test("grain show checks the registry's profile as a wallet does", async () => {
   const json = await run(["show", "--slug", "dice", "--json", "--node", node.url], dir);
   assert.equal(json.code, 0, json.stderr);
   assert.equal(JSON.parse(json.stdout).profile.profile.revision, 2, "only the record on stdout");
-  node.state.grain = { owner: "77".repeat(32) };
+  node.state.grain = { owner: "77".repeat(20) };
   assert.match((await run(["show", "--slug", "dice", "--node", node.url], dir)).stdout, /a wallet refuses it: owner/);
   node.state.grain = {};
   node.state.profile = null;
@@ -428,7 +429,7 @@ test("grain show checks the registry's profile as a wallet does", async () => {
   node.close();
 });
 
-test("grain connect-profile: a website's profile signed by its operator, for /.well-known/saltix-connect", async () => {
+test("grain connect-profile: a website's profile signed by its operator, for /.well-known/salarium-connect", async () => {
   const dir = scratch("grain-site-");
   writeFileSync(join(dir, "site.key"), "64".repeat(32) + "\n", { mode: 0o600 });
   const site = JSON.parse(connectJson("dex", "Example DEX", false));
@@ -439,7 +440,7 @@ test("grain connect-profile: a website's profile signed by its operator, for /.w
   site.support = "mailto:help@dex.example";
   writeFileSync(join(dir, "connect.json"), JSON.stringify(site));
   const args = ["connect-profile", "--origin", "https://dex.example", "--name", "Example DEX", "--category", "finance", "--key", "site.key"];
-  const out = join(dir, ".well-known", "saltix-connect");
+  const out = join(dir, ".well-known", "salarium-connect");
   // The first time, with no file of it here and the site not answering (dex.example is no host), the revision a
   // wallet would take is unknown: a wallet keeps a higher one, so the command asks for it rather than guess 1.
   const unknown = grain(args, dir);
@@ -448,7 +449,7 @@ test("grain connect-profile: a website's profile signed by its operator, for /.w
   assert.ok(!existsSync(out));
   const made = grain([...args, "--revision", "1"], dir);
   assert.equal(made.status, 0, made.stderr);
-  assert.match(made.stdout, /serve it at https:\/\/dex\.example\/\.well-known\/saltix-connect as application\/json/);
+  assert.match(made.stdout, /serve it at https:\/\/dex\.example\/\.well-known\/salarium-connect as application\/json/);
   const signed = signedProfileFromJson(JSON.parse(readFileSync(out, "utf8")));
   assert.equal(checkSiteProfile(signed, "https://dex.example"), null);
   assert.deepEqual(signed.profile.subject, { site: { origin: "https://dex.example", name: "Example DEX", category: 2 } });
@@ -480,14 +481,14 @@ test("grain connect-profile: a website's profile signed by its operator, for /.w
   // A managed operator's Ed25519 device key signs for the account --owner names (its key event log says whether it may).
   const managed = "dsalt1q" + "q".repeat(52);
   const { encodeAddress } = await import("@saltix/grain-server");
-  const account = encodeAddress("devnet", fromHex("77".repeat(32), 32), 5);
+  const account = encodeAddress("devnet", fromHex("77".repeat(20), 20));
   assert.equal(grain([...args, "--owner", account, "--out", other, "--revision", "1"], dir).status, 0);
   // Offline (an operator's machine without the network): above the file written before, never a guess.
   const offline = grain([...args, "--owner", account, "--out", other, "--offline"], dir);
   assert.equal(offline.status, 0, offline.stderr);
   assert.match(offline.stdout, /revision 2/);
   const device = signedProfileFromJson(JSON.parse(readFileSync(other, "utf8")));
-  assert.equal(device.profile.owner, "77".repeat(32));
+  assert.equal(device.profile.owner, "77".repeat(20));
   assert.equal(device.key.ed25519, toHex(ed25519.getPublicKey(fromHex("64".repeat(32), 32))));
   assert.equal(checkSiteProfile(device, "https://dex.example"), null);
   assert.equal(grain([...args, "--owner", managed, "--out", join(dir, "x.json")], dir).status, 1, "not an address");
@@ -506,7 +507,7 @@ test("a website's next revision goes above the one the site serves now, read as 
   };
   const json = JSON.stringify(profileToJson(site));
   assert.equal(await servedSiteRevision("https://dex.example", answer(200, json)), 7);
-  assert.equal(asked[0].url, "https://dex.example/.well-known/saltix-connect");
+  assert.equal(asked[0].url, "https://dex.example/.well-known/salarium-connect");
   assert.equal(asked[0].init.redirect, "manual", "no redirect is followed, as a wallet follows none");
   assert.equal(asked[0].init.credentials, "omit");
   assert.equal(await servedSiteRevision("https://other.example", answer(200, json)), 0, "another origin's profile is none of this one's");

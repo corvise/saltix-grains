@@ -3,15 +3,15 @@
 // frames that carry them, reproduced byte for byte.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   BLOB_PIECE, MAX_ICON_BYTES, MAX_NETWORK_BUNDLE_BYTES, NAMED_KINDS, NAMED_REASONS, PENDING_MS, bundleUploadMessage, bundleUploadNames,
   bundleUploadProblem, checkBundle, checkImage, decodeSignedBundleUpload, encodeBundleUpload, encodeSignedBundleUpload, fromBase64,
   fromHex, iconHash, bundleHash, manifestProblem, monogramColour, namedHash, namedProblem, pendingUntil, signBundleUpload, toBase64, toHex,
 } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("images-v1.json");
 const hex = (h) => fromHex(h);
 
 test("kinds: their tags, names, hash domains, bounds, types and sides", () => {
@@ -165,7 +165,7 @@ test("the frames: blob_put's pieces, its answers and refusals, blob_get and the 
   }
   assert.deepEqual(f.blob_put_first_result, { hash, kept: false, kind: "grain_bundle", received: f.blob_put_last.params.from });
   assert.deepEqual(f.blob_put_last_result, { hash, kept: true, kind: "grain_bundle", pending: true, received: zip.length });
-  assert.deepEqual(f.blob_put_offset, { code: -32602, data: { reason: "offset", received: 241 }, message: "the bundle is refused: offset" });
+  assert.deepEqual(f.blob_put_offset, { code: -32602, data: { reason: "offset", received: 242 }, message: "the bundle is refused: offset" });
   const piece = fromBase64(f.blob_get_result.blob.data);
   assert.deepEqual(piece, zip.subarray(f.blob_get.params.from));
   assert.equal(f.http_get.path, `/_blob/grain_bundle/${hash}`);
@@ -175,7 +175,7 @@ test("the frames: blob_put's pieces, its answers and refusals, blob_get and the 
 });
 
 test("a sealed manifest without a source: taken from protocol version 2, refused before it; then of 16 MiB at most", () => {
-  const grains = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
+  const grains = goldenVectors("grains-v1.json");
   const sealed = grains.manifests.find((c) => "sealed" in c.json.manifest.entry).json.manifest;
   const none = { ...sealed, entry: { sealed: { ...sealed.entry.sealed, sources: [] } } };
   assert.equal(manifestProblem(sealed, false, 1), null);

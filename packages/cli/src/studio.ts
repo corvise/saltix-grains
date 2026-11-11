@@ -107,7 +107,7 @@ export function membersOf(texts: string[]): Array<{ account: string; roles: numb
     const roles = parseRoles(text.slice(at + 1));
     if (roles === null) throw new Error(`--member ${text}: roles 1–7, or user, developer, viewer joined by +`);
     const decoded = decodeAddress(who);
-    const account = decoded ? toHex(decoded.id) : /^[0-9a-f]{64}$/.test(who) ? who : null;
+    const account = decoded ? toHex(decoded.id) : /^[0-9a-f]{40}$/.test(who) ? who : null;
     if (account === null) throw new Error(`--member ${text}: an address or an account id in hex`);
     return { account, roles };
   });

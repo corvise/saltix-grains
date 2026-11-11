@@ -48,9 +48,9 @@ export function relayBlobUrl(endpoint: string, hash: string): string | null {
   return source.length <= 2048 ? source : null;
 }
 
-/** A relay's place among a bundle's keepers (32-images §6.2): `derive("Saltix bundle placement v1", hash ‖ node key)`,
- *  the highest first. */
-const placement = (hash: string, key: string) => toHex(derive("Saltix bundle placement v1", fromHex(hash, 32), fromHex(key, 32)));
+/** A relay's place among a bundle's keepers (32-images §6.2): `derive("Salarium bundle placement v1", hash ‖ node key)`,
+ *  the highest first, as the network's nodes rank a bundle's holders. */
+const placement = (hash: string, key: string) => toHex(derive("Salarium bundle placement v1", fromHex(hash, 32), fromHex(key, 32)));
 
 /** The network an IPv4 endpoint serves from, by its /16, so the copies a manifest names are not all on one network. */
 const networkOf = (source: string) => {

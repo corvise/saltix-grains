@@ -21,7 +21,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import QRCode from "qrcode";
 import {
   APP_JSON_FILE, APP_KEY_FILE, AppKey, MAX_PAIR_NAME, type NetworkName, type NodeLike, type PairTarget, type PairingOffer, PairingError, type RegisteredGrain,
-  type SlugRecord, accountId, decodeOffer, encodeAddress, encodeOffer, fromHex, grainGet, judgeSlug, keyFingerprint, makeOffer, nodeCall,
+  ID_BYTES, type SlugRecord, decodeOffer, encodeAddress, encodeOffer, fromHex, grainGet, judgeSlug, keyFingerprint, makeOffer, nodeCall,
   offerCodeText, offerLink, pairTarget, refusedChar, registeredKeyStatus, slugRecordOf, targetOwner, toHex,
 } from "@saltix/grain-server";
 import { type DevLog, GRAIN_DIR, grainDir } from "./devlog.js";
@@ -42,7 +42,6 @@ const POLL_MAX_MS = 15_000;
 /** An offer shown again keeps at least this long to live; a shorter one is made anew. */
 const REUSE_MIN_MS = 10 * 60_000;
 /** The kind symbol of a managed account's address (Saltix 13-accounts): what an owner that is no plain key's account has. */
-const MANAGED_KIND = 5;
 
 /** What `.grain/pair.json` holds. */
 export interface PairState {
@@ -150,16 +149,10 @@ export function nameForOffer(text: string): string {
   return [...text].filter((c) => !refusedChar(c.codePointAt(0)!)).slice(0, MAX_PAIR_NAME).join("").trim();
 }
 
-/**
- * The owner's address of a registry record: its id is the record's `owner`; its kind is a plain key's (0) when the
- * manifest's owner key is that account's, else a managed account's. The id is what pairing binds; the kind only says how
- * the owner's address reads.
- */
+/** The owner's address of a registry record: the record's `owner`, the id pairing binds, whatever kind of account it is
+ *  (an address names no kind). */
 export function ownerAddressOf(network: NetworkName, grain: RegisteredGrain): string {
-  const owner = fromHex(grain.owner, 32);
-  const ownerKey = grain.manifest?.manifest.owner_key;
-  const plain = ownerKey === undefined || ("ed25519" in ownerKey && toHex(accountId(fromHex(ownerKey.ed25519, 32))) === grain.owner);
-  return encodeAddress(network, owner, plain ? 0 : MANAGED_KIND);
+  return encodeAddress(network, fromHex(grain.owner, ID_BYTES));
 }
 
 /**

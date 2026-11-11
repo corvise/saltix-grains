@@ -48,10 +48,10 @@ export interface KindInfo {
 }
 
 export const NAMED_KINDS: Readonly<Record<NamedKind, KindInfo>> = {
-  grain_icon: { tag: 0, domain: "Saltix grain icon v1", maxBytes: MAX_ICON_BYTES, type: "image/png", sides: [ICON_SIDE, LEGACY_ICON_SIDE] },
-  avatar: { tag: 1, domain: "Saltix avatar v1", maxBytes: MAX_AVATAR_BYTES, type: "image/jpeg", sides: [AVATAR_SIDE] },
-  token_logo: { tag: 2, domain: "Saltix token logo v1", maxBytes: MAX_TOKEN_LOGO_BYTES, type: "image/png", sides: [TOKEN_LOGO_SIDE] },
-  grain_bundle: { tag: 3, domain: "Saltix grain bundle v1", maxBytes: MAX_NETWORK_BUNDLE_BYTES, type: "application/zip", sides: [] },
+  grain_icon: { tag: 0, domain: "Salarium grain icon v1", maxBytes: MAX_ICON_BYTES, type: "image/png", sides: [ICON_SIDE, LEGACY_ICON_SIDE] },
+  avatar: { tag: 1, domain: "Salarium avatar v1", maxBytes: MAX_AVATAR_BYTES, type: "image/jpeg", sides: [AVATAR_SIDE] },
+  token_logo: { tag: 2, domain: "Salarium token logo v1", maxBytes: MAX_TOKEN_LOGO_BYTES, type: "image/png", sides: [TOKEN_LOGO_SIDE] },
+  grain_bundle: { tag: 3, domain: "Salarium grain bundle v1", maxBytes: MAX_NETWORK_BUNDLE_BYTES, type: "application/zip", sides: [] },
 };
 
 /** The hash a reference names a blob of `kind` by, hex. */
@@ -410,7 +410,7 @@ export function namedProblem(kind: NamedKind, bytes: Uint8Array): ImageReason | 
 /** The colour of a grain's monogram in the wallet's palette of 12 (32-images §3.5): what a wallet draws while an icon is
  *  none, missing or failing. */
 export const monogramColour = (slug: string): number =>
-  derive("Saltix grain monogram v1", new TextEncoder().encode(slug))[0]! % MONOGRAM_COLOURS;
+  derive("Salarium grain monogram v1", new TextEncoder().encode(slug))[0]! % MONOGRAM_COLOURS;
 
 /** Thirty-two zero bytes name no icon (32-images §3.1): wallets draw the monogram and fetch nothing. */
 export const NO_ICON = "00".repeat(32);

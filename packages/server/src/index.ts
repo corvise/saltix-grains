@@ -29,6 +29,7 @@ export * from "./profile-link.js";
 export * from "./sponsor.js";
 export * from "./notification.js";
 export * from "./records.js";
+export * from "./managed.js";
 export * from "./seal.js";
 export * from "./relay.js";
 export * from "./file.js";

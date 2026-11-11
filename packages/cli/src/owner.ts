@@ -7,7 +7,7 @@
 // anything is signed (`ownerLine`).
 import { basename, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import { type NetworkName, accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server";
+import { ID_BYTES, type NetworkName, accountId, encodeAddress, fromHex, toHex } from "@saltix/grain-server";
 import { UsageError } from "./args.js";
 import { KEY_FILE, publicKeyOf, readKey } from "./project.js";
 
@@ -71,7 +71,7 @@ export const keyFlag = (keyPath: string, dir: string): string => (resolve(dir, k
 
 /** An account's address on `network`, for people. */
 export const addressOf = (network: string, account: string): string =>
-  ["mainnet", "testnet", "devnet"].includes(network) ? encodeAddress(network as NetworkName, fromHex(account, 32)) : account;
+  ["mainnet", "testnet", "devnet"].includes(network) ? encodeAddress(network as NetworkName, fromHex(account, ID_BYTES)) : account;
 
 /**
  * The line that says, before anything is signed, which account owns what the call makes: the key file's (named, or the

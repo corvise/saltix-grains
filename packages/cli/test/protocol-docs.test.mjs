@@ -82,6 +82,8 @@ test("every link between the repository's pages reaches a file, and its anchor a
       const [path, anchor] = target.split("#", 2);
       const to = path === "" ? file : join(dirname(file), decodeURI(path));
       const where = `${relative(root, file)}:${line} → ${target}`;
+      // In the protocol's repository a link out of the SDK reaches a file too, and nothing in the public one.
+      assert.ok(!relative(root, to).startsWith(".."), `${where}: leaves the SDK, and the public repository holds the SDK alone`);
       assert.ok(existsSync(to), `${where}: no such file`);
       if (anchor !== undefined && to.endsWith(".md")) {
         assert.ok(anchorsOf(to).has(anchor), `${where}: no such heading`);
@@ -94,7 +96,7 @@ test("every link between the repository's pages reaches a file, and its anchor a
 
 test("nothing links to the private repositories, nor sends a reader to the protocol's specs", () => {
   // The vectors are the protocol's bytes, copied unchanged: their `spec` fields name its documents as it names them.
-  for (const file of files.filter((f) => TEXT.test(f) && !f.startsWith(join(root, "vectors")))) {
+  for (const file of files.filter((f) => TEXT.test(f) && !(f.startsWith(join(root, "vectors")) && f.endsWith(".json")))) {
     const text = readFileSync(file, "utf8");
     const where = relative(root, file);
     // assert.ok, not doesNotMatch: a failure names the file and the words, not the whole file.
@@ -119,6 +121,5 @@ test("the protocol's pages each name the protocol commit they reflect, and the i
     assert.ok(index.includes(`](${page})`), `the index lists ${page}`);
   }
   assert.ok(index.includes("](../../vectors/README.md)"), "the index leads to the vectors");
-  // The vectors' README: the repository's own here, the copy beside the packages in the public mirror (one level less).
-  assert.match(readFileSync(new URL("../../../vectors/README.md", import.meta.url), "utf8"), /the protocol's own bytes/i);
+  assert.match(readFileSync(join(root, "vectors", "README.md"), "utf8"), /the protocol's own bytes/i);
 });

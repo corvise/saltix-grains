@@ -1,5 +1,5 @@
 // A website's Connect profile as a wallet reads it (Saltix 19-connect §11.3): the signed JSON form at
-// `/.well-known/saltix-connect` of the offer's origin — no cookies, no referrer, no redirect, at most 64 KiB, within 5
+// `/.well-known/salarium-connect` of the offer's origin — no cookies, no referrer, no redirect, at most 64 KiB, within 5
 // seconds — taken when it reads strictly, it is the profile of that origin, and its key speaks for its owner by the
 // owner's key event log. A site checks its own with it (a status page, its tests), and so may anyone listing sites.
 // Signing a profile is the operator's, once, with a key that never comes near a page: `grain connect-profile`. A profile

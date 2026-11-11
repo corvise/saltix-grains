@@ -2,6 +2,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { AppKey } from "./app-key.js";
 import { Reader, Writer, derive, fromHex, toHex } from "./bytes.js";
 import { type DeviceKey, verifyByDeviceKey } from "./keys.js";
+import { ID_BYTES } from "./address.js";
 
 export type Asset = "SALT" | "WORK";
 
@@ -31,7 +32,7 @@ export function encodeInvoice(inv: Invoice): Uint8Array {
   if (new TextEncoder().encode(inv.memo).length > 200 || /\p{Cc}/u.test(inv.memo)) throw new TypeError("memo: at most 200 bytes, no control characters");
   return new Writer()
     .string(inv.slug)
-    .fixed(fromHex(inv.to, 32), 32)
+    .fixed(fromHex(inv.to, ID_BYTES), ID_BYTES)
     .u8(inv.asset === "SALT" ? 0 : 1)
     .u64(inv.amount)
     .string(inv.memo)
@@ -55,12 +56,12 @@ export function unitsOf(amount: bigint | string, asset: Asset): bigint {
 
 /** What the signer signs: the invoice on the network of `genesisHash` (hex). */
 export function invoiceMessage(inv: Invoice, genesisHash: string): Uint8Array {
-  return derive("Saltix grain invoice v1", fromHex(genesisHash, 32), encodeInvoice(inv));
+  return derive("Salarium grain invoice v1", fromHex(genesisHash, 32), encodeInvoice(inv));
 }
 
 /** What the owner key signs to certify `key` for `slug` until `expiresAt` (12-grains §5.2). */
 export function certMessage(slug: string, key: Uint8Array, expiresAt: number): Uint8Array {
-  return derive("Saltix grain invoice key v1", new Writer().string(slug).fixed(key, 32).u64(expiresAt).done());
+  return derive("Salarium grain invoice key v1", new Writer().string(slug).fixed(key, 32).u64(expiresAt).done());
 }
 
 /** An `InvoiceKeyCert` in Borsh, as a chat message and a spec frame carry it (22-grain-chats). */
@@ -72,7 +73,7 @@ export function readCertBody(r: Reader): InvoiceKeyCert {
   return { slug: r.string(64), key: toHex(r.fixed(32)), expires_at: r.u64n(), signature: toHex(r.fixed(64)) };
 }
 
-/** The hex of `cert`'s Borsh: the `cert` of `/.well-known/saltix-grain-chat` and of a chat link (22-grain-chats §2, §6). */
+/** The hex of `cert`'s Borsh: the `cert` of `/.well-known/salarium-grain-chat` and of a chat link (22-grain-chats §2, §6). */
 export function encodeCert(cert: InvoiceKeyCert): string {
   return toHex(writeCertBody(new Writer(), cert).done());
 }
@@ -155,7 +156,7 @@ const isRetired = (r: InvoiceRecord): boolean => r.retired === true || typeof r.
 /** A signed invoice read from `r`: what a chat's `Invoice` block carries. */
 export function readSignedInvoice(r: Reader): { invoice: Invoice; cert: InvoiceKeyCert | null; signature: string } {
   const slug = r.string(64);
-  const to = toHex(r.fixed(32));
+  const to = toHex(r.fixed(ID_BYTES));
   const asset = r.u8();
   if (asset > 1) throw new TypeError("borsh: an asset's tag");
   const invoice: Invoice = {

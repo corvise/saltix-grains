@@ -3,7 +3,7 @@
 // bound to it, anyone's rating, encoded and signed as the node checks them, the deposit a slug needs, and what a node
 // says of a slug.
 import { ed25519 } from "@noble/curves/ed25519";
-import { accountId } from "./address.js";
+import { ID_BYTES, accountId } from "./address.js";
 import { Writer, fromHex, toHex } from "./bytes.js";
 import { type Handle, handleProblem, writeHandle } from "./handle.js";
 import { encodeManifest, type Manifest, type SignedManifest } from "./manifest.js";
@@ -138,7 +138,7 @@ export function grainCallProblem(call: GrainCall, sender?: string, genesis?: str
     const { members } = call.access;
     const accounts = members.map((m) => m.account);
     const ok = members.length <= MAX_MEMBERS && new Set(accounts).size === accounts.length &&
-      members.every((m) => /^[0-9a-f]{64}$/.test(m.account) && m.account !== sender && rolesOk(m.roles));
+      members.every((m) => /^[0-9a-f]{40}$/.test(m.account) && m.account !== sender && rolesOk(m.roles));
     if (!ok) return `members: at most ${MAX_MEMBERS}, none twice, not the owner, roles 1 to 7`;
     return slug(call.access.slug);
   }
@@ -204,7 +204,7 @@ function grainAction(call: GrainCall, sender?: string, genesis?: string): Uint8A
   } else if ("access" in call) {
     const a = call.access;
     w.u8(CALL.access).string(a.slug).bool(a.public).u32(a.members.length);
-    for (const m of a.members) w.fixed(fromHex(m.account, 32), 32).u8(m.roles);
+    for (const m of a.members) w.fixed(fromHex(m.account, ID_BYTES), ID_BYTES).u8(m.roles);
   } else if ("rate" in call) {
     w.u8(CALL.rate).string(call.rate.slug).u8(call.rate.score).string(call.rate.review);
   } else if ("profile" in call) {

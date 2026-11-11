@@ -24,8 +24,9 @@ import { ensureGitignore } from "../dist/pair.js";
 import { isRelaySource } from "../dist/sources.js";
 import { connectJson } from "../dist/template.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+const vectors = goldenVectors("images-v1.json");
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const GENESIS = "5a".repeat(32);
 const OWNER = fromHex("41".repeat(32), 32);
@@ -680,7 +681,7 @@ test("an app made in Saltix is its owner's phone's: owner.key here never signs f
   writeFileSync(join(dir, "public", "index.html"), "<!doctype html><title>Space 3</title>");
   const puts = phones.calls.blob_put ?? 0;
   await assert.rejects(run(dir, ledger, { signing: { node: ledger, validFor: 600 }, keyNamed: true }).done,
-    /space-game: the registry names another owner \([0-9a-f]{64}\) than owner\.key's account: an app made in Saltix is its owner's phone's, so run it without --key/);
+    /space-game: the registry names another owner \([0-9a-f]{40}\) than owner\.key's account: an app made in Saltix is its owner's phone's, so run it without --key/);
   assert.deepEqual(ledger.submitted, []);
   assert.equal(phones.calls.blob_put ?? 0, puts, "nothing uploaded on a refused key's word");
 });
@@ -1272,7 +1273,7 @@ test("grain access: nothing to change sends nothing; what it sends is kept, and 
   assert.equal(ledger.pool.sent.length, sent);
   assert.ok(steps(dir).includes("registry:ok:unchanged"));
   // A member: sent with --no-wait, kept in .grain/publish.json, and grain doctor says when it landed.
-  const member = "88".repeat(32);
+  const member = "88".repeat(20);
   const added = await cli(dir, ["access", "--slug", SLUG, "--private", "--member", `${member}:user`, "--no-wait", "--node", url]);
   assert.equal(added.status, 0, added.err);
   assert.match(added.out, /^sent: it lands in the registry in a few minutes \(usually 1\.5 to 2\.5 minutes on the test network\); grain doctor --node \S+ says when it has landed$/m);

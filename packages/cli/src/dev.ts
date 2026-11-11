@@ -96,7 +96,7 @@ export function serve(root: string, manifest: () => Manifest, secret: Uint8Array
     if (path === `${DEV_API}/access`) {
       // Who uses and develops the app besides its owner: on its team, so their sign-ins carry member proofs.
       const members = (Array.isArray(body.members) ? body.members : [])
-        .filter((m): m is string => typeof m === "string" && /^[0-9a-f]{64}$/.test(m) && m !== g.owner)
+        .filter((m): m is string => typeof m === "string" && /^[0-9a-f]{40}$/.test(m) && m !== g.owner)
         .slice(0, 64).map((account) => ({ account, roles: ROLES.user | ROLES.developer }));
       registry.setAccess(body.public !== false, members);
       return json(res, 200, { access: { public: g.public, members: g.members ?? [] } });

@@ -26,7 +26,7 @@ export function spec(version = 2, over = {}) {
         params: [
           { name: "duration", title: en("Access for"), kind: { duration: { options: [600, 86_400] } }, required: true },
           { name: "note", title: en("Note"), kind: { text: { max: 40 } }, required: false },
-          { name: "site", title: en("Site"), kind: { choice: { options: [{ value: "saltix-io", title: en("saltix.io") }, { value: "web", title: en("Web") }] } }, required: true },
+          { name: "site", title: en("Site"), kind: { choice: { options: [{ value: "salarium-io", title: en("salarium.io") }, { value: "web", title: en("Web") }] } }, required: true },
         ],
       },
       { name: "revoke", title: en("Revoke a key"), help: {}, confirm: true, price: 0n, params: [{ name: "id", title: en("Key"), kind: { text: { max: 16 } }, required: true }] },
@@ -115,7 +115,7 @@ export function fakeChain(over = {}) {
 /** A wallet: the user's grain key at the relay, sending requests and keeping every frame it gets, opened. */
 export async function wallet(relay, seed, serverAddress, servers = []) {
   const secret = new Uint8Array(32).fill(seed);
-  const messagingSecret = derive("Saltix grain messaging key v1", secret, new TextEncoder().encode("access"));
+  const messagingSecret = derive("Salarium grain messaging key v1", secret, new TextEncoder().encode("access"));
   const client = await RelayClient.connect({ endpoints: [relay.endpoint()], secret, messagingSecret, network: "devnet", log: quiet });
   const frames = [];
   const waiting = [];

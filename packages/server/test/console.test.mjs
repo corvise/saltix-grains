@@ -4,7 +4,6 @@
 // hour.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
@@ -20,6 +19,7 @@ import {
   DAY, OWNER, SERVER, chain, ownerKey, quiet, spec, signedSpec, cert, serverKey, appKey, fakeChain, wallet, sleep, manifest,
 } from "./chat-helpers.mjs";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
 const accountOf = (secret) => toHex(accountId(ed25519.getPublicKey(secret)));
 const DEV = fromHex("53".repeat(32), 32);
@@ -90,10 +90,10 @@ const caught = (f) => {
 };
 
 test("secrets are scrubbed: developer keys, long hex, the server's own and what the app names", () => {
-  const key = `saltix-app:1:dsalt:6c6c6c6c6c6c6c6c:access:${HEX64}`;
+  const key = `salarium-app:1:dsalt:6c6c6c6c6c6c6c6c:access:${HEX64}`;
   const text = `start ${key} failed; secret=${HEX64.toUpperCase()}; 0x${HEX64}; pair ${HEX64}${HEX64}; id ${"cd".repeat(16)}; short ${"e".repeat(63)}`;
   const out = scrubSecrets(text);
-  assert.ok(!out.includes("saltix-app:1:"), "no trace of a developer key, its public parts included");
+  assert.ok(!out.includes("salarium-app:1:"), "no trace of a developer key, its public parts included");
   assert.ok(!/[0-9a-f]{64}/i.test(out), "no run of 64 hex survives");
   assert.match(out, /\[developer key removed\] failed/);
   assert.match(out, /secret=\[hex removed\]/, "upper case too");
@@ -433,7 +433,7 @@ test("an update is proposed to the team in the console, for the owner to approve
   // The registry's chat-only v1, with a sealed screen: v2.
   const next = {
     ...manifest().manifest, version: 2, permissions: 0,
-    entry: { sealed: { bundle: "88".repeat(32), size: 4096, sources: ["https://download.saltix.io/apps/screens/a.zip"], start: "index.html", connect: ["https://api.saltix.io"] } },
+    entry: { sealed: { bundle: "88".repeat(32), size: 4096, sources: ["https://download.salarium.io/apps/screens/a.zip"], start: "index.html", connect: ["https://api.salarium.io"] } },
   };
   try {
     // Nobody on the team has written yet: nobody is reached, and the owner is told apart.
@@ -494,7 +494,7 @@ test("an update proposed with its bundle: the bundle goes into the network first
   const store = createDevRegistry({ slug: "access", ownerSecret: OWNER, servers: [serverKey], genesis: chain.genesis });
   const answer = fake.wallet.call.bind(fake.wallet);
   fake.wallet.call = (method, params) => (method.startsWith("blob_") ? store.call(method, params) : answer(method, params));
-  const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+  const vectors = goldenVectors("images-v1.json");
   const zip = fromHex(vectors.bundles.made[0].hex);
   const { relay, server, events, close } = await studio(fake);
   const owner = await wallet(relay, 0x78, server.address, [serverKey]);
@@ -586,7 +586,7 @@ test("a handler's error reaches the team as a card for an AI agent; the same err
     await ask(user, user.request("report"));
     await owner.until(() => reports().length === 4);
     const leaked = JSON.stringify(reports()[3].message.blocks);
-    for (const secret of [HEX64, "tok-secret-0123456789", toHex(SERVER), toBase64(SERVER, true), "saltix-app:1:"]) assert.ok(!leaked.includes(secret), secret);
+    for (const secret of [HEX64, "tok-secret-0123456789", toHex(SERVER), toBase64(SERVER, true), "salarium-app:1:"]) assert.ok(!leaked.includes(secret), secret);
     assert.match(leaked, /minted with \[hex removed\] and \[removed\] under \[developer key removed\] \(\[removed\]\)/);
     const log = JSON.stringify(events);
     for (const secret of [HEX64, "tok-secret-0123456789", toHex(SERVER), toBase64(SERVER, true)]) assert.ok(!log.includes(secret), `log: ${secret}`);
@@ -670,12 +670,12 @@ test("the team's addresses survive a restart in a file store", async () => {
 });
 
 test("the team's checks, as functions", () => {
-  const access = { owner: "aa".repeat(32), public: true, members: [{ account: "bb".repeat(32), roles: ROLES.user | ROLES.developer }, { account: "cc".repeat(32), roles: ROLES.viewer }, { account: "dd".repeat(32), roles: ROLES.user }] };
-  assert.equal(onTeam(access, "aa".repeat(32)), true, "the owner");
-  assert.equal(onTeam(access, "bb".repeat(32)), true, "a developer who also uses it");
-  assert.equal(onTeam(access, "cc".repeat(32)), true, "a viewer");
-  assert.equal(onTeam(access, "dd".repeat(32)), false, "a user");
-  assert.equal(onTeam(access, "ee".repeat(32)), false, "a stranger");
+  const access = { owner: "aa".repeat(20), public: true, members: [{ account: "bb".repeat(20), roles: ROLES.user | ROLES.developer }, { account: "cc".repeat(20), roles: ROLES.viewer }, { account: "dd".repeat(20), roles: ROLES.user }] };
+  assert.equal(onTeam(access, "aa".repeat(20)), true, "the owner");
+  assert.equal(onTeam(access, "bb".repeat(20)), true, "a developer who also uses it");
+  assert.equal(onTeam(access, "cc".repeat(20)), true, "a viewer");
+  assert.equal(onTeam(access, "dd".repeat(20)), false, "a user");
+  assert.equal(onTeam(access, "ee".repeat(20)), false, "a stranger");
   const key = toHex(ed25519.getPublicKey(fromHex("60".repeat(32), 32)));
   const now = Date.now();
   const team = { ...access, members: [...access.members, { account: accountOf(DEV), roles: ROLES.developer }] };

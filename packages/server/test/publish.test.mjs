@@ -11,9 +11,9 @@ import {
 import { inflateRaw } from "../dist/inflate.js";
 
 const manifest = (over = {}) => ({
-  slug: "passgen", version: 2, owner: "aa".repeat(32), owner_key: { ed25519: "bb".repeat(32) }, name: { en: "Saltix Pass", ru: "Saltix Pass" },
+  slug: "passgen", version: 2, owner: "aa".repeat(20), owner_key: { ed25519: "bb".repeat(32) }, name: { en: "Saltix Pass", ru: "Saltix Pass" },
   description: { en: "Access keys for the closed sites." }, icon: "07".repeat(32),
-  entry: { sealed: { bundle: "09".repeat(32), size: 154_240, sources: ["https://download.saltix.io/apps/screens/x.zip"], start: "index.html", connect: ["https://api.saltix.io"] } },
+  entry: { sealed: { bundle: "09".repeat(32), size: 154_240, sources: ["https://download.salarium.io/apps/screens/x.zip"], start: "index.html", connect: ["https://api.salarium.io"] } },
   permissions: 0, sponsor: null, min_host: 1, ...over,
 });
 const unowned = (m) => ({ ...m, ...UNOWNED });
@@ -123,7 +123,7 @@ test("a manifest's text out of form is refused, as the protocol's reader refuses
   assert.equal(problem(pack(swapped)), "manifest");
   assert.deepEqual(readPublishText(pack(canonical)), two);
   assert.equal(problem(pack(encodeManifest(manifest()))), "owned");
-  assert.equal(problem(pack(encodeManifest({ ...m, owner: "aa".repeat(32) }))), "owned", "an owner alone");
+  assert.equal(problem(pack(encodeManifest({ ...m, owner: "aa".repeat(20) }))), "owned", "an owner alone");
   assert.equal(problem(pack(encodeManifest({ ...m, owner_key: { ed25519: "bb".repeat(32) } }))), "owned", "an owner key alone");
   assert.equal(problem(pack(encodeManifest({ ...m, owner_key: { p256: "02" + "00".repeat(32) } }))), "owned", "a P-256 key");
   assert.throws(() => readPublishLink(text), (e) => e instanceof PublishTextError && e.problem === "link");

@@ -65,16 +65,16 @@ const r = (result) => {
 };
 
 test("rights come from the registry's roles, the strongest first; a public grain's user role is none", () => {
-  const access = { owner: "aa".repeat(32), public: true, members: [
-    { account: "bb".repeat(32), roles: ROLES.user | ROLES.developer }, { account: "cc".repeat(32), roles: ROLES.viewer | ROLES.user },
-    { account: "dd".repeat(32), roles: ROLES.user },
+  const access = { owner: "aa".repeat(20), public: true, members: [
+    { account: "bb".repeat(20), roles: ROLES.user | ROLES.developer }, { account: "cc".repeat(20), roles: ROLES.viewer | ROLES.user },
+    { account: "dd".repeat(20), roles: ROLES.user },
   ] };
-  assert.equal(rightsOf(access, "aa".repeat(32)), "owner");
-  assert.equal(rightsOf(access, "bb".repeat(32)), "developer");
-  assert.equal(rightsOf(access, "cc".repeat(32)), "viewer");
-  assert.equal(rightsOf(access, "dd".repeat(32)), "none");
-  assert.equal(rightsOf({ ...access, public: false }, "dd".repeat(32)), "user");
-  assert.equal(rightsOf(access, "ee".repeat(32)), "none");
+  assert.equal(rightsOf(access, "aa".repeat(20)), "owner");
+  assert.equal(rightsOf(access, "bb".repeat(20)), "developer");
+  assert.equal(rightsOf(access, "cc".repeat(20)), "viewer");
+  assert.equal(rightsOf(access, "dd".repeat(20)), "none");
+  assert.equal(rightsOf({ ...access, public: false }, "dd".repeat(20)), "user");
+  assert.equal(rightsOf(access, "ee".repeat(20)), "none");
   assert.equal(rightsOf(access, null), "none");
 });
 

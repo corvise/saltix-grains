@@ -38,7 +38,7 @@ calls it. A client:
    an IPv4 one counts as that address) and the week, under a key that takes the hash of the week's first final beacon
    block, the same five from every relay, changed within the week only where a chosen relay departs, so asking more
    relays, or again, from one place learns nothing more. Sealed: X25519 with the answer's one-time key `E` (its first 32
-   bytes), `BLAKE3 derive_key("Saltix relay tickets seal v1", S ‖ E ‖ R)`, XChaCha20-Poly1305 with 24 zero bytes of nonce
+   bytes), `BLAKE3 derive_key("Salarium relay tickets seal v1", S ‖ E ‖ R)`, XChaCha20-Poly1305 with 24 zero bytes of nonce
    and the genesis that relay answered as associated data. It reads the relay's own ticket and five more, no further.
 4. **Checks every ticket** (below) and refuses one naming a host and port twice, keeps the endpoints that name a public
    address (none on a private, loopback, link-local, shared, documentation or multicast address; a name only where every
@@ -56,7 +56,7 @@ calls it. A client:
 **A ticket** is a relay's own signed record with the network it serves: `SALTIX-RELAY:` and RFC 4648 base32 (upper case,
 no padding) of `version (1) ‖ the network's genesis hash's first 8 bytes ‖ the record's version (2 or 3) ‖ the record as
 nodes gossip it` (its Borsh body — `node_key`, `peer_id`, `endpoints [{url, cert_sha256?}]`, `issued_at`, and version
-3's `store` and `country` — then the node key's 64-byte signature over `derive("Saltix relay record v2"/"v3", body)`).
+3's `store` and `country` — then the node key's 64-byte signature over `derive("Salarium relay record v2"/"v3", body)`).
 It lives 30 days from `issued_at`. A reader trims Rust's whitespace (not U+FEFF) and compares ASCII letters only (`ſ` is
 no S, `ı` no I), then refuses, in this order, the first that fails: `prefix`, `encoding` (not base32, over 1 152 bytes),
 `version`, `network` (another genesis, when known), `record` (not the version named, or bytes left over), `bounds` (a
@@ -121,7 +121,7 @@ KeyBinding {                     the account's messaging key; only the account k
   key_epoch:     u32             0 for a server
   devices_after: u64             Unix ms; device certificates issued before it no longer count
   issued_at:     u64             Unix ms
-  signature:     [u8; 64]        by account_key over derive("Saltix messaging key v1", Borsh(the fields above))
+  signature:     [u8; 64]        by account_key over derive("Salarium messaging key v1", Borsh(the fields above))
 }
 AddressRecord {                  where an address is now
   key:       KeyBinding
@@ -130,10 +130,10 @@ AddressRecord {                  where an address is now
   nonce:     [u8; 16]            hello.nonce of this connection
   device:    Option<DeviceCert>  none for a server: it signs with the account key itself
   signature: [u8; 64]            by device.device_key, or the account key without one, over
-                                 derive("Saltix address record v1", Borsh(the fields above))
+                                 derive("Salarium address record v1", Borsh(the fields above))
 }
 DeviceCert { device_key: [u8; 32], kind: u8 (0 phone, 1 browser), issued_at: u64, expires_at: u64, signature: [u8; 64] }
-  by the account key over derive("Saltix device certificate v1", Borsh((account_key, device_key, kind, issued_at, expires_at)))
+  by the account key over derive("Salarium device certificate v1", Borsh((account_key, device_key, kind, issued_at, expires_at)))
 ```
 
 A record is valid when the binding's key is valid and its signature verifies; `key.issued_at` and `issued_at` are at
@@ -154,7 +154,7 @@ and registers (so a server whose clock is behind still registers). `"revoked"` m
 record's device. A connection registers one address (`already_registered` for another); frames that need an address
 (`message`, `get_key`, `file_new`, …) before it get `not_registered`. After registering, the relay hands the connection the frames its mailbox kept.
 
-A grain's server derives its messaging secret from its key, `derive("Saltix grain server messaging key v1", the
+A grain's server derives its messaging secret from its key, `derive("Salarium grain server messaging key v1", the
 Ed25519 secret)`, so it keeps one messaging key across restarts and SDKs ([grains §5.5](grains.md#55-notifications)).
 Wallets register their users' grain aliases on their own connections (`register_alias {record, grain: true}`, at most
 32 per connection besides 8 ordinary aliases): a server never needs it.
@@ -167,9 +167,16 @@ get_key {pubkey}  → key_response {pubkey, record, encryptKey, managed, log, pr
 
 `record` is the newest plain address record the relays know of the address (base64url Borsh), or `null`. **Check the
 record yourself** and take the messaging key only from a checked record's binding whose key's personal address is the
-address asked for; never take the relay's word (`encryptKey`). A grain alias's record is a plain kind 0 record; a
-managed account's address has `record: null` and its `managed` record and `log` instead, which a grain's server never
-needs. The SDK: `messagingKeyOf`, `recordProblem`.
+address asked for; never take the relay's word (`encryptKey`). A grain alias's record is a plain kind 0 record. A
+managed account's address (a new wallet's is one) has `record: null` and its `managed` record and `log` instead
+(base64url Borsh: the `ManagedRecord`, and the account's key event log's events, from the first): take its key only
+from a record whose binding and record are signed by signers current in that log — a device that is not a guardian, or
+a root of the current phrase —, the log checked offline from the account's origin under the network's genesis hash and
+first account policy (`node_status.genesis`, `.accounts.policy`), at least at the binding's `seq`; an empty log is a new
+address's, and only its first root signs then. A grain's server never needs it (its users write from their grain
+aliases); an address of its own does. The SDK: `messagingKeyOf`, `recordProblem`; `managedMessagingKeyOf`,
+`managedRecordProblem`, `splitLog`; `RelayClient` takes managed keys itself with the rules its `accounts` option gives or
+its `node` tells.
 
 ## Sending and receiving
 
@@ -192,7 +199,7 @@ message {to, payload, msgId, ephemeral?}     to: an address; payload: at most 64
 ```text
 message_ack {to, msgId, proof}       to: the message's sender; proof: base64url Borsh(MailboxAckProof)
 MailboxAckProof { account_key: [u8; 32], msg_id: String, at: u64 (Unix ms), device: Option<DeviceCert>, signature: [u8; 64] }
-  by account_key (or the device) over derive("Saltix mailbox ack v1", Borsh(the fields above))
+  by account_key (or the device) over derive("Salarium mailbox ack v1", Borsh(the fields above))
 ```
 
 The ack goes to the sender like a message, and with the proof the message also leaves the acknowledging address's own
@@ -332,7 +339,7 @@ SponsorCert {
   expires:  u64         slot; issued < expires ≤ issued + MAX_GRANT_LIFE (2 592 000 slots, 30 days)
 }
 SignedSponsorCert { cert, signature: [u8; 64] }
-  by sponsor over derive("Saltix sponsor certificate v1", genesis_hash ‖ Borsh(cert)): Ed25519, or P-256 with a low s
+  by sponsor over derive("Salarium sponsor certificate v1", genesis_hash ‖ Borsh(cert)): Ed25519, or P-256 with a low s
 ```
 
 A grain's server issues one at login for the grain key `grain_login` returned, with `sponsor` the key whose personal

@@ -2,7 +2,7 @@
 
 Got a command starting with `grain pair --app`? It is the pairing command from a Saltix mini-app's page — start with
 [docs/how-it-works.md](docs/how-it-works.md) and [AGENTS.md](AGENTS.md#start-here-saltixs-brief-or-the-pairing-command);
-run it in the app's project and show its QR code. A key starting with `saltix-app:1:` is a developer key made before
+run it in the app's project and show its QR code. A key starting with `salarium-app:1:` is a developer key made before
 pairing: keep the key in `app.key`, never in a chat or a commit, and pair a server in its place.
 
 SDKs and tools for **grains**, apps that open inside Saltix wallets (*mini-apps*, as Saltix calls them in its Apps
@@ -197,7 +197,7 @@ npx grain support @dice                   # who answers users: connect.json's su
 npx grain support dsalt1q… --consent support-consent.json   # a Saltix address (protocol version 9) and its holder's consent
 SALTIX_SUPPORT_KEY=… npx grain support consent --slug dice   # the holder's side: its consent, the key from the environment
 npx grain connect-profile --origin https://dex.example --name "Example DEX" --category finance --key site.key
-                                          # a website's profile, for /.well-known/saltix-connect (docs/connect.md)
+                                          # a website's profile, for /.well-known/salarium-connect (docs/connect.md)
 npx grain retire --slug dice              # close the slug for good; the deposit returns 30 days later
 npx grain cert init && npx grain cert     # server.key, and cert.json: the owner key certifies it (31 days for chats)
 npx grain chat-spec --cert cert.json      # chat.json → chat.signed.json, served at /.well-known/saltix-grain-chat
@@ -356,8 +356,8 @@ npx grain show --slug dice --node http://127.0.0.1:30334   # any command, throug
   *Support the developer*, a transfer to the registry's owner ([AGENTS.md](AGENTS.md#donations-to-your-app)).
 - `grain connect-profile` signs a website's profile (subject `site`: `--origin`, `--name`, `--category`) with the
   operator's key file, from the texts and links of `--profile` (`connect.json`), at a revision above the one the site
-  serves now and the file it writes (`--out`, `.well-known/saltix-connect`), or `--revision N`; when neither can be
-  told it asks for `--revision` (`--offline`: the file only): serve it at `/.well-known/saltix-connect` as
+  serves now and the file it writes (`--out`, `.well-known/salarium-connect`), or `--revision N`; when neither can be
+  told it asks for `--revision` (`--offline`: the file only): serve it at `/.well-known/salarium-connect` as
   `application/json`, with no redirect ([docs/connect.md](docs/connect.md)).
 - `grain faucet` (test networks): a node's faucet signs a grant of test SALT, and WORK while its purse holds some, to
   owner.key's account or `--address` (`faucet_request`): 3 SALT, one an hour an address (the node's terms,
@@ -636,10 +636,12 @@ command line does: `RegisterGrain` (with the deposit `grainDeposit(slug)` or a n
 npm test               # builds, then runs every package's tests (node --test)
 ```
 
-The tests hold the SDK to the protocol's golden vectors byte for byte. In this repository they are a copy in `vectors/`
-of the ones Saltix's own repository keeps, made by `scripts/sync-vectors.sh <checkout of corvise/saltix>`, which records
-that checkout's commit and each file's git blob id in the mirror's `vectors/` (its `SOURCE` file); CI checks the copies against it
-(`scripts/check-vectors.mjs`), so a vector edited here by hand fails. This repository is published from Saltix's by its
-`scripts/publish-grains-mirror.sh`, one commit for each sync.
+The tests hold the SDK to the protocol's golden vectors byte for byte, each reading a file by its name
+(`goldenVectors("<name>.json")`, `scripts/vectors.mjs`). In this repository the vectors are copies in `vectors/` of the
+ones Saltix's own repository keeps: `node scripts/sync-vectors.mjs <checkout of corvise/saltix>` takes the files the
+tests read from that checkout's commit and records the commit and each file's git blob id in `vectors/SOURCE`; CI
+checks the copies against it (`node scripts/check-vectors.mjs`), so a vector edited here by hand fails
+([vectors/README.md](vectors/README.md)). This repository is published from Saltix's, one commit for each sync, and
+holds the SDK as that commit has it: `vectors/SOURCE` names the commit.
 
 MIT licensed.

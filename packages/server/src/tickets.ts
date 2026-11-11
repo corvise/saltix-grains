@@ -1,5 +1,5 @@
 // Relay tickets (Saltix 41-transport §18), byte for byte the node's `relay::tickets` (vectors/relay-tickets-v1.json): a
-// relay's own signed record (09-relay §1.3) with the network it serves, `SALTIX-RELAY:` and base32. A client finds relays
+// relay's own signed record (09-relay §1.3) with the network it serves, `SALARIUM-RELAY:` and base32. A client finds relays
 // by them without any public list, and checks each one itself — the signature of the record's node key, its bounds,
 // its age and its network — never the word of the relay that handed it out.
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
@@ -9,13 +9,13 @@ import { verifyEd25519 } from "./keys.js";
 import type { RelayEndpoint } from "./relay.js";
 
 /** What a ticket's text starts with (either case). */
-export const TICKET_PREFIX = "SALTIX-RELAY:";
+export const TICKET_PREFIX = "SALARIUM-RELAY:";
 /** A ticket serves this long after its record's `issued_at`. */
 export const TICKET_LIFE_MS = 30 * 86_400_000;
 /** The tickets of other relays one `relay_tickets` answer gives at most; the answering relay's own comes beside them. */
 export const TICKETS = 5;
 /** What `relay_tickets` seals its answer under to the requester's one-time key. */
-export const TICKETS_SEAL_DOMAIN = "Saltix relay tickets seal v1";
+export const TICKETS_SEAL_DOMAIN = "Salarium relay tickets seal v1";
 
 const VERSION = 1;
 /** A ticket longer than this is refused before decoding: the largest record the bounds allow (version 3, a 64-byte peer
@@ -25,13 +25,13 @@ const FUTURE_SKEW_MS = 10 * 60_000;
 const MAX_PEER_ID = 64;
 const MAX_ENDPOINTS = 4;
 const MAX_ENDPOINT_BYTES = 200;
-const RECORD_DOMAIN: Record<2 | 3, string> = { 2: "Saltix relay record v2", 3: "Saltix relay record v3" };
+const RECORD_DOMAIN: Record<2 | 3, string> = { 2: "Salarium relay record v2", 3: "Salarium relay record v3" };
 
 /** Why a reader refuses a ticket, in the order it checks (41-transport §18.3). */
 export type TicketReason = "prefix" | "encoding" | "version" | "network" | "record" | "bounds" | "signature" | "future" | "expired" | "unreachable";
 
 const WORDS: Record<TicketReason, string> = {
-  prefix: "not a relay ticket (one starts with SALTIX-RELAY:)",
+  prefix: "not a relay ticket (one starts with SALARIUM-RELAY:)",
   encoding: "not base32, or over 1 152 bytes",
   version: "a ticket of a version this SDK does not know",
   network: "a ticket of another network",
@@ -220,7 +220,7 @@ export function sealTicketsAnswer(answer: unknown, key: string, genesis: string,
 
 /**
  * Open `relay_tickets`' sealed answer (41-transport §18.4), the node's `saltix_crypto::sealed`: `E ‖ ciphertext`,
- * XChaCha20-Poly1305 under BLAKE3 derive_key("Saltix relay tickets seal v1", S ‖ E ‖ R) with 24 zero bytes of nonce and
+ * XChaCha20-Poly1305 under BLAKE3 derive_key("Salarium relay tickets seal v1", S ‖ E ‖ R) with 24 zero bytes of nonce and
  * the network's genesis hash as associated data. Null when it does not open (another key, another network, changed).
  */
 export function openTicketsAnswer(sealed: string, secret: Uint8Array, genesis: string): unknown | null {

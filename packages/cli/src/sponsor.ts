@@ -1,7 +1,8 @@
 // `grain sponsor`: the account that pays the relays for a grain's users (Saltix 11-access §4, 12-grains §5.4) —
 // its key file, its channels with pools' exchanges, and the transactions that open, top up and close them.
 import {
-  type ChannelCall, type NetworkName, type NodeLike, nodeCall, signChannelTx, channelTxFee, accountId, encodeAddress, toHex, fromHex,
+  type ChannelCall, ID_BYTES, type NetworkName, type NodeLike, nodeCall, signChannelTx, channelTxFee, accountId, encodeAddress, toHex,
+  fromHex,
 } from "@saltix/grain-server";
 import { publicKeyOf } from "./project.js";
 import type { Signing } from "./registry.js";
@@ -40,7 +41,7 @@ export async function sponsorStatus(node: NodeLike, secret: Uint8Array): Promise
   const a = await nodeCall<Account>(node, "account_get", { address: account });
   const { exchanges } = await nodeCall<{ exchanges: Exchange[] }>(node, "exchange_list");
   return {
-    address: encodeAddress(status.network, fromHex(account, 32)), account, salt: a.salt, work: a.work, channels: a.channels, exchanges,
+    address: encodeAddress(status.network, fromHex(account, ID_BYTES)), account, salt: a.salt, work: a.work, channels: a.channels, exchanges,
   };
 }
 

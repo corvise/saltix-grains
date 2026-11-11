@@ -23,11 +23,11 @@ import { type SignedMemberProof, readSignedMemberProof, writeSignedMemberProof }
 import { readPublishText } from "./publish.js";
 import { type SignedGrainStats, readSignedGrainStats, writeSignedGrainStats } from "./stats.js";
 
-export const CHAT_SPEC_DOMAIN = "Saltix grain chat spec v1";
-export const CHAT_REQUEST_DOMAIN = "Saltix grain chat request v1";
-export const CHAT_MESSAGE_DOMAIN = "Saltix grain chat message v1";
-export const CHAT_HELLO_DOMAIN = "Saltix grain chat hello v1";
-export const CHAT_WELCOME_DOMAIN = "Saltix grain chat welcome v1";
+export const CHAT_SPEC_DOMAIN = "Salarium grain chat spec v1";
+export const CHAT_REQUEST_DOMAIN = "Salarium grain chat request v1";
+export const CHAT_MESSAGE_DOMAIN = "Salarium grain chat message v1";
+export const CHAT_HELLO_DOMAIN = "Salarium grain chat hello v1";
+export const CHAT_WELCOME_DOMAIN = "Salarium grain chat welcome v1";
 /** What a grain-chat frame's plaintext starts with (§4). */
 export const CHAT_FRAME_MAGIC = new TextEncoder().encode("SGC1");
 /** The longest server-key certificate a wallet takes for chat: 31 days, ms. */
@@ -489,7 +489,7 @@ function readSignedSpec(r: Reader): SignedGrainChatSpec {
 
 export const encodeSignedChatSpec = (s: SignedGrainChatSpec): Uint8Array => writeSignedSpec(new Writer(), s).done();
 
-/** The Borsh (bytes or hex, as `/.well-known/saltix-grain-chat` serves it) of a signed spec, read back. */
+/** The Borsh (bytes or hex, as `/.well-known/salarium-grain-chat` serves it) of a signed spec, read back. */
 export function decodeSignedChatSpec(bytes: Uint8Array | string): SignedGrainChatSpec {
   const r = new Reader(typeof bytes === "string" ? fromHex(bytes) : bytes);
   const s = readSignedSpec(r);
@@ -1121,7 +1121,7 @@ export function isoToDay(iso: string): number | null {
   return days <= 0xffffffff ? days : null;
 }
 
-/** The `/.well-known/saltix-grain-chat` document (§2): `{spec, cert?, stats?}` in hex of their Borsh. `cert`, the
+/** The `/.well-known/salarium-grain-chat` document (§2): `{spec, cert?, stats?}` in hex of their Borsh. `cert`, the
  *  current server key's certificate when it has one; `stats`, the numbers the app reports (24-app-studio §6a). */
 export interface ChatDocument {
   spec: string;

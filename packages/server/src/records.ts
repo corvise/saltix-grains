@@ -9,10 +9,10 @@ import { verifyEd25519 } from "./keys.js";
  * Every signature is Ed25519 over `derive(domain, Borsh(payload))`.
  */
 
-const BINDING = "Saltix messaging key v1";
-const DEVICE = "Saltix device certificate v1";
-const RECORD = "Saltix address record v1";
-const ACK = "Saltix mailbox ack v1";
+const BINDING = "Salarium messaging key v1";
+const DEVICE = "Salarium device certificate v1";
+const RECORD = "Salarium address record v1";
+const ACK = "Salarium mailbox ack v1";
 /** How far ahead of a checker's clock a record may be issued. */
 const FUTURE_SKEW_MS = 10 * 60_000;
 const MAX_CERT_LIFETIME_MS = 400 * 86_400_000;

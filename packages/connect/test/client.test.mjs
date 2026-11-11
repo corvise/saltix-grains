@@ -71,7 +71,7 @@ test("an offer, the wallet's notice and a grant: connected, kept, restored, disc
   const parsed = parseOffer(offer.text);
   assert.equal(parsed.origin, ORIGIN);
   assert.equal(parsed.name, "Example DEX");
-  assert.equal(offer.link, `https://saltix.io/connect#${offer.text}`);
+  assert.equal(offer.link, `https://salarium.io/connect#${offer.text}`);
   assert.match(offer.qr.svg, /^<svg [^>]*viewBox="0 0 \d+ \d+"[^>]*>.*<path d="M/);
   assert.ok(offer.qr.size > 25 && offer.qr.path.length > 100);
   assert.ok(offer.expiresAt > Date.now());
@@ -185,7 +185,7 @@ test("the page's code life reaches its offers: expiresAt is that far ahead, 2 mi
 
 test("a connection is kept 30 days, for its own network only", () => {
   const storage = new MemoryStorage();
-  const c = { network: GENESIS, account: "11".repeat(32), address: "dsalt1q", grant: "AA", signer: "ed25519", managed: false, since: Date.now() };
+  const c = { network: GENESIS, account: "11".repeat(20), address: "dsalt1q", grant: "AA", signer: "ed25519", managed: false, since: Date.now() };
   storage.setItem(STORAGE_KEY, JSON.stringify({ devnet: c }));
   assert.deepEqual(loadConnection("devnet", GENESIS, Date.now(), storage), c);
   assert.equal(loadConnection("devnet", "66".repeat(32), Date.now(), storage), null, "a reset network's is dropped");

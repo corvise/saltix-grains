@@ -70,7 +70,7 @@ your app → Servers**).
 Keep the app **private** while you develop it: only you and the members you add can use it (My apps → your app). It goes
 public when it is ready (step 4).
 
-**Developer keys, retired.** A Saltix from before pairing made a **developer key**, `saltix-app:1:dsalt:7e70a4e3…:your-app:…`,
+**Developer keys, retired.** A Saltix from before pairing made a **developer key**, `salarium-app:1:dsalt:7e70a4e3…:your-app:…`,
 shown once, to copy to the server: a secret that travels, which whoever holds speaks for your app with. Saltix makes no
 new ones (Saltix [24-app-studio §3](protocol/app-studio.md#3-the-developer-key)): a host where no command runs is where
 the program's own first start runs `grain pair` once, its console showing the QR code as any terminal does. A key made
@@ -313,7 +313,7 @@ SDK: https://github.com/corvise/saltix-grains (public). Read first: docs/how-it-
   npm install && npm run build
   npx grain init ../{slug} --chat --slug {slug} && cd ../{slug} && npm install
 
-Then pair the project with the app; no key ever passes through this chat. Run `npx grain status` first: it says what is connected and the next step. Then `npx grain pair --app {slug} --owner {owner} --genesis {genesis}` (the three facts above, all public; or `npx grain pair --no-wait`, then `npx grain pair` to wait): it makes the program's key on this computer, never printed, signs its proof for the app and me, and shows a QR code (also in .grain/pair.html) and a six-digit code. Show me the QR code and the code, then wait: I scan it with Saltix, check the code and confirm with my PIN, and it writes app.key once the registry names the key. Then `npx grain doctor` names anything left. Never ask me for a key, a token or an address I did not give you: this brief holds everything; a developer key (saltix-app:1:…) is retired, and one made before keeps working until I pair a server in its place.
+Then pair the project with the app; no key ever passes through this chat. Run `npx grain status` first: it says what is connected and the next step. Then `npx grain pair --app {slug} --owner {owner} --genesis {genesis}` (the three facts above, all public; or `npx grain pair --no-wait`, then `npx grain pair` to wait): it makes the program's key on this computer, never printed, signs its proof for the app and me, and shows a QR code (also in .grain/pair.html) and a six-digit code. Show me the QR code and the code, then wait: I scan it with Saltix, check the code and confirm with my PIN, and it writes app.key once the registry names the key. Then `npx grain doctor` names anything left. Never ask me for a key, a token or an address I did not give you: this brief holds everything; a developer key (salarium-app:1:…) is retired, and one made before keeps working until I pair a server in its place.
 
 One app, one key, one program: the key is {slug}'s alone. Never run the SDK's example or another program with it, and never use another app's key or slug here: two programs on one key both answer in its chat.
 

@@ -196,7 +196,7 @@ export async function testChat(o: TestChatOptions): Promise<TestChat> {
   function wallet(name: string): TestUser {
     const grainSecret = new Uint8Array(randomBytes(32));
     const accountSecret = name === "owner" ? ownerSecret : memberSecrets.get(name) ?? null;
-    const messagingSecret = derive("Saltix grain messaging key v1", grainSecret, new TextEncoder().encode(spec.slug));
+    const messagingSecret = derive("Salarium grain messaging key v1", grainSecret, new TextEncoder().encode(spec.slug));
     let connecting: Promise<RelayClient> | null = null;
     const connected = () => {
       if (connecting) return connecting;

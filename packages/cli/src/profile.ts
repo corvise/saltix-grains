@@ -132,13 +132,13 @@ export interface SiteProfileInput {
 function accountOf(text: string): string {
   const decoded = decodeAddress(text);
   if (decoded) return toHex(decoded.id);
-  if (/^[0-9a-f]{64}$/.test(text)) return text;
+  if (/^[0-9a-f]{40}$/.test(text)) return text;
   throw new Error(`--owner ${text}: an address (dsalt1…) or an account id in hex`);
 }
 
 /**
  * A website's profile (subject `site`) signed with the operator's key file: its JSON form, which the site serves at
- * `/.well-known/saltix-connect`. Its revision, unless given, goes above both the one the site serves now and the file
+ * `/.well-known/salarium-connect`. Its revision, unless given, goes above both the one the site serves now and the file
  * written before; when neither can be told (the site cannot be read and no file of it is here), it asks for one rather
  * than start at 1, which a wallet that keeps a higher revision would never take.
  */

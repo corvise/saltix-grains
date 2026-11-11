@@ -100,10 +100,10 @@ test("the pairing command alone leads an agent to the SDK, how it works first, a
   assert.ok(brief.indexOf("Run `npx grain status` first") < pairAt);
   assert.ok(pairAt < brief.indexOf("Then `npx grain doctor`"));
   assert.ok(brief.includes("(also in .grain/pair.html) and a six-digit code") && brief.includes("Show me the QR code and the code, then wait"));
-  assert.ok(brief.includes("a developer key (saltix-app:1:…) is retired"));
+  assert.ok(brief.includes("a developer key (salarium-app:1:…) is retired"));
   assert.ok(brief.includes("One app, one key, one program") && brief.includes("Never run the SDK's example"));
   assert.doesNotMatch(brief, /npm run example/, "never the example: its spec would outrank the project's");
-  assert.doesNotMatch(brief, /saltix-app:1:[a-z]+:/, "no key, not even its start");
+  assert.doesNotMatch(brief, /salarium-app:1:[a-z]+:/, "no key, not even its start");
   assert.doesNotMatch(brief, /[0-9a-f]{32}/, "nothing as long as a secret");
   assert.ok(brief.split("\n").length <= 25, "short enough to paste");
   for (const path of ["docs/how-it-works.md", "AGENTS.md", "docs/first-app.md", "docs/agents/app.md"]) {
@@ -147,5 +147,5 @@ test("how-it-works.md: the pieces, whether an app needs a server, and the lifecy
   assert.doesNotMatch(page, /coming|will upload|needs a URL/i, "nothing about publishing is still to come");
   // Nothing private: no server's address, no real key.
   assert.doesNotMatch(page, /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, "no IP address");
-  assert.doesNotMatch(page, /saltix-app:1:[a-z]+:[0-9a-f]/, "no developer key");
+  assert.doesNotMatch(page, /salarium-app:1:[a-z]+:[0-9a-f]/, "no developer key");
 });

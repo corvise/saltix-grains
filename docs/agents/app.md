@@ -62,7 +62,7 @@ Pairing makes no developer key to copy, and Saltix makes no new ones (Saltix 24-
 [§3](../protocol/app-studio.md#3-the-developer-key), retired 2026-10-28): a host where no command runs is where the
 program's own first start runs `grain pair` once. One made before keeps working until its owner pairs a server in its
 place: the server says so at start (`warning: this server runs on a developer key made in Saltix…`), and `grain status`
-too. `app.key` holds a paired key in the same form, `saltix-app:1:<hrp>:<genesis>:<slug>:<secret>`: the network's
+too. `app.key` holds a paired key in the same form, `salarium-app:1:<hrp>:<genesis>:<slug>:<secret>`: the network's
 address prefix (`dsalt` on the test network), the first 8 bytes of its genesis hash, the app's slug, and the server
 key's Ed25519 secret. Whoever holds it speaks for the app until the owner replaces it.
 

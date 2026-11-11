@@ -40,7 +40,7 @@ export interface ErrorFacts {
   refusal: boolean;
 }
 
-const DEVELOPER_KEY = /saltix-app:1:\S*/gi;
+const DEVELOPER_KEY = /salarium-app:1:\S*/gi;
 const LONG_HEX = /(?<![0-9a-f])[0-9a-f]{64,}(?![0-9a-f])/gi;
 const MAX_CAUSES = 3;
 
@@ -48,7 +48,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * `text` without secrets: each of `extra` (exact text, or a pattern) first, then anything that looks like a developer
- * key (`saltix-app:1:…`), then every run of 64 or more hex digits. A run of 63 survives: name keys and hashes in your
+ * key (`salarium-app:1:…`), then every run of 64 or more hex digits. A run of 63 survives: name keys and hashes in your
  * errors by their first 16 characters.
  */
 export function scrubSecrets(text: string, extra: ReadonlyArray<string | RegExp> = []): string {

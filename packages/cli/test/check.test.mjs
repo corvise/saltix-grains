@@ -13,7 +13,9 @@ import { fileURLToPath } from "node:url";
 import { shortAddress } from "@saltix/grain";
 import { encodeAddress, fromHex } from "@saltix/grain-server";
 import { findBrowser } from "../dist/browser.js";
-import { checkReason, findingLines, judge, judgeTaps, overlap, underNavigationBar, underStatusBar } from "../dist/check.js";
+import {
+  LOOK_CLEAR, LOOK_SCATTER, checkReason, findingLines, judge, judgeTaps, overlap, sameLook, underNavigationBar, underStatusBar,
+} from "../dist/check.js";
 import { scratch } from "../../../scripts/scratch.mjs";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -182,6 +184,40 @@ test("--tap: a tap that throws, or asks Saltix for what it refuses, is an error;
   assert.ok(!judge(run()).some((f) => f.what === "tap"));
 });
 
+test("--tap: two looks of a page are one when no pixel differs clearly and those that differ faintly are a scatter", () => {
+  /** A look of `pixels` pixels of one colour, `count` of them, spread over it, moved by `by` in one channel. */
+  const look = (pixels, count = 0, by = 0, channel = 0) => {
+    const p = new Uint8Array(pixels * 4);
+    for (let i = 0; i < p.length; i += 4) p.set([40, 60, 80, 200], i);
+    for (let k = 0; k < count; k++) p[Math.floor((k * pixels) / count) * 4 + channel] += by;
+    return p;
+  };
+  const small = 100 * 100;
+  const scatter = small * LOOK_SCATTER;
+  assert.equal(sameLook(look(small), look(small)), true);
+  // A scatter of faint pixels is one look, to the last pixel of the share; one pixel more is two, however faint.
+  assert.equal(sameLook(look(small), look(small, scatter, 5)), true);
+  assert.equal(sameLook(look(small), look(small, scatter + 1, 1)), false);
+  // A pixel that differs clearly is a change, wherever it is and whichever channel moved, lighter or darker.
+  assert.equal(sameLook(look(small), look(small, 1, LOOK_CLEAR)), true);
+  for (const channel of [0, 1, 2, 3]) {
+    assert.equal(sameLook(look(small), look(small, 1, LOOK_CLEAR + 1, channel)), false, `the first pixel, channel ${channel}`);
+    assert.equal(sameLook(look(small, 1, LOOK_CLEAR + 1, channel), look(small)), false, `darker, channel ${channel}`);
+    const last = look(small);
+    last[last.length - 4 + channel] += LOOK_CLEAR + 1;
+    assert.equal(sameLook(look(small), last), false, `the last pixel, channel ${channel}`);
+  }
+  // Looks of two sizes are two looks.
+  assert.equal(sameLook(look(small), look(small).subarray(4)), false);
+  assert.equal(sameLook(look(small).subarray(4), look(small)), false);
+  // What a browser was seen to draw one resting page apart by (2026-11-11): 57 pixels of a phone's 360 by 780, by at
+  // most 5. And the share on that screen: 280 pixels are a scatter, 281 are not.
+  const phone = 360 * 780;
+  assert.equal(sameLook(look(phone), look(phone, 57, 5)), true);
+  assert.equal(sameLook(look(phone), look(phone, 280, 1)), true);
+  assert.equal(sameLook(look(phone), look(phone, 281, 1)), false);
+});
+
 test("the browser: CHROME_PATH first, then the system's usual places; none is said, never guessed", () => {
   const has = (paths) => (p) => paths.includes(p);
   assert.equal(findBrowser({ CHROME_PATH: "/opt/chrome" }, "linux", has(["/opt/chrome"])), "/opt/chrome");
@@ -231,7 +267,7 @@ test("a fresh page passes in a real browser: the sheet, the page, six screens in
   const report = reportOf(dir);
   // The sheet names the owner as Saltix does (19-connect §12.1): a short address of the network, never hex.
   const owner = JSON.parse(readFileSync(join(dir, "grain.json"), "utf8")).owner;
-  const short = shortAddress(encodeAddress("devnet", fromHex(owner, 32)));
+  const short = shortAddress(encodeAddress("devnet", fromHex(owner, 20)));
   assert.match(short, /^dsalt1q\w{4}…\w{6}$/);
   assert.ok(report.run.sheet.text.includes(`dice · by ${short}`), report.run.sheet.text);
   assert.ok(!report.run.sheet.text.includes(owner.slice(0, 8)), "no hex");

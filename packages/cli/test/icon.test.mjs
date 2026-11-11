@@ -17,8 +17,9 @@ import { DARK_GROUND, EDGE_BAND, KEYLINE_RADIUS, LIGHT_GROUND, THEME_GROUNDS, ch
 import { STROKE, contrast, luminance } from "../dist/monogram.js";
 import { PictureError, decodePicture } from "../dist/image.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const vectors = JSON.parse(readFileSync(new URL("../../../vectors/images-v1.json", import.meta.url), "utf8"));
+const vectors = goldenVectors("images-v1.json");
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 
 /** A PNG built by hand: any colour type and depth, with chunks of our choosing before IDAT. */

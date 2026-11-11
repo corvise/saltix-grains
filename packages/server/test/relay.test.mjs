@@ -17,11 +17,13 @@ import {
   messagingPublic, sealFrame, openFrame, serverMessagingSecret,
   encodeNotification, notificationMessage, signNotification, decodeNotification, notificationProblem,
   RelayClient, usableEndpoint, relaysOfNode, signRelayTicket, readTicket, TICKETS,
+  Writer, concat, policyOf, signManagedBinding, signManagedRecord, encodeManagedRecord,
 } from "../dist/index.js";
 import { scratch } from "../../../scripts/scratch.mjs";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const relayVectors = JSON.parse(readFileSync(new URL("../../../vectors/relay-v1.json", import.meta.url), "utf8")).vectors;
-const grains = JSON.parse(readFileSync(new URL("../../../vectors/grains-v1.json", import.meta.url), "utf8"));
+const relayVectors = goldenVectors("relay-v1.json").vectors;
+const grains = goldenVectors("grains-v1.json");
 const of = (kind) => relayVectors.filter((v) => v.kind === kind);
 
 test("key bindings, address records and mailbox acks are the node's", () => {
@@ -49,7 +51,7 @@ test("key bindings, address records and mailbox acks are the node's", () => {
       // A device cannot bind another messaging key: only the account key signs bindings.
       const forged = { ...record, key: { ...record.key, messagingKey: new Uint8Array(32).fill(0x66) } };
       const body = encodeAddressRecord(forged).subarray(0, -64);
-      const bySigner = ed25519.sign(derive("Saltix address record v1", body), fromHex(v.signer_private_key_hex, 32));
+      const bySigner = ed25519.sign(derive("Salarium address record v1", body), fromHex(v.signer_private_key_hex, 32));
       assert.equal(recordProblem({ ...forged, signature: bySigner }, v.issued_at), "binding");
     }
   }
@@ -119,13 +121,15 @@ test("frames open only for their recipient, from their sender", () => {
   assert.equal(openFrame(sealed, messagingPublic(a), a), null, "another recipient");
   assert.equal(openFrame(sealed.subarray(0, 39), messagingPublic(a), b), null);
   assert.notEqual(toHex(sealFrame(Uint8Array.of(1), messagingPublic(b), a)), toHex(sealFrame(Uint8Array.of(1), messagingPublic(b), a)), "fresh nonces");
-  assert.equal(toHex(serverMessagingSecret(new Uint8Array(32).fill(1))), toHex(derive("Saltix grain server messaging key v1", new Uint8Array(32).fill(1))));
+  assert.equal(toHex(serverMessagingSecret(new Uint8Array(32).fill(1))), toHex(derive("Salarium grain server messaging key v1", new Uint8Array(32).fill(1))));
 });
 
 /** A relay that checks registrations like the node does and records what clients send. */
 async function fakeRelay({ network = "devnet", https } = {}) {
   const relayKey = new Uint8Array(32).fill(9);
   const records = new Map();
+  /** Managed addresses' records and logs, base64url, by address. */
+  const managed = new Map();
   const sent = [];
   const awaited = [];
   const clients = new Set();
@@ -153,14 +157,17 @@ async function fakeRelay({ network = "devnet", https } = {}) {
         clients.add(ws);
         ws.send(JSON.stringify({ type: "registered", pubkey: address, keyEpoch: 0, turn: null }));
       } else if (f.type === "get_key") {
-        ws.send(JSON.stringify({ type: "key_response", pubkey: f.pubkey, record: records.get(f.pubkey) ?? null, encryptKey: null }));
+        // A managed address's record and log, as the node's relay hands them out (09-relay §1.4); a plain record otherwise.
+        const m = managed.get(f.pubkey);
+        if (m) ws.send(JSON.stringify({ type: "key_response", pubkey: f.pubkey, record: null, encryptKey: null, managed: m.record, log: m.log }));
+        else ws.send(JSON.stringify({ type: "key_response", pubkey: f.pubkey, record: records.get(f.pubkey) ?? null, encryptKey: null }));
       }
     });
   });
   const port = () => (https ? https.address().port : wss.address().port);
   return {
     url: () => `${https ? "wss" : "ws"}://127.0.0.1:${port()}`,
-    sent, records,
+    sent, records, managed, relayKey,
     /** The next frame of `type` a client sends. */
     next: (type) => new Promise((resolve) => awaited.push({ type, resolve })),
     /** A user's wallet: its record known to the relay, its frames delivered. */
@@ -218,7 +225,7 @@ test("a server registers, seals frames to users and hears theirs", async () => {
     assert.equal(kept.ephemeral, undefined, "kept for the mailbox");
     assert.equal(toHex(openFrame(fromBase64Url(kept.payload), serverKey, user.messaging)), toHex(note));
 
-    await assert.rejects(client.send(encodeAddress("devnet", new Uint8Array(32).fill(5)), Uint8Array.of(1)), /no messaging key/);
+    await assert.rejects(client.send(encodeAddress("devnet", new Uint8Array(20).fill(5)), Uint8Array.of(1)), /no messaging key/);
     await assert.rejects(client.send(user.address, new Uint8Array(49_113)), /too large/);
     await client.send(user.address, new Uint8Array(48_000));
 
@@ -236,7 +243,7 @@ test("a server registers, seals frames to users and hears theirs", async () => {
     assert.equal(ack.msgId, "m-9");
     const proof = fromBase64Url(ack.proof);
     const body = proof.subarray(0, proof.length - 64);
-    assert.ok(ed25519.verify(proof.subarray(proof.length - 64), derive("Saltix mailbox ack v1", body), ed25519.getPublicKey(secret)));
+    assert.ok(ed25519.verify(proof.subarray(proof.length - 64), derive("Salarium mailbox ack v1", body), ed25519.getPublicKey(secret)));
   } finally {
     client.close();
     await relay.close();
@@ -402,6 +409,129 @@ test("an app's numbers go to its relay, again on each registration, and the rela
     assert.deepEqual(outcomes.find((o) => !o.taken), { taken: false, reason: "stale" });
   } finally {
     client.close();
+    await relay.close();
+  }
+});
+
+test("a server beside its node prefers its own relay, says typing and read, and hears its activation and account", async () => {
+  const own = await fakeRelay();
+  const other = await fakeRelay();
+  const secret = new Uint8Array(32).fill(0x6a);
+  const client = await RelayClient.connect({
+    endpoints: [{ url: other.url(), cert_sha256: null }],
+    preferred: [{ url: own.url(), cert_sha256: null }],
+    secret, network: "devnet", ...quiet,
+  });
+  try {
+    assert.ok(own.records.has(client.address), "the preferred relay is tried first");
+    assert.ok(!other.records.has(client.address), "and the others only when it does not take the registration");
+    const user = own.user(0x51);
+
+    let next = own.next("typing");
+    client.typing(user.address, true);
+    assert.deepEqual(await next, { type: "typing", to: user.address, typing: true });
+    next = own.next("typing");
+    client.typing(user.address, false, "uploading");
+    assert.deepEqual(await next, { type: "typing", to: user.address, typing: false, activity: "uploading" });
+
+    next = own.next("message_read");
+    client.read(user.address, "m-7");
+    const read = await next;
+    assert.equal(read.to, user.address);
+    assert.equal(read.msgId, "m-7");
+    const proof = fromBase64Url(read.proof);
+    const body = proof.subarray(0, proof.length - 64);
+    assert.ok(ed25519.verify(proof.subarray(proof.length - 64), derive("Salarium mailbox ack v1", body), ed25519.getPublicKey(secret)),
+      "the read receipt carries the address's own proof, as an ack does");
+
+    const activations = [];
+    client.on("activation", (a) => activations.push(a));
+    const accounts = [];
+    client.on("account", (a) => accounts.push(a));
+    const heard = new Promise((r) => client.once("account", r));
+    own.deliver({ type: "activation", to: client.address, activated: false, epoch: null, via: null, price: "5000000000", price_epoch: 12 });
+    own.deliver({ type: "activation", to: client.address, activated: false, price: "5e9" });
+    own.deliver({ type: "account", to: client.address, address: encodeAddress("devnet", new Uint8Array(20).fill(3)), salt: "1" });
+    own.deliver({ type: "account", to: client.address, address: client.address, salt: "5100000000", nonce: 0 });
+    await heard;
+    assert.deepEqual(activations, [{ activated: false, price: "5000000000" }, { activated: false, price: null }],
+      "the price is a decimal string of base units, or nothing");
+    assert.equal(accounts.length, 1, "another address's account is not this client's");
+    assert.equal(accounts[0].salt, "5100000000");
+  } finally {
+    client.close();
+    await own.close();
+    await other.close();
+  }
+});
+
+test("a managed user's key comes from its record checked against its log: sealed to, opened from, refused when revoked", async () => {
+  // The vectors' managed account (vectors/accounts-v1.json): its phone binds a messaging key of the test's own, its browser
+  // registers it at the relay; the relay hands the record and the log out (09-relay §1.4).
+  const accounts = goldenVectors("accounts-v1.json");
+  const rules = { genesis: fromHex(accounts.chain.genesis_hash_hex, 32), policy: policyOf(accounts.chain.account_policy) };
+  const account = fromHex(accounts.account.account_hex, 20);
+  const address = accounts.account.address;
+  const carried = (events) => toBase64Url(concat(new Writer().u32(events.length).done(), ...events.map((e) => fromHex(e.event_hex))));
+  const relay = await fakeRelay();
+  const messaging = new Uint8Array(32).fill(0x2b);
+  const now = Date.now();
+  const binding = signManagedBinding({ p256: fromHex(accounts.account.phone_secret_hex, 32) }, account, messagingPublic(messaging), 0, now, 5);
+  const record = toBase64Url(encodeManagedRecord(signManagedRecord({ ed25519: fromHex(accounts.account.browser_secret_hex, 32) }, binding,
+    relay.relayKey, now, new Uint8Array(16).fill(1))));
+  relay.managed.set(address, { record, log: carried(accounts.log.events) });
+  // The network's rules from the node's own interface, as a server beside its node has them.
+  const { createServer: httpServer } = await import("node:http");
+  const node = httpServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const { method } = JSON.parse(body);
+      const result = method === "node_status"
+        ? { network: "devnet", genesis: accounts.chain.genesis_hash_hex, accounts: { derivation: 2, policy: accounts.chain.account_policy } }
+        : { period: 1, self: null, tickets: [] };
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+    });
+  });
+  await new Promise((r) => node.listen(0, "127.0.0.1", r));
+  const endpoints = [{ url: relay.url(), cert_sha256: null }];
+  const secret = new Uint8Array(32).fill(0x6b);
+  const logged = [];
+  const log = (level, event, meta) => logged.push({ event, ...meta });
+  const byNode = await RelayClient.connect({ endpoints, node: `http://127.0.0.1:${node.address().port}/`, secret, network: "devnet", log });
+  const given = await RelayClient.connect({ endpoints, accounts: rules, secret: new Uint8Array(32).fill(0x6c), network: "devnet", ...quiet });
+  const blind = await RelayClient.connect({ endpoints, secret: new Uint8Array(32).fill(0x6d), network: "devnet", log });
+  try {
+    for (const client of [byNode, given]) {
+      const serverKey = messagingPublic(serverMessagingSecret(client === byNode ? secret : new Uint8Array(32).fill(0x6c)));
+      // Sealed to the key the phone bound.
+      const sent = relay.next("message");
+      await client.send(address, new TextEncoder().encode("to the managed owner"), { keep: true });
+      const frame = await sent;
+      assert.equal(frame.to, address);
+      assert.equal(new TextDecoder().decode(openFrame(fromBase64Url(frame.payload), serverKey, messaging)), "to the managed owner");
+      // Opened from it.
+      const heard = new Promise((r) => client.once("frame", r));
+      relay.deliver({ type: "message", to: client.address, from: address, payload: toBase64Url(sealFrame(new TextEncoder().encode("from the managed owner"), serverKey, messaging)), msgId: "m-1", sts: Date.now() });
+      assert.equal(new TextDecoder().decode((await heard).payload), "from the managed owner");
+    }
+    // Without the network's rules, no key is taken: nothing is sealed to an address the client cannot check.
+    await assert.rejects(blind.send(address, Uint8Array.of(1)), /no messaging key/);
+    assert.ok(logged.some((l) => l.event === "relay_no_account_rules"));
+    // The phone removed from the account (its controller replaced by the browser's alone): its binding is revoked.
+    relay.managed.set(address, { record, log: carried(accounts.controller_change.events) });
+    const fresh = await RelayClient.connect({ endpoints, accounts: rules, secret: new Uint8Array(32).fill(0x6e), network: "devnet", log });
+    try {
+      await assert.rejects(fresh.send(address, Uint8Array.of(1)), /no messaging key/);
+      assert.ok(logged.some((l) => l.event === "relay_key_refused" && l.problem === "revoked"), JSON.stringify(logged));
+    } finally {
+      fresh.close();
+    }
+  } finally {
+    byNode.close();
+    given.close();
+    blind.close();
+    node.close();
     await relay.close();
   }
 });

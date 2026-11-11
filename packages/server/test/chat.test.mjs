@@ -5,7 +5,6 @@
 // negative cases.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519";
 import {
   fromHex, toHex, accountId, encodeAddress, issueInvoiceKeyCert, encodeCert, decodeCert, signInvoice,
@@ -23,8 +22,9 @@ import {
   encodeChatWelcome, encodeSignedChatWelcome, decodeSignedChatWelcome, chatWelcomeToSign, signChatWelcome, chatWelcomeProblem,
   introductionProblem, HELLO_LIFE_MS, HELLO_RETRY_MS, WELCOME_EVERY_MS, ROLES,
 } from "../dist/index.js";
+import { goldenVectors } from "../../../scripts/vectors.mjs";
 
-const v = JSON.parse(readFileSync(new URL("../../../vectors/grain-chats-v1.json", import.meta.url), "utf8"));
+const v = goldenVectors("grain-chats-v1.json");
 const chain = { genesis: v.chain.genesis_hash_hex, network: v.chain.network };
 const NOW = Number(v.now_ms);
 const DAY = 86_400_000;
@@ -57,7 +57,7 @@ function spec() {
         params: [
           { name: "duration", title: en("Access for"), kind: { duration: { options: [600, 86_400, 2_592_000] } }, required: true },
           { name: "note", title: en("Note"), kind: { text: { max: 40 } }, required: false },
-          { name: "site", title: en("Site"), kind: { choice: { options: [site("saltix-io", "saltix.io"), site("web", "Web")] } }, required: true },
+          { name: "site", title: en("Site"), kind: { choice: { options: [site("salarium-io", "salarium.io"), site("web", "Web")] } }, required: true },
         ],
         confirm: false, price: 0n,
       },
@@ -85,7 +85,7 @@ const CERT_EXPIRES = NOW + 30 * DAY;
 const cert = () => issueInvoiceKeyCert(OWNER, "access", toHex(ed25519.getPublicKey(SERVER)), CERT_EXPIRES);
 const request = () => ({
   slug: "access", id: repeat("11", 16), at: NOW, expires_at: NOW + DAY, via: null, command: "key",
-  args: [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "saltix-io" }]],
+  args: [["duration", { duration: 86_400 }], ["note", { text: "for the tester" }], ["site", { choice: "salarium-io" }]],
   text: "", member: null, lang: "ru",
 });
 const PROOF_EXPIRES = NOW + 30 * DAY;
@@ -101,7 +101,7 @@ const answer = () => ({
   slug: "access", id: repeat("22", 16), at: NOW + 1_000, answers: repeat("11", 16), replaces: null,
   blocks: [
     { secret: { label: "Key", value: "7KQ2-M9XA-4F", expires_at: NOW + DAY } },
-    { fields: { rows: [["Site", "saltix.io"], ["Access", "1 day after it is used"]] } },
+    { fields: { rows: [["Site", "salarium.io"], ["Access", "1 day after it is used"]] } },
     { status: { state: STATUS.done, text: "Opens the site once" } },
   ],
   actions: [
@@ -225,8 +225,8 @@ const updateManifest = () => ({
   name: { en: "Access", ru: "Доступ" }, description: { en: "One-time access keys for the closed sites." }, icon: repeat("77", 32),
   entry: {
     sealed: {
-      bundle: repeat("88", 32), size: 154_240, sources: [`https://download.saltix.io/apps/screens/${repeat("88", 32)}.zip`], start: "index.html",
-      connect: ["https://api.saltix.io"],
+      bundle: repeat("88", 32), size: 154_240, sources: [`https://download.salarium.io/apps/screens/${repeat("88", 32)}.zip`], start: "index.html",
+      connect: ["https://api.salarium.io"],
     },
   },
   permissions: 0, sponsor: null, min_host: 1,
@@ -487,7 +487,7 @@ function smallSpec() {
         name: "key", title: en("New key"), help: en("A one-time key"),
         params: [
           { name: "duration", title: en("For"), kind: { duration: { options: [3_600, 86_400] } }, required: true },
-          { name: "site", title: en("Site"), kind: { choice: { options: [site("saltix-io", "saltix.io")] } }, required: true },
+          { name: "site", title: en("Site"), kind: { choice: { options: [site("salarium-io", "salarium.io")] } }, required: true },
           { name: "note", title: en("Note"), kind: { text: { max: 20 } }, required: false },
         ],
         confirm: false, price: 0n,
@@ -499,7 +499,7 @@ function smallSpec() {
 }
 const smallRequest = () => ({
   slug: "access", id: repeat("07", 16), at: NOW, expires_at: NOW + 60_000, via: null, command: "key",
-  args: [["duration", { duration: 3_600 }], ["site", { choice: "saltix-io" }]], text: "", member: null, lang: "en",
+  args: [["duration", { duration: 3_600 }], ["site", { choice: "salarium-io" }]], text: "", member: null, lang: "en",
 });
 
 test("a spec is signed by the owner key, and a spec out of bounds is refused", () => {
@@ -547,7 +547,7 @@ test("a spec is signed by the owner key, and a spec out of bounds is refused", (
 test("a request fits its command", () => {
   const s = smallSpec();
   assert.equal(requestFitProblem(smallRequest(), s), null);
-  const withNote = { ...smallRequest(), args: [["duration", { duration: 86_400 }], ["note", { text: "for Ann" }], ["site", { choice: "saltix-io" }]] };
+  const withNote = { ...smallRequest(), args: [["duration", { duration: 86_400 }], ["note", { text: "for Ann" }], ["site", { choice: "salarium-io" }]] };
   assert.equal(requestFitProblem(withNote, s), null, "an optional argument");
   assert.equal(requestFitProblem({ ...smallRequest(), command: "", args: [], text: "hello" }, s), null, "text alone");
   const refused = (change) => {
@@ -561,7 +561,7 @@ test("a request fits its command", () => {
   assert.equal(refused((r) => r.args.push(["zz", { flag: true }])), "argument:zz", "an argument the command does not have");
   assert.equal(refused((r) => (r.args[0][1] = { duration: 60 })), "argument:duration", "a duration not offered");
   assert.equal(refused((r) => (r.args[1][1] = { choice: "web" })), "argument:site", "a choice not offered");
-  assert.equal(refused((r) => (r.args[1][1] = { text: "saltix-io" })), "argument:site", "a value of another kind");
+  assert.equal(refused((r) => (r.args[1][1] = { text: "salarium-io" })), "argument:site", "a value of another kind");
   assert.equal(refused((r) => r.args.reverse()), "argument:site", "arguments out of order");
   assert.equal(refused((r) => r.args.push(["note", { text: "x".repeat(21) }])), "argument:duration", "out of order after a push");
   assert.equal(refused((r) => (r.args = [r.args[0], ["note", { text: "x".repeat(21) }], r.args[1]])), "argument:note", "too long");
@@ -744,7 +744,7 @@ test("a message out of bounds is refused", () => {
     return chatMessageBoundsProblem(m);
   };
   const ref = reportFile();
-  const invoice = (slug) => signInvoice({ slug, to: repeat("aa", 32), asset: "SALT", amount: 1n, memo: "", reference: repeat("01", 16), expires_at: NOW + DAY }, SERVER, chain.genesis, cert());
+  const invoice = (slug) => signInvoice({ slug, to: repeat("aa", 20), asset: "SALT", amount: 1n, memo: "", reference: repeat("01", 16), expires_at: NOW + DAY }, SERVER, chain.genesis, cert());
   assert.equal(refused(() => {}), null);
   assert.equal(refused((m) => (m.slug = "A")), "slug");
   assert.equal(refused((m) => (m.blocks = [])), "bounds:blocks and actions");

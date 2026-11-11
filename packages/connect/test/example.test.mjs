@@ -15,7 +15,7 @@ const ORIGIN = "http://localhost:8091";
 const GENESIS = "5a".repeat(32);
 const SECRET = new Uint8Array(32).fill(0x44);
 const KEY = ed25519.getPublicKey(SECRET);
-const ADDRESS = encodeAddress("devnet", accountId(KEY), 0);
+const ADDRESS = encodeAddress("devnet", accountId(KEY));
 const CONNECTION = { network: GENESIS, account: toHex(accountId(KEY)), address: ADDRESS, signer: "ed25519", managed: false, since: 1 };
 const OFFER = { sid: b64url(new Uint8Array(32).fill(1)), boxKey: b64url(new Uint8Array(32).fill(2)), page: b64url(new Uint8Array(32).fill(3)), origin: ORIGIN, name: "Example site" };
 

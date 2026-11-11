@@ -20,7 +20,7 @@ network (§7.3). The SDK: `named.ts` (the checks), `bundle-upload.ts` (the state
 |---|---|---|---|
 | Kind (tag, name) | 0 `grain_icon` | 1 `avatar` | 3 `grain_bundle` (2 is reserved) |
 | Named by | a live grain's manifest `icon` | the newest profile of an account | a live grain's sealed manifest (`bundle`, `size`); for a day before, a registered server key's statement (§7.3) |
-| Hash | `derive("Saltix grain icon v1", bytes)` | `derive("Saltix avatar v1", bytes)` | `derive("Saltix grain bundle v1", bytes)` ([grains §8](grains.md#8-sealed-bundles)) |
+| Hash | `derive("Salarium grain icon v1", bytes)` | `derive("Salarium avatar v1", bytes)` | `derive("Salarium grain bundle v1", bytes)` ([grains §8](grains.md#8-sealed-bundles)) |
 | Format | PNG, opaque | JPEG | ZIP, the bundle check (§2a) |
 | Pixels | 512 × 512 (256 × 256 taken from manifests made before) | 640 × 640 | — |
 | Bytes | at most 65 536 | at most 131 072 | at most 16 MiB |
@@ -110,7 +110,7 @@ project's `icon.png` and compares its hash with the manifest's.
 
 Until a wallet has an icon's bytes, and whenever the icon is none, missing or fails, it draws the **monogram** in the
 same mask: the first character of the grain's name in the reader's language (else its English name), upper-cased,
-centred on a colour of the wallet's palette of 12 chosen by the first byte of `derive("Saltix grain monogram v1", slug)`
+centred on a colour of the wallet's palette of 12 chosen by the first byte of `derive("Salarium grain monogram v1", slug)`
 modulo 12. It is the same on every device and changes only with the slug.
 
 ## 4. Light on the icon's edge
@@ -130,7 +130,7 @@ exception: a bundle a registered server key says is its grain's next, held **pen
 themselves (their hash is computed, never claimed), so whoever holds them may bring them, and nobody can bring others.
 
 A bundle's keepers are 3 storage pools of different operators and the first 5 relays offering space, chosen by
-rendezvous hashing (`derive("Saltix bundle placement v1", hash ‖ key)`); a young network with neither keeps every bundle
+rendezvous hashing (`derive("Salarium bundle placement v1", hash ‖ key)`); a young network with neither keeps every bundle
 at every node with a store. Any relay caches what it fetched for its clients.
 
 ## 7. Uploading
@@ -148,7 +148,7 @@ besides the gateway's per-address limits (`rate_limited`).
 
 ```text
 blob_put {kind: "grain_bundle", hash, size, from, data, upload?}
-  hash    hex, derive("Saltix grain bundle v1", the bundle)
+  hash    hex, derive("Salarium grain bundle v1", the bundle)
   size    the bundle's bytes, at most 16 MiB
   from    where this piece starts: the first 0, each next where the last ended
   data    the piece, at most 262 144 bytes, base64
@@ -163,7 +163,7 @@ blob_put {kind: "grain_bundle", hash, size, from, data, upload?}
    BundleUpload       { slug: String, bundle: [u8; 32], size: u64, at: u64 }      at: Unix ms
    SignedBundleUpload { upload, key: [u8; 32], signature: [u8; 64] }
      signature: Ed25519 by key over
-     derive("Saltix grain bundle upload v1", genesis_hash ‖ Borsh(BundleUpload))
+     derive("Salarium grain bundle upload v1", genesis_hash ‖ Borsh(BundleUpload))
    ```
 
    signed by a key the live grain's registry record names: the key `grain pair` made on the developer's computer, or a

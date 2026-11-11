@@ -95,7 +95,7 @@ export function supportConsentFromEnvironment(o: { genesis: string; slug: string
   if (!text) throw new SupportKeyError(`no ${SUPPORT_KEY_ENV}: set it to the support address's Ed25519 secret (64 hex digits) where its holder runs this`);
   if (!/^[0-9a-fA-F]{64}$/.test(text)) throw new SupportKeyError(`${SUPPORT_KEY_ENV}: not an Ed25519 secret (64 hex digits)`);
   if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(o.slug)) throw new SupportKeyError(`the slug ${JSON.stringify(o.slug)}: 3 to 32 of [a-z0-9-]`);
-  if (!/^[0-9a-f]{64}$/.test(o.owner)) throw new SupportKeyError("the owner: an account id, 64 lowercase hex digits");
+  if (!/^[0-9a-f]{40}$/.test(o.owner)) throw new SupportKeyError("the owner: an account id, 40 lowercase hex digits");
   if (!/^[0-9a-f]{64}$/.test(o.genesis)) throw new SupportKeyError("the genesis hash: 64 lowercase hex digits");
   const secret = fromHex(text.toLowerCase(), 32);
   try {
